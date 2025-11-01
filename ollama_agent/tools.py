@@ -2,8 +2,10 @@
 
 import subprocess
 from typing import Any
+from agents import function_tool
 
 
+@function_tool
 def execute_command(command: str) -> dict[str, Any]:
     """
     Executes a local operating system command.
@@ -47,3 +49,4 @@ def execute_command(command: str) -> dict[str, Any]:
             "stderr": f"Error executing command: {str(e)}",
             "exit_code": -1
         }
+    

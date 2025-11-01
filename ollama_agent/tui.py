@@ -86,59 +86,59 @@ class ChatInterface(App):
         yield Footer()
     
     def on_mount(self) -> None:
-        """Ejecuta cuando la aplicación se monta."""
+        """Executes when the application is mounted."""
         self.title = "Ollama Agent - Chat"
-        self.sub_title = f"Modelo: {self.agent.model}"
+        self.sub_title = f"Model: {self.agent.model}"
         
         chat_log = self.query_one("#chat-log", RichLog)
-        chat_log.write(Text("¡Bienvenido a Ollama Agent!", style="bold cyan"))
-        chat_log.write(Text("Escribe tu mensaje y presiona Enter para enviar.", style="italic"))
-        chat_log.write(Text("Presiona Ctrl+C para salir o Ctrl+L para limpiar el chat.", style="italic"))
+        chat_log.write(Text("Welcome to Ollama Agent!", style="bold cyan"))
+        chat_log.write(Text("Type your message and press Enter to send.", style="italic"))
+        chat_log.write(Text("Press Ctrl+C to exit or Ctrl+L to clear the chat.", style="italic"))
         chat_log.write("")
         
-        # Enfocar el input
+        # Focus the input
         self.query_one("#user-input", Input).focus()
     
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """
-        Maneja el envío de mensajes del usuario.
+        Handles user message submission.
         
         Args:
-            event: El evento de envío.
+            event: The submission event.
         """
         message = event.value.strip()
         if not message:
             return
         
-        # Limpiar el input
+        # Clear the input
         input_widget = self.query_one("#user-input", Input)
         input_widget.value = ""
         
-        # Mostrar mensaje del usuario
+        # Show user message
         chat_log = self.query_one("#chat-log", RichLog)
-        chat_log.write(Text(f"Usuario: {message}", style="bold blue"))
+        chat_log.write(Text(f"User: {message}", style="bold blue"))
         
-        # Mostrar mensaje de "pensando..."
-        chat_log.write(Text("Agente: pensando...", style="italic yellow"))
+        # Show "thinking..." message
+        chat_log.write(Text("Agent: thinking...", style="italic yellow"))
         
-        # Obtener respuesta del agente
+        # Get response from agent
         try:
             response = await self.agent.run_async(message)
             
-            # Limpiar la última línea (el "pensando...")
-            # En su lugar, mostramos la respuesta real
-            chat_log.write(Text(f"Agente: {response}", style="bold green"))
+            # Clear the last line (the "thinking...")
+            # Instead, show the real response
+            chat_log.write(Text(f"Agent: {response}", style="bold green"))
             chat_log.write("")
         except Exception as e:
             chat_log.write(Text(f"Error: {str(e)}", style="bold red"))
             chat_log.write("")
         
-        # Hacer scroll al final
+        # Scroll to the end
         chat_log.scroll_end(animate=False)
     
     def action_clear(self) -> None:
-        """Limpia el chat."""
+        """Clears the chat."""
         chat_log = self.query_one("#chat-log", RichLog)
         chat_log.clear()
-        chat_log.write(Text("Chat limpiado.", style="italic yellow"))
+        chat_log.write(Text("Chat cleared.", style="italic yellow"))
         chat_log.write("")
