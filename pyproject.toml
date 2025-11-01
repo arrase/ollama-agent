@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ollama-agent"
+version = "0.1.0"
+description = "Agente de IA para interactuar con modelos de lenguaje locales a través de Ollama"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "openai>=1.0.0",
+    "textual>=0.47.0",
+    "openai-agents>=0.1.0",
+]
+
+[project.scripts]
+ollama-agent = "ollama_agent.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ollama_agent*"]
