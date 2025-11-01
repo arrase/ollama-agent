@@ -1,10 +1,11 @@
 """Terminal user interface (TUI) using Textual."""
 
 from textual.app import App, ComposeResult
-from textual.containers import Container, Vertical
-from textual.widgets import Header, Footer, Input, RichLog, Static
 from textual.binding import Binding
+from textual.containers import Container, Vertical
+from textual.widgets import Footer, Header, Input, RichLog
 from rich.text import Text
+
 from .agent import OllamaAgent
 
 
@@ -12,28 +13,21 @@ class ChatInterface(App):
     """Chat interface to interact with the AI agent."""
     
     CSS = """
-    Screen {
-        background: $surface;
-    }
-    
     #chat-container {
         height: 1fr;
         border: solid $primary;
-        background: $panel;
         padding: 1;
         margin-bottom: 1;
     }
     
     #chat-log {
         height: 1fr;
-        background: $panel;
         scrollbar-gutter: stable;
     }
     
     #input-container {
         height: 3;
         border: solid $accent;
-        background: $surface;
         padding: 0 1;
     }
     
@@ -41,20 +35,6 @@ class ChatInterface(App):
         width: 100%;
         height: 100%;
         border: none;
-    }
-    
-    .user-message {
-        color: $accent;
-        text-style: bold;
-    }
-    
-    .agent-message {
-        color: $success;
-    }
-    
-    .system-message {
-        color: $warning;
-        text-style: italic;
     }
     """
     
@@ -65,7 +45,7 @@ class ChatInterface(App):
     
     def __init__(self, agent: OllamaAgent):
         """
-        Initializes the interface.
+        Initialize the interface.
         
         Args:
             agent: The AI agent to use.
@@ -74,57 +54,98 @@ class ChatInterface(App):
         self.agent = agent
         
     def compose(self) -> ComposeResult:
-        """Creates the interface widgets."""
+        """Create the interface widgets."""
         yield Header()
         
         with Vertical(id="chat-container"):
             yield RichLog(id="chat-log", highlight=True, markup=True)
         
         with Container(id="input-container"):
-            yield Input(placeholder="Escribe tu mensaje aquí...", id="user-input")
+            yield Input(placeholder="Type your message here...", id="user-input")
         
         yield Footer()
     
     def on_mount(self) -> None:
-        """Executes when the application is mounted."""
+        """Execute when the application is mounted."""
         self.title = "Ollama Agent - Chat"
         self.sub_title = f"Model: {self.agent.model}"
         
         chat_log = self.query_one("#chat-log", RichLog)
-        chat_log.write(Text("Welcome to Ollama Agent!", style="bold cyan"))
-        chat_log.write(Text("Type your message and press Enter to send.", style="italic"))
-        chat_log.write(Text("Press Ctrl+C to exit or Ctrl+L to clear the chat.", style="italic"))
+        self._write_system_message(chat_log, "Welcome to Ollama Agent!")
+        self._write_system_message(chat_log, "Type your message and press Enter to send.")
+        self._write_system_message(chat_log, "Press Ctrl+C to exit or Ctrl+L to clear the chat.")
         chat_log.write("")
         
         # Focus the input
         self.query_one("#user-input", Input).focus()
     
+    def _write_system_message(self, chat_log: RichLog, message: str) -> None:
+        """
+        Write a system message to the chat log.
+        
+        Args:
+            chat_log: The RichLog widget.
+            message: The message to write.
+        """
+        chat_log.write(Text(message, style="italic cyan"))
+    
+    def _write_user_message(self, chat_log: RichLog, message: str) -> None:
+        """
+        Write a user message to the chat log.
+        
+        Args:
+            chat_log: The RichLog widget.
+            message: The message to write.
+        """
+        chat_log.write(Text(f"User: {message}", style="bold blue"))
+    
+    def _write_agent_message(self, chat_log: RichLog, message: str) -> None:
+        """
+        Write an agent message to the chat log.
+        
+        Args:
+            chat_log: The RichLog widget.
+            message: The message to write.
+        """
+        chat_log.write(Text(f"Agent: {message}", style="bold green"))
+    
+    def _write_error_message(self, chat_log: RichLog, message: str) -> None:
+        """
+        Write an error message to the chat log.
+        
+        Args:
+            chat_log: The RichLog widget.
+            message: The message to write.
+        """
+        chat_log.write(Text(f"Error: {message}", style="bold red"))
+    
     async def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Handles user message submission."""
+        """Handle user message submission."""
         message = event.value.strip()
         if not message:
             return
         
         # Clear the input
-        self.query_one("#user-input", Input).value = ""
+        input_widget = self.query_one("#user-input", Input)
+        input_widget.value = ""
         
         chat_log = self.query_one("#chat-log", RichLog)
-        chat_log.write(Text(f"User: {message}", style="bold blue"))
+        self._write_user_message(chat_log, message)
         chat_log.write(Text("Agent: thinking...", style="italic yellow"))
         
         # Get response from agent
         try:
             response = await self.agent.run_async(message)
-            chat_log.write(Text(f"Agent: {response}", style="bold green"))
+            self._write_agent_message(chat_log, response)
         except Exception as e:
-            chat_log.write(Text(f"Error: {str(e)}", style="bold red"))
+            self._write_error_message(chat_log, str(e))
         
         chat_log.write("")
         chat_log.scroll_end(animate=False)
     
     def action_clear(self) -> None:
-        """Clears the chat."""
+        """Clear the chat."""
         chat_log = self.query_one("#chat-log", RichLog)
         chat_log.clear()
-        chat_log.write(Text("Chat cleared.", style="italic yellow"))
+        self._write_system_message(chat_log, "Chat cleared.")
         chat_log.write("")

@@ -2,22 +2,41 @@
 
 from typing import Literal, cast
 
+from agents import Agent, ModelSettings, Runner, set_default_openai_api, set_default_openai_client, set_tracing_disabled
 from openai import AsyncOpenAI
-from agents import Agent, Runner, ModelSettings, set_default_openai_client, set_tracing_disabled, set_default_openai_api
 from openai.types.shared import Reasoning
+
 from .tools import execute_command
 
 ReasoningEffortValue = Literal["low", "medium", "high"]
 ALLOWED_REASONING_EFFORTS: tuple[ReasoningEffortValue, ...] = ("low", "medium", "high")
+DEFAULT_REASONING_EFFORT: ReasoningEffortValue = "medium"
 
 
-def _validate_reasoning_effort(effort: str) -> ReasoningEffortValue:
-    """Validates and normalizes reasoning effort value."""
-    return effort if effort in ALLOWED_REASONING_EFFORTS else "medium"  # type: ignore
+def validate_reasoning_effort(effort: str) -> ReasoningEffortValue:
+    """
+    Validate and normalize reasoning effort value.
+    
+    Args:
+        effort: Effort level string to validate.
+        
+    Returns:
+        Valid reasoning effort value.
+    """
+    if effort in ALLOWED_REASONING_EFFORTS:
+        return cast(ReasoningEffortValue, effort)
+    return DEFAULT_REASONING_EFFORT
 
 
 class OllamaAgent:
     """AI agent that connects to Ollama."""
+    
+    model: str
+    base_url: str
+    api_key: str
+    reasoning_effort: ReasoningEffortValue
+    client: AsyncOpenAI
+    agent: Agent
 
     def __init__(
         self, 
@@ -27,7 +46,7 @@ class OllamaAgent:
         reasoning_effort: str = "medium"
     ):
         """
-        Initializes the agent.
+        Initialize the agent.
 
         Args:
             model: Name of the model to use.
@@ -38,31 +57,50 @@ class OllamaAgent:
         self.model = model
         self.base_url = base_url
         self.api_key = api_key
-        self.reasoning_effort = _validate_reasoning_effort(reasoning_effort)
+        self.reasoning_effort = validate_reasoning_effort(reasoning_effort)
+        
+        # Create OpenAI client and agent
+        self.client = self._create_client()
+        self.agent = self._create_agent()
 
-        # Configure openai-agents to work with Ollama
+    def _create_client(self) -> AsyncOpenAI:
+        """
+        Create and configure OpenAI client for Ollama.
+        
+        Returns:
+            Configured AsyncOpenAI client.
+        """
         set_tracing_disabled(True)
         set_default_openai_api("chat_completions")
+        
+        client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
+        set_default_openai_client(client, use_for_tracing=False)
+        
+        return client
 
-        # Create and set OpenAI client compatible with Ollama
-        self.client = AsyncOpenAI(base_url=base_url, api_key=api_key)
-        set_default_openai_client(self.client, use_for_tracing=False)
-
-        # Create the agent with the command execution tool
-        self.agent = Agent(
+    def _create_agent(self) -> Agent:
+        """
+        Create the AI agent with tools and settings.
+        
+        Returns:
+            Configured Agent instance.
+        """
+        return Agent(
             name="Ollama Assistant",
-            instructions="You are a helpful AI assistant that can help with various tasks. "
-                        "You have access to a tool that allows you to execute operating system commands.",
-            model=model,
+            instructions=(
+                "You are a helpful AI assistant that can help with various tasks. "
+                "You have access to a tool that allows you to execute operating system commands."
+            ),
+            model=self.model,
             tools=[execute_command],
             model_settings=ModelSettings(
-                reasoning=Reasoning(effort=cast(ReasoningEffortValue, self.reasoning_effort))
+                reasoning=Reasoning(effort=self.reasoning_effort)
             )
         )
 
     async def run_async(self, prompt: str) -> str:
         """
-        Runs the agent asynchronously.
+        Run the agent asynchronously.
 
         Args:
             prompt: The user's prompt.

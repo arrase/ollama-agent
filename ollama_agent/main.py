@@ -2,13 +2,19 @@
 
 import argparse
 import asyncio
+
 from . import config
 from .agent import ALLOWED_REASONING_EFFORTS, OllamaAgent
 from .tui import ChatInterface
 
 
-def parse_arguments():
-    """Parses command line arguments."""
+def create_argument_parser() -> argparse.ArgumentParser:
+    """
+    Create and configure argument parser.
+    
+    Returns:
+        Configured ArgumentParser instance.
+    """
     parser = argparse.ArgumentParser(
         description="Ollama Agent - AI agent to interact with local models"
     )
@@ -28,28 +34,48 @@ def parse_arguments():
         choices=list(ALLOWED_REASONING_EFFORTS),
         help="Set reasoning effort level (low, medium, high)"
     )
-    return parser.parse_args()
+    return parser
 
 
-async def run_non_interactive(agent: OllamaAgent, prompt: str):
-    """Runs the agent in non-interactive mode."""
+async def run_non_interactive(agent: OllamaAgent, prompt: str) -> None:
+    """
+    Run the agent in non-interactive mode.
+    
+    Args:
+        agent: The OllamaAgent instance.
+        prompt: User prompt to process.
+    """
     print(f"User: {prompt}")
     print("Agent: thinking...")
     response = await agent.run_async(prompt)
     print(f"Agent: {response}")
 
 
-def main():
-    """Main entry point."""
-    args = parse_arguments()
+def create_agent_from_args(args: argparse.Namespace) -> OllamaAgent:
+    """
+    Create OllamaAgent instance with CLI args overriding config.
     
-    # CLI args override config values
-    agent = OllamaAgent(
-        model=args.model or config.get("model"),
-        base_url=config.get("base_url"),
-        api_key=config.get("api_key"),
-        reasoning_effort=args.effort or config.get("reasoning_effort")
+    Args:
+        args: Parsed command line arguments.
+        
+    Returns:
+        Configured OllamaAgent instance.
+    """
+    cfg = config.get_config()
+    
+    return OllamaAgent(
+        model=args.model or cfg.model,
+        base_url=cfg.base_url,
+        api_key=cfg.api_key,
+        reasoning_effort=args.effort or cfg.reasoning_effort
     )
+
+
+def main() -> None:
+    """Main entry point."""
+    parser = create_argument_parser()
+    args = parser.parse_args()
+    agent = create_agent_from_args(args)
     
     if args.prompt:
         asyncio.run(run_non_interactive(agent, args.prompt))

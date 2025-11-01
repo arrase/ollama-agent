@@ -1,17 +1,49 @@
 """Built-in tools for the agent."""
 
 import subprocess
-from typing import Any
+from typing import Any, TypedDict
+
 from agents import function_tool
 
 
-@function_tool
-def execute_command(command: str) -> dict[str, Any]:
+class CommandResult(TypedDict):
+    """Result of a command execution."""
+    success: bool
+    stdout: str
+    stderr: str
+    exit_code: int
+
+
+DEFAULT_TIMEOUT = 30
+
+
+def _create_error_result(stderr_message: str, exit_code: int = -1) -> CommandResult:
     """
-    Executes a local operating system command.
+    Create an error result dictionary.
+    
+    Args:
+        stderr_message: Error message.
+        exit_code: Exit code to return.
+        
+    Returns:
+        CommandResult with error information.
+    """
+    return {
+        "success": False,
+        "stdout": "",
+        "stderr": stderr_message,
+        "exit_code": exit_code
+    }
+
+
+@function_tool
+def execute_command(command: str, timeout: int = DEFAULT_TIMEOUT) -> CommandResult:
+    """
+    Execute a local operating system command.
     
     Args:
         command: The command to execute in the system shell.
+        timeout: Maximum execution time in seconds (default: 30).
     
     Returns:
         A dictionary with the result of the execution:
@@ -26,7 +58,7 @@ def execute_command(command: str) -> dict[str, Any]:
             shell=True,
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=timeout
         )
         
         return {
@@ -36,17 +68,9 @@ def execute_command(command: str) -> dict[str, Any]:
             "exit_code": result.returncode
         }
     except subprocess.TimeoutExpired:
-        return {
-            "success": False,
-            "stdout": "",
-            "stderr": "Error: The command exceeded the 30 second time limit",
-            "exit_code": -1
-        }
+        return _create_error_result(
+            f"Error: The command exceeded the {timeout} second time limit"
+        )
     except Exception as e:
-        return {
-            "success": False,
-            "stdout": "",
-            "stderr": f"Error executing command: {str(e)}",
-            "exit_code": -1
-        }
+        return _create_error_result(f"Error executing command: {str(e)}")
     
