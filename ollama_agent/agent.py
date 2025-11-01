@@ -7,20 +7,20 @@ from agents import Agent, Runner, function_tool, set_default_openai_client, set_
 @function_tool
 def execute_command(command: str) -> dict:
     """
-    Ejecuta un comando del sistema operativo local.
-    
+    Executes a local operating system command.
+
     Args:
-        command: El comando a ejecutar en el shell del sistema.
-        
+    command: The command to execute in the system shell.
+
     Returns:
-        Un diccionario con el resultado de la ejecución:
-        - success: True si el comando se ejecutó correctamente
-        - stdout: La salida estándar del comando
-        - stderr: La salida de error del comando
-        - exit_code: El código de salida del comando
+    A dictionary with the result of the execution:
+    - success: True if the command executed successfully
+    - stdout: The standard output of the command
+    - stderr: The error output of the command
+    - exit_code: The exit code of the command
     """
     import subprocess
-    
+
     try:
         result = subprocess.run(
             command,
@@ -29,7 +29,7 @@ def execute_command(command: str) -> dict:
             text=True,
             timeout=30
         )
-        
+
         return {
             "success": result.returncode == 0,
             "stdout": result.stdout,
@@ -40,78 +40,78 @@ def execute_command(command: str) -> dict:
         return {
             "success": False,
             "stdout": "",
-            "stderr": "Error: El comando excedió el tiempo límite de 30 segundos",
+            "stderr": "Error: The command exceeded the 30 second time limit",
             "exit_code": -1
         }
     except Exception as e:
         return {
             "success": False,
             "stdout": "",
-            "stderr": f"Error al ejecutar el comando: {str(e)}",
+            "stderr": f"Error executing command: {str(e)}",
             "exit_code": -1
         }
 
 
 class OllamaAgent:
-    """Agente de IA que se conecta a Ollama."""
-    
+    """AI agent that connects to Ollama."""
+
     def __init__(self, model: str, base_url: str = "http://localhost:11434/v1/", api_key: str = "ollama"):
         """
-        Inicializa el agente.
-        
+        Initializes the agent.
+
         Args:
-            model: Nombre del modelo a utilizar.
-            base_url: URL base del servidor Ollama.
-            api_key: API key (requerida pero ignorada por Ollama).
+            model: Name of the model to use.
+            base_url: Base URL of the Ollama server.
+            api_key: API key (required but ignored by Ollama).
         """
         self.model = model
         self.base_url = base_url
         self.api_key = api_key
-        
-        # Deshabilitar tracing para evitar intentos de conectarse a OpenAI
+
+        # Disable tracing to avoid attempts to connect to OpenAI
         set_tracing_disabled(True)
-        
-        # Configurar para usar chat_completions en lugar de responses
+
+        # Configure to use chat_completions instead of responses
         set_default_openai_api("chat_completions")
-        
-        # Crear cliente OpenAI compatible con Ollama
+
+        # Create OpenAI client compatible with Ollama
         self.client = AsyncOpenAI(
             base_url=base_url,
             api_key=api_key
         )
-        
-        # Configurar el cliente globalmente para el agente
+
+        # Set the client globally for the agent
         set_default_openai_client(self.client, use_for_tracing=False)
-        
-        # Crear el agente con la herramienta de ejecución de comandos
+
+        # Create the agent with the command execution tool
         self.agent = Agent(
             name="Ollama Assistant",
-            instructions="""Eres un asistente de IA útil que puede ayudar con diversas tareas.
-Tienes acceso a una herramienta que te permite ejecutar comandos del sistema operativo.""",
+            instructions="""You are a helpful AI assistant that can help with various tasks.
+You have access to a tool that allows you to execute operating system commands.""",
             model=model,
             tools=[execute_command]
         )
-    
+
     def run(self, prompt: str) -> str:
         """
-        Ejecuta el agente con un prompt (versión síncrona fallback).
-        
+        Runs the agent with a prompt (synchronous fallback version).
+
         Args:
-            prompt: El prompt del usuario.
-            
+            prompt: The user's prompt.
+
         Returns:
-            La respuesta del agente.
+            The agent's response.
         """
         import asyncio
         return asyncio.run(self.run_async(prompt))
-    
+
     async def run_async(self, prompt: str) -> str:
         """
-        Ejecuta el agente de forma asíncrona.
-        
+        Runs the agent asynchronously.
+
         Args:
-            prompt: El prompt del usuario.
-            
+            prompt: The user's prompt.
+
         Returns:
             La respuesta del agente.
         """
@@ -120,4 +120,3 @@ Tienes acceso a una herramienta que te permite ejecutar comandos del sistema ope
             return str(result.final_output)
         except Exception as e:
             return f"Error: {str(e)}"
-

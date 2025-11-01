@@ -1,4 +1,4 @@
-"""Punto de entrada principal de la aplicación."""
+"""Main entry point of the application."""
 
 import argparse
 import asyncio
@@ -9,63 +9,63 @@ from .tui import ChatInterface
 
 def parse_arguments():
     """
-    Analiza los argumentos de la línea de comandos.
+    Parses command line arguments.
     
     Returns:
-        Argumentos parseados.
+        Parsed arguments.
     """
     parser = argparse.ArgumentParser(
-        description="Ollama Agent - Agente de IA para interactuar con modelos locales"
+        description="Ollama Agent - AI agent to interact with local models"
     )
     parser.add_argument(
         "--model",
         type=str,
-        help="Especifica el modelo de IA a utilizar (por defecto: gpt-oss:20b)"
+        help="Specify the AI model to use (default: gpt-oss:20b)"
     )
     parser.add_argument(
         "--prompt",
         type=str,
-        help="Modo no interactivo, proporciona un prompt directamente desde la línea de comandos"
+        help="Non-interactive mode, provide a prompt directly from the command line"
     )
     return parser.parse_args()
 
 
 async def run_non_interactive(agent: OllamaAgent, prompt: str):
     """
-    Ejecuta el agente en modo no interactivo.
+    Runs the agent in non-interactive mode.
     
     Args:
-        agent: El agente de IA.
-        prompt: El prompt del usuario.
+        agent: The AI agent.
+        prompt: The user's prompt.
     """
-    print(f"Usuario: {prompt}")
-    print("Agente: pensando...")
+    print(f"User: {prompt}")
+    print("Agent: thinking...")
     response = await agent.run_async(prompt)
-    print(f"Agente: {response}")
+    print(f"Agent: {response}")
 
 
 def main():
-    """Punto de entrada principal."""
+    """Main entry point."""
     args = parse_arguments()
     
-    # Cargar configuración
+    # Load configuration
     config = Config()
     config_data = config.load()
     
-    # Determinar el modelo a usar
+    # Determine the model to use
     model = args.model if args.model else config_data.get("model", "gpt-oss:20b")
     base_url = config_data.get("base_url", "http://localhost:11434/v1/")
     api_key = config_data.get("api_key", "ollama")
     
-    # Crear el agente
+    # Create the agent
     agent = OllamaAgent(model=model, base_url=base_url, api_key=api_key)
     
-    # Modo no interactivo o interactivo
+    # Non-interactive or interactive mode
     if args.prompt:
-        # Modo no interactivo
+        # Non-interactive mode
         asyncio.run(run_non_interactive(agent, args.prompt))
     else:
-        # Modo interactivo con TUI
+        # Interactive mode with TUI
         app = ChatInterface(agent)
         app.run()
 

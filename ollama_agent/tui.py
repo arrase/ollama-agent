@@ -1,4 +1,4 @@
-"""Interfaz de usuario de terminal (TUI) usando Textual."""
+"""Terminal user interface (TUI) using Textual."""
 
 from textual.app import App, ComposeResult
 from textual.containers import Container, Vertical
@@ -9,7 +9,7 @@ from .agent import OllamaAgent
 
 
 class ChatInterface(App):
-    """Interfaz de chat para interactuar con el agente de IA."""
+    """Chat interface to interact with the AI agent."""
     
     CSS = """
     Screen {
@@ -59,22 +59,22 @@ class ChatInterface(App):
     """
     
     BINDINGS = [
-        Binding("ctrl+c", "quit", "Salir"),
-        Binding("ctrl+l", "clear", "Limpiar"),
+        Binding("ctrl+c", "quit", "Quit"),
+        Binding("ctrl+l", "clear", "Clear"),
     ]
     
     def __init__(self, agent: OllamaAgent):
         """
-        Inicializa la interfaz.
+        Initializes the interface.
         
         Args:
-            agent: El agente de IA a utilizar.
+            agent: The AI agent to use.
         """
         super().__init__()
         self.agent = agent
         
     def compose(self) -> ComposeResult:
-        """Crea los widgets de la interfaz."""
+        """Creates the interface widgets."""
         yield Header()
         
         with Vertical(id="chat-container"):
