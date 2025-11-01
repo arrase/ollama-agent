@@ -42,14 +42,14 @@ async def run_non_interactive(agent: OllamaAgent, prompt: str):
 def main():
     """Main entry point."""
     args = parse_arguments()
-    config = Config().load()
+    config = Config()
     
     # CLI args override config values
     agent = OllamaAgent(
-        model=args.model or config["model"],
-        base_url=config["base_url"],
-        api_key=config["api_key"],
-        reasoning_effort=args.effort or config["reasoning_effort"]
+        model=args.model or config.get("model"),
+        base_url=config.get("base_url"),
+        api_key=config.get("api_key"),
+        reasoning_effort=args.effort or config.get("reasoning_effort")
     )
     
     if args.prompt:
