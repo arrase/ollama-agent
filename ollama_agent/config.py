@@ -50,7 +50,8 @@ class Config:
         return {
             "model": "gpt-oss:20b",
             "base_url": "http://localhost:11434/v1/",
-            "api_key": "ollama"
+            "api_key": "ollama",
+            "reasoning_effort": "medium"
         }
     
     def get(self, key: str, default: Any = None) -> Any:

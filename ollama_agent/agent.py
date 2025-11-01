@@ -1,14 +1,20 @@
 """AI agent using openai-agents and Ollama."""
 
+from typing import Literal, cast
+
 from openai import AsyncOpenAI
-from agents import Agent, Runner, set_default_openai_client, set_tracing_disabled, set_default_openai_api
+from agents import Agent, Runner, ModelSettings, set_default_openai_client, set_tracing_disabled, set_default_openai_api
+from openai.types.shared import Reasoning
 from .tools import execute_command
+
+ReasoningEffortValue = Literal["low", "medium", "high"]
+ALLOWED_REASONING_EFFORTS: tuple[ReasoningEffortValue, ...] = ("low", "medium", "high")
 
 
 class OllamaAgent:
     """AI agent that connects to Ollama."""
 
-    def __init__(self, model: str, base_url: str = "http://localhost:11434/v1/", api_key: str = "ollama"):
+    def __init__(self, model: str, base_url: str = "http://localhost:11434/v1/", api_key: str = "ollama", reasoning_effort: str = "medium"):
         """
         Initializes the agent.
 
@@ -20,6 +26,7 @@ class OllamaAgent:
         self.model = model
         self.base_url = base_url
         self.api_key = api_key
+        self.reasoning_effort = reasoning_effort if reasoning_effort in ALLOWED_REASONING_EFFORTS else "medium"
 
         # Disable tracing to avoid attempts to connect to OpenAI
         set_tracing_disabled(True)
@@ -42,7 +49,8 @@ class OllamaAgent:
             instructions="""You are a helpful AI assistant that can help with various tasks.
 You have access to a tool that allows you to execute operating system commands.""",
             model=model,
-            tools=[execute_command]
+            tools=[execute_command],
+            model_settings=ModelSettings(reasoning=Reasoning(effort=cast(ReasoningEffortValue, self.reasoning_effort)))
         )
 
     def run(self, prompt: str) -> str:
