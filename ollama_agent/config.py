@@ -27,10 +27,10 @@ def get_config(config_dir: Path | None = None) -> Config:
     config_dir = config_dir or Path.home() / ".ollama-agent"
     config_file = config_dir / "config.ini"
     
-    # Valores por defecto
+    # Default values
     defaults = Config()
     
-    # Si el archivo no existe, crearlo con valores por defecto
+    # If the file doesn't exist, create it with default values
     if not config_file.exists():
         config_dir.mkdir(parents=True, exist_ok=True)
         parser = configparser.ConfigParser()
@@ -45,7 +45,7 @@ def get_config(config_dir: Path | None = None) -> Config:
         
         return defaults
     
-    # Si existe, leer los valores
+    # If it exists, read the values
     parser = configparser.ConfigParser()
     parser.read(config_file)
     
