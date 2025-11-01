@@ -100,40 +100,26 @@ class ChatInterface(App):
         self.query_one("#user-input", Input).focus()
     
     async def on_input_submitted(self, event: Input.Submitted) -> None:
-        """
-        Handles user message submission.
-        
-        Args:
-            event: The submission event.
-        """
+        """Handles user message submission."""
         message = event.value.strip()
         if not message:
             return
         
         # Clear the input
-        input_widget = self.query_one("#user-input", Input)
-        input_widget.value = ""
+        self.query_one("#user-input", Input).value = ""
         
-        # Show user message
         chat_log = self.query_one("#chat-log", RichLog)
         chat_log.write(Text(f"User: {message}", style="bold blue"))
-        
-        # Show "thinking..." message
         chat_log.write(Text("Agent: thinking...", style="italic yellow"))
         
         # Get response from agent
         try:
             response = await self.agent.run_async(message)
-            
-            # Clear the last line (the "thinking...")
-            # Instead, show the real response
             chat_log.write(Text(f"Agent: {response}", style="bold green"))
-            chat_log.write("")
         except Exception as e:
             chat_log.write(Text(f"Error: {str(e)}", style="bold red"))
-            chat_log.write("")
         
-        # Scroll to the end
+        chat_log.write("")
         chat_log.scroll_end(animate=False)
     
     def action_clear(self) -> None:
