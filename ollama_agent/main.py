@@ -2,7 +2,7 @@
 
 import argparse
 import asyncio
-from .config import Config
+from . import config
 from .agent import ALLOWED_REASONING_EFFORTS, OllamaAgent
 from .tui import ChatInterface
 
@@ -42,7 +42,6 @@ async def run_non_interactive(agent: OllamaAgent, prompt: str):
 def main():
     """Main entry point."""
     args = parse_arguments()
-    config = Config()
     
     # CLI args override config values
     agent = OllamaAgent(

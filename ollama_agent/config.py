@@ -13,78 +13,70 @@ _DEFAULT_CONFIG = {
     }
 }
 
-class Config:
-    """Manages application configuration."""
-    
-    def __init__(self):
-        self.config_dir = Path.home() / ".ollama-agent"
-        self.config_file = self.config_dir / "config.ini"
-        self._config = configparser.ConfigParser()
-        self._ensure_config_dir_and_load()
-        
-    def _ensure_config_dir_and_load(self):
-        """Creates the configuration directory if it does not exist and loads config."""
-        self.config_dir.mkdir(parents=True, exist_ok=True)
-        if not self.config_file.exists():
-            self._config.read_dict(_DEFAULT_CONFIG)
-            self.save()
-        else:
-            self._config.read(self.config_file)
+_config = configparser.ConfigParser()
+_config_dir = Path.home() / ".ollama-agent"
+_config_file = _config_dir / "config.ini"
 
-        if 'default' not in self._config:
-            self._config['default'] = {}
+def _initialize():
+    """Initializes the configuration, creating the file if it doesn't exist."""
+    global _config
+    _config_dir.mkdir(parents=True, exist_ok=True)
+    
+    if not _config_file.exists():
+        _config.read_dict(_DEFAULT_CONFIG)
+        with open(_config_file, 'w', encoding='utf-8') as f:
+            _config.write(f)
+    else:
+        _config.read(_config_file)
 
-        for key, value in _DEFAULT_CONFIG['default'].items():
-            if key not in self._config['default']:
-                self._config['default'][key] = value
+    if 'default' not in _config:
+        _config.add_section('default')
 
-    def load(self) -> dict[str, Any]:
-        """
-        Returns the configuration as a dictionary.
-        
-        Returns:
-            Dictionary with the configuration.
-        """
-        return dict(self._config.items('default'))
+    for key, value in _DEFAULT_CONFIG['default'].items():
+        if not _config.has_option('default', key):
+            _config.set('default', key, value)
+
+def get(key: str, default: Any = None) -> Any:
+    """
+    Gets a configuration value from the 'default' section.
     
-    def save(self) -> bool:
-        """
-        Saves the current configuration to the file.
-            
-        Returns:
-            True if saved successfully, False otherwise.
-        """
-        try:
-            with open(self.config_file, 'w', encoding='utf-8') as f:
-                self._config.write(f)
-            return True
-        except Exception as e:
-            print(f"Error saving configuration: {e}")
-            return False
+    Args:
+        key: Configuration key.
+        default: Default value if the key does not exist.
+        
+    Returns:
+        The configuration value or the default value.
+    """
+    return _config.get('default', key, fallback=default)
+
+def set(key: str, value: Any) -> bool:
+    """
+    Sets a configuration value in the 'default' section and saves it.
     
-    def get(self, key: str, default: Any = None) -> Any:
-        """
-        Gets a configuration value.
+    Args:
+        key: Configuration key.
+        value: Value to set.
         
-        Args:
-            key: Configuration key.
-            default: Default value if the key does not exist.
-        
-        Returns:
-            The configuration value or the default value.
-        """
-        return self._config.get('default', key, fallback=default)
-    
-    def set(self, key: str, value: Any) -> bool:
-        """
-        Sets a configuration value.
-        
-        Args:
-            key: Configuration key.
-            value: Value to set.
-            
-        Returns:
-            True if saved successfully, False otherwise.
-        """
-        self._config.set('default', key, str(value))
-        return self.save()
+    Returns:
+        True if saved successfully, False otherwise.
+    """
+    _config.set('default', key, str(value))
+    return save()
+
+def save() -> bool:
+    """
+    Saves the current configuration to the file.
+
+    Returns:
+        True if saved successfully, False otherwise.
+    """
+    try:
+        with open(_config_file, 'w', encoding='utf-8') as f:
+            _config.write(f)
+        return True
+    except Exception as e:
+        print(f"Error saving configuration: {e}")
+        return False
+
+# Initialize on module import
+_initialize()
