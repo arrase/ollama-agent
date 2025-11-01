@@ -23,14 +23,31 @@ class Config:
         
         Returns:
             Dictionary with the configuration, or default values if it does not exist.
+            
+        Raises:
+            ValueError: If the configuration file exists but contains invalid JSON.
         """
         if self.config_file.exists():
             try:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     return json.load(f)
-            except Exception:
-                return self._default_config()
-        return self._default_config()
+            except json.JSONDecodeError as e:
+                raise ValueError(
+                    f"Error: Configuration file '{self.config_file}' contains invalid JSON.\n"
+                    f"Details: {e}\n"
+                    f"Please correct the file manually or delete it to create a new one with default values."
+                )
+            except Exception as e:
+                raise ValueError(
+                    f"Error: Could not read configuration file '{self.config_file}'.\n"
+                    f"Details: {e}\n"
+                    f"Please check the file permissions."
+                )
+        
+        # File does not exist, create default config
+        default_config = self._default_config()
+        self.save(default_config)
+        return default_config
     
     def save(self, config: dict[str, Any]):
         """
