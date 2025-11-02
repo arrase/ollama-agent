@@ -41,6 +41,7 @@ class ChatInterface(App):
     BINDINGS = [
         Binding("ctrl+c", "quit", "Quit"),
         Binding("ctrl+l", "clear", "Clear"),
+        Binding("ctrl+r", "reset_session", "New Session"),
     ]
     
     def __init__(self, agent: OllamaAgent):
@@ -67,13 +68,15 @@ class ChatInterface(App):
     
     def on_mount(self) -> None:
         """Execute when the application is mounted."""
+        session_id = self.agent.get_session_id()
         self.title = "Ollama Agent - Chat"
-        self.sub_title = f"Model: {self.agent.model}"
+        self.sub_title = f"Model: {self.agent.model} | Session: {session_id[:8]}..." if session_id else f"Model: {self.agent.model}"
         
         chat_log = self.query_one("#chat-log", RichLog)
         self._write_system_message(chat_log, "Welcome to Ollama Agent!")
+        self._write_system_message(chat_log, f"Session ID: {session_id}")
         self._write_system_message(chat_log, "Type your message and press Enter to send.")
-        self._write_system_message(chat_log, "Press Ctrl+C to exit or Ctrl+L to clear the chat.")
+        self._write_system_message(chat_log, "Press Ctrl+C to exit, Ctrl+L to clear the chat, or Ctrl+R to start a new session.")
         chat_log.write("")
         
         # Focus the input
@@ -149,3 +152,16 @@ class ChatInterface(App):
         chat_log.clear()
         self._write_system_message(chat_log, "Chat cleared.")
         chat_log.write("")
+    
+    def action_reset_session(self) -> None:
+        """Reset the session and start a new conversation."""
+        session_id = self.agent.reset_session()
+        chat_log = self.query_one("#chat-log", RichLog)
+        chat_log.clear()
+        self._write_system_message(chat_log, "New session started!")
+        self._write_system_message(chat_log, f"Session ID: {session_id}")
+        self._write_system_message(chat_log, "Previous conversation history has been cleared.")
+        chat_log.write("")
+        
+        # Update subtitle with new session ID
+        self.sub_title = f"Model: {self.agent.model} | Session: {session_id[:8]}..."

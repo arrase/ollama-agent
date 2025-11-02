@@ -67,7 +67,8 @@ def create_agent_from_args(args: argparse.Namespace) -> OllamaAgent:
         model=args.model or cfg.model,
         base_url=cfg.base_url,
         api_key=cfg.api_key,
-        reasoning_effort=args.effort or cfg.reasoning_effort
+        reasoning_effort=args.effort or cfg.reasoning_effort,
+        database_path=cfg.database_path
     )
 
 
