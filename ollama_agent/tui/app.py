@@ -14,7 +14,9 @@ from rich.markdown import Markdown as RichMarkdown
 from ..agent import OllamaAgent
 from ..tasks import Task, TaskManager
 from ..tools import set_builtin_tool_timeout
-from .screens import SessionListScreen, CreateTaskScreen, TaskListScreen
+from .session_list_screen import SessionListScreen
+from .create_task_screen import CreateTaskScreen
+from .task_list_screen import TaskListScreen
 from ..utils import ALLOWED_REASONING_EFFORTS, validate_reasoning_effort
 
 
