@@ -49,17 +49,30 @@ You can run a single prompt directly from the command line:
 
 ```bash
 ollama-agent --prompt "List all files in the current directory as a json."
+# Or using the short form:
+ollama-agent -p "List all files in the current directory as a json."
 ```
 
-You can also override the configured model, reasoning effort, or command execution timeout:
+You can also override the configured model, reasoning effort, or built-in tool execution timeout:
 
 ```bash
 ollama-agent --model "gpt-oss:20b" --effort "high" --prompt "What is the current date?"
+# Or using short forms:
+ollama-agent -m "gpt-oss:20b" -e "high" -p "What is the current date?"
 ```
 
 ```bash
-ollama-agent --timeout 60 --prompt "Run a long-running task"
+ollama-agent --builtin-tool-timeout 60 --prompt "Run a long-running task"
+# Or using short forms:
+ollama-agent -t 60 -p "Run a long-running task"
 ```
+
+**Available Parameters:**
+
+- `-m`, `--model`: Specify the AI model to use
+- `-p`, `--prompt`: Provide a prompt for non-interactive mode
+- `-e`, `--effort`: Set reasoning effort level (low, medium, high)
+- `-t`, `--builtin-tool-timeout`: Set built-in tool execution timeout in seconds
 
 ### Task Management
 
@@ -96,7 +109,7 @@ On the first run, the application will create a default configuration file at `~
 - `api_key`: API key for authentication (default: `ollama`)
 - `reasoning_effort`: Agent reasoning effort level - `low`, `medium`, or `high` (default: `medium`)
 - `database_path`: Path to the SQLite session database (default: `~/.ollama-agent/sessions.db`)
-- `timeout`: Command execution timeout in seconds (default: `30`)
+- `builtin_tool_timeout`: Built-in tool execution timeout in seconds (default: `30`)
 
 **Example `config.ini`:**
 
@@ -107,7 +120,7 @@ base_url = http://localhost:11434/v1/
 api_key = ollama
 reasoning_effort = medium
 database_path = /home/user/.ollama-agent/sessions.db
-timeout = 30
+builtin_tool_timeout = 30
 ```
 
 ## For Developers

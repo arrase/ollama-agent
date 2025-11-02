@@ -11,7 +11,7 @@ from rich.table import Table
 from . import config
 from .agent import ALLOWED_REASONING_EFFORTS, OllamaAgent
 from .tasks import Task, TaskManager
-from .tools import set_timeout
+from .tools import set_builtin_tool_timeout
 from .tui import ChatInterface
 
 
@@ -26,25 +26,25 @@ def create_argument_parser() -> argparse.ArgumentParser:
         description="Ollama Agent - AI agent to interact with local models"
     )
     parser.add_argument(
-        "--model",
+        "-m", "--model",
         type=str,
         help="Specify the AI model to use"
     )
     parser.add_argument(
-        "--prompt",
+        "-p", "--prompt",
         type=str,
         help="Non-interactive mode, provide a prompt directly from the command line"
     )
     parser.add_argument(
-        "--effort",
+        "-e", "--effort",
         type=str,
         choices=list(ALLOWED_REASONING_EFFORTS),
         help="Set reasoning effort level (low, medium, high)"
     )
     parser.add_argument(
-        "--timeout",
+        "-t", "--builtin-tool-timeout",
         type=int,
-        help="Set command execution timeout in seconds"
+        help="Set built-in tool execution timeout in seconds"
     )
     
     # Task management subcommands
@@ -220,10 +220,10 @@ def main() -> None:
     parser = create_argument_parser()
     args = parser.parse_args()
     
-    # Configure timeout from args or config
+    # Configure built-in tool timeout from args or config
     cfg = config.get_config()
-    timeout = args.timeout if args.timeout is not None else cfg.timeout
-    set_timeout(timeout)
+    builtin_tool_timeout = args.builtin_tool_timeout if args.builtin_tool_timeout is not None else cfg.builtin_tool_timeout
+    set_builtin_tool_timeout(builtin_tool_timeout)
     
     # Handle task commands
     if args.command == "task-list":
@@ -242,7 +242,7 @@ def main() -> None:
     if args.prompt:
         asyncio.run(run_non_interactive(agent, args.prompt))
     else:
-        ChatInterface(agent, timeout=timeout).run()
+        ChatInterface(agent, builtin_tool_timeout=builtin_tool_timeout).run()
 
 
 if __name__ == "__main__":

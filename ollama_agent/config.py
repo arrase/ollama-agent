@@ -18,7 +18,7 @@ class Config:
     api_key: str = "ollama"
     reasoning_effort: str = "medium"
     database_path: Path = DEFAULT_DATABASE_PATH
-    timeout: int = 30
+    builtin_tool_timeout: int = 30
 
 
 def get_config(config_dir: Path | None = None) -> Config:
@@ -49,7 +49,7 @@ def get_config(config_dir: Path | None = None) -> Config:
         parser.set("default", "api_key", defaults.api_key)
         parser.set("default", "reasoning_effort", defaults.reasoning_effort)
         parser.set("default", "database_path", str(defaults.database_path))
-        parser.set("default", "timeout", str(defaults.timeout))
+        parser.set("default", "builtin_tool_timeout", str(defaults.builtin_tool_timeout))
         
         with open(config_file, 'w', encoding='utf-8') as f:
             parser.write(f)
@@ -61,7 +61,7 @@ def get_config(config_dir: Path | None = None) -> Config:
     parser.read(config_file)
     
     database_path_str = parser.get("default", "database_path", fallback=str(defaults.database_path))
-    timeout_str = parser.get("default", "timeout", fallback=str(defaults.timeout))
+    builtin_tool_timeout_str = parser.get("default", "builtin_tool_timeout", fallback=str(defaults.builtin_tool_timeout))
     
     return Config(
         model=parser.get("default", "model", fallback=defaults.model),
@@ -69,5 +69,5 @@ def get_config(config_dir: Path | None = None) -> Config:
         api_key=parser.get("default", "api_key", fallback=defaults.api_key),
         reasoning_effort=parser.get("default", "reasoning_effort", fallback=defaults.reasoning_effort),
         database_path=Path(database_path_str),
-        timeout=int(timeout_str),
+        builtin_tool_timeout=int(builtin_tool_timeout_str),
     )

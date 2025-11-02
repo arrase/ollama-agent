@@ -14,29 +14,29 @@ class CommandResult(TypedDict):
     exit_code: int
 
 
-# Global timeout value that can be configured
-_TIMEOUT = 30
+# Global timeout value for built-in tool execution
+_BUILTIN_TOOL_TIMEOUT = 30
 
 
-def set_timeout(timeout: int) -> None:
+def set_builtin_tool_timeout(timeout: int) -> None:
     """
-    Set the global timeout for command execution.
+    Set the global timeout for built-in tool execution.
     
     Args:
-        timeout: Timeout in seconds.
+        timeout: Timeout in seconds for tool execution.
     """
-    global _TIMEOUT
-    _TIMEOUT = timeout
+    global _BUILTIN_TOOL_TIMEOUT
+    _BUILTIN_TOOL_TIMEOUT = timeout
 
 
-def get_timeout() -> int:
+def get_builtin_tool_timeout() -> int:
     """
-    Get the current global timeout value.
+    Get the current global built-in tool timeout value.
     
     Returns:
         Current timeout in seconds.
     """
-    return _TIMEOUT
+    return _BUILTIN_TOOL_TIMEOUT
 
 
 def _create_error_result(stderr_message: str, exit_code: int = -1) -> CommandResult:
@@ -74,10 +74,10 @@ def execute_command(command: str) -> CommandResult:
         - exit_code: The exit code of the command
     
     Note:
-        The timeout is controlled by the global timeout setting.
-        Use set_timeout() to change it.
+        The timeout is controlled by the global built-in tool timeout setting.
+        Use set_builtin_tool_timeout() to change it.
     """
-    timeout = get_timeout()
+    timeout = get_builtin_tool_timeout()
     
     try:
         result = subprocess.run(
