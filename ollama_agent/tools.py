@@ -14,7 +14,29 @@ class CommandResult(TypedDict):
     exit_code: int
 
 
-DEFAULT_TIMEOUT = 30
+# Global timeout value that can be configured
+_TIMEOUT = 30
+
+
+def set_timeout(timeout: int) -> None:
+    """
+    Set the global timeout for command execution.
+    
+    Args:
+        timeout: Timeout in seconds.
+    """
+    global _TIMEOUT
+    _TIMEOUT = timeout
+
+
+def get_timeout() -> int:
+    """
+    Get the current global timeout value.
+    
+    Returns:
+        Current timeout in seconds.
+    """
+    return _TIMEOUT
 
 
 def _create_error_result(stderr_message: str, exit_code: int = -1) -> CommandResult:
@@ -37,13 +59,12 @@ def _create_error_result(stderr_message: str, exit_code: int = -1) -> CommandRes
 
 
 @function_tool
-def execute_command(command: str, timeout: int = DEFAULT_TIMEOUT) -> CommandResult:
+def execute_command(command: str) -> CommandResult:
     """
     Execute a local operating system command.
     
     Args:
         command: The command to execute in the system shell.
-        timeout: Maximum execution time in seconds (default: 30).
     
     Returns:
         A dictionary with the result of the execution:
@@ -51,7 +72,13 @@ def execute_command(command: str, timeout: int = DEFAULT_TIMEOUT) -> CommandResu
         - stdout: The standard output of the command
         - stderr: The error output of the command
         - exit_code: The exit code of the command
+    
+    Note:
+        The timeout is controlled by the global timeout setting.
+        Use set_timeout() to change it.
     """
+    timeout = get_timeout()
+    
     try:
         result = subprocess.run(
             command,

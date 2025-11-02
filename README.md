@@ -51,10 +51,14 @@ You can run a single prompt directly from the command line:
 ollama-agent --prompt "List all files in the current directory as a json."
 ```
 
-You can also override the configured model or reasoning effort:
+You can also override the configured model, reasoning effort, or command execution timeout:
 
 ```bash
 ollama-agent --model "gpt-oss:20b" --effort "high" --prompt "What is the current date?"
+```
+
+```bash
+ollama-agent --timeout 60 --prompt "Run a long-running task"
 ```
 
 ### Task Management
@@ -84,6 +88,27 @@ ollama-agent task-delete <task_id>
 ### Configuration
 
 On the first run, the application will create a default configuration file at `~/.ollama-agent/config.ini`. You can edit this file to permanently change the default model, API URL, and other settings.
+
+**Configuration Options:**
+
+- `model`: The default AI model to use (default: `gpt-oss:20b`)
+- `base_url`: The Ollama API endpoint (default: `http://localhost:11434/v1/`)
+- `api_key`: API key for authentication (default: `ollama`)
+- `reasoning_effort`: Agent reasoning effort level - `low`, `medium`, or `high` (default: `medium`)
+- `database_path`: Path to the SQLite session database (default: `~/.ollama-agent/sessions.db`)
+- `timeout`: Command execution timeout in seconds (default: `30`)
+
+**Example `config.ini`:**
+
+```ini
+[default]
+model = gpt-oss:20b
+base_url = http://localhost:11434/v1/
+api_key = ollama
+reasoning_effort = medium
+database_path = /home/user/.ollama-agent/sessions.db
+timeout = 30
+```
 
 ## For Developers
 

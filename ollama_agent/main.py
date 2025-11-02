@@ -11,6 +11,7 @@ from rich.table import Table
 from . import config
 from .agent import ALLOWED_REASONING_EFFORTS, OllamaAgent
 from .tasks import Task, TaskManager
+from .tools import set_timeout
 from .tui import ChatInterface
 
 
@@ -39,6 +40,11 @@ def create_argument_parser() -> argparse.ArgumentParser:
         type=str,
         choices=list(ALLOWED_REASONING_EFFORTS),
         help="Set reasoning effort level (low, medium, high)"
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        help="Set command execution timeout in seconds"
     )
     
     # Task management subcommands
@@ -214,6 +220,11 @@ def main() -> None:
     parser = create_argument_parser()
     args = parser.parse_args()
     
+    # Configure timeout from args or config
+    cfg = config.get_config()
+    timeout = args.timeout if args.timeout is not None else cfg.timeout
+    set_timeout(timeout)
+    
     # Handle task commands
     if args.command == "task-list":
         list_tasks_command()
@@ -231,7 +242,7 @@ def main() -> None:
     if args.prompt:
         asyncio.run(run_non_interactive(agent, args.prompt))
     else:
-        ChatInterface(agent).run()
+        ChatInterface(agent, timeout=timeout).run()
 
 
 if __name__ == "__main__":

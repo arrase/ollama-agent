@@ -13,6 +13,7 @@ from rich.markdown import Markdown as RichMarkdown
 
 from .agent import ALLOWED_REASONING_EFFORTS, OllamaAgent, validate_reasoning_effort
 from .tasks import Task, TaskManager
+from .tools import set_timeout
 
 
 class SessionListScreen(ModalScreen):
@@ -416,16 +417,18 @@ class ChatInterface(App):
         Binding("ctrl+t", "create_task", "Create Task"),
     ]
     
-    def __init__(self, agent: OllamaAgent):
+    def __init__(self, agent: OllamaAgent, timeout: int = 30):
         """
         Initialize the interface.
         
         Args:
             agent: The AI agent to use.
+            timeout: Command execution timeout in seconds.
         """
         super().__init__()
         self.agent = agent
         self.task_manager = TaskManager()
+        set_timeout(timeout)
 
     @staticmethod
     def _extract_text(content: Any) -> str:
