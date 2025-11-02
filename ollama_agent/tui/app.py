@@ -53,6 +53,10 @@ class StreamingMarkdownRenderer:
             if len(self.chat_log.lines) > self._start_line_count:
                 self.chat_log.lines.pop()
 
+        # Directly clear the private _line_cache attribute.
+        # There is no public API for clearing the line cache in RichLog.
+        # This is necessary to ensure the markdown is re-rendered correctly.
+        # If a public method becomes available in future versions of Textual, use that instead.
         self.chat_log._line_cache.clear()
         self.chat_log.write(RichMarkdown(self.buffer))
         self.chat_log.scroll_end(animate=False)
