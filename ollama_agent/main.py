@@ -2,7 +2,7 @@
 
 import argparse
 import asyncio
-from typing import Optional
+from typing import Callable, Optional
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -43,41 +43,45 @@ def create_argument_parser() -> argparse.ArgumentParser:
         type=int,
         help="Set built-in tool execution timeout in seconds"
     )
-    
+
     # Task management subcommands
-    subparsers = parser.add_subparsers(dest="command", help="Task management commands")
-    
+    subparsers = parser.add_subparsers(
+        dest="command", help="Task management commands")
+
     # task-list command
     subparsers.add_parser("task-list", help="List all saved tasks")
-    
+
     # task-run command
     task_run = subparsers.add_parser("task-run", help="Execute a saved task")
-    task_run.add_argument("task_id", type=str, help="Task ID or prefix to execute")
-    
+    task_run.add_argument("task_id", type=str,
+                          help="Task ID or prefix to execute")
+
     # task-delete command
-    task_delete = subparsers.add_parser("task-delete", help="Delete a saved task")
-    task_delete.add_argument("task_id", type=str, help="Task ID or prefix to delete")
-    
+    task_delete = subparsers.add_parser(
+        "task-delete", help="Delete a saved task")
+    task_delete.add_argument(
+        "task_id", type=str, help="Task ID or prefix to delete")
+
     return parser
 
 
 async def run_non_interactive(agent: OllamaAgent, prompt: str, model: Optional[str] = None, effort: Optional[str] = None) -> None:
     """Run the agent in non-interactive mode with streaming."""
     console = Console()
-    
+
     try:
         console.print("[bold green]Agent:[/bold green]")
-        
+
         # Use Live display to update markdown in real-time
         buffer = ""
-        
+
         with Live(console=console, refresh_per_second=4) as live:
             async for token in agent.run_async_streamed(prompt, model=model, reasoning_effort=effort):
                 buffer += token
                 # Update the live display with current markdown
                 markdown = Markdown(buffer)
                 live.update(markdown)
-        
+
         # Final newline after streaming completes
         console.print()
     finally:
@@ -88,7 +92,7 @@ async def run_non_interactive(agent: OllamaAgent, prompt: str, model: Optional[s
 def create_agent(model: Optional[str] = None, reasoning_effort: Optional[str] = None) -> OllamaAgent:
     """Create OllamaAgent instance from config with optional overrides."""
     cfg = config.get_config()
-    
+
     return OllamaAgent(
         model=model or cfg.model,
         base_url=cfg.base_url,
@@ -102,11 +106,11 @@ def create_agent(model: Optional[str] = None, reasoning_effort: Optional[str] = 
 def find_task_or_exit(task_manager: TaskManager, task_id: str, console: Console) -> tuple[str, Task]:
     """Find a task by ID or prefix, exit if not found."""
     result = task_manager.find_task_by_prefix(task_id)
-    
+
     if not result:
         console.print(f"[red]Task not found: {task_id}[/red]")
         raise SystemExit(1)
-    
+
     return result
 
 
@@ -115,20 +119,21 @@ def list_tasks_command() -> None:
     console = Console()
     task_manager = TaskManager()
     tasks = task_manager.list_tasks()
-    
+
     if not tasks:
         console.print("[yellow]No tasks found.[/yellow]")
         return
-    
-    table = Table(title="Saved Tasks", show_header=True, header_style="bold magenta")
+
+    table = Table(title="Saved Tasks", show_header=True,
+                  header_style="bold magenta")
     table.add_column("ID", style="cyan", width=10)
     table.add_column("Title", style="green")
     table.add_column("Model", style="blue")
     table.add_column("Effort", style="yellow")
-    
+
     for task_id, task in tasks:
         table.add_row(task_id, task.title, task.model, task.reasoning_effort)
-    
+
     console.print(table)
 
 
@@ -136,15 +141,18 @@ async def run_task_command(task_id: str) -> None:
     """Execute a saved task."""
     console = Console()
     task_manager = TaskManager()
-    
+
     found_id, task = find_task_or_exit(task_manager, task_id, console)
-    
-    console.print(f"[bold cyan]Executing task:[/bold cyan] {task.title} ({found_id})")
+
+    console.print(
+        f"[bold cyan]Executing task:[/bold cyan] {task.title} ({found_id})")
     console.print(f"[bold blue]Prompt:[/bold blue] {task.prompt}")
-    console.print(f"[bold]Model:[/bold] {task.model} | [bold]Effort:[/bold] {task.reasoning_effort}")
+    console.print(
+        f"[bold]Model:[/bold] {task.model} | [bold]Effort:[/bold] {task.reasoning_effort}")
     console.print("")
-    
-    agent = create_agent(model=task.model, reasoning_effort=task.reasoning_effort)
+
+    agent = create_agent(
+        model=task.model, reasoning_effort=task.reasoning_effort)
     await run_non_interactive(agent, task.prompt)
 
 
@@ -152,11 +160,12 @@ def delete_task_command(task_id: str) -> None:
     """Delete a saved task."""
     console = Console()
     task_manager = TaskManager()
-    
+
     found_id, task = find_task_or_exit(task_manager, task_id, console)
-    
+
     if task_manager.delete_task(found_id):
-        console.print(f"[green]Task deleted:[/green] {task.title} ({found_id})")
+        console.print(
+            f"[green]Task deleted:[/green] {task.title} ({found_id})")
     else:
         console.print(f"[red]Error deleting task: {found_id}[/red]")
 
@@ -165,26 +174,26 @@ def main() -> None:
     """Main entry point."""
     parser = create_argument_parser()
     args = parser.parse_args()
-    
+
     # Configure built-in tool timeout from args or config
     cfg = config.get_config()
     builtin_tool_timeout = args.builtin_tool_timeout if args.builtin_tool_timeout is not None else cfg.builtin_tool_timeout
     set_builtin_tool_timeout(builtin_tool_timeout)
-    
-    # Handle task commands
-    if args.command == "task-list":
-        list_tasks_command()
+
+    command_handlers: dict[str, Callable[[], None]] = {
+        "task-list": list_tasks_command,
+        "task-delete": lambda: delete_task_command(args.task_id),
+        "task-run": lambda: asyncio.run(run_task_command(args.task_id)),
+    }
+
+    handler = command_handlers.get(args.command or "")
+    if handler:
+        handler()
         return
-    elif args.command == "task-run":
-        asyncio.run(run_task_command(args.task_id))
-        return
-    elif args.command == "task-delete":
-        delete_task_command(args.task_id)
-        return
-    
+
     # Normal agent execution
     agent = create_agent(model=args.model, reasoning_effort=args.effort)
-    
+
     if args.prompt:
         asyncio.run(run_non_interactive(agent, args.prompt))
     else:

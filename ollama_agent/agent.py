@@ -7,22 +7,30 @@ import uuid
 from pathlib import Path
 from typing import Any, AsyncGenerator, Optional
 
-from agents import Agent, ModelSettings, Runner, SQLiteSession, set_default_openai_api, set_default_openai_client, set_tracing_disabled
+from agents import (
+    Agent,
+    ModelSettings,
+    Runner,
+    SQLiteSession,
+    set_default_openai_api,
+    set_default_openai_client,
+    set_tracing_disabled,
+)
 from openai import AsyncOpenAI
-from openai.types.shared import Reasoning
 from openai.types.responses import ResponseTextDeltaEvent
+from openai.types.shared import Reasoning
 
-from .settings.mcp import initialize_mcp_servers, cleanup_mcp_servers, RunningMCPServer
-from .tools import execute_command
-from .utils import validate_reasoning_effort, ReasoningEffortValue
 from .settings.configini import load_instructions
+from .settings.mcp import RunningMCPServer, cleanup_mcp_servers, initialize_mcp_servers
+from .tools import execute_command
+from .utils import ReasoningEffortValue, extract_text, validate_reasoning_effort
 
 logger = logging.getLogger(__name__)
 
 
 class OllamaAgent:
     """AI agent that connects to Ollama."""
-    
+
     model: str
     base_url: str
     api_key: str
@@ -37,10 +45,10 @@ class OllamaAgent:
     mcp_servers: list[RunningMCPServer]
 
     def __init__(
-        self, 
-        model: str, 
-        base_url: str = "http://localhost:11434/v1/", 
-        api_key: str = "ollama", 
+        self,
+        model: str,
+        base_url: str = "http://localhost:11434/v1/",
+        api_key: str = "ollama",
         reasoning_effort: str = "medium",
         database_path: Optional[Path] = None,
         mcp_config_path: Optional[Path] = None
@@ -60,20 +68,21 @@ class OllamaAgent:
         self.base_url = base_url
         self.api_key = api_key
         self.reasoning_effort = validate_reasoning_effort(reasoning_effort)
-        self.database_path = database_path or Path.home() / ".ollama-agent" / "sessions.db"
+        self.database_path = database_path or Path.home() / ".ollama-agent" / \
+            "sessions.db"
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self.mcp_config_path = mcp_config_path
         self.mcp_servers: list[RunningMCPServer] = []
-        
+
         # Load instructions
         self.instructions = load_instructions()
-        
+
         # Configure OpenAI client
         set_tracing_disabled(True)
         set_default_openai_api("chat_completions")
         self.client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
         set_default_openai_client(self.client, use_for_tracing=False)
-        
+
         # Create agent and session (MCP servers will be initialized when needed)
         self.agent = self._create_agent()
         self.session = None
@@ -91,29 +100,26 @@ class OllamaAgent:
         except (json.JSONDecodeError, TypeError):
             return "No content"
 
+        content: Any
         if isinstance(message_data, dict):
             content = message_data.get("content")
-            if isinstance(content, str):
-                return content[:50]
-            if isinstance(content, list):
-                text = " ".join(
-                    item.get("text", "")
-                    for item in content
-                    if isinstance(item, dict) and item.get("text")
-                ).strip()
-                return text[:50] if text else "No content"
-            return str(message_data)[:50]
+        else:
+            content = message_data
+
+        text_preview = extract_text(content)
+        if text_preview:
+            return text_preview[:50]
 
         return str(message_data)[:50]
 
     def _create_agent(self, model: Optional[str] = None, reasoning_effort: Optional[ReasoningEffortValue] = None) -> Agent:
         """
         Create the AI agent with tools and settings.
-        
+
         Args:
             model: Optional model override. Uses instance model if not provided.
             reasoning_effort: Optional reasoning effort override. Uses instance effort if not provided.
-        
+
         Returns:
             Configured Agent instance.
         """
@@ -126,10 +132,11 @@ class OllamaAgent:
             tools=[execute_command],
             mcp_servers=active_mcp_servers,
             model_settings=ModelSettings(
-                reasoning=Reasoning(effort=reasoning_effort or self.reasoning_effort)
+                reasoning=Reasoning(
+                    effort=reasoning_effort or self.reasoning_effort)
             )
         )
-    
+
     async def _ensure_mcp_servers_initialized(self) -> None:
         """Initialize MCP servers if not already done."""
         if not self.mcp_servers and self.mcp_config_path:
@@ -137,7 +144,18 @@ class OllamaAgent:
             # Recreate agent with MCP servers if any were initialized
             if self.mcp_servers:
                 self.agent = self._create_agent()
-    
+
+    async def _get_agent(self, model: Optional[str], reasoning_effort: Optional[str]) -> Agent:
+        """Return the agent instance, applying overrides when present."""
+        await self._ensure_mcp_servers_initialized()
+
+        if not model and not reasoning_effort:
+            return self.agent
+
+        effort = validate_reasoning_effort(
+            reasoning_effort) if reasoning_effort else self.reasoning_effort
+        return self._create_agent(model=model, reasoning_effort=effort)
+
     async def cleanup(self) -> None:
         """Cleanup resources, including MCP server connections."""
         if self.mcp_servers:
@@ -156,32 +174,24 @@ class OllamaAgent:
         Returns:
             The agent's response.
         """
-        # Ensure MCP servers are initialized
-        await self._ensure_mcp_servers_initialized()
-        
-        # Create agent with overrides if needed
-        if model or reasoning_effort:
-            validated_effort = validate_reasoning_effort(reasoning_effort) if reasoning_effort else None
-            agent = self._create_agent(model=model, reasoning_effort=validated_effort)
-        else:
-            agent = self.agent
-        
+        agent = await self._get_agent(model, reasoning_effort)
+
         try:
             result = await Runner.run(agent, input=prompt, session=self.session)
             return str(result.final_output)
         except Exception as e:
             logger.error(f"Error running agent: {e}")
             return f"Error: {str(e)}"
-    
+
     async def run_async_streamed(
-        self, 
-        prompt: str, 
-        model: Optional[str] = None, 
+        self,
+        prompt: str,
+        model: Optional[str] = None,
         reasoning_effort: Optional[str] = None
     ) -> AsyncGenerator[str, None]:
         """
         Run the agent asynchronously with streaming support.
-        
+
         Yields text deltas as they arrive from the model.
 
         Args:
@@ -192,69 +202,62 @@ class OllamaAgent:
         Yields:
             Text deltas from the model response.
         """
-        # Ensure MCP servers are initialized
-        await self._ensure_mcp_servers_initialized()
-        
-        # Create agent with overrides if needed
-        if model or reasoning_effort:
-            validated_effort = validate_reasoning_effort(reasoning_effort) if reasoning_effort else None
-            agent = self._create_agent(model=model, reasoning_effort=validated_effort)
-        else:
-            agent = self.agent
-        
+        agent = await self._get_agent(model, reasoning_effort)
+
         try:
-            result = Runner.run_streamed(agent, input=prompt, session=self.session)
-            
+            result = Runner.run_streamed(
+                agent, input=prompt, session=self.session)
+
             async for event in result.stream_events():
                 # Only process raw response events with text deltas
                 if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
                     yield event.data.delta
-                    
+
         except Exception as e:
             logger.error(f"Error running streamed agent: {e}")
             yield f"Error: {str(e)}"
-    
+
     def reset_session(self) -> str:
         """
         Reset conversation with a new session.
-        
+
         Returns:
             The new session ID.
         """
         self.session_id = str(uuid.uuid4())
         self.session = SQLiteSession(self.session_id, str(self.database_path))
         return self.session_id
-    
+
     def load_session(self, session_id: str) -> None:
         """
         Load an existing session.
-        
+
         Args:
             session_id: ID of the session to load.
         """
         self.session_id = session_id
         self.session = SQLiteSession(session_id, str(self.database_path))
-    
+
     def get_session_id(self) -> Optional[str]:
         """
         Get the current session ID.
-        
+
         Returns:
             The current session ID or None if no session is active.
         """
         return self.session_id
-    
+
     def list_sessions(self) -> list[dict[str, Any]]:
         """
         List all available sessions in the database.
-        
+
         Returns:
             List of dictionaries containing session information.
             Each dictionary has: session_id, message_count, first_message, last_message
         """
         if not self.database_path.exists():
             return []
-        
+
         try:
             with sqlite3.connect(str(self.database_path)) as conn:
                 cursor = conn.cursor()
@@ -287,7 +290,8 @@ class OllamaAgent:
                     )
 
                     preview_row = cursor.fetchone()
-                    preview = self._extract_preview_text(preview_row[0] if preview_row else None)
+                    preview = self._extract_preview_text(
+                        preview_row[0] if preview_row else None)
 
                     sessions.append({
                         "session_id": session_id,
@@ -301,23 +305,23 @@ class OllamaAgent:
         except Exception as e:
             logger.error(f"Error listing sessions: {e}")
             return []
-    
+
     async def get_session_history(self, session_id: Optional[str] = None) -> list[Any]:
         """
         Get the conversation history for a session.
-        
+
         Args:
             session_id: ID of the session. If None, uses current session.
-            
+
         Returns:
             List of messages in the session.
         """
         if session_id is None:
             session_id = self.session_id
-        
+
         if session_id is None:
             return []
-        
+
         temp_session = SQLiteSession(session_id, str(self.database_path))
         try:
             items = await temp_session.get_items()
@@ -325,30 +329,32 @@ class OllamaAgent:
         except Exception as e:
             logger.error(f"Error getting session history: {e}")
             return []
-    
+
     def delete_session(self, session_id: str) -> bool:
         """
         Delete a session from the database.
-        
+
         Args:
             session_id: ID of the session to delete.
-            
+
         Returns:
             True if successful, False otherwise.
         """
         if not self.database_path.exists():
             return False
-        
+
         try:
             with sqlite3.connect(str(self.database_path)) as conn:
                 cursor = conn.cursor()
-                cursor.execute("DELETE FROM agent_messages WHERE session_id = ?", (session_id,))
-                cursor.execute("DELETE FROM agent_sessions WHERE session_id = ?", (session_id,))
+                cursor.execute(
+                    "DELETE FROM agent_messages WHERE session_id = ?", (session_id,))
+                cursor.execute(
+                    "DELETE FROM agent_sessions WHERE session_id = ?", (session_id,))
 
             # If we deleted the current session, create a new one
             if session_id == self.session_id:
                 self.reset_session()
-            
+
             return True
         except Exception as e:
             logger.error(f"Error deleting session: {e}")
