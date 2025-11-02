@@ -105,7 +105,8 @@ class SessionListScreen(ModalScreen):
                             try:
                                 dt = datetime.fromisoformat(last_time)
                                 time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
-                            except:
+                            except ValueError:
+                                # Ignore invalid date formats; show raw value
                                 pass
 
                         # Create a row with session info and buttons
