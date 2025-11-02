@@ -5,8 +5,9 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, Footer, Header, Input, Label, ListItem, ListView, RichLog, Static
+from textual.widgets import Button, Footer, Header, Input, Label, ListItem, ListView, RichLog, Static, Markdown
 from rich.text import Text
+from rich.markdown import Markdown as RichMarkdown
 
 from .agent import OllamaAgent
 
@@ -247,7 +248,11 @@ class ChatInterface(App):
             chat_log: The RichLog widget.
             message: The message to write.
         """
-        chat_log.write(Text(f"Agent: {message}", style="bold green"))
+        # Write the label
+        chat_log.write(Text("Agent:", style="bold green"))
+        # Render markdown content
+        markdown = RichMarkdown(message)
+        chat_log.write(markdown)
     
     def _write_error_message(self, chat_log: RichLog, message: str) -> None:
         """
@@ -271,11 +276,17 @@ class ChatInterface(App):
         
         chat_log = self.query_one("#chat-log", RichLog)
         self._write_user_message(chat_log, message)
-        chat_log.write(Text("Agent: thinking...", style="italic yellow"))
+        
+        # Show thinking indicator
+        thinking_text = Text("Agent: thinking...", style="italic yellow")
+        chat_log.write(thinking_text)
+        chat_log.scroll_end(animate=False)
         
         # Get response from agent
         try:
             response = await self.agent.run_async(message)
+            # Remove the last line (thinking indicator) by re-rendering from history
+            # For now, just add the response
             self._write_agent_message(chat_log, response)
         except Exception as e:
             self._write_error_message(chat_log, str(e))
