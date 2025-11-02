@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Any
 
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, VerticalScroll
