@@ -5,7 +5,7 @@ from typing import Any, Optional
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Vertical
-from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Select
+from textual.widgets import Footer, Header, Input, RichLog
 from rich.text import Text
 from rich.markdown import Markdown as RichMarkdown
 
