@@ -25,6 +25,7 @@ class SessionListScreen(ModalScreen):
         border: thick $background 80%;
         background: $surface;
         padding: 1 2;
+        overflow-x: hidden;
     }
     
     #session-title {
@@ -38,6 +39,7 @@ class SessionListScreen(ModalScreen):
         height: 18;
         border: solid $primary;
         margin: 1 0;
+        overflow-x: hidden;
     }
     
     #button-container {
@@ -156,6 +158,7 @@ class ChatInterface(App):
     #chat-log {
         height: 1fr;
         scrollbar-gutter: stable;
+        overflow-x: hidden;
     }
     
     #input-container {
@@ -193,7 +196,7 @@ class ChatInterface(App):
         yield Header()
         
         with Vertical(id="chat-container"):
-            yield RichLog(id="chat-log", highlight=True, markup=True)
+            yield RichLog(id="chat-log", highlight=True, markup=True, wrap=True)
         
         with Container(id="input-container"):
             yield Input(placeholder="Type your message here...", id="user-input")
