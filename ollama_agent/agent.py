@@ -146,18 +146,40 @@ class OllamaAgent:
             )
         )
 
-    async def run_async(self, prompt: str) -> str:
+    async def run_async(self, prompt: str, model: Optional[str] = None, reasoning_effort: Optional[str] = None) -> str:
         """
         Run the agent asynchronously.
 
         Args:
             prompt: The user's prompt.
+            model: Optional model override.
+            reasoning_effort: Optional reasoning effort override.
 
         Returns:
             The agent's response.
         """
+        # Create a temporary agent if overrides are provided
+        agent_to_use = self.agent
+        
+        if model or reasoning_effort:
+            temp_effort = validate_reasoning_effort(reasoning_effort) if reasoning_effort else self.reasoning_effort
+            temp_model = model or self.model
+            
+            agent_to_use = Agent(
+                name="Ollama Assistant",
+                instructions=(
+                    "You are a helpful AI assistant that can help with various tasks. "
+                    "You have access to a tool that allows you to execute operating system commands."
+                ),
+                model=temp_model,
+                tools=[execute_command],
+                model_settings=ModelSettings(
+                    reasoning=Reasoning(effort=temp_effort)
+                )
+            )
+        
         try:
-            result = await Runner.run(self.agent, input=prompt, session=self.session)
+            result = await Runner.run(agent_to_use, input=prompt, session=self.session)
             return str(result.final_output)
         except Exception as e:
             return f"Error: {str(e)}"
