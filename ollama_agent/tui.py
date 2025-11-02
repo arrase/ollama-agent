@@ -1,11 +1,13 @@
 """Terminal user interface (TUI) using Textual."""
 
 from datetime import datetime
+from typing import Any
+
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, Footer, Header, Input, Label, ListItem, ListView, RichLog, Static, Markdown
+from textual.widgets import Button, Footer, Header, Input, Label, RichLog
 from rich.text import Text
 from rich.markdown import Markdown as RichMarkdown
 
@@ -87,7 +89,6 @@ class SessionListScreen(ModalScreen):
         super().__init__()
         self.sessions = sessions
         self.agent = agent
-        self.action_result = None  # 'load:session_id' or 'delete:session_id' or None
     
     def compose(self) -> ComposeResult:
         """Create the session list dialog."""
@@ -191,7 +192,20 @@ class ChatInterface(App):
         """
         super().__init__()
         self.agent = agent
-        
+
+    @staticmethod
+    def _extract_text(content: Any) -> str:
+        """Normalize agent history payloads into plain text."""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            return " ".join(
+                item.get("text", "")
+                for item in content
+                if isinstance(item, dict) and item.get("text")
+            ).strip()
+        return ""
+
     def compose(self) -> ComposeResult:
         """Create the interface widgets."""
         yield Header()
@@ -248,9 +262,7 @@ class ChatInterface(App):
             chat_log: The RichLog widget.
             message: The message to write.
         """
-        # Write the label
         chat_log.write(Text("Agent:", style="bold green"))
-        # Render markdown content
         markdown = RichMarkdown(message)
         chat_log.write(markdown)
     
@@ -282,11 +294,8 @@ class ChatInterface(App):
         chat_log.write(thinking_text)
         chat_log.scroll_end(animate=False)
         
-        # Get response from agent
         try:
             response = await self.agent.run_async(message)
-            # Remove the last line (thinking indicator) by re-rendering from history
-            # For now, just add the response
             self._write_agent_message(chat_log, response)
         except Exception as e:
             self._write_error_message(chat_log, str(e))
@@ -336,26 +345,14 @@ class ChatInterface(App):
         self._write_system_message(chat_log, f"Loaded session: {session_id}")
         chat_log.write("")
         
-        # Load and display session history
         history = await self.agent.get_session_history(session_id)
         
         for item in history:
             if isinstance(item, dict):
                 role = item.get('role', 'unknown')
                 content = item.get('content', '')
-                
-                # Extract text from content (handles both string and array formats)
-                text = ''
-                if isinstance(content, str):
-                    text = content
-                elif isinstance(content, list):
-                    # For assistant messages with array content
-                    text_parts = []
-                    for c in content:
-                        if isinstance(c, dict) and 'text' in c:
-                            text_parts.append(c['text'])
-                    text = ' '.join(text_parts)
-                
+                text = self._extract_text(content)
+
                 if role == 'user' and text:
                     self._write_user_message(chat_log, text)
                 elif role == 'assistant' and text:

@@ -1,8 +1,8 @@
 """AI agent using openai-agents and Ollama."""
 
+import json
 import sqlite3
 import uuid
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, Optional, cast
 
@@ -80,6 +80,36 @@ class OllamaAgent:
         
         # Initialize with a new session
         self.reset_session()
+
+    def _connect(self) -> sqlite3.Connection:
+        """Create a SQLite connection for the session database."""
+        return sqlite3.connect(str(self.database_path))
+
+    @staticmethod
+    def _extract_preview_text(message_blob: Optional[str]) -> str:
+        """Parse the first message of a session into a short preview."""
+        if not message_blob:
+            return "No messages"
+
+        try:
+            message_data = json.loads(message_blob)
+        except (json.JSONDecodeError, TypeError):
+            return "No content"
+
+        if isinstance(message_data, dict):
+            content = message_data.get("content")
+            if isinstance(content, str):
+                return content[:50]
+            if isinstance(content, list):
+                text = " ".join(
+                    item.get("text", "")
+                    for item in content
+                    if isinstance(item, dict) and item.get("text")
+                ).strip()
+                return text[:50] if text else "No content"
+            return str(message_data)[:50]
+
+        return str(message_data)[:50]
 
     def _create_client(self) -> AsyncOpenAI:
         """
@@ -173,73 +203,52 @@ class OllamaAgent:
         if not self.database_path.exists():
             return []
         
-        sessions = []
         try:
-            conn = sqlite3.connect(str(self.database_path))
-            cursor = conn.cursor()
-            
-            # Get all unique session IDs and their message counts
-            cursor.execute("""
-                SELECT s.session_id, 
-                       COUNT(m.id) as message_count,
-                       s.created_at as first_message_time,
-                       s.updated_at as last_message_time
-                FROM agent_sessions s
-                LEFT JOIN agent_messages m ON s.session_id = m.session_id
-                GROUP BY s.session_id
-                ORDER BY s.updated_at DESC
-            """)
-            
-            for row in cursor.fetchall():
-                session_id, count, first_time, last_time = row
-                
-                # Get first user message as preview
-                cursor.execute("""
-                    SELECT message_data FROM agent_messages
-                    WHERE session_id = ?
-                    ORDER BY created_at ASC
-                    LIMIT 1
-                """, (session_id,))
-                
-                preview_row = cursor.fetchone()
-                preview = "No messages"
-                if preview_row:
-                    import json
-                    try:
-                        message_data = json.loads(preview_row[0])
-                        # The message_data structure varies, try to extract content
-                        if isinstance(message_data, dict):
-                            role = message_data.get('role', '')
-                            content = message_data.get('content', '')
-                            
-                            # For user messages, content is a string
-                            if isinstance(content, str) and content:
-                                preview = content[:50]
-                            # For assistant messages, content is an array of objects
-                            elif isinstance(content, list) and content:
-                                text_parts = []
-                                for item in content:
-                                    if isinstance(item, dict) and 'text' in item:
-                                        text_parts.append(item['text'])
-                                preview = ' '.join(text_parts)[:50] if text_parts else 'No content'
-                            else:
-                                preview = str(message_data)[:50]
-                    except Exception as e:
-                        preview = f"Parse error: {str(e)[:30]}"
-                
-                sessions.append({
-                    'session_id': session_id,
-                    'message_count': count,
-                    'first_message': first_time,
-                    'last_message': last_time,
-                    'preview': preview
-                })
-            
-            conn.close()
+            with self._connect() as conn:
+                cursor = conn.cursor()
+
+                cursor.execute(
+                    """
+                    SELECT s.session_id,
+                           COUNT(m.id) as message_count,
+                           s.created_at as first_message_time,
+                           s.updated_at as last_message_time
+                    FROM agent_sessions s
+                    LEFT JOIN agent_messages m ON s.session_id = m.session_id
+                    GROUP BY s.session_id
+                    ORDER BY s.updated_at DESC
+                    """
+                )
+
+                rows = cursor.fetchall()
+
+                sessions: list[dict[str, Any]] = []
+                for session_id, count, first_time, last_time in rows:
+                    cursor.execute(
+                        """
+                        SELECT message_data FROM agent_messages
+                        WHERE session_id = ?
+                        ORDER BY created_at ASC
+                        LIMIT 1
+                        """,
+                        (session_id,),
+                    )
+
+                    preview_row = cursor.fetchone()
+                    preview = self._extract_preview_text(preview_row[0] if preview_row else None)
+
+                    sessions.append({
+                        "session_id": session_id,
+                        "message_count": count,
+                        "first_message": first_time or "Unknown",
+                        "last_message": last_time or "Unknown",
+                        "preview": preview,
+                    })
+
+                return sessions
         except Exception as e:
             print(f"Error listing sessions: {e}")
-        
-        return sessions
+            return []
     
     async def get_session_history(self, session_id: Optional[str] = None) -> list[Any]:
         """
@@ -279,17 +288,11 @@ class OllamaAgent:
             return False
         
         try:
-            conn = sqlite3.connect(str(self.database_path))
-            cursor = conn.cursor()
-            
-            # Delete messages first (foreign key relationship)
-            cursor.execute("DELETE FROM agent_messages WHERE session_id = ?", (session_id,))
-            # Delete session
-            cursor.execute("DELETE FROM agent_sessions WHERE session_id = ?", (session_id,))
-            
-            conn.commit()
-            conn.close()
-            
+            with self._connect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM agent_messages WHERE session_id = ?", (session_id,))
+                cursor.execute("DELETE FROM agent_sessions WHERE session_id = ?", (session_id,))
+
             # If we deleted the current session, create a new one
             if session_id == self.session_id:
                 self.reset_session()
