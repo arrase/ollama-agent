@@ -11,10 +11,10 @@ from agents import Agent, ModelSettings, Runner, SQLiteSession, set_default_open
 from openai import AsyncOpenAI
 from openai.types.shared import Reasoning
 
-from .mcp_config import initialize_mcp_servers, cleanup_mcp_servers, MCPServer
+from .settings.mcp import initialize_mcp_servers, cleanup_mcp_servers, MCPServer
 from .tools import execute_command
 from .utils import validate_reasoning_effort, ReasoningEffortValue
-from .config import load_instructions
+from .settings.settings import load_instructions
 
 logger = logging.getLogger(__name__)
 

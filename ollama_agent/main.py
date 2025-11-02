@@ -8,7 +8,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.table import Table
 
-from . import config
+from .settings import settings as config
 from .agent import OllamaAgent
 from .tasks import Task, TaskManager
 from .tools import set_builtin_tool_timeout
