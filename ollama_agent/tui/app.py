@@ -1,6 +1,5 @@
 """Terminal user interface (TUI) using Textual."""
 
-from datetime import datetime
 from typing import Any, Optional
 
 from textual.app import App, ComposeResult
