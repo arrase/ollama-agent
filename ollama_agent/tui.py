@@ -448,7 +448,10 @@ class ChatInterface(App):
             yield RichLog(id="chat-log", highlight=True, markup=True, wrap=True)
         
         with Container(id="input-container"):
-            yield Input(placeholder="Type your message here...", id="user-input")
+            yield Input(
+                placeholder="Type your message here (Ctrl+V to paste)...", 
+                id="user-input"
+            )
         
         yield Footer()
     
@@ -461,7 +464,7 @@ class ChatInterface(App):
         chat_log = self.query_one("#chat-log", RichLog)
         self._write_system_message(chat_log, "Welcome to Ollama Agent!")
         self._write_system_message(chat_log, f"Session ID: {session_id}")
-        self._write_system_message(chat_log, "Type your message and press Enter to send.")
+        self._write_system_message(chat_log, "Type your message and press Enter to send. Use Ctrl+V to paste text.")
         self._write_system_message(chat_log, "Shortcuts: Ctrl+R=New Session | Ctrl+S=Load Session | Ctrl+T=Create Task | Ctrl+L=Tasks")
         chat_log.write("")
         
