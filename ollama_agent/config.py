@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 # Default paths
 DEFAULT_CONFIG_DIR = Path.home() / ".ollama-agent"
 DEFAULT_DATABASE_PATH = DEFAULT_CONFIG_DIR / "sessions.db"
+DEFAULT_MCP_CONFIG_PATH = DEFAULT_CONFIG_DIR / "mcp_servers.json"
 
 
 @dataclass
@@ -21,6 +22,7 @@ class Config:
     reasoning_effort: str = "medium"
     database_path: Path = field(default_factory=lambda: DEFAULT_DATABASE_PATH)
     builtin_tool_timeout: int = 30
+    mcp_config_path: Path = field(default_factory=lambda: DEFAULT_MCP_CONFIG_PATH)
 
 
 def get_config(config_dir: Path | None = None) -> Config:
@@ -49,6 +51,7 @@ def get_config(config_dir: Path | None = None) -> Config:
         parser.set("default", "reasoning_effort", defaults.reasoning_effort)
         parser.set("default", "database_path", str(defaults.database_path))
         parser.set("default", "builtin_tool_timeout", str(defaults.builtin_tool_timeout))
+        parser.set("default", "mcp_config_path", str(defaults.mcp_config_path))
         
         with open(config_file, 'w', encoding='utf-8') as f:
             parser.write(f)
@@ -65,4 +68,5 @@ def get_config(config_dir: Path | None = None) -> Config:
         reasoning_effort=parser.get("default", "reasoning_effort", fallback=defaults.reasoning_effort),
         database_path=Path(parser.get("default", "database_path", fallback=str(defaults.database_path))),
         builtin_tool_timeout=int(parser.get("default", "builtin_tool_timeout", fallback=str(defaults.builtin_tool_timeout))),
+        mcp_config_path=Path(parser.get("default", "mcp_config_path", fallback=str(defaults.mcp_config_path))),
     )

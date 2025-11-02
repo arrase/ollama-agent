@@ -11,6 +11,7 @@ from agents import Agent, ModelSettings, Runner, SQLiteSession, set_default_open
 from openai import AsyncOpenAI
 from openai.types.shared import Reasoning
 
+from .mcp_config import initialize_mcp_servers, cleanup_mcp_servers, MCPServer
 from .tools import execute_command
 from .utils import validate_reasoning_effort, ReasoningEffortValue
 
@@ -25,10 +26,12 @@ class OllamaAgent:
     api_key: str
     reasoning_effort: ReasoningEffortValue
     database_path: Path
+    mcp_config_path: Optional[Path]
     client: AsyncOpenAI
     agent: Agent
     session: Optional[SQLiteSession]
     session_id: Optional[str]
+    mcp_servers: list[MCPServer]
 
     def __init__(
         self, 
@@ -36,7 +39,8 @@ class OllamaAgent:
         base_url: str = "http://localhost:11434/v1/", 
         api_key: str = "ollama", 
         reasoning_effort: str = "medium",
-        database_path: Optional[Path] = None
+        database_path: Optional[Path] = None,
+        mcp_config_path: Optional[Path] = None
     ):
         """
         Initialize the agent.
@@ -47,6 +51,7 @@ class OllamaAgent:
             api_key: API key (required but ignored by Ollama).
             reasoning_effort: Reasoning effort level (low, medium, high).
             database_path: Path to the SQLite database for session storage.
+            mcp_config_path: Path to MCP servers configuration file.
         """
         self.model = model
         self.base_url = base_url
@@ -54,6 +59,8 @@ class OllamaAgent:
         self.reasoning_effort = validate_reasoning_effort(reasoning_effort)
         self.database_path = database_path or Path.home() / ".ollama-agent" / "sessions.db"
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        self.mcp_config_path = mcp_config_path
+        self.mcp_servers = []
         
         # Configure OpenAI client
         set_tracing_disabled(True)
@@ -61,7 +68,7 @@ class OllamaAgent:
         self.client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
         set_default_openai_client(self.client, use_for_tracing=False)
         
-        # Create agent and session
+        # Create agent and session (MCP servers will be initialized when needed)
         self.agent = self._create_agent()
         self.session = None
         self.session_id = None
@@ -112,10 +119,25 @@ class OllamaAgent:
             ),
             model=model or self.model,
             tools=[execute_command],
+            mcp_servers=self.mcp_servers,
             model_settings=ModelSettings(
                 reasoning=Reasoning(effort=reasoning_effort or self.reasoning_effort)
             )
         )
+    
+    async def _ensure_mcp_servers_initialized(self) -> None:
+        """Initialize MCP servers if not already done."""
+        if not self.mcp_servers and self.mcp_config_path:
+            self.mcp_servers = await initialize_mcp_servers(self.mcp_config_path)
+            # Recreate agent with MCP servers if any were initialized
+            if self.mcp_servers:
+                self.agent = self._create_agent()
+    
+    async def cleanup(self) -> None:
+        """Cleanup resources, including MCP server connections."""
+        if self.mcp_servers:
+            await cleanup_mcp_servers(self.mcp_servers)
+            self.mcp_servers = []
 
     async def run_async(self, prompt: str, model: Optional[str] = None, reasoning_effort: Optional[str] = None) -> str:
         """
@@ -129,6 +151,9 @@ class OllamaAgent:
         Returns:
             The agent's response.
         """
+        # Ensure MCP servers are initialized
+        await self._ensure_mcp_servers_initialized()
+        
         # Create agent with overrides if needed
         if model or reasoning_effort:
             validated_effort = validate_reasoning_effort(reasoning_effort) if reasoning_effort else None

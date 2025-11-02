@@ -468,6 +468,11 @@ class ChatInterface(App):
         # Focus the input
         self.query_one("#user-input", Input).focus()
     
+    async def on_unmount(self) -> None:
+        """Execute when the application is unmounted."""
+        # Cleanup MCP servers
+        await self.agent.cleanup()
+    
     def _write_system_message(self, chat_log: RichLog, message: str) -> None:
         """
         Write a system message to the chat log.

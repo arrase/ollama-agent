@@ -64,14 +64,18 @@ async def run_non_interactive(agent: OllamaAgent, prompt: str, model: Optional[s
     """Run the agent in non-interactive mode."""
     console = Console()
     
-    console.print("[italic yellow]Agent: thinking...[/italic yellow]")
-    
-    response = await agent.run_async(prompt, model=model, reasoning_effort=effort)
-    
-    # Render the response as Markdown
-    console.print("[bold green]Agent:[/bold green]")
-    markdown = Markdown(response)
-    console.print(markdown)
+    try:
+        console.print("[italic yellow]Agent: thinking...[/italic yellow]")
+        
+        response = await agent.run_async(prompt, model=model, reasoning_effort=effort)
+        
+        # Render the response as Markdown
+        console.print("[bold green]Agent:[/bold green]")
+        markdown = Markdown(response)
+        console.print(markdown)
+    finally:
+        # Cleanup MCP servers
+        await agent.cleanup()
 
 
 def create_agent(model: Optional[str] = None, reasoning_effort: Optional[str] = None) -> OllamaAgent:
@@ -83,7 +87,8 @@ def create_agent(model: Optional[str] = None, reasoning_effort: Optional[str] = 
         base_url=cfg.base_url,
         api_key=cfg.api_key,
         reasoning_effort=reasoning_effort or cfg.reasoning_effort,
-        database_path=cfg.database_path
+        database_path=cfg.database_path,
+        mcp_config_path=cfg.mcp_config_path
     )
 
 

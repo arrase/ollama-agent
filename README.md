@@ -110,6 +110,7 @@ On the first run, the application will create a default configuration file at `~
 - `reasoning_effort`: Agent reasoning effort level - `low`, `medium`, or `high` (default: `medium`)
 - `database_path`: Path to the SQLite session database (default: `~/.ollama-agent/sessions.db`)
 - `builtin_tool_timeout`: Built-in tool execution timeout in seconds (default: `30`)
+- `mcp_config_path`: Path to MCP servers configuration file (default: `~/.ollama-agent/mcp_servers.json`)
 
 **Example `config.ini`:**
 
@@ -121,6 +122,33 @@ api_key = ollama
 reasoning_effort = medium
 database_path = /home/user/.ollama-agent/sessions.db
 builtin_tool_timeout = 30
+mcp_config_path = /home/user/.ollama-agent/mcp_servers.json
+```
+
+### MCP Servers (Optional)
+
+Ollama Agent supports the Model Context Protocol (MCP) to extend the agent's capabilities with additional tools and context. MCP servers are **optional** and can provide features like filesystem access, Git operations, and custom APIs.
+
+To configure MCP servers, create a `mcp_servers.json` file at `~/.ollama-agent/mcp_servers.json`. See [MCP_SERVERS.md](./MCP_SERVERS.md) for detailed configuration instructions and examples.
+
+**Quick Example:**
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/documents"]
+    },
+    "context7": {
+      "httpUrl": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "your-api-key-here",
+        "Accept": "application/json, text/event-stream"
+      }
+    }
+  }
+}
 ```
 
 ## For Developers
@@ -167,6 +195,7 @@ Interested in contributing? Great! Here’s how to get started.
 - `ollama_agent/tasks.py`: `TaskManager` class for saving, loading, and managing tasks.
 - `ollama_agent/config.py`: Manages loading and creating the application's configuration file.
 - `ollama_agent/tools.py`: Defines the built-in tools available to the agent, such as `execute_command`.
+- `ollama_agent/mcp_config.py`: MCP servers configuration and initialization.
 - `pyproject.toml`: Project metadata and dependencies.
 
 ### Contributions
