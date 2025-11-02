@@ -1,35 +1,20 @@
 """AI agent using openai-agents and Ollama."""
 
 import json
+import logging
 import sqlite3
 import uuid
 from pathlib import Path
-from typing import Any, Literal, Optional, cast
+from typing import Any, Optional
 
 from agents import Agent, ModelSettings, Runner, SQLiteSession, set_default_openai_api, set_default_openai_client, set_tracing_disabled
 from openai import AsyncOpenAI
 from openai.types.shared import Reasoning
 
 from .tools import execute_command
+from .utils import validate_reasoning_effort, ReasoningEffortValue, ALLOWED_REASONING_EFFORTS
 
-ReasoningEffortValue = Literal["low", "medium", "high"]
-ALLOWED_REASONING_EFFORTS: tuple[ReasoningEffortValue, ...] = ("low", "medium", "high")
-DEFAULT_REASONING_EFFORT: ReasoningEffortValue = "medium"
-
-
-def validate_reasoning_effort(effort: str) -> ReasoningEffortValue:
-    """
-    Validate and normalize reasoning effort value.
-    
-    Args:
-        effort: Effort level string to validate.
-        
-    Returns:
-        Valid reasoning effort value.
-    """
-    if effort in ALLOWED_REASONING_EFFORTS:
-        return cast(ReasoningEffortValue, effort)
-    return DEFAULT_REASONING_EFFORT
+logger = logging.getLogger(__name__)
 
 
 class OllamaAgent:
@@ -68,22 +53,19 @@ class OllamaAgent:
         self.api_key = api_key
         self.reasoning_effort = validate_reasoning_effort(reasoning_effort)
         self.database_path = database_path or Path.home() / ".ollama-agent" / "sessions.db"
-        
-        # Ensure database directory exists
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Create OpenAI client and agent
-        self.client = self._create_client()
+        # Configure OpenAI client
+        set_tracing_disabled(True)
+        set_default_openai_api("chat_completions")
+        self.client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
+        set_default_openai_client(self.client, use_for_tracing=False)
+        
+        # Create agent and session
         self.agent = self._create_agent()
         self.session = None
         self.session_id = None
-        
-        # Initialize with a new session
         self.reset_session()
-
-    def _connect(self) -> sqlite3.Connection:
-        """Create a SQLite connection for the session database."""
-        return sqlite3.connect(str(self.database_path))
 
     @staticmethod
     def _extract_preview_text(message_blob: Optional[str]) -> str:
@@ -111,24 +93,13 @@ class OllamaAgent:
 
         return str(message_data)[:50]
 
-    def _create_client(self) -> AsyncOpenAI:
-        """
-        Create and configure OpenAI client for Ollama.
-        
-        Returns:
-            Configured AsyncOpenAI client.
-        """
-        set_tracing_disabled(True)
-        set_default_openai_api("chat_completions")
-        
-        client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
-        set_default_openai_client(client, use_for_tracing=False)
-        
-        return client
-
-    def _create_agent(self) -> Agent:
+    def _create_agent(self, model: Optional[str] = None, reasoning_effort: Optional[ReasoningEffortValue] = None) -> Agent:
         """
         Create the AI agent with tools and settings.
+        
+        Args:
+            model: Optional model override. Uses instance model if not provided.
+            reasoning_effort: Optional reasoning effort override. Uses instance effort if not provided.
         
         Returns:
             Configured Agent instance.
@@ -139,10 +110,10 @@ class OllamaAgent:
                 "You are a helpful AI assistant that can help with various tasks. "
                 "You have access to a tool that allows you to execute operating system commands."
             ),
-            model=self.model,
+            model=model or self.model,
             tools=[execute_command],
             model_settings=ModelSettings(
-                reasoning=Reasoning(effort=self.reasoning_effort)
+                reasoning=Reasoning(effort=reasoning_effort or self.reasoning_effort)
             )
         )
 
@@ -158,30 +129,18 @@ class OllamaAgent:
         Returns:
             The agent's response.
         """
-        # Create a temporary agent if overrides are provided
-        agent_to_use = self.agent
-        
+        # Create agent with overrides if needed
         if model or reasoning_effort:
-            temp_effort = validate_reasoning_effort(reasoning_effort) if reasoning_effort else self.reasoning_effort
-            temp_model = model or self.model
-            
-            agent_to_use = Agent(
-                name="Ollama Assistant",
-                instructions=(
-                    "You are a helpful AI assistant that can help with various tasks. "
-                    "You have access to a tool that allows you to execute operating system commands."
-                ),
-                model=temp_model,
-                tools=[execute_command],
-                model_settings=ModelSettings(
-                    reasoning=Reasoning(effort=temp_effort)
-                )
-            )
+            validated_effort = validate_reasoning_effort(reasoning_effort) if reasoning_effort else None
+            agent = self._create_agent(model=model, reasoning_effort=validated_effort)
+        else:
+            agent = self.agent
         
         try:
-            result = await Runner.run(agent_to_use, input=prompt, session=self.session)
+            result = await Runner.run(agent, input=prompt, session=self.session)
             return str(result.final_output)
         except Exception as e:
+            logger.error(f"Error running agent: {e}")
             return f"Error: {str(e)}"
     
     def reset_session(self) -> str:
@@ -226,7 +185,7 @@ class OllamaAgent:
             return []
         
         try:
-            with self._connect() as conn:
+            with sqlite3.connect(str(self.database_path)) as conn:
                 cursor = conn.cursor()
 
                 cursor.execute(
@@ -269,7 +228,7 @@ class OllamaAgent:
 
                 return sessions
         except Exception as e:
-            print(f"Error listing sessions: {e}")
+            logger.error(f"Error listing sessions: {e}")
             return []
     
     async def get_session_history(self, session_id: Optional[str] = None) -> list[Any]:
@@ -293,7 +252,7 @@ class OllamaAgent:
             items = await temp_session.get_items()
             return list(items)
         except Exception as e:
-            print(f"Error getting session history: {e}")
+            logger.error(f"Error getting session history: {e}")
             return []
     
     def delete_session(self, session_id: str) -> bool:
@@ -310,7 +269,7 @@ class OllamaAgent:
             return False
         
         try:
-            with self._connect() as conn:
+            with sqlite3.connect(str(self.database_path)) as conn:
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM agent_messages WHERE session_id = ?", (session_id,))
                 cursor.execute("DELETE FROM agent_sessions WHERE session_id = ?", (session_id,))
@@ -321,5 +280,5 @@ class OllamaAgent:
             
             return True
         except Exception as e:
-            print(f"Error deleting session: {e}")
+            logger.error(f"Error deleting session: {e}")
             return False

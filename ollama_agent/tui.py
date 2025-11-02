@@ -11,9 +11,10 @@ from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Selec
 from rich.text import Text
 from rich.markdown import Markdown as RichMarkdown
 
-from .agent import ALLOWED_REASONING_EFFORTS, OllamaAgent, validate_reasoning_effort
+from .agent import OllamaAgent
 from .tasks import Task, TaskManager
 from .tools import set_builtin_tool_timeout
+from .utils import ALLOWED_REASONING_EFFORTS, validate_reasoning_effort
 
 
 class SessionListScreen(ModalScreen):
@@ -129,23 +130,19 @@ class SessionListScreen(ModalScreen):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press."""
         button_id = event.button.id
+        if not button_id:
+            return
         
         if button_id == "cancel-button":
             self.dismiss(None)
-        elif button_id and button_id.startswith("load-"):
-            session_id = button_id.replace("load-", "")
+        elif button_id.startswith("load-"):
+            session_id = button_id.removeprefix("load-")
             self.dismiss(f"load:{session_id}")
-        elif button_id and button_id.startswith("delete-"):
-            session_id = button_id.replace("delete-", "")
-            # Delete the session
-            success = self.agent.delete_session(session_id)
-            if success:
-                # Refresh the session list
+        elif button_id.startswith("delete-"):
+            session_id = button_id.removeprefix("delete-")
+            if self.agent.delete_session(session_id):
                 self.sessions = self.agent.list_sessions()
                 self.refresh(recompose=True)
-            else:
-                # Could show an error message here
-                pass
 
 
 class CreateTaskScreen(ModalScreen):

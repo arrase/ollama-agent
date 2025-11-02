@@ -9,19 +9,15 @@ from rich.markdown import Markdown
 from rich.table import Table
 
 from . import config
-from .agent import ALLOWED_REASONING_EFFORTS, OllamaAgent
+from .agent import OllamaAgent
 from .tasks import Task, TaskManager
 from .tools import set_builtin_tool_timeout
 from .tui import ChatInterface
+from .utils import ALLOWED_REASONING_EFFORTS
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
-    """
-    Create and configure argument parser.
-    
-    Returns:
-        Configured ArgumentParser instance.
-    """
+    """Create and configure argument parser."""
     parser = argparse.ArgumentParser(
         description="Ollama Agent - AI agent to interact with local models"
     )
@@ -65,18 +61,9 @@ def create_argument_parser() -> argparse.ArgumentParser:
 
 
 async def run_non_interactive(agent: OllamaAgent, prompt: str, model: Optional[str] = None, effort: Optional[str] = None) -> None:
-    """
-    Run the agent in non-interactive mode.
-    
-    Args:
-        agent: The OllamaAgent instance.
-        prompt: User prompt to process.
-        model: Optional model override.
-        effort: Optional reasoning effort override.
-    """
+    """Run the agent in non-interactive mode."""
     console = Console()
     
-    console.print(f"[bold blue]User:[/bold blue] {prompt}")
     console.print("[italic yellow]Agent: thinking...[/italic yellow]")
     
     response = await agent.run_async(prompt, model=model, reasoning_effort=effort)
@@ -87,38 +74,8 @@ async def run_non_interactive(agent: OllamaAgent, prompt: str, model: Optional[s
     console.print(markdown)
 
 
-def create_agent_from_args(args: argparse.Namespace) -> OllamaAgent:
-    """
-    Create OllamaAgent instance with CLI args overriding config.
-    
-    Args:
-        args: Parsed command line arguments.
-        
-    Returns:
-        Configured OllamaAgent instance.
-    """
-    cfg = config.get_config()
-    
-    return OllamaAgent(
-        model=args.model or cfg.model,
-        base_url=cfg.base_url,
-        api_key=cfg.api_key,
-        reasoning_effort=args.effort or cfg.reasoning_effort,
-        database_path=cfg.database_path
-    )
-
-
-def create_agent_from_config(model: Optional[str] = None, reasoning_effort: Optional[str] = None) -> OllamaAgent:
-    """
-    Create OllamaAgent instance from config with optional overrides.
-    
-    Args:
-        model: Optional model override.
-        reasoning_effort: Optional reasoning effort override.
-        
-    Returns:
-        Configured OllamaAgent instance.
-    """
+def create_agent(model: Optional[str] = None, reasoning_effort: Optional[str] = None) -> OllamaAgent:
+    """Create OllamaAgent instance from config with optional overrides."""
     cfg = config.get_config()
     
     return OllamaAgent(
@@ -131,20 +88,7 @@ def create_agent_from_config(model: Optional[str] = None, reasoning_effort: Opti
 
 
 def find_task_or_exit(task_manager: TaskManager, task_id: str, console: Console) -> tuple[str, Task]:
-    """
-    Find a task by ID or prefix, exit if not found.
-    
-    Args:
-        task_manager: TaskManager instance.
-        task_id: Task ID or prefix to search.
-        console: Console instance for error output.
-        
-    Returns:
-        Tuple of (task_id, task) if found.
-        
-    Raises:
-        SystemExit: If task not found.
-    """
+    """Find a task by ID or prefix, exit if not found."""
     result = task_manager.find_task_by_prefix(task_id)
     
     if not result:
@@ -177,12 +121,7 @@ def list_tasks_command() -> None:
 
 
 async def run_task_command(task_id: str) -> None:
-    """
-    Execute a saved task.
-    
-    Args:
-        task_id: Task ID or prefix to execute.
-    """
+    """Execute a saved task."""
     console = Console()
     task_manager = TaskManager()
     
@@ -193,17 +132,12 @@ async def run_task_command(task_id: str) -> None:
     console.print(f"[bold]Model:[/bold] {task.model} | [bold]Effort:[/bold] {task.reasoning_effort}")
     console.print("")
     
-    agent = create_agent_from_config(model=task.model, reasoning_effort=task.reasoning_effort)
+    agent = create_agent(model=task.model, reasoning_effort=task.reasoning_effort)
     await run_non_interactive(agent, task.prompt)
 
 
 def delete_task_command(task_id: str) -> None:
-    """
-    Delete a saved task.
-    
-    Args:
-        task_id: Task ID or prefix to delete.
-    """
+    """Delete a saved task."""
     console = Console()
     task_manager = TaskManager()
     
@@ -237,7 +171,7 @@ def main() -> None:
         return
     
     # Normal agent execution
-    agent = create_agent_from_args(args)
+    agent = create_agent(model=args.model, reasoning_effort=args.effort)
     
     if args.prompt:
         asyncio.run(run_non_interactive(agent, args.prompt))
