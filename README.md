@@ -125,6 +125,31 @@ builtin_tool_timeout = 30
 mcp_config_path = /home/user/.ollama-agent/mcp_servers.json
 ```
 
+### Agent Instructions
+
+You can customize the agent's behavior by editing the instructions file at `~/.ollama-agent/instructions.md`. This file is automatically created on first use with default instructions.
+
+Simply edit the file to:
+
+- Change the agent's personality and tone
+- Add specific guidelines for responses
+- Include domain-specific knowledge
+- Customize tool usage behavior
+
+**Example instructions file:**
+
+```markdown
+You are a helpful AI assistant specialized in software development tasks.
+
+You have access to a tool that allows you to execute operating system commands.
+When executing commands, always:
+1. Explain what you're about to do
+2. Show the command before execution
+3. Summarize the results
+
+Be concise, clear, and security-conscious. Never execute destructive commands without explicit user confirmation.
+```
+
 ### MCP Servers (Optional)
 
 Ollama Agent supports the Model Context Protocol (MCP) to extend the agent's capabilities with additional tools and context. MCP servers are **optional** and can provide features like filesystem access, Git operations, and custom APIs.

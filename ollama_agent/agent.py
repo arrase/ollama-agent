@@ -14,6 +14,7 @@ from openai.types.shared import Reasoning
 from .mcp_config import initialize_mcp_servers, cleanup_mcp_servers, MCPServer
 from .tools import execute_command
 from .utils import validate_reasoning_effort, ReasoningEffortValue
+from .config import load_instructions
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ class OllamaAgent:
     reasoning_effort: ReasoningEffortValue
     database_path: Path
     mcp_config_path: Optional[Path]
+    instructions: str
     client: AsyncOpenAI
     agent: Agent
     session: Optional[SQLiteSession]
@@ -61,6 +63,9 @@ class OllamaAgent:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self.mcp_config_path = mcp_config_path
         self.mcp_servers = []
+        
+        # Load instructions
+        self.instructions = load_instructions()
         
         # Configure OpenAI client
         set_tracing_disabled(True)
@@ -113,10 +118,7 @@ class OllamaAgent:
         """
         return Agent(
             name="Ollama Assistant",
-            instructions=(
-                "You are a helpful AI assistant that can help with various tasks. "
-                "You have access to a tool that allows you to execute operating system commands."
-            ),
+            instructions=self.instructions,
             model=model or self.model,
             tools=[execute_command],
             mcp_servers=self.mcp_servers,
