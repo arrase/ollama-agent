@@ -12,7 +12,7 @@ from . import config
 from .agent import OllamaAgent
 from .tasks import Task, TaskManager
 from .tools import set_builtin_tool_timeout
-from .tui import ChatInterface
+from .tui.app import ChatInterface
 from .utils import ALLOWED_REASONING_EFFORTS
 
 
