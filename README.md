@@ -215,12 +215,16 @@ Interested in contributing? Great! Here’s how to get started.
 ### Project Structure
 
 - `ollama_agent/main.py`: Main entry point, handles CLI arguments and starts the TUI or non-interactive mode.
-- `ollama_agent/agent.py`: Core `OllamaAgent` class that manages the agent, client, and sessions.
-- `ollama_agent/tui.py`: Contains all the Textual components for the Terminal User Interface.
-- `ollama_agent/tasks.py`: `TaskManager` class for saving, loading, and managing tasks.
-- `ollama_agent/config.py`: Manages loading and creating the application's configuration file.
+- `ollama_agent/agent.py`: Core `OllamaAgent` class that manages the agent, client, and sessions using `openai-agents` library.
+- `ollama_agent/tasks.py`: `TaskManager` class for saving, loading, and managing tasks (stored as YAML files).
 - `ollama_agent/tools.py`: Defines the built-in tools available to the agent, such as `execute_command`.
-- `ollama_agent/mcp_config.py`: MCP servers configuration and initialization.
+- `ollama_agent/utils.py`: Utility functions and helper methods.
+- `ollama_agent/settings/configini.py`: Manages loading and creating the application's configuration file.
+- `ollama_agent/settings/mcp.py`: MCP servers configuration and initialization.
+- `ollama_agent/tui/app.py`: Main `ChatInterface` Textual app with keybindings.
+- `ollama_agent/tui/session_list_screen.py`: Modal screen for session selection.
+- `ollama_agent/tui/task_list_screen.py`: Modal screen for task management.
+- `ollama_agent/tui/create_task_screen.py`: Modal form for creating new tasks.
 - `pyproject.toml`: Project metadata and dependencies.
 
 ### Contributions
