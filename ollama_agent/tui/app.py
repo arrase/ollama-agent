@@ -1,7 +1,6 @@
 """Terminal user interface (TUI) using Textual."""
 
-import logging
-from typing import Any, Optional
+from typing import Optional
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -13,102 +12,51 @@ from rich.markdown import Markdown as RichMarkdown
 from ..agent import OllamaAgent
 from ..tasks import Task, TaskManager
 from ..tools import set_builtin_tool_timeout
+from ..utils import extract_text
 from .session_list_screen import SessionListScreen
 from .create_task_screen import CreateTaskScreen
 from .task_list_screen import TaskListScreen
 
-logger = logging.getLogger(__name__)
-
 
 class StreamingMarkdownRenderer:
-    """Helper class to render streaming markdown progressively in RichLog."""
-    
-    def __init__(self, chat_log: RichLog, parent_widget, update_frequency: int = 5):
-        """
-        Initialize the streaming renderer.
-        
-        Args:
-            chat_log: The RichLog widget to render to.
-            parent_widget: The parent widget (needed for context).
-            update_frequency: Update display every N tokens (default: 5).
-        """
+    """Render markdown content progressively inside a RichLog widget."""
+
+    def __init__(self, chat_log: RichLog, update_frequency: int = 5):
         self.chat_log = chat_log
-        self.parent_widget = parent_widget
-        self.update_frequency = update_frequency
+        self.update_frequency = max(1, update_frequency)
         self.buffer = ""
         self.token_count = 0
-        self._header_written = False
-        # Track the starting line count to know where our content begins
         self._start_line_count = 0
-    
+
     def start_rendering(self) -> None:
-        """Start the rendering process."""
-        # Write the header and remember where we started
+        """Prepare the log for streaming output."""
         self.chat_log.write(Text("Agent:", style="bold green"))
-        self._header_written = True
         self._start_line_count = len(self.chat_log.lines)
-        logger.debug(f"Started rendering at line {self._start_line_count}")
-    
+
     def append_token(self, token: str) -> None:
-        """
-        Append a token to the buffer and update display if needed.
-        
-        Args:
-            token: Text token to append.
-        """
+        """Append a token and refresh the view at the configured cadence."""
         self.buffer += token
         self.token_count += 1
-        
-        logger.debug(f"Token {self.token_count}: buffer length now {len(self.buffer)}")
-        
-        # Update display every N tokens
         if self.token_count % self.update_frequency == 0:
-            logger.debug(f"Triggering display update at token {self.token_count}")
             self._update_display()
-    
+
     def finalize(self) -> None:
-        """Finalize the rendering with the complete buffer."""
-        logger.debug(f"Finalizing with {self.token_count} tokens")
-        self._update_display(final=True)
-    
-    def _update_display(self, final: bool = False) -> None:
-        """
-        Update the display with current buffer content.
-        
-        Args:
-            final: Whether this is the final update.
-        """
+        """Render the buffered markdown one last time."""
+        self._update_display()
+
+    def _update_display(self) -> None:
         if not self.buffer:
-            logger.debug("No buffer content, skipping update")
             return
-        
-        logger.debug(f"Updating display (final={final}), buffer length: {len(self.buffer)}")
-        
-        # Remove all lines after the header (our previous markdown rendering)
+
         current_lines = len(self.chat_log.lines)
-        lines_to_remove = current_lines - self._start_line_count
-        
-        logger.debug(f"Current lines: {current_lines}, start: {self._start_line_count}, removing: {lines_to_remove}")
-        
-        if lines_to_remove > 0:
-            # Remove from the end
-            for _ in range(lines_to_remove):
-                if len(self.chat_log.lines) > self._start_line_count:
-                    self.chat_log.lines.pop()
-            
-            # Force RichLog to update its internal state
-            self.chat_log._line_cache.clear()
-            logger.debug(f"Removed {lines_to_remove} lines")
-        
-        # Render and write the current markdown
-        markdown = RichMarkdown(self.buffer)
-        self.chat_log.write(markdown)
-        
-        # Scroll to end and refresh
+        for _ in range(current_lines - self._start_line_count):
+            if len(self.chat_log.lines) > self._start_line_count:
+                self.chat_log.lines.pop()
+
+        self.chat_log._line_cache.clear()
+        self.chat_log.write(RichMarkdown(self.buffer))
         self.chat_log.scroll_end(animate=False)
         self.chat_log.refresh()
-        
-        logger.debug(f"Display updated, total lines: {len(self.chat_log.lines)}")
 
 
 class ChatInterface(App):
@@ -162,19 +110,6 @@ class ChatInterface(App):
         self.task_manager = TaskManager()
         set_builtin_tool_timeout(builtin_tool_timeout)
 
-    @staticmethod
-    def _extract_text(content: Any) -> str:
-        """Normalize agent history payloads into plain text."""
-        if isinstance(content, str):
-            return content
-        if isinstance(content, list):
-            return " ".join(
-                item.get("text", "")
-                for item in content
-                if isinstance(item, dict) and item.get("text")
-            ).strip()
-        return ""
-
     def compose(self) -> ComposeResult:
         """Create the interface widgets."""
         yield Header()
@@ -199,8 +134,10 @@ class ChatInterface(App):
         chat_log = self.query_one("#chat-log", RichLog)
         self._write_system_message(chat_log, "Welcome to Ollama Agent!")
         self._write_system_message(chat_log, f"Session ID: {session_id}")
-        self._write_system_message(chat_log, "Type your message and press Enter to send. Use Ctrl+V to paste text.")
-        self._write_system_message(chat_log, "Shortcuts: Ctrl+R=New Session | Ctrl+S=Load Session | Ctrl+T=Create Task | Ctrl+L=Tasks")
+        self._write_system_message(
+            chat_log, "Type your message and press Enter to send. Use Ctrl+V to paste text.")
+        self._write_system_message(
+            chat_log, "Shortcuts: Ctrl+R=New Session | Ctrl+S=Load Session | Ctrl+T=Create Task | Ctrl+L=Tasks")
         chat_log.write("")
 
         # Focus the input
@@ -253,6 +190,32 @@ class ChatInterface(App):
         """
         chat_log.write(Text(f"Error: {message}", style="bold red"))
 
+    async def _stream_agent_response(
+        self,
+        prompt: str,
+        chat_log: RichLog,
+        *,
+        model: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
+    ) -> None:
+        """Render a streamed agent response into the chat log."""
+        renderer = StreamingMarkdownRenderer(chat_log)
+        renderer.start_rendering()
+
+        try:
+            async for token in self.agent.run_async_streamed(
+                prompt,
+                model=model,
+                reasoning_effort=reasoning_effort,
+            ):
+                renderer.append_token(token)
+        except Exception as exc:
+            self._write_error_message(chat_log, str(exc))
+        finally:
+            renderer.finalize()
+            chat_log.write("")
+            chat_log.scroll_end(animate=False)
+
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle user message submission."""
         message = event.value.strip()
@@ -265,23 +228,7 @@ class ChatInterface(App):
 
         chat_log = self.query_one("#chat-log", RichLog)
         self._write_user_message(chat_log, message)
-
-        # Create streaming renderer
-        renderer = StreamingMarkdownRenderer(chat_log, self)
-        renderer.start_rendering()
-
-        try:
-            # Stream the response token by token
-            async for token in self.agent.run_async_streamed(message):
-                renderer.append_token(token)
-            
-            # Finalize rendering
-            renderer.finalize()
-        except Exception as e:
-            self._write_error_message(chat_log, str(e))
-
-        chat_log.write("")
-        chat_log.scroll_end(animate=False)
+        await self._stream_agent_response(message, chat_log)
 
     def action_reset_session(self) -> None:
         """Reset the session and start a new conversation."""
@@ -290,7 +237,8 @@ class ChatInterface(App):
         chat_log.clear()
         self._write_system_message(chat_log, "New session started!")
         self._write_system_message(chat_log, f"Session ID: {session_id}")
-        self._write_system_message(chat_log, "Previous conversation history has been cleared.")
+        self._write_system_message(
+            chat_log, "Previous conversation history has been cleared.")
         chat_log.write("")
 
         # Update subtitle with new session ID
@@ -306,7 +254,8 @@ class ChatInterface(App):
                 session_id = action.replace("load:", "")
                 await self._load_selected_session(session_id)
 
-        self.push_screen(SessionListScreen(sessions, self.agent), handle_session_action)
+        self.push_screen(SessionListScreen(
+            sessions, self.agent), handle_session_action)
 
     async def _load_selected_session(self, session_id: str) -> None:
         """Load the selected session and display its history."""
@@ -324,7 +273,7 @@ class ChatInterface(App):
             if isinstance(item, dict):
                 role = item.get('role', 'unknown')
                 content = item.get('content', '')
-                text = self._extract_text(content)
+                text = extract_text(content)
 
                 if role == 'user' and text:
                     self._write_user_message(chat_log, text)
@@ -344,7 +293,8 @@ class ChatInterface(App):
             if task:
                 task_id = self.task_manager.save_task(task)
                 chat_log = self.query_one("#chat-log", RichLog)
-                self._write_system_message(chat_log, f"Task saved: {task.title} ({task_id})")
+                self._write_system_message(
+                    chat_log, f"Task saved: {task.title} ({task_id})")
                 chat_log.write("")
 
         self.push_screen(CreateTaskScreen(self.agent), handle_task_creation)
@@ -369,26 +319,13 @@ class ChatInterface(App):
             return
 
         chat_log = self.query_one("#chat-log", RichLog)
-        self._write_system_message(chat_log, f"Executing task: {task.title} ({task_id})")
+        self._write_system_message(
+            chat_log, f"Executing task: {task.title} ({task_id})")
         self._write_user_message(chat_log, task.prompt)
 
-        # Create streaming renderer
-        renderer = StreamingMarkdownRenderer(chat_log, self)
-        renderer.start_rendering()
-
-        try:
-            # Stream the response token by token
-            async for token in self.agent.run_async_streamed(
-                task.prompt, 
-                model=task.model, 
-                reasoning_effort=task.reasoning_effort
-            ):
-                renderer.append_token(token)
-            
-            # Finalize rendering
-            renderer.finalize()
-        except Exception as e:
-            self._write_error_message(chat_log, str(e))
-
-        chat_log.write("")
-        chat_log.scroll_end(animate=False)
+        await self._stream_agent_response(
+            task.prompt,
+            chat_log,
+            model=task.model,
+            reasoning_effort=task.reasoning_effort,
+        )
