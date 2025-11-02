@@ -1,5 +1,6 @@
 """Terminal user interface (TUI) using Textual."""
 
+import logging
 from typing import Any, Optional
 
 from textual.app import App, ComposeResult
@@ -15,6 +16,101 @@ from ..tools import set_builtin_tool_timeout
 from .session_list_screen import SessionListScreen
 from .create_task_screen import CreateTaskScreen
 from .task_list_screen import TaskListScreen
+
+logger = logging.getLogger(__name__)
+
+
+class StreamingMarkdownRenderer:
+    """Helper class to render streaming markdown progressively in RichLog."""
+    
+    def __init__(self, chat_log: RichLog, parent_widget, update_frequency: int = 5):
+        """
+        Initialize the streaming renderer.
+        
+        Args:
+            chat_log: The RichLog widget to render to.
+            parent_widget: The parent widget (needed for context).
+            update_frequency: Update display every N tokens (default: 5).
+        """
+        self.chat_log = chat_log
+        self.parent_widget = parent_widget
+        self.update_frequency = update_frequency
+        self.buffer = ""
+        self.token_count = 0
+        self._header_written = False
+        # Track the starting line count to know where our content begins
+        self._start_line_count = 0
+    
+    def start_rendering(self) -> None:
+        """Start the rendering process."""
+        # Write the header and remember where we started
+        self.chat_log.write(Text("Agent:", style="bold green"))
+        self._header_written = True
+        self._start_line_count = len(self.chat_log.lines)
+        logger.debug(f"Started rendering at line {self._start_line_count}")
+    
+    def append_token(self, token: str) -> None:
+        """
+        Append a token to the buffer and update display if needed.
+        
+        Args:
+            token: Text token to append.
+        """
+        self.buffer += token
+        self.token_count += 1
+        
+        logger.debug(f"Token {self.token_count}: buffer length now {len(self.buffer)}")
+        
+        # Update display every N tokens
+        if self.token_count % self.update_frequency == 0:
+            logger.debug(f"Triggering display update at token {self.token_count}")
+            self._update_display()
+    
+    def finalize(self) -> None:
+        """Finalize the rendering with the complete buffer."""
+        logger.debug(f"Finalizing with {self.token_count} tokens")
+        self._update_display(final=True)
+    
+    def _update_display(self, final: bool = False) -> None:
+        """
+        Update the display with current buffer content.
+        
+        Args:
+            final: Whether this is the final update.
+        """
+        if not self.buffer:
+            logger.debug("No buffer content, skipping update")
+            return
+        
+        logger.debug(f"Updating display (final={final}), buffer length: {len(self.buffer)}")
+        
+        # Remove all lines after the header (our previous markdown rendering)
+        current_lines = len(self.chat_log.lines)
+        lines_to_remove = current_lines - self._start_line_count
+        
+        logger.debug(f"Current lines: {current_lines}, start: {self._start_line_count}, removing: {lines_to_remove}")
+        
+        if lines_to_remove > 0:
+            # Remove from the end
+            for _ in range(lines_to_remove):
+                if len(self.chat_log.lines) > self._start_line_count:
+                    self.chat_log.lines.pop()
+            
+            # Force RichLog to update its internal state
+            self.chat_log._line_cache.clear()
+            logger.debug(f"Removed {lines_to_remove} lines")
+        
+        # Render and write the current markdown
+        markdown = RichMarkdown(self.buffer)
+        self.chat_log.write(markdown)
+        
+        # Scroll to end and refresh
+        self.chat_log.scroll_end(animate=False)
+        self.chat_log.refresh()
+        
+        logger.debug(f"Display updated, total lines: {len(self.chat_log.lines)}")
+
+
 class ChatInterface(App):
     """Chat interface to interact with the AI agent."""
 
@@ -170,14 +266,17 @@ class ChatInterface(App):
         chat_log = self.query_one("#chat-log", RichLog)
         self._write_user_message(chat_log, message)
 
-        # Show thinking indicator
-        thinking_text = Text("Agent: thinking...", style="italic yellow")
-        chat_log.write(thinking_text)
-        chat_log.scroll_end(animate=False)
+        # Create streaming renderer
+        renderer = StreamingMarkdownRenderer(chat_log, self)
+        renderer.start_rendering()
 
         try:
-            response = await self.agent.run_async(message)
-            self._write_agent_message(chat_log, response)
+            # Stream the response token by token
+            async for token in self.agent.run_async_streamed(message):
+                renderer.append_token(token)
+            
+            # Finalize rendering
+            renderer.finalize()
         except Exception as e:
             self._write_error_message(chat_log, str(e))
 
@@ -273,14 +372,21 @@ class ChatInterface(App):
         self._write_system_message(chat_log, f"Executing task: {task.title} ({task_id})")
         self._write_user_message(chat_log, task.prompt)
 
-        # Show thinking indicator
-        thinking_text = Text("Agent: thinking...", style="italic yellow")
-        chat_log.write(thinking_text)
-        chat_log.scroll_end(animate=False)
+        # Create streaming renderer
+        renderer = StreamingMarkdownRenderer(chat_log, self)
+        renderer.start_rendering()
 
         try:
-            response = await self.agent.run_async(task.prompt, model=task.model, reasoning_effort=task.reasoning_effort)
-            self._write_agent_message(chat_log, response)
+            # Stream the response token by token
+            async for token in self.agent.run_async_streamed(
+                task.prompt, 
+                model=task.model, 
+                reasoning_effort=task.reasoning_effort
+            ):
+                renderer.append_token(token)
+            
+            # Finalize rendering
+            renderer.finalize()
         except Exception as e:
             self._write_error_message(chat_log, str(e))
 

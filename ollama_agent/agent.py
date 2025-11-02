@@ -5,11 +5,12 @@ import logging
 import sqlite3
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, AsyncGenerator, Optional
 
 from agents import Agent, ModelSettings, Runner, SQLiteSession, set_default_openai_api, set_default_openai_client, set_tracing_disabled
 from openai import AsyncOpenAI
 from openai.types.shared import Reasoning
+from openai.types.responses import ResponseTextDeltaEvent
 
 from .settings.mcp import initialize_mcp_servers, cleanup_mcp_servers, MCPServer
 from .tools import execute_command
@@ -169,6 +170,47 @@ class OllamaAgent:
         except Exception as e:
             logger.error(f"Error running agent: {e}")
             return f"Error: {str(e)}"
+    
+    async def run_async_streamed(
+        self, 
+        prompt: str, 
+        model: Optional[str] = None, 
+        reasoning_effort: Optional[str] = None
+    ) -> AsyncGenerator[str, None]:
+        """
+        Run the agent asynchronously with streaming support.
+        
+        Yields text deltas as they arrive from the model.
+
+        Args:
+            prompt: The user's prompt.
+            model: Optional model override.
+            reasoning_effort: Optional reasoning effort override.
+
+        Yields:
+            Text deltas from the model response.
+        """
+        # Ensure MCP servers are initialized
+        await self._ensure_mcp_servers_initialized()
+        
+        # Create agent with overrides if needed
+        if model or reasoning_effort:
+            validated_effort = validate_reasoning_effort(reasoning_effort) if reasoning_effort else None
+            agent = self._create_agent(model=model, reasoning_effort=validated_effort)
+        else:
+            agent = self.agent
+        
+        try:
+            result = Runner.run_streamed(agent, input=prompt, session=self.session)
+            
+            async for event in result.stream_events():
+                # Only process raw response events with text deltas
+                if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
+                    yield event.data.delta
+                    
+        except Exception as e:
+            logger.error(f"Error running streamed agent: {e}")
+            yield f"Error: {str(e)}"
     
     def reset_session(self) -> str:
         """

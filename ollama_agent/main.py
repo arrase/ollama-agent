@@ -7,6 +7,7 @@ from typing import Optional
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.table import Table
+from rich.live import Live
 
 from .settings import configini as config
 from .agent import OllamaAgent
@@ -61,18 +62,24 @@ def create_argument_parser() -> argparse.ArgumentParser:
 
 
 async def run_non_interactive(agent: OllamaAgent, prompt: str, model: Optional[str] = None, effort: Optional[str] = None) -> None:
-    """Run the agent in non-interactive mode."""
+    """Run the agent in non-interactive mode with streaming."""
     console = Console()
     
     try:
-        console.print("[italic yellow]Agent: thinking...[/italic yellow]")
-        
-        response = await agent.run_async(prompt, model=model, reasoning_effort=effort)
-        
-        # Render the response as Markdown
         console.print("[bold green]Agent:[/bold green]")
-        markdown = Markdown(response)
-        console.print(markdown)
+        
+        # Use Live display to update markdown in real-time
+        buffer = ""
+        
+        with Live(console=console, refresh_per_second=4) as live:
+            async for token in agent.run_async_streamed(prompt, model=model, reasoning_effort=effort):
+                buffer += token
+                # Update the live display with current markdown
+                markdown = Markdown(buffer)
+                live.update(markdown)
+        
+        # Final newline after streaming completes
+        console.print()
     finally:
         # Cleanup MCP servers
         await agent.cleanup()
