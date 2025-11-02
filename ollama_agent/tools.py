@@ -1,7 +1,7 @@
 """Built-in tools for the agent."""
 
 import subprocess
-from typing import Any, TypedDict
+from typing import TypedDict
 
 from agents import function_tool
 

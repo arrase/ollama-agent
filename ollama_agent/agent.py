@@ -12,7 +12,7 @@ from openai import AsyncOpenAI
 from openai.types.shared import Reasoning
 
 from .tools import execute_command
-from .utils import validate_reasoning_effort, ReasoningEffortValue, ALLOWED_REASONING_EFFORTS
+from .utils import validate_reasoning_effort, ReasoningEffortValue
 
 logger = logging.getLogger(__name__)
 
