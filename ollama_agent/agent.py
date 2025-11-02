@@ -12,7 +12,7 @@ from openai import AsyncOpenAI
 from openai.types.shared import Reasoning
 from openai.types.responses import ResponseTextDeltaEvent
 
-from .settings.mcp import initialize_mcp_servers, cleanup_mcp_servers, MCPServer
+from .settings.mcp import initialize_mcp_servers, cleanup_mcp_servers, RunningMCPServer
 from .tools import execute_command
 from .utils import validate_reasoning_effort, ReasoningEffortValue
 from .settings.configini import load_instructions
@@ -34,7 +34,7 @@ class OllamaAgent:
     agent: Agent
     session: Optional[SQLiteSession]
     session_id: Optional[str]
-    mcp_servers: list[MCPServer]
+    mcp_servers: list[RunningMCPServer]
 
     def __init__(
         self, 
@@ -63,7 +63,7 @@ class OllamaAgent:
         self.database_path = database_path or Path.home() / ".ollama-agent" / "sessions.db"
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self.mcp_config_path = mcp_config_path
-        self.mcp_servers = []
+        self.mcp_servers: list[RunningMCPServer] = []
         
         # Load instructions
         self.instructions = load_instructions()
@@ -117,12 +117,14 @@ class OllamaAgent:
         Returns:
             Configured Agent instance.
         """
+        active_mcp_servers = [entry.server for entry in self.mcp_servers]
+
         return Agent(
             name="Ollama Assistant",
             instructions=self.instructions,
             model=model or self.model,
             tools=[execute_command],
-            mcp_servers=self.mcp_servers,
+            mcp_servers=active_mcp_servers,
             model_settings=ModelSettings(
                 reasoning=Reasoning(effort=reasoning_effort or self.reasoning_effort)
             )

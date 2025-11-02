@@ -1,15 +1,50 @@
 """MCP servers configuration and initialization."""
 
+import asyncio
 import json
 import logging
-from pathlib import Path
+from dataclasses import dataclass
 from typing import Any, Optional
+from pathlib import Path
 
 from agents.mcp import MCPServer, MCPServerSse, MCPServerStdio, MCPServerStreamableHttp
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MCP_CONFIG_PATH = Path.home() / ".ollama-agent" / "mcp_servers.json"
+
+
+@dataclass
+class RunningMCPServer:
+    """Keep track of a running MCP server lifecycle."""
+
+    server: MCPServer
+    stop_event: asyncio.Event
+    task: asyncio.Task[None]
+
+
+async def _run_server_lifecycle(
+    server: MCPServer,
+    stop_event: asyncio.Event,
+    started_event: asyncio.Event,
+) -> None:
+    """Run server context in dedicated task to keep enter/exit in same scope."""
+    entered = False
+    try:
+        await server.__aenter__()  # type: ignore[attr-defined]
+        entered = True
+        started_event.set()
+        await stop_event.wait()
+    except Exception:
+        if not started_event.is_set():
+            started_event.set()
+        raise
+    finally:
+        if entered:
+            try:
+                await server.__aexit__(None, None, None)  # type: ignore[attr-defined]
+            except Exception as cleanup_error:
+                logger.debug(f"Error cleaning up MCP server: {cleanup_error}")
 
 
 def _create_stdio_server(name: str, config: dict[str, Any]) -> Optional[MCPServerStdio]:
@@ -52,7 +87,7 @@ def _create_http_server(name: str, config: dict[str, Any]) -> Optional[MCPServer
         )
 
 
-async def initialize_mcp_servers(config_path: Optional[Path] = None) -> list[MCPServer]:
+async def initialize_mcp_servers(config_path: Optional[Path] = None) -> list[RunningMCPServer]:
     """
     Initialize MCP servers from JSON config file.
     
@@ -77,18 +112,33 @@ async def initialize_mcp_servers(config_path: Optional[Path] = None) -> list[MCP
             logger.warning(f"Invalid MCP config format in {config_path}")
             return []
         
-        servers: list[MCPServer] = []
+        servers: list[RunningMCPServer] = []
         for name, config in data["mcpServers"].items():
             # Try stdio first, then http
             server = _create_stdio_server(name, config) or _create_http_server(name, config)
             
             if server:
                 try:
-                    await server.__aenter__()  # type: ignore[attr-defined]
-                    servers.append(server)
+                    stop_event = asyncio.Event()
+                    started_event = asyncio.Event()
+                    task = asyncio.create_task(
+                        _run_server_lifecycle(server, stop_event, started_event)
+                    )
+                    await started_event.wait()
+
+                    if task.done():
+                        try:
+                            task.result()
+                        except Exception as exc:
+                            logger.error(
+                                f"Failed to connect to MCP server '{name}': {exc}"
+                            )
+                        continue
+
+                    servers.append(RunningMCPServer(server, stop_event, task))
                     logger.info(f"Initialized MCP server: {name}")
                 except Exception as e:
-                    logger.error(f"Failed to connect to MCP server '{name}': {e}")
+                    logger.error(f"Failed to initialize MCP server '{name}': {e}")
         
         return servers
         
@@ -97,10 +147,16 @@ async def initialize_mcp_servers(config_path: Optional[Path] = None) -> list[MCP
         return []
 
 
-async def cleanup_mcp_servers(servers: list[MCPServer]) -> None:
+async def cleanup_mcp_servers(servers: list[RunningMCPServer]) -> None:
     """Cleanup MCP server connections."""
-    for server in servers:
+    if not servers:
+        return
+
+    for entry in servers:
+        entry.stop_event.set()
+
+    for entry in servers:
         try:
-            await server.__aexit__(None, None, None)  # type: ignore[attr-defined]
+            await entry.task
         except Exception as e:
             logger.debug(f"Error cleaning up MCP server: {e}")
