@@ -3,6 +3,9 @@
 import argparse
 import asyncio
 
+from rich.console import Console
+from rich.markdown import Markdown
+
 from . import config
 from .agent import ALLOWED_REASONING_EFFORTS, OllamaAgent
 from .tui import ChatInterface
@@ -45,10 +48,17 @@ async def run_non_interactive(agent: OllamaAgent, prompt: str) -> None:
         agent: The OllamaAgent instance.
         prompt: User prompt to process.
     """
-    print(f"User: {prompt}")
-    print("Agent: thinking...")
+    console = Console()
+    
+    console.print(f"[bold blue]User:[/bold blue] {prompt}")
+    console.print("[italic yellow]Agent: thinking...[/italic yellow]")
+    
     response = await agent.run_async(prompt)
-    print(f"Agent: {response}")
+    
+    # Render the response as Markdown
+    console.print("[bold green]Agent:[/bold green]")
+    markdown = Markdown(response)
+    console.print(markdown)
 
 
 def create_agent_from_args(args: argparse.Namespace) -> OllamaAgent:
