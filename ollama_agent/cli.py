@@ -9,7 +9,6 @@ from rich.markdown import Markdown
 from rich.table import Table
 from rich.live import Live
 
-from .settings import configini as config
 from .agent import OllamaAgent
 from .tasks import Task, TaskManager
 from .agent.tools import set_builtin_tool_timeout
