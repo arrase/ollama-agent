@@ -3,6 +3,7 @@
 Ollama Agent is a powerful command-line tool and Textual TUI (Terminal User Interface) that allows you to interact with local AI models through an Ollama-compatible API. It provides a persistent chat experience, session management, and the ability to execute local shell commands, turning your local models into helpful assistants for your daily tasks.
 
 ![Ollama Agent TUI](./screenshot.png)
+![Ollama Agent CLI](./cli.png)
 
 ## Features
 
