@@ -19,10 +19,10 @@ from openai import AsyncOpenAI
 from openai.types.responses import ResponseReasoningTextDeltaEvent, ResponseTextDeltaEvent
 from openai.types.shared import Reasoning
 
-from .settings.configini import load_instructions
-from .settings.mcp import RunningMCPServer, cleanup_mcp_servers, initialize_mcp_servers
+from ..settings.configini import load_instructions
+from ..settings.mcp import RunningMCPServer, cleanup_mcp_servers, initialize_mcp_servers
 from .tools import execute_command
-from .utils import ReasoningEffortValue, validate_reasoning_effort
+from ..utils import ReasoningEffortValue, validate_reasoning_effort
 from .session_manager import SessionManager
 
 logger = logging.getLogger(__name__)

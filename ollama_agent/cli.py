@@ -12,7 +12,7 @@ from rich.live import Live
 from .settings import configini as config
 from .agent import OllamaAgent
 from .tasks import Task, TaskManager
-from .tools import set_builtin_tool_timeout
+from .agent.tools import set_builtin_tool_timeout
 from .tui.app import ChatInterface
 from .utils import ALLOWED_REASONING_EFFORTS
 

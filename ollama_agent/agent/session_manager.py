@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from agents import SQLiteSession
-from .utils import extract_text
+from ..utils import extract_text
 
 logger = logging.getLogger(__name__)
 

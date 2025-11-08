@@ -11,7 +11,7 @@ from textual.widgets import Footer, Header, Input, RichLog
 
 from ..agent import OllamaAgent
 from ..tasks import Task, TaskManager
-from ..tools import set_builtin_tool_timeout
+from ..agent.tools import set_builtin_tool_timeout
 from ..utils import extract_text
 from .create_task_screen import CreateTaskScreen
 from .renderers import ReasoningRenderer, StreamingMarkdownRenderer

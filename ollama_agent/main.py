@@ -4,7 +4,7 @@ from typing import Optional
 
 from .settings import configini as config
 from .agent import OllamaAgent
-from .tools import set_builtin_tool_timeout
+from .agent.tools import set_builtin_tool_timeout
 from .tui.app import ChatInterface
 from .cli import create_argument_parser, handle_cli_commands
 
