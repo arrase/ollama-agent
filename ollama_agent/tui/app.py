@@ -61,9 +61,28 @@ class ChatInterface(App):
         super().__init__()
         self.agent = agent
         self.task_manager = TaskManager()
-        self.chat_log: RichLog | None = None
-        self.input_widget: Input | None = None
+        self._chat_log: RichLog | None = None
+        self._input_field: Input | None = None
         set_builtin_tool_timeout(builtin_tool_timeout)
+
+    @property
+    def chat_log(self) -> RichLog:
+        if self._chat_log is None:
+            raise RuntimeError("Chat log not ready")
+        return self._chat_log
+
+    @property
+    def input_field(self) -> Input:
+        if self._input_field is None:
+            raise RuntimeError("Input widget not ready")
+        return self._input_field
+
+    def _blank_line(self) -> None:
+        self.chat_log.write("")
+
+    def _set_subtitle(self, session_id: Optional[str]) -> None:
+        session_piece = f" | Session: {session_id[:8]}..." if session_id else ""
+        self.sub_title = f"Model: {self.agent.model}{session_piece}"
 
     def compose(self) -> ComposeResult:
         """Create the interface widgets."""
@@ -84,22 +103,18 @@ class ChatInterface(App):
         """Execute when the application is mounted."""
         session_id = self.agent.get_session_id()
         self.title = "Ollama Agent - Chat"
-        self.sub_title = f"Model: {self.agent.model} | Session: {session_id[:8]}..." if session_id else f"Model: {self.agent.model}"
+        self._chat_log = self.query_one("#chat-log", RichLog)
+        self._input_field = self.query_one("#user-input", Input)
 
-        self.chat_log = self.query_one("#chat-log", RichLog)
-        self.input_widget = self.query_one("#user-input", Input)
-
+        self._set_subtitle(session_id)
         self._write_system_message("Welcome to Ollama Agent!")
         self._write_system_message(f"Session ID: {session_id}")
         self._write_system_message(
             "Type your message and press Enter to send. Use Ctrl+V to paste text.")
         self._write_system_message(
             "Shortcuts: Ctrl+R=New Session | Ctrl+S=Load Session | Ctrl+T=Create Task | Ctrl+L=Tasks")
-        if self.chat_log is not None:
-            self.chat_log.write("")
-
-        if self.input_widget is not None:
-            self.input_widget.focus()
+        self._blank_line()
+        self.input_field.focus()
 
     async def on_unmount(self) -> None:
         """Execute when the application is unmounted."""
@@ -107,24 +122,16 @@ class ChatInterface(App):
         await self.agent.cleanup()
 
     def _write_system_message(self, message: str) -> None:
-        if self.chat_log is None:
-            return
         self.chat_log.write(Text(message, style="italic cyan"))
 
     def _write_user_message(self, message: str) -> None:
-        if self.chat_log is None:
-            return
         self.chat_log.write(Text(f"User: {message}", style="bold blue"))
 
     def _write_agent_message(self, message: str) -> None:
-        if self.chat_log is None:
-            return
         self.chat_log.write(Text("Agent:", style="bold green"))
         self.chat_log.write(RichMarkdown(message))
 
     def _write_error_message(self, message: str) -> None:
-        if self.chat_log is None:
-            return
         self.chat_log.write(Text(f"Error: {message}", style="bold red"))
 
     async def _stream_agent_response(
@@ -135,11 +142,46 @@ class ChatInterface(App):
         reasoning_effort: Optional[str] = None,
     ) -> None:
         """Render a streamed agent response into the chat log."""
-        if self.chat_log is None:
-            return
-
         text_renderer = StreamingMarkdownRenderer(self.chat_log)
         reasoning_renderer = ReasoningRenderer(self.chat_log)
+
+        def handle_text_delta(event: dict) -> None:
+            if reasoning_renderer.is_active:
+                reasoning_renderer.finalize_reasoning()
+            text_renderer.append_token(event.get("content", ""))
+
+        def handle_reasoning_delta(event: dict) -> None:
+            reasoning_renderer.start_reasoning()
+            reasoning_renderer.append_reasoning_token(event.get("content", ""))
+
+        def handle_reasoning_summary(event: dict) -> None:
+            if reasoning_renderer.is_active:
+                return
+            preview = event.get("content", "")[:100]
+            if preview:
+                self.chat_log.write(Text(f"💭 Reasoning: {preview}...",
+                                         style="dim italic magenta"))
+
+        def handle_tool_call(event: dict) -> None:
+            if reasoning_renderer.is_active:
+                reasoning_renderer.finalize_reasoning()
+            tool_name = event.get("name", "unknown tool")
+            self.chat_log.write(Text(f"🔧 Calling tool: {tool_name}",
+                                     style="bold yellow"))
+
+        def handle_tool_output(event: dict) -> None:
+            output = event.get("output", "")
+            preview = f"{output[:100]}..." if len(output) > 100 else output
+            self.chat_log.write(Text(f"📤 Tool output: {preview}",
+                                     style="cyan"))
+
+        event_handlers = {
+            "text_delta": handle_text_delta,
+            "reasoning_delta": handle_reasoning_delta,
+            "reasoning_summary": handle_reasoning_summary,
+            "tool_call": handle_tool_call,
+            "tool_output": handle_tool_output,
+        }
 
         try:
             async for event in self.agent.run_async_streamed(
@@ -147,44 +189,22 @@ class ChatInterface(App):
                 model=model,
                 reasoning_effort=reasoning_effort,
             ):
-                if event["type"] == "text_delta":
-                    # Regular text tokens
-                    if reasoning_renderer.is_active:
-                        reasoning_renderer.finalize_reasoning()
-                    # Append token (start_rendering called automatically on first token)
-                    text_renderer.append_token(event["content"])
+                event_type = event.get("type")
 
-                elif event["type"] == "reasoning_delta":
-                    # Reasoning/thinking tokens
-                    reasoning_renderer.start_reasoning()
-                    reasoning_renderer.append_reasoning_token(event["content"])
-
-                elif event["type"] == "reasoning_summary":
-                    # Full reasoning summary (if available)
-                    if not reasoning_renderer.is_active:
-                        self.chat_log.write(Text(f"💭 Reasoning: {event['content'][:100]}...",
-                                                 style="dim italic magenta"))
-
-                elif event["type"] == "tool_call":
-                    if reasoning_renderer.is_active:
-                        reasoning_renderer.finalize_reasoning()
-                    self.chat_log.write(Text(f"🔧 Calling tool: {event['name']}",
-                                             style="bold yellow"))
-
-                elif event["type"] == "tool_output":
-                    output_preview = event["output"][:100] + \
-                        "..." if len(event["output"]
-                                     ) > 100 else event["output"]
-                    self.chat_log.write(Text(f"📤 Tool output: {output_preview}",
-                                             style="cyan"))
-
-                elif event["type"] == "agent_update":
-                    # Skip the initial agent update message
-                    pass
-
-                elif event["type"] == "error":
-                    self._write_error_message(event["content"])
+                if event_type == "error":
+                    self._write_error_message(
+                        event.get("content", "Unknown error"))
                     break
+
+                if event_type == "agent_update":
+                    continue
+
+                if not isinstance(event_type, str):
+                    continue
+
+                handler = event_handlers.get(event_type)
+                if handler:
+                    handler(event)
 
         except Exception as exc:
             self._write_error_message(str(exc))
@@ -192,9 +212,8 @@ class ChatInterface(App):
             if reasoning_renderer.is_active:
                 reasoning_renderer.finalize_reasoning()
             text_renderer.finalize()
-            if self.chat_log is not None:
-                self.chat_log.write("")
-                self.chat_log.scroll_end(animate=False)
+            self._blank_line()
+            self.chat_log.scroll_end(animate=False)
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle user message submission."""
@@ -203,8 +222,7 @@ class ChatInterface(App):
             return
 
         # Clear the input
-        if self.input_widget is not None:
-            self.input_widget.value = ""
+        self.input_field.value = ""
 
         self._write_user_message(message)
         await self._stream_agent_response(message)
@@ -212,17 +230,15 @@ class ChatInterface(App):
     def action_reset_session(self) -> None:
         """Reset the session and start a new conversation."""
         session_id = self.agent.reset_session()
-        if self.chat_log is not None:
-            self.chat_log.clear()
+        self.chat_log.clear()
         self._write_system_message("New session started!")
         self._write_system_message(f"Session ID: {session_id}")
         self._write_system_message(
             "Previous conversation history has been cleared.")
-        if self.chat_log is not None:
-            self.chat_log.write("")
+        self._blank_line()
 
         # Update subtitle with new session ID
-        self.sub_title = f"Model: {self.agent.model} | Session: {session_id[:8]}..."
+        self._set_subtitle(session_id)
 
     def action_load_session(self) -> None:
         """Show the session list dialog."""
@@ -242,12 +258,9 @@ class ChatInterface(App):
         self.agent.load_session(session_id)
 
         log = self.chat_log
-        if log is None:
-            return
-
         log.clear()
         self._write_system_message(f"Loaded session: {session_id}")
-        log.write("")
+        self._blank_line()
 
         history = await self.agent.get_session_history(session_id)
 
@@ -262,11 +275,11 @@ class ChatInterface(App):
                 elif role == 'assistant' and text:
                     self._write_agent_message(text)
 
-        log.write("")
+        self._blank_line()
         log.scroll_end(animate=False)
 
         # Update subtitle
-        self.sub_title = f"Model: {self.agent.model} | Session: {session_id[:8]}..."
+        self._set_subtitle(session_id)
 
     def action_create_task(self) -> None:
         """Show the create task dialog."""
@@ -276,8 +289,7 @@ class ChatInterface(App):
                 task_id = self.task_manager.save_task(task)
                 self._write_system_message(
                     f"Task saved: {task.title} ({task_id})")
-                if self.chat_log is not None:
-                    self.chat_log.write("")
+                self._blank_line()
 
         self.push_screen(CreateTaskScreen(self.agent), handle_task_creation)
 
