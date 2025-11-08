@@ -4,6 +4,7 @@ Ollama Agent is a powerful command-line tool and Textual TUI (Terminal User Inte
 
 ![Ollama Agent TUI](./screenshot.png)
 ![Ollama Agent CLI](./cli.png)
+![Ollama Agent Tasks](./tasks.png)
 
 ## Features
 
