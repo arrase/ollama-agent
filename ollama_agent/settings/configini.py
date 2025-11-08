@@ -14,7 +14,7 @@ DEFAULT_MCP_CONFIG_PATH = DEFAULT_CONFIG_DIR / "mcp_servers.json"
 DEFAULT_INSTRUCTIONS_PATH = DEFAULT_CONFIG_DIR / "instructions.md"
 
 # Default agent instructions
-DEFAULT_INSTRUCTIONS = """As an expert assistant your primary goal is to solve user tasks, using the available tools if needed.
+DEFAULT_INSTRUCTIONS = """As an expert assistant your primary goal is to solve user tasks using the available tools if needed.
 
 When using tools you must strictly follow the Thought, Action (function call), and Observation (tool result) sequence until you have a Final Answer.
 
