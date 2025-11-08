@@ -21,10 +21,12 @@ class Task:
     title: str
     prompt: str
     model: str
-    reasoning_effort: ReasoningEffortValue = field(default=DEFAULT_REASONING_EFFORT)
+    reasoning_effort: ReasoningEffortValue = field(
+        default=DEFAULT_REASONING_EFFORT)
 
     def __post_init__(self) -> None:
-        self.reasoning_effort = validate_reasoning_effort(self.reasoning_effort)
+        self.reasoning_effort = validate_reasoning_effort(
+            self.reasoning_effort)
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
