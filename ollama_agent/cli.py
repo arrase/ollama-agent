@@ -105,19 +105,23 @@ async def run_non_interactive(agent: OllamaAgent, prompt: str, model: Optional[s
                 case "reasoning_delta":
                     if not in_reasoning:
                         stop_live()
-                        console.print("\n[bold magenta]🧠 Thinking:[/bold magenta] ", end="")
+                        console.print(
+                            "\n[bold magenta]🧠 Thinking:[/bold magenta] ", end="")
                         in_reasoning = True
-                    console.print(event["content"], end="", style="dim italic magenta")
+                    console.print(event["content"], end="",
+                                  style="dim italic magenta")
 
                 case "tool_call":
                     conclude_reasoning()
                     stop_live()
-                    console.print(f"\n[yellow]🔧 Calling tool: {event['name']}[/yellow]")
+                    console.print(
+                        f"\n[yellow]🔧 Calling tool: {event['name']}[/yellow]")
 
                 case "tool_output":
                     stop_live()
                     output = event["output"]
-                    preview = f"{output[:100]}..." if len(output) > 100 else output
+                    preview = f"{output[:100]}..." if len(
+                        output) > 100 else output
                     console.print(f"[cyan]📤 Tool output: {preview}[/cyan]\n")
 
                 case "agent_update" | "reasoning_summary":
@@ -199,6 +203,8 @@ def delete_task_command(task_id: str) -> None:
             f"[green]Task deleted:[/green] {task.title} ({found_id})")
     else:
         console.print(f"[red]Error deleting task: {found_id}[/red]")
+
+
 def handle_cli_commands(args: argparse.Namespace, create_agent_func: Callable[..., OllamaAgent]) -> bool:
     """Handle CLI commands and return True if a command was handled."""
     if args.command == "task-list":
@@ -211,7 +217,8 @@ def handle_cli_commands(args: argparse.Namespace, create_agent_func: Callable[..
         asyncio.run(run_task_command(args.task_id, create_agent_func))
         return True
     if args.prompt:
-        agent = create_agent_func(model=args.model, reasoning_effort=args.effort)
+        agent = create_agent_func(
+            model=args.model, reasoning_effort=args.effort)
         asyncio.run(run_non_interactive(agent, args.prompt))
         return True
     return False

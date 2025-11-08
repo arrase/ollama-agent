@@ -153,33 +153,35 @@ class ChatInterface(App):
                         reasoning_renderer.finalize_reasoning()
                     # Append token (start_rendering called automatically on first token)
                     text_renderer.append_token(event["content"])
-                
+
                 elif event["type"] == "reasoning_delta":
                     # Reasoning/thinking tokens
                     reasoning_renderer.start_reasoning()
                     reasoning_renderer.append_reasoning_token(event["content"])
-                
+
                 elif event["type"] == "reasoning_summary":
                     # Full reasoning summary (if available)
                     if not reasoning_renderer.is_active:
-                        self.chat_log.write(Text(f"💭 Reasoning: {event['content'][:100]}...", 
-                                           style="dim italic magenta"))
-                
+                        self.chat_log.write(Text(f"💭 Reasoning: {event['content'][:100]}...",
+                                                 style="dim italic magenta"))
+
                 elif event["type"] == "tool_call":
                     if reasoning_renderer.is_active:
                         reasoning_renderer.finalize_reasoning()
-                    self.chat_log.write(Text(f"🔧 Calling tool: {event['name']}", 
-                                       style="bold yellow"))
-                
+                    self.chat_log.write(Text(f"🔧 Calling tool: {event['name']}",
+                                             style="bold yellow"))
+
                 elif event["type"] == "tool_output":
-                    output_preview = event["output"][:100] + "..." if len(event["output"]) > 100 else event["output"]
-                    self.chat_log.write(Text(f"📤 Tool output: {output_preview}", 
-                                       style="cyan"))
-                
+                    output_preview = event["output"][:100] + \
+                        "..." if len(event["output"]
+                                     ) > 100 else event["output"]
+                    self.chat_log.write(Text(f"📤 Tool output: {output_preview}",
+                                             style="cyan"))
+
                 elif event["type"] == "agent_update":
                     # Skip the initial agent update message
                     pass
-                
+
                 elif event["type"] == "error":
                     self._write_error_message(event["content"])
                     break

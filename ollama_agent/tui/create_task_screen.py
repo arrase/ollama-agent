@@ -113,7 +113,8 @@ class CreateTaskScreen(ModalScreen):
             return None
 
         effort_select = self.query_one("#task-effort-select", Select)
-        effort = str(effort_select.value) if effort_select.value else self.agent.reasoning_effort
+        effort = str(
+            effort_select.value) if effort_select.value else self.agent.reasoning_effort
 
         return Task(
             title=title,

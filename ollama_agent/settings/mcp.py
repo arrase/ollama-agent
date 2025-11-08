@@ -30,9 +30,11 @@ class RunningMCPServer:
         try:
             await self._closer()
         except asyncio.CancelledError:
-            logger.debug("Cancellation while cleaning up MCP server '%s'", self.name)
+            logger.debug(
+                "Cancellation while cleaning up MCP server '%s'", self.name)
         except Exception as cleanup_error:  # pragma: no cover - best effort logging
-            logger.debug("Error cleaning up MCP server '%s': %s", self.name, cleanup_error)
+            logger.debug("Error cleaning up MCP server '%s': %s",
+                         self.name, cleanup_error)
 
 
 def _get_config_value(config: dict[str, Any], *keys: str, default: Any = None) -> Any:
@@ -159,7 +161,8 @@ def _build_server(name: str, config: dict[str, Any]) -> Optional[MCPServer]:
     if transport in {"streamable_http", "http", "streamable"}:
         return _create_streamable_http_server(name, config)
 
-    logger.warning("Unsupported MCP server transport '%s' for '%s'", transport, name)
+    logger.warning(
+        "Unsupported MCP server transport '%s' for '%s'", transport, name)
     return None
 
 
@@ -174,10 +177,12 @@ async def initialize_mcp_servers(config_path: Optional[Path] = None) -> list[Run
         with open(config_path, "r", encoding="utf-8") as config_file:
             data = json.load(config_file)
     except json.JSONDecodeError as parse_error:
-        logger.error("Invalid MCP config JSON in %s: %s", config_path, parse_error)
+        logger.error("Invalid MCP config JSON in %s: %s",
+                     config_path, parse_error)
         return []
     except OSError as io_error:
-        logger.error("Unable to read MCP config at %s: %s", config_path, io_error)
+        logger.error("Unable to read MCP config at %s: %s",
+                     config_path, io_error)
         return []
 
     servers_payload = data.get("mcpServers")
@@ -189,12 +194,14 @@ async def initialize_mcp_servers(config_path: Optional[Path] = None) -> list[Run
 
     for name, raw_config in servers_payload.items():
         if not isinstance(raw_config, dict):
-            logger.warning("Skipping MCP server '%s': expected object, got %s", name, type(raw_config).__name__)
+            logger.warning("Skipping MCP server '%s': expected object, got %s", name, type(
+                raw_config).__name__)
             continue
 
         server = _build_server(name, raw_config)
         if server is None:
-            logger.warning("Skipping MCP server '%s': could not determine transport", name)
+            logger.warning(
+                "Skipping MCP server '%s': could not determine transport", name)
             continue
 
         stack = AsyncExitStack()
@@ -204,11 +211,13 @@ async def initialize_mcp_servers(config_path: Optional[Path] = None) -> list[Run
             )
         except Exception as connect_error:
             await stack.aclose()
-            logger.error("Failed to initialize MCP server '%s': %s", name, connect_error)
+            logger.error("Failed to initialize MCP server '%s': %s",
+                         name, connect_error)
             continue
 
         running_servers.append(
-            RunningMCPServer(name=name, server=entered_server, _closer=stack.aclose)
+            RunningMCPServer(name=name, server=entered_server,
+                             _closer=stack.aclose)
         )
         logger.info("Initialized MCP server: %s", name)
 

@@ -34,7 +34,8 @@ class SessionManager:
         except (json.JSONDecodeError, TypeError):
             return "No content"
 
-        content: Any = message_data.get("content") if isinstance(message_data, dict) else message_data
+        content: Any = message_data.get("content") if isinstance(
+            message_data, dict) else message_data
         text_preview = extract_text(content)
         return text_preview[:50] if text_preview else str(message_data)[:50]
 
@@ -116,7 +117,8 @@ class SessionManager:
         try:
             with sqlite3.connect(self._db_path) as conn:
                 for table in ("agent_messages", "agent_sessions"):
-                    conn.execute(f"DELETE FROM {table} WHERE session_id = ?", (session_id,))
+                    conn.execute(
+                        f"DELETE FROM {table} WHERE session_id = ?", (session_id,))
             if session_id == self.session_id:
                 self.reset_session()
             return True

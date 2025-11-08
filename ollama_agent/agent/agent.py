@@ -58,11 +58,13 @@ class OllamaAgent:
     instructions: str = field(init=False)
     client: AsyncOpenAI = field(init=False)
     agent: Agent = field(init=False)
-    mcp_servers: list[RunningMCPServer] = field(init=False, default_factory=list)
+    mcp_servers: list[RunningMCPServer] = field(
+        init=False, default_factory=list)
     session_manager: SessionManager = field(init=False)
 
     def __post_init__(self) -> None:
-        self.reasoning_effort = validate_reasoning_effort(self.reasoning_effort)
+        self.reasoning_effort = validate_reasoning_effort(
+            self.reasoning_effort)
         self.instructions = load_instructions()
 
         set_tracing_disabled(True)
@@ -138,7 +140,8 @@ class OllamaAgent:
     ) -> AsyncGenerator[dict[str, Any], None]:
         agent = await self._get_agent(model, reasoning_effort)
         try:
-            result = Runner.run_streamed(agent, input=prompt, session=self.session_manager.get_session())
+            result = Runner.run_streamed(
+                agent, input=prompt, session=self.session_manager.get_session())
             async for event in result.stream_events():
                 match event.type:
                     case "raw_response_event":

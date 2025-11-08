@@ -112,7 +112,8 @@ class ReasoningRenderer:
         # Write the updated reasoning line
         reasoning_line = Text()
         reasoning_line.append("🧠 Thinking: ", style="bold magenta")
-        reasoning_line.append(self.reasoning_buffer, style="dim italic magenta")
+        reasoning_line.append(self.reasoning_buffer,
+                              style="dim italic magenta")
         self.chat_log.write(reasoning_line)
 
         # Scroll to end to show the update
