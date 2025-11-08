@@ -47,6 +47,17 @@ def _item_event_payloads(item: Any) -> Iterable[dict[str, Any]]:
             yield {"type": "reasoning_summary", "content": summary}
 
 
+def _event_payloads(event: Any) -> Iterable[dict[str, Any]]:
+    event_type = getattr(event, "type", "")
+    if event_type == "raw_response_event":
+        yield from _raw_event_payloads(getattr(event, "data", None))
+    elif event_type == "run_item_stream_event":
+        yield from _item_event_payloads(getattr(event, "item", None))
+    elif event_type == "agent_updated_stream_event":
+        agent_name = getattr(getattr(event, "new_agent", None), "name", "unknown")
+        yield {"type": "agent_update", "name": agent_name}
+
+
 @dataclass(slots=True)
 class OllamaAgent:
     model: str
@@ -75,6 +86,14 @@ class OllamaAgent:
         self.session_manager = SessionManager(self.database_path)
         self.agent = self._create_agent()
 
+    def _build_model_settings(
+        self, effort: ReasoningEffortValue | None = None
+    ) -> ModelSettings:
+        active_effort = effort or self.reasoning_effort
+        return ModelSettings(
+            reasoning=Reasoning(effort=cast(Any, active_effort))
+        )
+
     def _create_agent(
         self,
         *,
@@ -87,13 +106,7 @@ class OllamaAgent:
             model=model or self.model,
             tools=[execute_command],
             mcp_servers=[entry.server for entry in self.mcp_servers],
-            model_settings=ModelSettings(
-                reasoning=Reasoning(
-                    effort=cast(
-                        Any, reasoning_effort or self.reasoning_effort
-                    )
-                )
-            ),
+            model_settings=self._build_model_settings(reasoning_effort),
         )
 
     async def _ensure_mcp_servers_initialized(self) -> None:
@@ -143,15 +156,8 @@ class OllamaAgent:
             result = Runner.run_streamed(
                 agent, input=prompt, session=self.session_manager.get_session())
             async for event in result.stream_events():
-                match event.type:
-                    case "raw_response_event":
-                        for payload in _raw_event_payloads(event.data):
-                            yield payload
-                    case "run_item_stream_event":
-                        for payload in _item_event_payloads(event.item):
-                            yield payload
-                    case "agent_updated_stream_event":
-                        yield {"type": "agent_update", "name": event.new_agent.name}
+                for payload in _event_payloads(event):
+                    yield payload
         except Exception as exc:  # noqa: BLE001
             logger.error("Error running streamed agent: %s", exc)
             yield {"type": "error", "content": str(exc)}

@@ -25,6 +25,14 @@ class SessionManager:
         self.session: SQLiteSession | None = None
         self.reset_session()
 
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self._db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _session_from_id(self, session_id: str) -> SQLiteSession:
+        return SQLiteSession(session_id, self._db_path)
+
     @staticmethod
     def _extract_preview_text(message_blob: Optional[str]) -> str:
         if not message_blob:
@@ -42,13 +50,13 @@ class SessionManager:
     def reset_session(self) -> str:
         """Resets the current session and returns a new session ID."""
         self.session_id = str(uuid.uuid4())
-        self.session = SQLiteSession(self.session_id, self._db_path)
+        self.session = self._session_from_id(self.session_id)
         return self.session_id
 
     def load_session(self, session_id: str) -> None:
         """Loads an existing session."""
         self.session_id = session_id
-        self.session = SQLiteSession(session_id, self._db_path)
+        self.session = self._session_from_id(session_id)
 
     def get_session_id(self) -> Optional[str]:
         """Returns the current session ID."""
@@ -63,7 +71,7 @@ class SessionManager:
         if not self.storage_path.exists():
             return []
         try:
-            with sqlite3.connect(self._db_path) as conn:
+            with self._connect() as conn:
                 rows = conn.execute(
                     """
                     SELECT s.session_id,
@@ -86,13 +94,13 @@ class SessionManager:
 
             return [
                 {
-                    "session_id": session_id,
-                    "message_count": message_count,
-                    "first_message": first_time or "Unknown",
-                    "last_message": last_time or "Unknown",
-                    "preview": self._extract_preview_text(first_message),
+                    "session_id": row["session_id"],
+                    "message_count": row["message_count"],
+                    "first_message": row["created_at"] or "Unknown",
+                    "last_message": row["updated_at"] or "Unknown",
+                    "preview": self._extract_preview_text(row["first_message"]),
                 }
-                for session_id, message_count, first_time, last_time, first_message in rows
+                for row in rows
             ]
         except Exception as exc:  # noqa: BLE001
             logger.error("Error listing sessions: %s", exc)
@@ -103,7 +111,7 @@ class SessionManager:
         session_id = session_id or self.session_id
         if not session_id:
             return []
-        temp_session = SQLiteSession(session_id, self._db_path)
+        temp_session = self._session_from_id(session_id)
         try:
             return list(await temp_session.get_items())
         except Exception as exc:  # noqa: BLE001
@@ -115,7 +123,7 @@ class SessionManager:
         if not self.storage_path.exists():
             return False
         try:
-            with sqlite3.connect(self._db_path) as conn:
+            with self._connect() as conn:
                 for table in ("agent_messages", "agent_sessions"):
                     conn.execute(
                         f"DELETE FROM {table} WHERE session_id = ?", (session_id,))
