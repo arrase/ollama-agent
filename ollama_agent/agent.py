@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import json
 import logging
-import sqlite3
-import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, AsyncGenerator, Iterable, Optional, cast
@@ -14,7 +11,6 @@ from agents import (
     Agent,
     ModelSettings,
     Runner,
-    SQLiteSession,
     set_default_openai_api,
     set_default_openai_client,
     set_tracing_disabled,
@@ -26,7 +22,8 @@ from openai.types.shared import Reasoning
 from .settings.configini import load_instructions
 from .settings.mcp import RunningMCPServer, cleanup_mcp_servers, initialize_mcp_servers
 from .tools import execute_command
-from .utils import ReasoningEffortValue, extract_text, validate_reasoning_effort
+from .utils import ReasoningEffortValue, validate_reasoning_effort
+from .session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -61,18 +58,11 @@ class OllamaAgent:
     instructions: str = field(init=False)
     client: AsyncOpenAI = field(init=False)
     agent: Agent = field(init=False)
-    session: Optional[SQLiteSession] = field(init=False, default=None)
-    session_id: Optional[str] = field(init=False, default=None)
     mcp_servers: list[RunningMCPServer] = field(init=False, default_factory=list)
-    storage_path: Path = field(init=False)
-    _db_path: str = field(init=False, repr=False)
+    session_manager: SessionManager = field(init=False)
 
     def __post_init__(self) -> None:
         self.reasoning_effort = validate_reasoning_effort(self.reasoning_effort)
-        self.storage_path = self.database_path or Path.home() / ".ollama-agent" / "sessions.db"
-        self.storage_path.parent.mkdir(parents=True, exist_ok=True)
-        self.database_path = self.storage_path
-        self._db_path = str(self.storage_path)
         self.instructions = load_instructions()
 
         set_tracing_disabled(True)
@@ -80,21 +70,8 @@ class OllamaAgent:
         self.client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
         set_default_openai_client(self.client, use_for_tracing=False)
 
+        self.session_manager = SessionManager(self.database_path)
         self.agent = self._create_agent()
-        self.reset_session()
-
-    @staticmethod
-    def _extract_preview_text(message_blob: Optional[str]) -> str:
-        if not message_blob:
-            return "No messages"
-        try:
-            message_data = json.loads(message_blob)
-        except (json.JSONDecodeError, TypeError):
-            return "No content"
-
-        content: Any = message_data.get("content") if isinstance(message_data, dict) else message_data
-        text_preview = extract_text(content)
-        return text_preview[:50] if text_preview else str(message_data)[:50]
 
     def _create_agent(
         self,
@@ -147,7 +124,7 @@ class OllamaAgent:
     ) -> str:
         agent = await self._get_agent(model, reasoning_effort)
         try:
-            result = await Runner.run(agent, input=prompt, session=self.session)
+            result = await Runner.run(agent, input=prompt, session=self.session_manager.get_session())
             return str(result.final_output)
         except Exception as exc:  # noqa: BLE001
             logger.error("Error running agent: %s", exc)
@@ -161,7 +138,7 @@ class OllamaAgent:
     ) -> AsyncGenerator[dict[str, Any], None]:
         agent = await self._get_agent(model, reasoning_effort)
         try:
-            result = Runner.run_streamed(agent, input=prompt, session=self.session)
+            result = Runner.run_streamed(agent, input=prompt, session=self.session_manager.get_session())
             async for event in result.stream_events():
                 match event.type:
                     case "raw_response_event":
@@ -177,77 +154,19 @@ class OllamaAgent:
             yield {"type": "error", "content": str(exc)}
 
     def reset_session(self) -> str:
-        self.session_id = str(uuid.uuid4())
-        self.session = SQLiteSession(self.session_id, self._db_path)
-        return self.session_id
+        return self.session_manager.reset_session()
 
     def load_session(self, session_id: str) -> None:
-        self.session_id = session_id
-        self.session = SQLiteSession(session_id, self._db_path)
+        self.session_manager.load_session(session_id)
 
     def get_session_id(self) -> Optional[str]:
-        return self.session_id
+        return self.session_manager.get_session_id()
 
     def list_sessions(self) -> list[dict[str, Any]]:
-        if not self.storage_path.exists():
-            return []
-        try:
-            with sqlite3.connect(self._db_path) as conn:
-                rows = conn.execute(
-                    """
-                    SELECT s.session_id,
-                           COUNT(m.id) AS message_count,
-                           s.created_at,
-                           s.updated_at,
-                           (
-                               SELECT message_data
-                               FROM agent_messages
-                               WHERE session_id = s.session_id
-                               ORDER BY created_at ASC
-                               LIMIT 1
-                           ) AS first_message
-                    FROM agent_sessions s
-                    LEFT JOIN agent_messages m ON s.session_id = m.session_id
-                    GROUP BY s.session_id
-                    ORDER BY s.updated_at DESC
-                    """
-                ).fetchall()
-
-            return [
-                {
-                    "session_id": session_id,
-                    "message_count": message_count,
-                    "first_message": first_time or "Unknown",
-                    "last_message": last_time or "Unknown",
-                    "preview": self._extract_preview_text(first_message),
-                }
-                for session_id, message_count, first_time, last_time, first_message in rows
-            ]
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Error listing sessions: %s", exc)
-            return []
+        return self.session_manager.list_sessions()
 
     async def get_session_history(self, session_id: Optional[str] = None) -> list[Any]:
-        session_id = session_id or self.session_id
-        if not session_id:
-            return []
-        temp_session = SQLiteSession(session_id, self._db_path)
-        try:
-            return list(await temp_session.get_items())
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Error getting session history: %s", exc)
-            return []
+        return await self.session_manager.get_session_history(session_id)
 
     def delete_session(self, session_id: str) -> bool:
-        if not self.storage_path.exists():
-            return False
-        try:
-            with sqlite3.connect(self._db_path) as conn:
-                for table in ("agent_messages", "agent_sessions"):
-                    conn.execute(f"DELETE FROM {table} WHERE session_id = ?", (session_id,))
-            if session_id == self.session_id:
-                self.reset_session()
-            return True
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Error deleting session: %s", exc)
-            return False
+        return self.session_manager.delete_session(session_id)
