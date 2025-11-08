@@ -79,6 +79,8 @@ ollama-agent -t 60 -p "Run a long-running task"
 
 ### Task Management
 
+![Ollama Agent Tasks](./tasks.png)
+
 Tasks are saved prompts that can be executed repeatedly.
 
 **List Tasks:**
@@ -88,8 +90,6 @@ ollama-agent task-list
 ```
 
 **Run a Task:**
-
-![Ollama Agent Tasks](./tasks.png)
 
 Use the task ID (or a unique prefix) from the list to run it.
 
