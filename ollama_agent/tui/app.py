@@ -172,16 +172,11 @@ class ChatInterface(App):
     ]
 
     def __init__(self, agent: OllamaAgent, builtin_tool_timeout: int = 30):
-        """
-        Initialize the interface.
-
-        Args:
-            agent: The AI agent to use.
-            builtin_tool_timeout: Built-in tool execution timeout in seconds.
-        """
         super().__init__()
         self.agent = agent
         self.task_manager = TaskManager()
+        self.chat_log: RichLog | None = None
+        self.input_widget: Input | None = None
         set_builtin_tool_timeout(builtin_tool_timeout)
 
     def compose(self) -> ComposeResult:
@@ -205,76 +200,60 @@ class ChatInterface(App):
         self.title = "Ollama Agent - Chat"
         self.sub_title = f"Model: {self.agent.model} | Session: {session_id[:8]}..." if session_id else f"Model: {self.agent.model}"
 
-        chat_log = self.query_one("#chat-log", RichLog)
-        self._write_system_message(chat_log, "Welcome to Ollama Agent!")
-        self._write_system_message(chat_log, f"Session ID: {session_id}")
-        self._write_system_message(
-            chat_log, "Type your message and press Enter to send. Use Ctrl+V to paste text.")
-        self._write_system_message(
-            chat_log, "Shortcuts: Ctrl+R=New Session | Ctrl+S=Load Session | Ctrl+T=Create Task | Ctrl+L=Tasks")
-        chat_log.write("")
+        self.chat_log = self.query_one("#chat-log", RichLog)
+        self.input_widget = self.query_one("#user-input", Input)
 
-        # Focus the input
-        self.query_one("#user-input", Input).focus()
+        self._write_system_message("Welcome to Ollama Agent!")
+        self._write_system_message(f"Session ID: {session_id}")
+        self._write_system_message(
+            "Type your message and press Enter to send. Use Ctrl+V to paste text.")
+        self._write_system_message(
+            "Shortcuts: Ctrl+R=New Session | Ctrl+S=Load Session | Ctrl+T=Create Task | Ctrl+L=Tasks")
+        if self.chat_log is not None:
+            self.chat_log.write("")
+
+        if self.input_widget is not None:
+            self.input_widget.focus()
 
     async def on_unmount(self) -> None:
         """Execute when the application is unmounted."""
         # Cleanup MCP servers
         await self.agent.cleanup()
 
-    def _write_system_message(self, chat_log: RichLog, message: str) -> None:
-        """
-        Write a system message to the chat log.
+    def _write_system_message(self, message: str) -> None:
+        if self.chat_log is None:
+            return
+        self.chat_log.write(Text(message, style="italic cyan"))
 
-        Args:
-            chat_log: The RichLog widget.
-            message: The message to write.
-        """
-        chat_log.write(Text(message, style="italic cyan"))
+    def _write_user_message(self, message: str) -> None:
+        if self.chat_log is None:
+            return
+        self.chat_log.write(Text(f"User: {message}", style="bold blue"))
 
-    def _write_user_message(self, chat_log: RichLog, message: str) -> None:
-        """
-        Write a user message to the chat log.
+    def _write_agent_message(self, message: str) -> None:
+        if self.chat_log is None:
+            return
+        self.chat_log.write(Text("Agent:", style="bold green"))
+        self.chat_log.write(RichMarkdown(message))
 
-        Args:
-            chat_log: The RichLog widget.
-            message: The message to write.
-        """
-        chat_log.write(Text(f"User: {message}", style="bold blue"))
-
-    def _write_agent_message(self, chat_log: RichLog, message: str) -> None:
-        """
-        Write an agent message to the chat log.
-
-        Args:
-            chat_log: The RichLog widget.
-            message: The message to write.
-        """
-        chat_log.write(Text("Agent:", style="bold green"))
-        markdown = RichMarkdown(message)
-        chat_log.write(markdown)
-
-    def _write_error_message(self, chat_log: RichLog, message: str) -> None:
-        """
-        Write an error message to the chat log.
-
-        Args:
-            chat_log: The RichLog widget.
-            message: The message to write.
-        """
-        chat_log.write(Text(f"Error: {message}", style="bold red"))
+    def _write_error_message(self, message: str) -> None:
+        if self.chat_log is None:
+            return
+        self.chat_log.write(Text(f"Error: {message}", style="bold red"))
 
     async def _stream_agent_response(
         self,
         prompt: str,
-        chat_log: RichLog,
         *,
         model: Optional[str] = None,
         reasoning_effort: Optional[str] = None,
     ) -> None:
         """Render a streamed agent response into the chat log."""
-        text_renderer = StreamingMarkdownRenderer(chat_log)
-        reasoning_renderer = ReasoningRenderer(chat_log)
+        if self.chat_log is None:
+            return
+
+        text_renderer = StreamingMarkdownRenderer(self.chat_log)
+        reasoning_renderer = ReasoningRenderer(self.chat_log)
 
         try:
             async for event in self.agent.run_async_streamed(
@@ -297,18 +276,18 @@ class ChatInterface(App):
                 elif event["type"] == "reasoning_summary":
                     # Full reasoning summary (if available)
                     if not reasoning_renderer.is_active:
-                        chat_log.write(Text(f"💭 Reasoning: {event['content'][:100]}...", 
+                        self.chat_log.write(Text(f"💭 Reasoning: {event['content'][:100]}...", 
                                            style="dim italic magenta"))
                 
                 elif event["type"] == "tool_call":
                     if reasoning_renderer.is_active:
                         reasoning_renderer.finalize_reasoning()
-                    chat_log.write(Text(f"🔧 Calling tool: {event['name']}", 
+                    self.chat_log.write(Text(f"🔧 Calling tool: {event['name']}", 
                                        style="bold yellow"))
                 
                 elif event["type"] == "tool_output":
                     output_preview = event["output"][:100] + "..." if len(event["output"]) > 100 else event["output"]
-                    chat_log.write(Text(f"📤 Tool output: {output_preview}", 
+                    self.chat_log.write(Text(f"📤 Tool output: {output_preview}", 
                                        style="cyan"))
                 
                 elif event["type"] == "agent_update":
@@ -316,17 +295,18 @@ class ChatInterface(App):
                     pass
                 
                 elif event["type"] == "error":
-                    self._write_error_message(chat_log, event["content"])
+                    self._write_error_message(event["content"])
                     break
 
         except Exception as exc:
-            self._write_error_message(chat_log, str(exc))
+            self._write_error_message(str(exc))
         finally:
             if reasoning_renderer.is_active:
                 reasoning_renderer.finalize_reasoning()
             text_renderer.finalize()
-            chat_log.write("")
-            chat_log.scroll_end(animate=False)
+            if self.chat_log is not None:
+                self.chat_log.write("")
+                self.chat_log.scroll_end(animate=False)
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle user message submission."""
@@ -335,23 +315,23 @@ class ChatInterface(App):
             return
 
         # Clear the input
-        input_widget = self.query_one("#user-input", Input)
-        input_widget.value = ""
+        if self.input_widget is not None:
+            self.input_widget.value = ""
 
-        chat_log = self.query_one("#chat-log", RichLog)
-        self._write_user_message(chat_log, message)
-        await self._stream_agent_response(message, chat_log)
+        self._write_user_message(message)
+        await self._stream_agent_response(message)
 
     def action_reset_session(self) -> None:
         """Reset the session and start a new conversation."""
         session_id = self.agent.reset_session()
-        chat_log = self.query_one("#chat-log", RichLog)
-        chat_log.clear()
-        self._write_system_message(chat_log, "New session started!")
-        self._write_system_message(chat_log, f"Session ID: {session_id}")
+        if self.chat_log is not None:
+            self.chat_log.clear()
+        self._write_system_message("New session started!")
+        self._write_system_message(f"Session ID: {session_id}")
         self._write_system_message(
-            chat_log, "Previous conversation history has been cleared.")
-        chat_log.write("")
+            "Previous conversation history has been cleared.")
+        if self.chat_log is not None:
+            self.chat_log.write("")
 
         # Update subtitle with new session ID
         self.sub_title = f"Model: {self.agent.model} | Session: {session_id[:8]}..."
@@ -373,11 +353,13 @@ class ChatInterface(App):
         """Load the selected session and display its history."""
         self.agent.load_session(session_id)
 
-        chat_log = self.query_one("#chat-log", RichLog)
-        chat_log.clear()
+        log = self.chat_log
+        if log is None:
+            return
 
-        self._write_system_message(chat_log, f"Loaded session: {session_id}")
-        chat_log.write("")
+        log.clear()
+        self._write_system_message(f"Loaded session: {session_id}")
+        log.write("")
 
         history = await self.agent.get_session_history(session_id)
 
@@ -388,12 +370,12 @@ class ChatInterface(App):
                 text = extract_text(content)
 
                 if role == 'user' and text:
-                    self._write_user_message(chat_log, text)
+                    self._write_user_message(text)
                 elif role == 'assistant' and text:
-                    self._write_agent_message(chat_log, text)
+                    self._write_agent_message(text)
 
-        chat_log.write("")
-        chat_log.scroll_end(animate=False)
+        log.write("")
+        log.scroll_end(animate=False)
 
         # Update subtitle
         self.sub_title = f"Model: {self.agent.model} | Session: {session_id[:8]}..."
@@ -404,10 +386,10 @@ class ChatInterface(App):
             """Handle the created task."""
             if task:
                 task_id = self.task_manager.save_task(task)
-                chat_log = self.query_one("#chat-log", RichLog)
                 self._write_system_message(
-                    chat_log, f"Task saved: {task.title} ({task_id})")
-                chat_log.write("")
+                    f"Task saved: {task.title} ({task_id})")
+                if self.chat_log is not None:
+                    self.chat_log.write("")
 
         self.push_screen(CreateTaskScreen(self.agent), handle_task_creation)
 
@@ -426,18 +408,15 @@ class ChatInterface(App):
         task = self.task_manager.load_task(task_id)
 
         if not task:
-            chat_log = self.query_one("#chat-log", RichLog)
-            self._write_error_message(chat_log, f"Task not found: {task_id}")
+            self._write_error_message(f"Task not found: {task_id}")
             return
 
-        chat_log = self.query_one("#chat-log", RichLog)
         self._write_system_message(
-            chat_log, f"Executing task: {task.title} ({task_id})")
-        self._write_user_message(chat_log, task.prompt)
+            f"Executing task: {task.title} ({task_id})")
+        self._write_user_message(task.prompt)
 
         await self._stream_agent_response(
             task.prompt,
-            chat_log,
             model=task.model,
             reasoning_effort=task.reasoning_effort,
         )

@@ -1,124 +1,34 @@
-# Ollama Agent - AI Coding Assistant Guide
+# Ollama Agent – AI Coding Assistant Guide
 
-## Architecture Overview
+## Core Architecture
+- `OllamaAgent` in `ollama_agent/agent.py` wraps `openai-agents` with an `AsyncOpenAI` client pointed at the Ollama-compatible `/v1/` endpoint and injects the `execute_command` tool plus any configured MCP servers.
+- `run_async_streamed` is the hot path; it yields `text_delta`, `reasoning_delta`, `reasoning_summary`, `tool_call`, `tool_output`, `agent_update`, and `error` payloads that both CLI streaming (`main.run_non_interactive`) and the Textual TUI consume.
+- Sessions persist via `agents.SQLiteSession` stored at `~/.ollama-agent/sessions.db`; `_extract_preview_text` expects chat items to stay JSON-serializable and keeps previews under 50 characters.
+- MCP descriptors in `~/.ollama-agent/mcp_servers.json` are lazy-loaded; `RunningMCPServer` entries cache async closers, so always hold onto the list until `cleanup()` runs.
 
-This is a **Python CLI/TUI application** that wraps local AI models (via Ollama) with tool execution capabilities and persistent session management. The current branch (`feat-streaming-response`) is focused on adding streaming response capabilities.
+## Execution Modes
+- `ollama_agent/main.py` owns CLI parsing, task subcommands, timeout overrides, and launches either the streamed console run or the Textual `ChatInterface`.
+- `run_non_interactive` uses `rich.Live` to display markdown increments; it pauses the live view for reasoning/tool segments, so keep buffer state (`agent_shown`, `in_reasoning`) in sync with new event types.
+- The TUI relies on `StreamingMarkdownRenderer` and `ReasoningRenderer` in `tui/app.py`; both mutate `RichLog.lines` and `_line_cache`, so any rendering changes must preserve the clear/update cycle to avoid duplicate lines.
+- TUI key bindings (Ctrl+R/S/T/L) call directly into `OllamaAgent` session/task APIs; remember to propagate new agent behaviors through these bindings.
 
-### Core Components
+## Tasks, Tools, Sessions
+- `TaskManager` stores YAML tasks in `~/.ollama-agent/tasks/` with IDs `blake2s(title)[:8]`; `find_task_by_prefix` returns `None` when a prefix matches 0 or many files—surface ambiguity to users.
+- The sole built-in tool `execute_command` (`tools.py`) shells out with a global timeout; the CLI flag `--builtin-tool-timeout` and TUI constructor both call `set_builtin_tool_timeout`, so keep timeout state process-global.
+- Session management commands (`list_sessions`, `get_session_history`, `delete_session`) hit SQLite directly; never bypass `OllamaAgent` when mutating session tables to keep `session_id` in sync.
 
-1. **OllamaAgent** (`agent.py`): Main orchestrator wrapping `openai-agents` library
-   - Manages AsyncOpenAI client connected to Ollama-compatible API
-   - Handles session persistence via SQLite (using `SQLiteSession` from `openai-agents`)
-   - Lazy-initializes MCP servers on first agent run
-   - Agent lifecycle: `__init__` → `_ensure_mcp_servers_initialized` → `run_async` → `cleanup`
+## Configuration & Instructions
+- Config precedence is CLI args → `~/.ollama-agent/config.ini` → defaults from `settings/configini.py`; new options must be added in all three places to stay consistent.
+- `load_instructions` seeds `~/.ollama-agent/instructions.md`; edits only apply to new `OllamaAgent` instances, so recreate or `reset_session()` after changing instructions.
+- Default connection targets `http://localhost:11434/v1/` with API key `ollama`; reuse these defaults unless the user explicitly overrides them.
 
-2. **Entry Points** (`main.py`): Two execution modes
-   - **TUI mode** (default): Textual-based interactive chat with keybindings
-   - **CLI mode** (`--prompt`): Single-shot execution with markdown-rendered output
+## Developer Workflow
+- Typical setup: `python -m venv .venv && source .venv/bin/activate && pip install -e .`; install `textual[dev]` if you need Textual tooling.
+- Run the TUI with `ollama-agent`; fire one-off prompts via `ollama-agent -p "..."` and optionally `-m/-e/-t` overrides for model, reasoning effort, and command timeout.
+- Automated tests are currently empty (`tests/`); manual verification against a live Ollama endpoint is expected when introducing behavior changes.
 
-3. **Tool System** (`tools.py`): Shell command execution via `@function_tool` decorator
-   - Global timeout controlled by `set_builtin_tool_timeout()` (default: 30s)
-   - Uses `subprocess.run(shell=True)` with structured `CommandResult` return type
-
-4. **Task Management** (`tasks.py`): Save/run reusable prompts as YAML files
-   - Task IDs computed using Blake2s hash (8 chars) of title
-   - Stored in `~/.ollama-agent/tasks/*.yaml`
-
-5. **MCP Integration** (`settings/mcp.py`): Model Context Protocol server support
-   - Supports stdio (`MCPServerStdio`) and HTTP (`MCPServerSse`, `MCPServerStreamableHttp`)
-   - Config: `~/.ollama-agent/mcp_servers.json` with `mcpServers` object
-
-## Key Patterns & Conventions
-
-### Async/Await Usage
-- All agent execution methods are async: `run_async()`, `get_session_history()`, `_ensure_mcp_servers_initialized()`
-- MCP server lifecycle managed via async context managers (`__aenter__`/`__aexit__`)
-- Always call `await agent.cleanup()` in `finally` blocks for non-interactive mode
-
-### Session Management
-- Sessions stored in `~/.ollama-agent/sessions.db` (SQLite)
-- Session ID is UUID4, loaded via `load_session(id)` or created via `reset_session()`
-- Preview text extracted from first message (max 50 chars) using `_extract_preview_text()`
-
-### Configuration Hierarchy
-1. CLI args (`--model`, `--effort`, `--builtin-tool-timeout`) override
-2. Config file (`~/.ollama-agent/config.ini`)
-3. Hardcoded defaults in `Config` dataclass
-
-### Reasoning Effort
-- Valid values: `"low"`, `"medium"`, `"high"` (enforced by `ReasoningEffortValue` Literal type)
-- Passed to `ModelSettings(reasoning=Reasoning(effort=...))` for OpenAI API
-- Validated via `validate_reasoning_effort()` with fallback to `"medium"`
-
-### File Organization
-```
-~/.ollama-agent/
-├── config.ini              # User config (auto-created)
-├── sessions.db             # SQLite conversation history
-├── instructions.md         # Agent system prompt (auto-created from DEFAULT_INSTRUCTIONS)
-├── mcp_servers.json        # MCP server definitions
-└── tasks/*.yaml            # Saved task files (Blake2s hash names)
-```
-
-## Development Workflows
-
-### Running the Application
-```bash
-# Install in editable mode (for development)
-pip install -e .
-
-# Interactive TUI
-ollama-agent
-
-# Non-interactive CLI
-ollama-agent -p "Your prompt here" -m "model-name" -e "high"
-
-# Task management
-ollama-agent task-list
-ollama-agent task-run <id>
-ollama-agent task-delete <id>
-```
-
-### Testing Considerations
-- Requires running Ollama instance at `http://localhost:11434/v1/` (configurable)
-- Test with different models using `-m` flag
-- MCP servers are optional; agent works without them
-- Session DB can be deleted for fresh state: `rm ~/.ollama-agent/sessions.db`
-
-### Adding New Tools
-1. Define function in `tools.py` with `@function_tool` decorator
-2. Add to `OllamaAgent._create_agent()` tools list
-3. Return structured TypedDict for consistent error handling (see `CommandResult`)
-
-### Adding MCP Servers
-Edit `~/.ollama-agent/mcp_servers.json`:
-```json
-{
-  "mcpServers": {
-    "my-server": {
-      "command": "python",
-      "args": ["-m", "my_mcp_server"],
-      "cache_tools_list": true,
-      "max_retry_attempts": 3
-    }
-  }
-}
-```
-
-## Common Pitfalls
-
-- **Don't forget `await agent.cleanup()`** - MCP connections must be explicitly closed
-- **Task IDs are derived from title hash** - changing title changes ID, creates new task
-- **Session loading doesn't validate existence** - check `list_sessions()` first
-- **Agent instructions loaded once at init** - changes to `instructions.md` require restart
-- **Reasoning effort validation is silent** - invalid values fall back to "medium" with warning
-
-## Textual TUI Structure
-
-Located in `ollama_agent/tui/`:
-- `app.py`: Main `ChatInterface` app with keybindings (Ctrl+R/S/L/T/C)
-- `session_list_screen.py`: Modal screen for session selection
-- `task_list_screen.py`: Modal screen for task management
-- `create_task_screen.py`: Modal form for creating new tasks
-
-TUI uses `RichLog` for chat display with markdown rendering via `Rich` library.
+## Pitfalls & Tips
+- Always `await agent.cleanup()` in async entrypoints to shut down MCP processes; both CLI and TUI already do this—mirror that pattern in new flows.
+- Streaming handlers assume the event schema from `openai-agents`; expand the `match`/`if` blocks wherever you introduce new event types to avoid silent drops.
+- `validate_reasoning_effort` falls back to `"medium"` and logs; validate earlier if you need strict enforcement or user feedback.
+- The renderers expect incremental tokens and call `RichLog._line_cache.clear()`; Textual lacks a public API, so keep this workaround until upstream exposes one.

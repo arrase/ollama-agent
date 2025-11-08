@@ -66,96 +66,73 @@ def create_argument_parser() -> argparse.ArgumentParser:
 
 
 async def run_non_interactive(agent: OllamaAgent, prompt: str, model: Optional[str] = None, effort: Optional[str] = None) -> None:
-    """Run the agent in non-interactive mode with streaming."""
+    """Stream agent output to the console."""
     console = Console()
+    text_buffer = []
+    live = Live(console=console, refresh_per_second=10)
+    live_active = False
+    agent_shown = False
+    in_reasoning = False
 
-    try:
-        # Buffers for different content types
-        text_buffer = ""
-        reasoning_buffer = ""
-        reasoning_active = False
-        live_active = False
-        shown_thinking_header = False
-        shown_agent_header = False
+    def start_live() -> None:
+        nonlocal live_active
+        if not live_active:
+            live.start()
+            live_active = True
 
-        live = Live(console=console, refresh_per_second=10)
-
-        async for event in agent.run_async_streamed(prompt, model=model, reasoning_effort=effort):
-            if event["type"] == "text_delta":
-                # Regular text output
-                if reasoning_active:
-                    # Flush reasoning before showing text
-                    reasoning_active = False
-                    shown_thinking_header = False
-                    console.print()  # New line after reasoning
-                    reasoning_buffer = ""
-                
-                # Show "Agent:" header before first text
-                if not shown_agent_header:
-                    console.print("\n[bold green]Agent:[/bold green]")
-                    shown_agent_header = True
-                
-                if not live_active:
-                    live.start()
-                    live_active = True
-                
-                text_buffer += event["content"]
-                markdown = Markdown(text_buffer)
-                live.update(markdown)
-            
-            elif event["type"] == "reasoning_delta":
-                # Reasoning tokens (thinking process)
-                if not shown_thinking_header:
-                    if live_active:
-                        live.stop()
-                        live_active = False
-                    console.print("\n[bold magenta]🧠 Thinking:[/bold magenta] ", end="")
-                    shown_thinking_header = True
-                    reasoning_active = True
-                
-                reasoning_buffer += event["content"]
-                # Show reasoning in real-time
-                console.print(event["content"], end="", style="dim italic magenta")
-            
-            elif event["type"] == "reasoning_summary":
-                # Full reasoning summary (after streaming - usually not needed)
-                pass
-            
-            elif event["type"] == "tool_call":
-                if reasoning_active:
-                    reasoning_active = False
-                    shown_thinking_header = False
-                    console.print()  # New line after reasoning
-                if live_active:
-                    live.stop()
-                    live_active = False
-                console.print(f"\n[yellow]🔧 Calling tool: {event['name']}[/yellow]")
-            
-            elif event["type"] == "tool_output":
-                if live_active:
-                    live.stop()
-                    live_active = False
-                output_preview = event["output"][:100] + "..." if len(event["output"]) > 100 else event["output"]
-                console.print(f"[cyan]📤 Tool output: {output_preview}[/cyan]\n")
-            
-            elif event["type"] == "agent_update":
-                # Skip the initial agent update message
-                pass
-            
-            elif event["type"] == "error":
-                if live_active:
-                    live.stop()
-                    live_active = False
-                console.print(f"\n[red]❌ Error: {event['content']}[/red]")
-                break
-
+    def stop_live() -> None:
+        nonlocal live_active
         if live_active:
             live.stop()
+            live_active = False
 
-        # Final newline after streaming completes
+    def conclude_reasoning() -> None:
+        nonlocal in_reasoning
+        if in_reasoning:
+            in_reasoning = False
+            console.print()
+
+    try:
+        async for event in agent.run_async_streamed(prompt, model=model, reasoning_effort=effort):
+            match event["type"]:
+                case "text_delta":
+                    conclude_reasoning()
+                    if not agent_shown:
+                        console.print("\n[bold green]Agent:[/bold green]")
+                        agent_shown = True
+                    start_live()
+                    text_buffer.append(event["content"])
+                    live.update(Markdown("".join(text_buffer)))
+
+                case "reasoning_delta":
+                    if not in_reasoning:
+                        stop_live()
+                        console.print("\n[bold magenta]🧠 Thinking:[/bold magenta] ", end="")
+                        in_reasoning = True
+                    console.print(event["content"], end="", style="dim italic magenta")
+
+                case "tool_call":
+                    conclude_reasoning()
+                    stop_live()
+                    console.print(f"\n[yellow]🔧 Calling tool: {event['name']}[/yellow]")
+
+                case "tool_output":
+                    stop_live()
+                    output = event["output"]
+                    preview = f"{output[:100]}..." if len(output) > 100 else output
+                    console.print(f"[cyan]📤 Tool output: {preview}[/cyan]\n")
+
+                case "agent_update" | "reasoning_summary":
+                    pass
+
+                case "error":
+                    stop_live()
+                    console.print(f"\n[red]❌ Error: {event['content']}[/red]")
+                    break
+
+        stop_live()
         console.print()
     finally:
-        # Cleanup MCP servers
         await agent.cleanup()
 
 
