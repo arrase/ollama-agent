@@ -70,17 +70,87 @@ async def run_non_interactive(agent: OllamaAgent, prompt: str, model: Optional[s
     console = Console()
 
     try:
-        console.print("[bold green]Agent:[/bold green]")
+        # Buffers for different content types
+        text_buffer = ""
+        reasoning_buffer = ""
+        reasoning_active = False
+        live_active = False
+        shown_thinking_header = False
+        shown_agent_header = False
 
-        # Use Live display to update markdown in real-time
-        buffer = ""
+        live = Live(console=console, refresh_per_second=10)
 
-        with Live(console=console, refresh_per_second=4) as live:
-            async for token in agent.run_async_streamed(prompt, model=model, reasoning_effort=effort):
-                buffer += token
-                # Update the live display with current markdown
-                markdown = Markdown(buffer)
+        async for event in agent.run_async_streamed(prompt, model=model, reasoning_effort=effort):
+            if event["type"] == "text_delta":
+                # Regular text output
+                if reasoning_active:
+                    # Flush reasoning before showing text
+                    reasoning_active = False
+                    shown_thinking_header = False
+                    console.print()  # New line after reasoning
+                    reasoning_buffer = ""
+                
+                # Show "Agent:" header before first text
+                if not shown_agent_header:
+                    console.print("\n[bold green]Agent:[/bold green]")
+                    shown_agent_header = True
+                
+                if not live_active:
+                    live.start()
+                    live_active = True
+                
+                text_buffer += event["content"]
+                markdown = Markdown(text_buffer)
                 live.update(markdown)
+            
+            elif event["type"] == "reasoning_delta":
+                # Reasoning tokens (thinking process)
+                if not shown_thinking_header:
+                    if live_active:
+                        live.stop()
+                        live_active = False
+                    console.print("\n[bold magenta]🧠 Thinking:[/bold magenta] ", end="")
+                    shown_thinking_header = True
+                    reasoning_active = True
+                
+                reasoning_buffer += event["content"]
+                # Show reasoning in real-time
+                console.print(event["content"], end="", style="dim italic magenta")
+            
+            elif event["type"] == "reasoning_summary":
+                # Full reasoning summary (after streaming - usually not needed)
+                pass
+            
+            elif event["type"] == "tool_call":
+                if reasoning_active:
+                    reasoning_active = False
+                    shown_thinking_header = False
+                    console.print()  # New line after reasoning
+                if live_active:
+                    live.stop()
+                    live_active = False
+                console.print(f"\n[yellow]🔧 Calling tool: {event['name']}[/yellow]")
+            
+            elif event["type"] == "tool_output":
+                if live_active:
+                    live.stop()
+                    live_active = False
+                output_preview = event["output"][:100] + "..." if len(event["output"]) > 100 else event["output"]
+                console.print(f"[cyan]📤 Tool output: {output_preview}[/cyan]\n")
+            
+            elif event["type"] == "agent_update":
+                # Skip the initial agent update message
+                pass
+            
+            elif event["type"] == "error":
+                if live_active:
+                    live.stop()
+                    live_active = False
+                console.print(f"\n[red]❌ Error: {event['content']}[/red]")
+                break
+
+        if live_active:
+            live.stop()
 
         # Final newline after streaming completes
         console.print()

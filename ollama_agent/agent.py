@@ -17,7 +17,7 @@ from agents import (
     set_tracing_disabled,
 )
 from openai import AsyncOpenAI
-from openai.types.responses import ResponseTextDeltaEvent
+from openai.types.responses import ResponseTextDeltaEvent, ResponseReasoningTextDeltaEvent
 from openai.types.shared import Reasoning
 
 from .settings.configini import load_instructions
@@ -188,11 +188,11 @@ class OllamaAgent:
         prompt: str,
         model: Optional[str] = None,
         reasoning_effort: Optional[str] = None
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[dict[str, Any], None]:
         """
         Run the agent asynchronously with streaming support.
 
-        Yields text deltas as they arrive from the model.
+        Yields structured events including text deltas, tool calls, and reasoning.
 
         Args:
             prompt: The user's prompt.
@@ -200,7 +200,13 @@ class OllamaAgent:
             reasoning_effort: Optional reasoning effort override.
 
         Yields:
-            Text deltas from the model response.
+            Dictionary with event type and content:
+            - {"type": "text_delta", "content": str} for text tokens
+            - {"type": "reasoning_delta", "content": str} for reasoning tokens
+            - {"type": "tool_call", "name": str} for tool invocations
+            - {"type": "tool_output", "output": str} for tool results
+            - {"type": "agent_update", "name": str} for agent handoffs
+            - {"type": "error", "content": str} for errors
         """
         agent = await self._get_agent(model, reasoning_effort)
 
@@ -209,13 +215,37 @@ class OllamaAgent:
                 agent, input=prompt, session=self.session)
 
             async for event in result.stream_events():
-                # Only process raw response events with text deltas
-                if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
-                    yield event.data.delta
+                # Process raw response events with text deltas
+                if event.type == "raw_response_event":
+                    # Check if this is a reasoning delta event
+                    if isinstance(event.data, ResponseReasoningTextDeltaEvent):
+                        if event.data.delta:  # Only yield non-empty deltas
+                            yield {"type": "reasoning_delta", "content": event.data.delta}
+                    elif isinstance(event.data, ResponseTextDeltaEvent):
+                        if event.data.delta:  # Only yield non-empty deltas
+                            yield {"type": "text_delta", "content": event.data.delta}
+                
+                # Process higher-level item events
+                elif event.type == "run_item_stream_event":
+                    if event.item.type == "tool_call_item":
+                        tool_name = getattr(event.item, 'name', 'unknown')
+                        yield {"type": "tool_call", "name": tool_name}
+                    elif event.item.type == "tool_call_output_item":
+                        yield {"type": "tool_output", "output": str(event.item.output)}
+                    elif event.item.type == "reasoning":
+                        # Full reasoning item (after streaming completes)
+                        summary = getattr(event.item, 'summary', '')
+                        if summary:
+                            yield {"type": "reasoning_summary", "content": summary}
+                
+                # Process agent update events
+                elif event.type == "agent_updated_stream_event":
+                    yield {"type": "agent_update", "name": event.new_agent.name}
 
         except Exception as e:
             logger.error(f"Error running streamed agent: {e}")
-            yield f"Error: {str(e)}"
+            yield {"type": "error", "content": str(e)}
+
 
     def reset_session(self) -> str:
         """
