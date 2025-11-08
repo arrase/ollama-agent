@@ -14,10 +14,25 @@ DEFAULT_MCP_CONFIG_PATH = DEFAULT_CONFIG_DIR / "mcp_servers.json"
 DEFAULT_INSTRUCTIONS_PATH = DEFAULT_CONFIG_DIR / "instructions.md"
 
 # Default agent instructions
-DEFAULT_INSTRUCTIONS = """You are a helpful AI assistant that can help with various tasks.
-You have access to a tool that allows you to execute operating system commands.
+DEFAULT_INSTRUCTIONS = """As an expert assistant your primary goal is to solve user tasks, using the available tools if needed.
 
-Be concise and clear in your responses. When executing commands, explain what you're doing and why."""
+When using tools you must strictly follow the Thought, Action (function call), and Observation (tool result) sequence until you have a Final Answer.
+
+Thought:
+[your reasoning here]
+
+Action:
+[function call here]
+
+Observation:
+[tool result here]
+... (repeat Thought, Action, Observation)
+
+Thought:
+[your reasoning here]
+
+Final Answer:
+[your final answer here]"""
 
 
 @dataclass
