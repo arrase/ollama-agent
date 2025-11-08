@@ -9,11 +9,9 @@ from rich.markdown import Markdown
 from rich.table import Table
 from rich.live import Live
 
-from .settings import configini as config
 from .agent import OllamaAgent
 from .tasks import Task, TaskManager
 from .agent.tools import set_builtin_tool_timeout
-from .tui.app import ChatInterface
 from .utils import ALLOWED_REASONING_EFFORTS
 
 
@@ -201,7 +199,6 @@ def delete_task_command(task_id: str) -> None:
             f"[green]Task deleted:[/green] {task.title} ({found_id})")
     else:
         console.print(f"[red]Error deleting task: {found_id}[/red]")
-
 def handle_cli_commands(args: argparse.Namespace, create_agent_func: Callable[..., OllamaAgent]) -> bool:
     """Handle CLI commands and return True if a command was handled."""
     if args.command == "task-list":
