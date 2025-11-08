@@ -3,8 +3,6 @@
 Ollama Agent is a powerful command-line tool and Textual TUI (Terminal User Interface) that allows you to interact with local AI models through an Ollama-compatible API. It provides a persistent chat experience, session management, and the ability to execute local shell commands, turning your local models into helpful assistants for your daily tasks.
 
 ![Ollama Agent TUI](./screenshot.png)
-![Ollama Agent CLI](./cli.png)
-![Ollama Agent Tasks](./tasks.png)
 
 ## Features
 
@@ -76,6 +74,8 @@ ollama-agent -t 60 -p "Run a long-running task"
 - `-e`, `--effort`: Set reasoning effort level (low, medium, high)
 - `-t`, `--builtin-tool-timeout`: Set built-in tool execution timeout in seconds
 
+![Ollama Agent CLI](./cli.png)
+
 ### Task Management
 
 Tasks are saved prompts that can be executed repeatedly.
@@ -99,6 +99,8 @@ ollama-agent task-run <task_id>
 ```bash
 ollama-agent task-delete <task_id>
 ```
+
+![Ollama Agent Tasks](./tasks.png)
 
 ### Configuration
 
