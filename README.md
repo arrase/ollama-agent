@@ -2,8 +2,6 @@
 
 Ollama Agent is a powerful command-line tool and Textual TUI (Terminal User Interface) that allows you to interact with local AI models through an Ollama-compatible API. It provides a persistent chat experience, session management, and the ability to execute local shell commands, turning your local models into helpful assistants for your daily tasks.
 
-![Ollama Agent TUI](./screenshot.png)
-
 ## Features
 
 - **Interactive Chat TUI**: A terminal-based chat interface for a seamless conversation experience.
@@ -29,6 +27,8 @@ pipx install git+https://github.com/arrase/ollama-agent.git
 
 ### Interactive Mode (TUI)
 
+![Ollama Agent TUI](./screenshot.png)
+
 To start the chat interface, simply run:
 
 ```bash
@@ -44,6 +44,8 @@ The TUI provides a rich, interactive experience with the following keybindings:
 - `Ctrl+T`: Create a new task.
 
 ### Non-Interactive Mode
+
+![Ollama Agent CLI](./cli.png)
 
 You can run a single prompt directly from the command line:
 
@@ -74,7 +76,6 @@ ollama-agent -t 60 -p "Run a long-running task"
 - `-e`, `--effort`: Set reasoning effort level (low, medium, high)
 - `-t`, `--builtin-tool-timeout`: Set built-in tool execution timeout in seconds
 
-![Ollama Agent CLI](./cli.png)
 
 ### Task Management
 
@@ -88,6 +89,8 @@ ollama-agent task-list
 
 **Run a Task:**
 
+![Ollama Agent Tasks](./tasks.png)
+
 Use the task ID (or a unique prefix) from the list to run it.
 
 ```bash
@@ -99,8 +102,6 @@ ollama-agent task-run <task_id>
 ```bash
 ollama-agent task-delete <task_id>
 ```
-
-![Ollama Agent Tasks](./tasks.png)
 
 ### Configuration
 
