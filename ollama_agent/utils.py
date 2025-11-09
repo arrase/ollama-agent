@@ -16,41 +16,29 @@ DEFAULT_REASONING_EFFORT: ReasoningEffortValue = "medium"
 logger = logging.getLogger(__name__)
 
 
+class ModelCapabilityError(RuntimeError):
+    """Raised when the selected model cannot run tool calls."""
+
+
 @lru_cache(maxsize=None)
 def _capabilities_for_model(model: str) -> set[str]:
-    """Retrieve the tool-use capabilities for a given model."""
     try:
         response = ollama.show(model)
-        # The 'capabilities' attribute can be nested, so we try to extract it.
         payload = response.get("capabilities", {})
-        capabilities_list = payload.get("capabilities", payload)
-
+        capabilities_list = payload.get("capabilities", payload if isinstance(payload, list) else [])
         if isinstance(capabilities_list, str):
             capabilities_list = [capabilities_list]
 
-        if not isinstance(capabilities_list, list):
-            logger.warning(
-                "Unexpected format for capabilities in model '%s'. Expected a list.", model
-            )
-            return set()
-
-        capabilities = {str(item).lower() for item in capabilities_list}
+        capabilities = {str(item).lower() for item in capabilities_list if isinstance(item, str)}
         if not capabilities:
-            logger.warning(
-                "Model '%s' does not expose any capabilities in the Ollama response.", model
-            )
+            logger.warning("Model '%s' does not expose capabilities.", model)
         return capabilities
-    except ollama.ResponseError as exc:
-        raise exc
     except Exception as exc:
-        raise exc
+        raise ModelCapabilityError(f"Failed to fetch metadata for model '{model}': {exc}") from exc
 
 
 def model_supports_tools(model: str) -> bool:
     return "tools" in _capabilities_for_model(model)
-
-
-from .exceptions import ModelCapabilityError
 
 
 def ensure_model_supports_tools(model: str) -> None:

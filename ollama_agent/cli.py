@@ -63,100 +63,74 @@ def create_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-class NonInteractiveRenderer:
-    """Renders agent output to the console for non-interactive sessions."""
-
-    def __init__(self, console: Console):
-        self.console = console
-        self.live = Live(console=console, auto_refresh=False, vertical_overflow="visible")
-        self.text_buffer: list[str] = []
-        self.live_active = False
-        self.agent_shown = False
-        self.in_reasoning = False
-
-    def __enter__(self) -> "NonInteractiveRenderer":
-        return self
-
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        self.stop_live()
-
-    def start_live(self) -> None:
-        if not self.live_active:
-            self.live.start()
-            self.live_active = True
-
-    def stop_live(self) -> None:
-        if self.live_active:
-            self.live.stop()
-            self.live_active = False
-
-    def conclude_reasoning(self) -> None:
-        if self.in_reasoning:
-            self.in_reasoning = False
-            self.console.print()
-
-    def ensure_agent_banner(self) -> None:
-        if not self.agent_shown:
-            self.console.print("\n[bold green]Agent:[/bold green]")
-            self.agent_shown = True
-
-    def handle_text_delta(self, event: dict[str, Any]) -> None:
-        self.conclude_reasoning()
-        self.ensure_agent_banner()
-        self.start_live()
-        self.text_buffer.append(event.get("content", ""))
-        self.live.update(Markdown("".join(self.text_buffer)), refresh=True)
-
-    def handle_reasoning_delta(self, event: dict[str, Any]) -> None:
-        if not self.in_reasoning:
-            self.stop_live()
-            self.console.print("\n[bold magenta]🧠 Thinking:[/bold magenta] ", end="")
-            self.in_reasoning = True
-        self.console.print(event.get("content", ""), end="", style="dim italic magenta")
-
-    def handle_tool_call(self, event: dict[str, Any]) -> None:
-        self.conclude_reasoning()
-        self.stop_live()
-        tool_name = event.get('name', 'unknown')
-        self.console.print(f"\n[yellow]🔧 Calling tool: {tool_name}[/yellow]")
-
-    def handle_tool_output(self, event: dict[str, Any]) -> None:
-        self.stop_live()
-        output = event.get("output", "")
-        preview = f"{output[:100]}..." if len(output) > 100 else output
-        self.console.print(f"[cyan]📤 Tool output: {preview}[/cyan]\n")
-
-    def handle_error(self, event: dict[str, Any]) -> None:
-        self.stop_live()
-        error_message = event.get('content', 'Unknown error')
-        self.console.print(f"\n[red]❌ Error: {error_message}[/red]")
-
-
-async def run_non_interactive(agent: OllamaAgent, prompt: str, model: Optional[str] = None, effort: Optional[str] = None) -> None:
+async def run_non_interactive(
+    agent: OllamaAgent,
+    prompt: str,
+    model: Optional[str] = None,
+    effort: Optional[str] = None,
+) -> None:
     """Stream agent output to the console."""
     console = Console()
-    renderer = NonInteractiveRenderer(console)
+    live = Live(console=console, auto_refresh=False, vertical_overflow="visible")
+    state = {
+        "text_buffer": [],
+        "agent_shown": False,
+        "in_reasoning": False,
+        "live_active": False,
+    }
 
-    def _get_event_handler(event_type: str) -> Optional[Callable[[dict[str, Any]], None]]:
-        return {
-            "text_delta": renderer.handle_text_delta,
-            "reasoning_delta": renderer.handle_reasoning_delta,
-            "tool_call": renderer.handle_tool_call,
-            "tool_output": renderer.handle_tool_output,
-            "error": renderer.handle_error,
-        }.get(event_type)
+    def manage_live(start: bool):
+        if start and not state["live_active"]:
+            live.start()
+            state["live_active"] = True
+        elif not start and state["live_active"]:
+            live.stop()
+            state["live_active"] = False
+
+    def handle_event(event: dict[str, Any]):
+        event_type = event.get("type")
+
+        if state["in_reasoning"] and event_type != "reasoning_delta":
+            console.print()
+            state["in_reasoning"] = False
+
+        if not state["agent_shown"] and event_type == "text_delta":
+            console.print("\n[bold green]Agent:[/bold green]")
+            state["agent_shown"] = True
+
+        if event_type == "text_delta":
+            manage_live(True)
+            state["text_buffer"].append(event.get("content", ""))
+            live.update(Markdown("".join(state["text_buffer"])), refresh=True)
+        elif event_type == "reasoning_delta":
+            manage_live(False)
+            if not state["in_reasoning"]:
+                console.print("\n[bold magenta]🧠 Thinking:[/bold magenta] ", end="")
+                state["in_reasoning"] = True
+            console.print(event.get("content", ""), end="", style="dim italic magenta")
+        elif event_type == "tool_call":
+            manage_live(False)
+            console.print(f"\n[yellow]🔧 Calling tool: {event.get('name', 'unknown')}[/yellow]")
+        elif event_type == "tool_output":
+            manage_live(False)
+            output = event.get("output", "")
+            preview = f"{output[:100]}..." if len(output) > 100 else output
+            console.print(f"[cyan]📤 Tool output: {preview}[/cyan]\n")
+        elif event_type == "error":
+            manage_live(False)
+            console.print(f"\n[red]❌ Error: {event.get('content', 'Unknown error')}[/red]")
+            return False
+        return True
 
     try:
-        with renderer:
-            async for event in agent.run_async_streamed(prompt, model=model, reasoning_effort=effort):
-                event_type = event.get("type")
-                if isinstance(event_type, str):
-                    if handler := _get_event_handler(event_type):
-                        handler(event)
-                        if event_type == "error":
-                            break
-            console.print()
+        async for event in agent.run_async_streamed(
+            prompt, model=model, reasoning_effort=effort
+        ):
+            if not handle_event(event):
+                break
     finally:
+        manage_live(False)
+        console.print()
         await agent.cleanup()
 
 
