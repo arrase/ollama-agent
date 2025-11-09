@@ -165,7 +165,7 @@ class OllamaAgent:
         try:
             agent = await self._get_agent(model, reasoning_effort)
         except ModelCapabilityError as exc:
-            logger.error("Error running streamed agent: %s", exc)
+            logger.error("Model capability error for streamed execution: %s", exc)
             yield {"type": "error", "content": str(exc)}
             return
         try:
