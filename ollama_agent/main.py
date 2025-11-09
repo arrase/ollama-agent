@@ -7,17 +7,27 @@ from .agent import OllamaAgent
 from .agent.tools import set_builtin_tool_timeout
 from .tui.app import ChatInterface
 from .cli import create_argument_parser, handle_cli_commands
+from .utils import ModelCapabilityError, ensure_model_supports_tools, validate_reasoning_effort
 
 
 def create_agent(model: Optional[str] = None, reasoning_effort: Optional[str] = None) -> OllamaAgent:
     """Create OllamaAgent instance from config with optional overrides."""
     cfg = config.get_config()
+    target_model = model or cfg.model
+
+    try:
+        ensure_model_supports_tools(target_model)
+    except ModelCapabilityError as exc:
+        raise SystemExit(str(exc)) from exc
+
+    effort = validate_reasoning_effort(
+        reasoning_effort or cfg.reasoning_effort)
 
     return OllamaAgent(
-        model=model or cfg.model,
+        model=target_model,
         base_url=cfg.base_url,
         api_key=cfg.api_key,
-        reasoning_effort=reasoning_effort or cfg.reasoning_effort,
+        reasoning_effort=effort,
         database_path=cfg.database_path,
         mcp_config_path=cfg.mcp_config_path
     )

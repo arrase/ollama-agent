@@ -22,7 +22,12 @@ from openai.types.shared import Reasoning
 from ..settings.configini import load_instructions
 from ..settings.mcp import RunningMCPServer, cleanup_mcp_servers, initialize_mcp_servers
 from .tools import execute_command
-from ..utils import ReasoningEffortValue, validate_reasoning_effort
+from ..utils import (
+    ModelCapabilityError,
+    ReasoningEffortValue,
+    ensure_model_supports_tools,
+    validate_reasoning_effort,
+)
 from .session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
@@ -100,10 +105,12 @@ class OllamaAgent:
         model: Optional[str] = None,
         reasoning_effort: Optional[ReasoningEffortValue] = None,
     ) -> Agent:
+        selected_model = model or self.model
+        ensure_model_supports_tools(selected_model)
         return Agent(
             name="Ollama Assistant",
             instructions=self.instructions,
-            model=model or self.model,
+            model=selected_model,
             tools=[execute_command],
             mcp_servers=[entry.server for entry in self.mcp_servers],
             model_settings=self._build_model_settings(reasoning_effort),
@@ -137,7 +144,11 @@ class OllamaAgent:
         model: Optional[str] = None,
         reasoning_effort: Optional[str] = None,
     ) -> str:
-        agent = await self._get_agent(model, reasoning_effort)
+        try:
+            agent = await self._get_agent(model, reasoning_effort)
+        except ModelCapabilityError as exc:
+            logger.error("Model without tool support: %s", exc)
+            return f"Error: {exc}"
         try:
             result = await Runner.run(agent, input=prompt, session=self.session_manager.get_session())
             return str(result.final_output)
@@ -151,7 +162,12 @@ class OllamaAgent:
         model: Optional[str] = None,
         reasoning_effort: Optional[str] = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
-        agent = await self._get_agent(model, reasoning_effort)
+        try:
+            agent = await self._get_agent(model, reasoning_effort)
+        except ModelCapabilityError as exc:
+            logger.error("Error running streamed agent: %s", exc)
+            yield {"type": "error", "content": str(exc)}
+            return
         try:
             result = Runner.run_streamed(
                 agent, input=prompt, session=self.session_manager.get_session())

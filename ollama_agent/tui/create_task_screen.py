@@ -1,5 +1,6 @@
 from typing import Optional
 
+from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal
 from textual.screen import ModalScreen
@@ -7,7 +8,12 @@ from textual.widgets import Button, Input, Label, Select
 
 from ..agent import OllamaAgent
 from ..tasks import Task
-from ..utils import ALLOWED_REASONING_EFFORTS, validate_reasoning_effort
+from ..utils import (
+    ALLOWED_REASONING_EFFORTS,
+    ModelCapabilityError,
+    get_tool_compatible_models,
+    validate_reasoning_effort,
+)
 
 
 class CreateTaskScreen(ModalScreen):
@@ -62,8 +68,14 @@ class CreateTaskScreen(ModalScreen):
         """
         super().__init__()
         self.agent = agent
+        try:
+            self._models = get_tool_compatible_models(self.agent.model)
+        except ModelCapabilityError:
+            self._models = [self.agent.model]
+        if not self._models:
+            self._models = [self.agent.model]
 
-    def compose(self) -> "ComposeResult":
+    def compose(self) -> ComposeResult:
         """Create the task creation dialog."""
         with Container(id="task-dialog"):
             yield Label("Create New Task", id="task-title")
@@ -75,7 +87,13 @@ class CreateTaskScreen(ModalScreen):
             yield Input(placeholder="Enter task prompt...", id="task-prompt-input", classes="field-input")
 
             yield Label("Model:", classes="field-label")
-            yield Input(value=self.agent.model, id="task-model-input", classes="field-input")
+            default_model = self.agent.model if self.agent.model in self._models else (self._models[0] if self._models else "")
+            yield Select(
+                [(model, model) for model in self._models],
+                value=default_model,
+                id="task-model-select",
+                classes="field-input"
+            )
 
             yield Label("Reasoning Effort:", classes="field-label")
             yield Select(
@@ -107,7 +125,8 @@ class CreateTaskScreen(ModalScreen):
         """
         title = self.query_one("#task-title-input", Input).value.strip()
         prompt = self.query_one("#task-prompt-input", Input).value.strip()
-        model = self.query_one("#task-model-input", Input).value.strip()
+        model_select = self.query_one("#task-model-select", Select)
+        model = str(model_select.value) if model_select.value else ""
 
         if not all([title, prompt, model]):
             return None
