@@ -6,7 +6,7 @@ import hashlib
 import logging
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 
 import yaml
 
@@ -56,6 +56,12 @@ class TaskManager:
     def _task_path(self, task_id: str) -> Path:
         return self.tasks_dir / f"{task_id}.yaml"
 
+    def _iter_tasks(self, pattern: str = "*.yaml") -> Iterator[tuple[str, Task]]:
+        for path in self.tasks_dir.glob(pattern):
+            task = self.load_task(path.stem)
+            if task:
+                yield path.stem, task
+
     def save_task(self, task: Task) -> str:
         task_id = compute_task_id(task.title)
         self._task_path(task_id).write_text(
@@ -86,19 +92,10 @@ class TaskManager:
             return False
 
     def list_tasks(self) -> list[tuple[str, Task]]:
-        tasks = [
-            (path.stem, task)
-            for path in self.tasks_dir.glob("*.yaml")
-            if (task := self.load_task(path.stem))
-        ]
-        return sorted(tasks, key=lambda item: item[1].title.lower())
+        return sorted(self._iter_tasks(), key=lambda item: item[1].title.lower())
 
     def find_task_by_prefix(self, prefix: str) -> Optional[tuple[str, Task]]:
-        matches = [
-            (path.stem, task)
-            for path in self.tasks_dir.glob(f"{prefix}*.yaml")
-            if (task := self.load_task(path.stem))
-        ]
+        matches = list(self._iter_tasks(f"{prefix}*.yaml"))
         if len(matches) == 1:
             return matches[0]
         if len(matches) > 1:

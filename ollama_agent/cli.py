@@ -2,7 +2,7 @@
 
 import argparse
 import asyncio
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -66,7 +66,7 @@ def create_argument_parser() -> argparse.ArgumentParser:
 async def run_non_interactive(agent: OllamaAgent, prompt: str, model: Optional[str] = None, effort: Optional[str] = None) -> None:
     """Stream agent output to the console."""
     console = Console()
-    text_buffer = []
+    text_buffer: list[str] = []
     live = Live(console=console, refresh_per_second=10)
     live_active = False
     agent_shown = False
@@ -90,47 +90,60 @@ async def run_non_interactive(agent: OllamaAgent, prompt: str, model: Optional[s
             in_reasoning = False
             console.print()
 
+    def ensure_agent_banner() -> None:
+        nonlocal agent_shown
+        if not agent_shown:
+            console.print("\n[bold green]Agent:[/bold green]")
+            agent_shown = True
+
+    def handle_text_delta(event: dict[str, Any]) -> None:
+        conclude_reasoning()
+        ensure_agent_banner()
+        start_live()
+        text_buffer.append(event.get("content", ""))
+        live.update(Markdown("".join(text_buffer)))
+
+    def handle_reasoning_delta(event: dict[str, Any]) -> None:
+        nonlocal in_reasoning
+        if not in_reasoning:
+            stop_live()
+            console.print("\n[bold magenta]🧠 Thinking:[/bold magenta] ", end="")
+            in_reasoning = True
+        console.print(event.get("content", ""), end="",
+                      style="dim italic magenta")
+
+    def handle_tool_call(event: dict[str, Any]) -> None:
+        conclude_reasoning()
+        stop_live()
+        console.print(
+            f"\n[yellow]🔧 Calling tool: {event.get('name', 'unknown')}[/yellow]")
+
+    def handle_tool_output(event: dict[str, Any]) -> None:
+        stop_live()
+        output = event.get("output", "")
+        preview = f"{output[:100]}..." if len(output) > 100 else output
+        console.print(f"[cyan]📤 Tool output: {preview}[/cyan]\n")
+
+    handlers: dict[str, Callable[[dict[str, Any]], None]] = {
+        "text_delta": handle_text_delta,
+        "reasoning_delta": handle_reasoning_delta,
+        "tool_call": handle_tool_call,
+        "tool_output": handle_tool_output,
+    }
+
     try:
         async for event in agent.run_async_streamed(prompt, model=model, reasoning_effort=effort):
-            match event["type"]:
-                case "text_delta":
-                    conclude_reasoning()
-                    if not agent_shown:
-                        console.print("\n[bold green]Agent:[/bold green]")
-                        agent_shown = True
-                    start_live()
-                    text_buffer.append(event["content"])
-                    live.update(Markdown("".join(text_buffer)))
+            event_type = event.get("type")
+            if event_type == "error":
+                stop_live()
+                console.print(
+                    f"\n[red]❌ Error: {event.get('content', 'Unknown error')}[/red]")
+                break
 
-                case "reasoning_delta":
-                    if not in_reasoning:
-                        stop_live()
-                        console.print(
-                            "\n[bold magenta]🧠 Thinking:[/bold magenta] ", end="")
-                        in_reasoning = True
-                    console.print(event["content"], end="",
-                                  style="dim italic magenta")
-
-                case "tool_call":
-                    conclude_reasoning()
-                    stop_live()
-                    console.print(
-                        f"\n[yellow]🔧 Calling tool: {event['name']}[/yellow]")
-
-                case "tool_output":
-                    stop_live()
-                    output = event["output"]
-                    preview = f"{output[:100]}..." if len(
-                        output) > 100 else output
-                    console.print(f"[cyan]📤 Tool output: {preview}[/cyan]\n")
-
-                case "agent_update" | "reasoning_summary":
-                    pass
-
-                case "error":
-                    stop_live()
-                    console.print(f"\n[red]❌ Error: {event['content']}[/red]")
-                    break
+            if isinstance(event_type, str):
+                handler = handlers.get(event_type)
+                if handler:
+                    handler(event)
 
         stop_live()
         console.print()
