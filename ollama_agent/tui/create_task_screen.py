@@ -71,9 +71,14 @@ class CreateTaskScreen(ModalScreen):
         try:
             self._models = get_tool_compatible_models(self.agent.model)
         except ModelCapabilityError:
-            self._models = [self.agent.model]
+            # Preferred model is not tool-compatible; try to get all tool-compatible models
+            try:
+                self._models = get_tool_compatible_models()
+            except ModelCapabilityError:
+                self._models = []
         if not self._models:
-            self._models = [self.agent.model]
+            # No tool-compatible models available; leave list empty
+            self._models = []
 
     def compose(self) -> ComposeResult:
         """Create the task creation dialog."""
