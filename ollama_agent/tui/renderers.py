@@ -5,6 +5,17 @@ from rich.text import Text
 from textual.widgets import RichLog
 
 
+def _clear_log_lines(log: RichLog, start_line: int) -> None:
+    """Remove rendered lines after ``start_line`` and clear RichLog caches."""
+
+    while len(log.lines) > start_line:
+        log.lines.pop()
+
+    # RichLog lacks a public API to drop cached rendered lines; clear manually.
+    if hasattr(log, "_line_cache"):
+        log._line_cache.clear()
+
+
 class StreamingMarkdownRenderer:
     """Render markdown content progressively inside a RichLog widget."""
 
@@ -41,16 +52,7 @@ class StreamingMarkdownRenderer:
         if not self.buffer:
             return
 
-        current_lines = len(self.chat_log.lines)
-        for _ in range(current_lines - self._start_line_count):
-            if len(self.chat_log.lines) > self._start_line_count:
-                self.chat_log.lines.pop()
-
-        # Directly clear the private _line_cache attribute.
-        # There is no public API for clearing the line cache in RichLog.
-        # This is necessary to ensure the markdown is re-rendered correctly.
-        # If a public method becomes available in future versions of Textual, use that instead.
-        self.chat_log._line_cache.clear()
+        _clear_log_lines(self.chat_log, self._start_line_count)
         self.chat_log.write(RichMarkdown(self.buffer))
         self.chat_log.scroll_end(animate=False)
         self.chat_log.refresh()
@@ -98,16 +100,7 @@ class ReasoningRenderer:
     def _update_display(self) -> None:
         """Update the reasoning line in the chat log."""
         # Remove any lines we added before (if updating)
-        current_line_count = len(self.chat_log.lines)
-        lines_to_remove = current_line_count - self._start_line_count
-
-        for _ in range(lines_to_remove):
-            if len(self.chat_log.lines) > self._start_line_count:
-                self.chat_log.lines.pop()
-
-        # Clear the line cache to force re-render
-        if hasattr(self.chat_log, '_line_cache'):
-            self.chat_log._line_cache.clear()
+        _clear_log_lines(self.chat_log, self._start_line_count)
 
         # Write the updated reasoning line
         reasoning_line = Text()

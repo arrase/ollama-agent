@@ -77,6 +77,8 @@ class OllamaAgent:
     mcp_servers: list[RunningMCPServer] = field(
         init=False, default_factory=list)
     session_manager: SessionManager = field(init=False)
+    _agent_cache: dict[tuple[str, ReasoningEffortValue], Agent] = field(
+        init=False, default_factory=dict)
 
     def __post_init__(self) -> None:
         self.reasoning_effort = validate_reasoning_effort(
@@ -106,32 +108,42 @@ class OllamaAgent:
         reasoning_effort: Optional[ReasoningEffortValue] = None,
     ) -> Agent:
         selected_model = model or self.model
+        selected_effort = reasoning_effort or self.reasoning_effort
         ensure_model_supports_tools(selected_model)
-        return Agent(
+        cache_key = (selected_model, selected_effort)
+        cached_agent = self._agent_cache.get(cache_key)
+        if cached_agent is not None:
+            return cached_agent
+
+        agent = Agent(
             name="Ollama Assistant",
             instructions=self.instructions,
             model=selected_model,
             tools=[execute_command],
             mcp_servers=[entry.server for entry in self.mcp_servers],
-            model_settings=self._build_model_settings(reasoning_effort),
+            model_settings=self._build_model_settings(selected_effort),
         )
+        self._agent_cache[cache_key] = agent
+        return agent
 
     async def _ensure_mcp_servers_initialized(self) -> None:
         if not self.mcp_servers and self.mcp_config_path:
             self.mcp_servers = await initialize_mcp_servers(self.mcp_config_path)
             if self.mcp_servers:
+                self._agent_cache.clear()
                 self.agent = self._create_agent()
 
     async def _get_agent(self, model: Optional[str], reasoning_effort: Optional[str]) -> Agent:
         await self._ensure_mcp_servers_initialized()
         if not model and not reasoning_effort:
             return self.agent
+        selected_model = model or self.model
         effort: ReasoningEffortValue = (
             validate_reasoning_effort(reasoning_effort)
             if reasoning_effort
             else self.reasoning_effort
         )
-        return self._create_agent(model=model, reasoning_effort=effort)
+        return self._create_agent(model=selected_model, reasoning_effort=effort)
 
     async def cleanup(self) -> None:
         if self.mcp_servers:

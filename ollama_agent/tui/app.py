@@ -84,6 +84,23 @@ class ChatInterface(App):
         session_piece = f" | Session: {session_id[:8]}..." if session_id else ""
         self.sub_title = f"Model: {self.agent.model}{session_piece}"
 
+    def _write_message(
+        self,
+        message: str,
+        *,
+        style: str,
+        prefix: Optional[str] = None,
+        markdown: bool = False,
+    ) -> None:
+        if markdown:
+            if prefix:
+                self.chat_log.write(Text(f"{prefix}:", style=style))
+            self.chat_log.write(RichMarkdown(message))
+            return
+
+        text = f"{prefix}: {message}" if prefix else message
+        self.chat_log.write(Text(text, style=style))
+
     def compose(self) -> ComposeResult:
         """Create the interface widgets."""
         yield Header()
@@ -107,12 +124,17 @@ class ChatInterface(App):
         self._input_field = self.query_one("#user-input", Input)
 
         self._set_subtitle(session_id)
-        self._write_system_message("Welcome to Ollama Agent!")
-        self._write_system_message(f"Session ID: {session_id}")
-        self._write_system_message(
-            "Type your message and press Enter to send. Use Ctrl+V to paste text.")
-        self._write_system_message(
-            "Shortcuts: Ctrl+R=New Session | Ctrl+S=Load Session | Ctrl+T=Create Task | Ctrl+L=Tasks")
+        self._write_message("Welcome to Ollama Agent!", style="italic cyan")
+        self._write_message(
+            f"Session ID: {session_id}", style="italic cyan")
+        self._write_message(
+            "Type your message and press Enter to send. Use Ctrl+V to paste text.",
+            style="italic cyan",
+        )
+        self._write_message(
+            "Shortcuts: Ctrl+R=New Session | Ctrl+S=Load Session | Ctrl+T=Create Task | Ctrl+L=Tasks",
+            style="italic cyan",
+        )
         self._blank_line()
         self.input_field.focus()
 
@@ -120,19 +142,6 @@ class ChatInterface(App):
         """Execute when the application is unmounted."""
         # Cleanup MCP servers
         await self.agent.cleanup()
-
-    def _write_system_message(self, message: str) -> None:
-        self.chat_log.write(Text(message, style="italic cyan"))
-
-    def _write_user_message(self, message: str) -> None:
-        self.chat_log.write(Text(f"User: {message}", style="bold blue"))
-
-    def _write_agent_message(self, message: str) -> None:
-        self.chat_log.write(Text("Agent:", style="bold green"))
-        self.chat_log.write(RichMarkdown(message))
-
-    def _write_error_message(self, message: str) -> None:
-        self.chat_log.write(Text(f"Error: {message}", style="bold red"))
 
     async def _stream_agent_response(
         self,
@@ -192,8 +201,11 @@ class ChatInterface(App):
                 event_type = event.get("type")
 
                 if event_type == "error":
-                    self._write_error_message(
-                        event.get("content", "Unknown error"))
+                    self._write_message(
+                        event.get("content", "Unknown error"),
+                        style="bold red",
+                        prefix="Error",
+                    )
                     break
 
                 if event_type == "agent_update":
@@ -207,7 +219,7 @@ class ChatInterface(App):
                     handler(event)
 
         except Exception as exc:
-            self._write_error_message(str(exc))
+            self._write_message(str(exc), style="bold red", prefix="Error")
         finally:
             if reasoning_renderer.is_active:
                 reasoning_renderer.finalize_reasoning()
@@ -224,17 +236,20 @@ class ChatInterface(App):
         # Clear the input
         self.input_field.value = ""
 
-        self._write_user_message(message)
+        self._write_message(message, style="bold blue", prefix="User")
         await self._stream_agent_response(message)
 
     def action_reset_session(self) -> None:
         """Reset the session and start a new conversation."""
         session_id = self.agent.reset_session()
         self.chat_log.clear()
-        self._write_system_message("New session started!")
-        self._write_system_message(f"Session ID: {session_id}")
-        self._write_system_message(
-            "Previous conversation history has been cleared.")
+        self._write_message("New session started!", style="italic cyan")
+        self._write_message(
+            f"Session ID: {session_id}", style="italic cyan")
+        self._write_message(
+            "Previous conversation history has been cleared.",
+            style="italic cyan",
+        )
         self._blank_line()
 
         # Update subtitle with new session ID
@@ -259,7 +274,8 @@ class ChatInterface(App):
 
         log = self.chat_log
         log.clear()
-        self._write_system_message(f"Loaded session: {session_id}")
+        self._write_message(
+            f"Loaded session: {session_id}", style="italic cyan")
         self._blank_line()
 
         history = await self.agent.get_session_history(session_id)
@@ -271,9 +287,14 @@ class ChatInterface(App):
                 text = extract_text(content)
 
                 if role == 'user' and text:
-                    self._write_user_message(text)
+                    self._write_message(text, style="bold blue", prefix="User")
                 elif role == 'assistant' and text:
-                    self._write_agent_message(text)
+                    self._write_message(
+                        text,
+                        style="bold green",
+                        prefix="Agent",
+                        markdown=True,
+                    )
 
         self._blank_line()
         log.scroll_end(animate=False)
@@ -287,8 +308,10 @@ class ChatInterface(App):
             """Handle the created task."""
             if task:
                 task_id = self.task_manager.save_task(task)
-                self._write_system_message(
-                    f"Task saved: {task.title} ({task_id})")
+                self._write_message(
+                    f"Task saved: {task.title} ({task_id})",
+                    style="italic cyan",
+                )
                 self._blank_line()
 
         self.push_screen(CreateTaskScreen(self.agent), handle_task_creation)
@@ -308,12 +331,15 @@ class ChatInterface(App):
         task = self.task_manager.load_task(task_id)
 
         if not task:
-            self._write_error_message(f"Task not found: {task_id}")
+            self._write_message(
+                f"Task not found: {task_id}", style="bold red", prefix="Error")
             return
 
-        self._write_system_message(
-            f"Executing task: {task.title} ({task_id})")
-        self._write_user_message(task.prompt)
+        self._write_message(
+            f"Executing task: {task.title} ({task_id})",
+            style="italic cyan",
+        )
+        self._write_message(task.prompt, style="bold blue", prefix="User")
 
         await self._stream_agent_response(
             task.prompt,
