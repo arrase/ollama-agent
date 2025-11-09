@@ -7,9 +7,9 @@ from typing import Any, Iterable, Literal, cast
 import ollama
 
 # Type definitions
-ReasoningEffortValue = Literal["low", "medium", "high"]
+ReasoningEffortValue = Literal["low", "medium", "high", "disabled"]
 ALLOWED_REASONING_EFFORTS: tuple[ReasoningEffortValue, ...] = (
-    "low", "medium", "high")
+    "low", "medium", "high", "disabled")
 DEFAULT_REASONING_EFFORT: ReasoningEffortValue = "medium"
 
 # Configure logging

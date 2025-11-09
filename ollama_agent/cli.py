@@ -34,7 +34,7 @@ def create_argument_parser() -> argparse.ArgumentParser:
         "-e", "--effort",
         type=str,
         choices=list(ALLOWED_REASONING_EFFORTS),
-        help="Set reasoning effort level (low, medium, high)"
+        help="Set reasoning effort level (low, medium, high, disabled)"
     )
     parser.add_argument(
         "-t", "--builtin-tool-timeout",

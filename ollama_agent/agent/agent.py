@@ -95,8 +95,10 @@ class OllamaAgent:
 
     def _build_model_settings(
         self, effort: ReasoningEffortValue | None = None
-    ) -> ModelSettings:
+    ) -> ModelSettings | None:
         active_effort = effort or self.reasoning_effort
+        if active_effort == "disabled":
+            return None
         return ModelSettings(
             reasoning=Reasoning(effort=cast(Any, active_effort))
         )
@@ -115,14 +117,18 @@ class OllamaAgent:
         if cached_agent is not None:
             return cached_agent
 
-        agent = Agent(
-            name="Ollama Assistant",
-            instructions=self.instructions,
-            model=selected_model,
-            tools=[execute_command],
-            mcp_servers=[entry.server for entry in self.mcp_servers],
-            model_settings=self._build_model_settings(selected_effort),
-        )
+        model_settings = self._build_model_settings(selected_effort)
+        agent_kwargs: dict[str, Any] = {
+            "name": "Ollama Assistant",
+            "instructions": self.instructions,
+            "model": selected_model,
+            "tools": [execute_command],
+            "mcp_servers": [entry.server for entry in self.mcp_servers],
+        }
+        if model_settings is not None:
+            agent_kwargs["model_settings"] = model_settings
+
+        agent = Agent(**agent_kwargs)
         self._agent_cache[cache_key] = agent
         return agent
 

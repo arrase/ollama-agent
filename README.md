@@ -73,7 +73,7 @@ ollama-agent -t 60 -p "Run a long-running task"
 
 - `-m`, `--model`: Specify the AI model to use
 - `-p`, `--prompt`: Provide a prompt for non-interactive mode
-- `-e`, `--effort`: Set reasoning effort level (low, medium, high)
+- `-e`, `--effort`: Set reasoning effort level (low, medium, high, disabled)
 - `-t`, `--builtin-tool-timeout`: Set built-in tool execution timeout in seconds
 
 
