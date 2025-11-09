@@ -4,7 +4,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, Select
+from textual.widgets import Button, Input, Label, Select, Static
 
 from ..agent import OllamaAgent
 from ..tasks import Task
@@ -68,17 +68,24 @@ class CreateTaskScreen(ModalScreen):
         """
         super().__init__()
         self.agent = agent
+        self._models: list[str] = []
+        self._error: Optional[str] = None
         try:
             self._models = get_tool_compatible_models(self.agent.model)
-        except ModelCapabilityError:
-            # Preferred model is not tool-compatible; try to get all tool-compatible models
-            try:
-                self._models = get_tool_compatible_models()
-            except ModelCapabilityError:
-                self._models = []
+        except ModelCapabilityError as exc:
+            self._error = str(exc)
         if not self._models:
-            # No tool-compatible models available; leave list empty
-            self._models = []
+            try:
+                fallback_models = get_tool_compatible_models()
+            except ModelCapabilityError as exc:
+                if self._error is None:
+                    self._error = str(exc)
+            else:
+                if fallback_models:
+                    self._models = fallback_models
+                    self._error = None
+        if not self._models and self._error is None:
+            self._error = "No models with tool support are available."
 
     def compose(self) -> ComposeResult:
         """Create the task creation dialog."""
@@ -91,14 +98,17 @@ class CreateTaskScreen(ModalScreen):
             yield Label("Prompt:", classes="field-label")
             yield Input(placeholder="Enter task prompt...", id="task-prompt-input", classes="field-input")
 
-            yield Label("Model:", classes="field-label")
-            default_model = self.agent.model if self.agent.model in self._models else (self._models[0] if self._models else "")
-            yield Select(
-                [(model, model) for model in self._models],
-                value=default_model,
-                id="task-model-select",
-                classes="field-input"
-            )
+            if self._error:
+                yield Static(self._error, classes="field-label")
+            else:
+                yield Label("Model:", classes="field-label")
+                default_model = self.agent.model if self.agent.model in self._models else self._models[0]
+                yield Select(
+                    [(model, model) for model in self._models],
+                    value=default_model,
+                    id="task-model-select",
+                    classes="field-input"
+                )
 
             yield Label("Reasoning Effort:", classes="field-label")
             yield Select(
@@ -109,7 +119,7 @@ class CreateTaskScreen(ModalScreen):
             )
 
             with Horizontal(id="button-container"):
-                yield Button("Save", variant="primary", id="save-button")
+                yield Button("Save", variant="primary", id="save-button", disabled=bool(self._error))
                 yield Button("Cancel", variant="default", id="cancel-button")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -128,6 +138,9 @@ class CreateTaskScreen(ModalScreen):
         Returns:
             Task instance if all inputs are valid, None otherwise.
         """
+        if self._error:
+            return None
+
         title = self.query_one("#task-title-input", Input).value.strip()
         prompt = self.query_one("#task-prompt-input", Input).value.strip()
         model_select = self.query_one("#task-model-select", Select)
