@@ -15,7 +15,8 @@ def create_agent(model: Optional[str] = None, reasoning_effort: Optional[str] = 
     cfg = config.get_config()
     target_model = model or cfg.model
 
-    effort = validate_reasoning_effort(reasoning_effort or cfg.reasoning_effort)
+    effort = validate_reasoning_effort(
+        reasoning_effort or cfg.reasoning_effort)
 
     try:
         return OllamaAgent(

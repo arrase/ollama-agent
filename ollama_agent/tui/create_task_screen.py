@@ -102,7 +102,8 @@ class CreateTaskScreen(ModalScreen):
                 yield Static(self._error, classes="field-label")
             else:
                 yield Label("Model:", classes="field-label")
-                default_model = self.agent.model if self.agent.model in self._models else self._models[0]
+                default_model = self.agent.model if self.agent.model in self._models else self._models[
+                    0]
                 yield Select(
                     [(model, model) for model in self._models],
                     value=default_model,
