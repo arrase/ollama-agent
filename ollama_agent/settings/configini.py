@@ -60,7 +60,7 @@ If instructions change at runtime, they supersede this template.
 class Mem0Settings:
     collection_name: str = "ollama-agent"
     host: str = "localhost"
-    port: int = 63333
+    port: int = 6333
     embedding_model_dims: int = 768
     llm_model: str = "llama3.1:latest"
     llm_temperature: float = 0.0

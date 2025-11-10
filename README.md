@@ -135,7 +135,7 @@ mcp_config_path = /home/user/.ollama-agent/mcp_servers.json
 [mem0]
 collection_name = ollama-agent
 host = localhost
-port = 63333
+port = 6333
 embedding_model_dims = 768
 llm_model = llama3.1:latest
 llm_temperature = 0
@@ -156,15 +156,15 @@ The agent can remember long-term facts by delegating storage and retrieval to [M
 
 - You need **Docker installed and the daemon running** on your system.
 - When the agent starts (or when Mem0 settings are updated), it will look for a Qdrant container. If none exists, it will **pull `qdrant/qdrant:latest` and start a background container** named `ollama-agent-qdrant-<PORT>` (fixed prefix + configured port) with restart policy `unless-stopped`.
-- The published port is taken from `mem0.port` (`63333` by default in the code). If you already have an external Qdrant instance, set `mem0.host` and `mem0.port` to point to it; the agent will still attempt to create a local container if it doesn't detect one exposing that port.
+- The published port is taken from `mem0.port` (`6333` by default in the code). If you already have an external Qdrant instance, set `mem0.host` and `mem0.port` to point to it; the agent will still attempt to create a local container if it doesn't detect one exposing that port.
 - Check status with:
 
   ```bash
   docker ps --filter name=ollama-agent-qdrant
-  docker logs ollama-agent-qdrant-63333 | head -n 40
+  docker logs ollama-agent-qdrant-6333 | head -n 40
   ```
 
-- To update the image: `docker rm -f ollama-agent-qdrant-63333` and start the agent again; it will re-create the container with the latest image.
+- To update the image: `docker rm -f ollama-agent-qdrant-6333` and start the agent again; it will re-create the container with the latest image.
 
 Summary: you only need Docker running; the agent will pull and start Qdrant in the background for you.
 

@@ -27,7 +27,7 @@ def ensure_qdrant_service(settings: Mem0Settings) -> None:
             "The docker library is required to manage the Qdrant backend."
         )
 
-    host_port = settings.port or 63333
+    host_port = settings.port or 6333
     container_name = f"{CONTAINER_NAME_PREFIX}-{host_port}"
 
     try:
