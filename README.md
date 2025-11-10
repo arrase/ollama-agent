@@ -135,7 +135,7 @@ mcp_config_path = /home/user/.ollama-agent/mcp_servers.json
 [mem0]
 collection_name = ollama-agent
 host = localhost
-port = 6333
+port = 63333
 embedding_model_dims = 768
 llm_model = llama3.1:latest
 llm_temperature = 0
@@ -146,19 +146,35 @@ embedder_base_url = http://localhost:11434
 user_id = default
 ```
 
-### Persistent Memory with Mem0 (Optional)
+### Persistent Memory with Mem0
 
-The agent can remember long-term facts by delegating storage and retrieval to [Mem0](https://github.com/mem0ai/mem0) running locally. To use it:
+![Ollama Agent Memory](./memory.png)
 
-1. Install the extra dependencies and pull the required Ollama models:
+The agent can remember long-term facts by delegating storage and retrieval to [Mem0](https://github.com/mem0ai/mem0) running locally, backed by a Qdrant vector store that the agent automatically manages via Docker.
+
+#### Docker and automatic Qdrant startup
+
+- You need **Docker installed and the daemon running** on your system.
+- When the agent starts (or when Mem0 settings are updated), it will look for a Qdrant container. If none exists, it will **pull `qdrant/qdrant:latest` and start a background container** named `ollama-agent-qdrant-<PORT>` (fixed prefix + configured port) with restart policy `unless-stopped`.
+- The published port is taken from `mem0.port` (`63333` by default in the code). If you already have an external Qdrant instance, set `mem0.host` and `mem0.port` to point to it; the agent will still attempt to create a local container if it doesn't detect one exposing that port.
+- Check status with:
 
   ```bash
-  pip install mem0 qdrant-client
-  ollama pull llama3.1:latest
-  ollama pull nomic-embed-text:latest
+  docker ps --filter name=ollama-agent-qdrant
+  docker logs ollama-agent-qdrant-63333 | head -n 40
   ```
 
-1. Start a Qdrant instance (default configuration expects `localhost:6333`).
+- To update the image: `docker rm -f ollama-agent-qdrant-63333` and start the agent again; it will re-create the container with the latest image.
+
+Summary: you only need Docker running; the agent will pull and start Qdrant in the background for you.
+
+To use Mem0:
+
+1. Pull an Ollama embed model:
+
+  ```bash
+  ollama pull nomic-embed-text:latest
+  ```
 
 1. Adjust the `[mem0]` section in `~/.ollama-agent/config.ini` to match your environment.
 
