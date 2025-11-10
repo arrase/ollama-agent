@@ -11,6 +11,7 @@ Ollama Agent is a powerful command-line tool and Textual TUI (Terminal User Inte
 - **Session Management**: Conversations are automatically saved and can be reloaded, deleted, or switched between.
 - **Task Management**: Save frequently used prompts as "tasks" and execute them with a simple command.
 - **Configurable**: Easily configure the model, API endpoint, and agent reasoning effort.
+- **Mem0 Memory Layer**: Persistent memory backed by Mem0 + Qdrant, exposed through function-calling tools.
 
 ## Installation
 
@@ -116,6 +117,7 @@ On the first run, the application will create a default configuration file at `~
 - `database_path`: Path to the SQLite session database (default: `~/.ollama-agent/sessions.db`)
 - `builtin_tool_timeout`: Built-in tool execution timeout in seconds (default: `30`)
 - `mcp_config_path`: Path to MCP servers configuration file (default: `~/.ollama-agent/mcp_servers.json`)
+- `mem0.*`: Persistent memory configuration (adjust host/ports to match your setup)
 
 **Example `config.ini`:**
 
@@ -128,7 +130,43 @@ reasoning_effort = medium
 database_path = /home/user/.ollama-agent/sessions.db
 builtin_tool_timeout = 30
 mcp_config_path = /home/user/.ollama-agent/mcp_servers.json
+
+[mem0]
+collection_name = ollama-agent
+host = localhost
+port = 6333
+embedding_model_dims = 768
+llm_model = llama3.1:latest
+llm_temperature = 0
+llm_max_tokens = 2000
+ollama_base_url = http://localhost:11434
+embedder_model = nomic-embed-text:latest
+embedder_base_url = http://localhost:11434
+user_id = default
 ```
+
+### Persistent Memory with Mem0 (Optional)
+
+The agent can remember long-term facts by delegating storage and retrieval to [Mem0](https://github.com/mem0ai/mem0) running locally. To use it:
+
+1. Install the extra dependencies and pull the required Ollama models:
+
+  ```bash
+  pip install mem0 qdrant-client
+  ollama pull llama3.1:latest
+  ollama pull nomic-embed-text:latest
+  ```
+
+1. Start a Qdrant instance (default configuration expects `localhost:6333`).
+
+1. Adjust the `[mem0]` section in `~/.ollama-agent/config.ini` to match your environment.
+
+Once dependencies are installed, the agent exposes two tools via function calling:
+
+- `mem0_add_memory(memory: str)` – stores a new memory for the single local user.
+- `mem0_search_memory(query: str, limit: int | None = None)` – retrieves relevant memories to augment the reply.
+
+Because these tools are part of the normal tool list, both the CLI and TUI flows gain persistent recall without additional configuration.
 
 ### Agent Instructions
 
@@ -223,6 +261,7 @@ Interested in contributing? Great! Here’s how to get started.
 - `ollama_agent/agent.py`: Core `OllamaAgent` class that manages the agent, client, and sessions using `openai-agents` library.
 - `ollama_agent/tasks.py`: `TaskManager` class for saving, loading, and managing tasks (stored as YAML files).
 - `ollama_agent/tools.py`: Defines the built-in tools available to the agent, such as `execute_command`.
+- `ollama_agent/memory.py`: Wraps Mem0 configuration and exposes helper functions for the persistent memory tools.
 - `ollama_agent/utils.py`: Utility functions and helper methods.
 - `ollama_agent/settings/configini.py`: Manages loading and creating the application's configuration file.
 - `ollama_agent/settings/mcp.py`: MCP servers configuration and initialization.

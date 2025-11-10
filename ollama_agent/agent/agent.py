@@ -19,9 +19,10 @@ from openai import AsyncOpenAI
 from openai.types.responses import ResponseReasoningTextDeltaEvent, ResponseTextDeltaEvent
 from openai.types.shared import Reasoning
 
-from ..settings.configini import load_instructions
+from ..memory import configure_mem0
+from ..settings.configini import Mem0Settings, load_instructions
 from ..settings.mcp import RunningMCPServer, cleanup_mcp_servers, initialize_mcp_servers
-from .tools import execute_command
+from .tools import execute_command, mem0_add_memory, mem0_search_memory
 from ..utils import (
     ModelCapabilityError,
     ReasoningEffortValue,
@@ -71,6 +72,7 @@ class OllamaAgent:
     reasoning_effort: ReasoningEffortValue = "medium"
     database_path: Optional[Path] = None
     mcp_config_path: Optional[Path] = None
+    mem0_settings: Mem0Settings = field(default_factory=Mem0Settings)
     instructions: str = field(init=False)
     client: AsyncOpenAI = field(init=False)
     agent: Agent = field(init=False)
@@ -89,6 +91,8 @@ class OllamaAgent:
         set_default_openai_api("chat_completions")
         self.client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
         set_default_openai_client(self.client, use_for_tracing=False)
+
+        configure_mem0(self.mem0_settings)
 
         self.session_manager = SessionManager(self.database_path)
         self.agent = self._create_agent()
@@ -118,11 +122,13 @@ class OllamaAgent:
             return cached_agent
 
         model_settings = self._build_model_settings(selected_effort)
+        tools = [execute_command, mem0_add_memory, mem0_search_memory]
+
         agent_kwargs: dict[str, Any] = {
             "name": "Ollama Assistant",
             "instructions": self.instructions,
             "model": selected_model,
-            "tools": [execute_command],
+            "tools": tools,
             "mcp_servers": [entry.server for entry in self.mcp_servers],
         }
         if model_settings is not None:

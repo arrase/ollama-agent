@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 import subprocess
-from typing import TypedDict
+from typing import Any, Dict, Optional, TypedDict
 
 from agents import function_tool
+
+from ..memory import (
+    Mem0InitializationError,
+    Mem0NotConfiguredError,
+    add_memory_entry,
+    search_memories,
+)
 
 
 class CommandResult(TypedDict):
@@ -13,6 +20,12 @@ class CommandResult(TypedDict):
     stdout: str
     stderr: str
     exit_code: int
+
+
+class Mem0ToolResult(TypedDict, total=False):
+    success: bool
+    data: Dict[str, Any]
+    error: str
 
 
 _BUILTIN_TOOL_TIMEOUT = 30
@@ -52,3 +65,37 @@ def execute_command(command: str) -> CommandResult:
         return _error(f"Error: The command exceeded the {timeout} second time limit")
     except Exception as exc:  # noqa: BLE001
         return _error(f"Error executing command: {exc}")
+
+
+def _mem0_error(message: str) -> Mem0ToolResult:
+    return {"success": False, "error": message}
+
+
+@function_tool
+def mem0_add_memory(memory: str) -> Mem0ToolResult:
+    """Persist a new memory for the active user."""
+    try:
+        payload = add_memory_entry(memory)
+    except Mem0NotConfiguredError:
+        return _mem0_error("Mem0 integration is not initialized")
+    except Mem0InitializationError as exc:
+        return _mem0_error(f"Mem0 initialization failed: {exc}")
+    except Exception as exc:  # noqa: BLE001
+        return _mem0_error(f"Failed to add memory: {exc}")
+
+    return {"success": True, "data": payload}
+
+
+@function_tool
+def mem0_search_memory(query: str, limit: Optional[int] = None) -> Mem0ToolResult:
+    """Search stored memories relevant to the provided query."""
+    try:
+        payload = search_memories(query, limit=limit)
+    except Mem0NotConfiguredError:
+        return _mem0_error("Mem0 integration is not initialized")
+    except Mem0InitializationError as exc:
+        return _mem0_error(f"Mem0 initialization failed: {exc}")
+    except Exception as exc:  # noqa: BLE001
+        return _mem0_error(f"Failed to search memories: {exc}")
+
+    return {"success": True, "data": payload}

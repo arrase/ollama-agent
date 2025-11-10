@@ -5,6 +5,7 @@ from typing import Optional
 from .settings import configini as config
 from .agent import OllamaAgent
 from .agent.tools import set_builtin_tool_timeout
+from .memory import Mem0InitializationError, bootstrap_memory_backend
 from .tui.app import ChatInterface
 from .cli import create_argument_parser, handle_cli_commands
 from .utils import ModelCapabilityError, validate_reasoning_effort
@@ -25,7 +26,8 @@ def create_agent(model: Optional[str] = None, reasoning_effort: Optional[str] = 
             api_key=cfg.api_key,
             reasoning_effort=effort,
             database_path=cfg.database_path,
-            mcp_config_path=cfg.mcp_config_path
+            mcp_config_path=cfg.mcp_config_path,
+            mem0_settings=cfg.mem0,
         )
     except ModelCapabilityError as exc:
         raise SystemExit(str(exc)) from exc
@@ -38,6 +40,11 @@ def main() -> None:
 
     # Configure built-in tool timeout from args or config
     cfg = config.get_config()
+    try:
+        bootstrap_memory_backend(cfg.mem0)
+    except Mem0InitializationError as exc:
+        raise SystemExit(str(exc)) from exc
+
     builtin_tool_timeout = args.builtin_tool_timeout if args.builtin_tool_timeout is not None else cfg.builtin_tool_timeout
     set_builtin_tool_timeout(builtin_tool_timeout)
 
