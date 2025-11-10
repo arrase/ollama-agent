@@ -29,7 +29,7 @@ pipx install git+https://github.com/arrase/ollama-agent.git
 
 ### Interactive Mode (TUI)
 
-![Ollama Agent TUI](./screenshot.png)
+![Ollama Agent TUI](./screenshots/main.png)
 
 To start the chat interface, simply run:
 
@@ -47,7 +47,7 @@ The TUI provides a rich, interactive experience with the following keybindings:
 
 ### Non-Interactive Mode
 
-![Ollama Agent CLI](./cli.png)
+![Ollama Agent CLI](./screenshots/cli.png)
 
 You can run a single prompt directly from the command line:
 
@@ -81,7 +81,7 @@ ollama-agent -t 60 -p "Run a long-running task"
 
 ### Task Management
 
-![Ollama Agent Tasks](./tasks.png)
+![Ollama Agent Tasks](./screenshots/tasks.png)
 
 Tasks are saved prompts that can be executed repeatedly.
 
@@ -148,7 +148,7 @@ user_id = default
 
 ### Persistent Memory with Mem0
 
-![Ollama Agent Memory](./memory.png)
+![Ollama Agent Memory](./screenshots/memory.png)
 
 The agent can remember long-term facts by delegating storage and retrieval to [Mem0](https://github.com/mem0ai/mem0) running locally, backed by a Qdrant vector store that the agent automatically manages via Docker.
 
