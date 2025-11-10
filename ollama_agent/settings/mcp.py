@@ -186,6 +186,7 @@ def _build_mcp_agent(
     if not isinstance(agent_config, dict):
         agent_config = {}
 
+    # If no explicit model for the MCP agent, inherit the caller's default_model (CLI --model or config.ini)
     model = agent_config.get("model") or default_model
     if not model:
         logger.error("Skipping MCP server '%s': missing model for agent", name)

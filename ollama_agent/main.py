@@ -1,6 +1,7 @@
 """Main entry point of the application."""
 
 from typing import Optional
+from dataclasses import replace
 
 from .settings import configini as config
 from .agent import OllamaAgent
@@ -20,6 +21,12 @@ def create_agent(model: Optional[str] = None, reasoning_effort: Optional[str] = 
         reasoning_effort or cfg.reasoning_effort)
 
     try:
+        # Ensure Mem0 uses the same LLM model as the agent when not explicitly set
+        default_mem0 = config.Mem0Settings()
+        mem0_settings = cfg.mem0
+        if not getattr(mem0_settings, "llm_model", None) or mem0_settings.llm_model == getattr(default_mem0, "llm_model", None):
+            mem0_settings = replace(mem0_settings, llm_model=target_model)
+
         return OllamaAgent(
             model=target_model,
             base_url=cfg.base_url,
@@ -27,7 +34,7 @@ def create_agent(model: Optional[str] = None, reasoning_effort: Optional[str] = 
             reasoning_effort=effort,
             database_path=cfg.database_path,
             mcp_config_path=cfg.mcp_config_path,
-            mem0_settings=cfg.mem0,
+            mem0_settings=mem0_settings,
         )
     except ModelCapabilityError as exc:
         raise SystemExit(str(exc)) from exc
