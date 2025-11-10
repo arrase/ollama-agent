@@ -10,8 +10,9 @@ from textual.containers import Container, Vertical
 from textual.widgets import Footer, Header, Input, RichLog
 
 from ..agent import OllamaAgent
-from ..tasks import Task, TaskManager
 from ..agent.tools import set_builtin_tool_timeout
+from ..streaming import stream_agent_events
+from ..tasks import Task, TaskManager
 from ..utils import extract_text
 from .create_task_screen import CreateTaskScreen
 from .renderers import ReasoningRenderer, StreamingMarkdownRenderer
@@ -184,40 +185,28 @@ class ChatInterface(App):
             self.chat_log.write(Text(f"📤 Tool output: {preview}",
                                      style="cyan"))
 
-        event_handlers = {
-            "text_delta": handle_text_delta,
-            "reasoning_delta": handle_reasoning_delta,
-            "reasoning_summary": handle_reasoning_summary,
-            "tool_call": handle_tool_call,
-            "tool_output": handle_tool_output,
-        }
-
         try:
-            async for event in self.agent.run_async_streamed(
+            event_handlers = {
+                "text_delta": handle_text_delta,
+                "reasoning_delta": handle_reasoning_delta,
+                "reasoning_summary": handle_reasoning_summary,
+                "tool_call": handle_tool_call,
+                "tool_output": handle_tool_output,
+            }
+
+            await stream_agent_events(
+                self.agent,
                 prompt,
+                event_handlers,
                 model=model,
                 reasoning_effort=reasoning_effort,
-            ):
-                event_type = event.get("type")
-
-                if event_type == "error":
-                    self._write_message(
-                        event.get("content", "Unknown error"),
-                        style="bold red",
-                        prefix="Error",
-                    )
-                    break
-
-                if event_type == "agent_update":
-                    continue
-
-                if not isinstance(event_type, str):
-                    continue
-
-                handler = event_handlers.get(event_type)
-                if handler:
-                    handler(event)
-
+                on_error=lambda event: self._write_message(
+                    event.get("content", "Unknown error"),
+                    style="bold red",
+                    prefix="Error",
+                ),
+                ignore={"agent_update"},
+            )
         except Exception as exc:
             self._write_message(str(exc), style="bold red", prefix="Error")
         finally:
@@ -257,16 +246,13 @@ class ChatInterface(App):
 
     def action_load_session(self) -> None:
         """Show the session list dialog."""
-        sessions = self.agent.list_sessions()
-
         async def handle_session_action(action: str | None) -> None:
             """Handle the selected action."""
             if action and action.startswith("load:"):
                 session_id = action.replace("load:", "")
                 await self._load_selected_session(session_id)
 
-        self.push_screen(SessionListScreen(
-            sessions, self.agent), handle_session_action)
+        self.push_screen(SessionListScreen(self.agent), handle_session_action)
 
     async def _load_selected_session(self, session_id: str) -> None:
         """Load the selected session and display its history."""

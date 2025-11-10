@@ -5,13 +5,13 @@ import asyncio
 from typing import Any, Callable, Optional
 
 from rich.console import Console
+from rich.live import Live
 from rich.markdown import Markdown
 from rich.table import Table
-from rich.live import Live
 
 from .agent import OllamaAgent
 from .tasks import Task, TaskManager
-from .agent.tools import set_builtin_tool_timeout
+from .streaming import stream_agent_events
 from .utils import ALLOWED_REASONING_EFFORTS
 
 
@@ -124,27 +124,29 @@ async def run_non_interactive(agent: OllamaAgent, prompt: str, model: Optional[s
         preview = f"{output[:100]}..." if len(output) > 100 else output
         console.print(f"[cyan]📤 Tool output: {preview}[/cyan]\n")
 
-    handlers: dict[str, Callable[[dict[str, Any]], None]] = {
+    handlers = {
         "text_delta": handle_text_delta,
         "reasoning_delta": handle_reasoning_delta,
         "tool_call": handle_tool_call,
         "tool_output": handle_tool_output,
     }
 
+    def on_error(event: dict[str, Any]) -> None:
+        stop_live()
+        console.print(
+            f"\n[red]❌ Error: {event.get('content', 'Unknown error')}[/red]"
+        )
+
     try:
-        async for event in agent.run_async_streamed(prompt, model=model, reasoning_effort=effort):
-            event_type = event.get("type")
-            if event_type == "error":
-                stop_live()
-                console.print(
-                    f"\n[red]❌ Error: {event.get('content', 'Unknown error')}[/red]")
-                break
-
-            if isinstance(event_type, str):
-                handler = handlers.get(event_type)
-                if handler:
-                    handler(event)
-
+        await stream_agent_events(
+            agent,
+            prompt,
+            handlers,
+            model=model,
+            reasoning_effort=effort,
+            on_error=on_error,
+            ignore={"agent_update"},
+        )
         stop_live()
         console.print()
     finally:
