@@ -1,32 +1,27 @@
-## Project Snapshot
-- CLI entrypoint `ollama_agent/main.py` selects between streamed CLI commands and the Textual TUI; treat CLI args (model, effort, timeout) as authoritative overrides on top of config defaults.
-- Core agent runs on `openai-agents` with `AsyncOpenAI` pointed at Ollama; always verify models via `ensure_model_supports_tools` so tool calls stay available.
-- Textual app in `ollama_agent/tui/app.py` streams responses through custom renderers, so preserve event ordering and markdown formatting contracts.
-- Persistence, config, and instructions live under `~/.ollama-agent`; keep backwards compatibility when touching paths or defaults.
+# Copilot Instructions
 
-## Core Modules & Contracts
-- `create_agent` centralizes `OllamaAgent` construction; pass overrides into it instead of mutating global state so caches and MCP init stay correct.
-- `OllamaAgent` caches agents keyed by `(model, effort)`; clear `_agent_cache` whenever instructions or MCP servers change to avoid stale tool lists.
-- Streamed runs emit `text_delta`, `reasoning_delta`, `reasoning_summary`, `tool_call`, `tool_output`, `agent_update`; new features should extend handlers rather than changing these keys.
-- Built-ins live in `agent/tools.py`; respect `set_builtin_tool_timeout` when adding tools and return dicts compatible with `CommandResult`.
-
-## State & Persistence
-- `SessionManager` wraps `agents.SQLiteSession` storing data at `~/.ollama-agent/sessions.db`; avoid schema changes unless mirrored in existing tables (`agent_sessions`, `agent_messages`).
-- Call `reset_session` when starting fresh conversations to keep UI state aligned with the backing SQLite session ID.
-- `TaskManager` stores YAML per BLAKE2 hash of the title (first 8 chars); modifying `compute_task_id` can orphan saved tasks.
-- `settings/configini.load_instructions` backfills `instructions.md`; reuse it so user overrides survive onboarding flows.
-- MCP servers load from `~/.ollama-agent/mcp_servers.json`; initialization happens lazily, so update flows should re-run `initialize_mcp_servers` or trigger `cleanup_mcp_servers` on shutdown.
-
-## Developer Workflow
-- Install locally with `pip install -e .` (Python ≥3.9) and ensure an Ollama server exposing tool-capable models is running before manual tests.
-- Use `ollama-agent -p "prompt"` to exercise the streamed CLI path and bare `ollama-agent` to validate TUI interactions after changes.
-- Validate persistence via CLI task commands (`task-list`, `task-run`, `task-delete`) and TUI shortcuts (Ctrl+R/Ctrl+S/Ctrl+L/Ctrl+T).
-- Enable verbose logging with `LOGLEVEL=DEBUG` when chasing MCP or session issues; logging already routes through the stdlib logger.
-- With no automated tests, sanity-check both `run_async` and `run_async_streamed` flows whenever touching agent execution or event handling.
-
-## Extension Points
-- New agent tools should use `@function_tool` and return JSON-serializable payloads that mirror `CommandResult`; keep outputs concise for both CLI and TUI previews.
-- Extend the TUI by adding screens under `ollama_agent/tui`, following existing CSS/binding patterns so shortcuts remain consistent.
-- If you tweak streaming UX, update `StreamingMarkdownRenderer` and `ReasoningRenderer` together to avoid RichLog flicker and dangling reasoning banners.
-- When introducing config knobs, add fields to the `Config` dataclass, write defaults into `config.ini`, and wire them through CLI flags if user-facing.
-- Document new commands or behaviors in `README.md` to keep feature discoverability in sync with CLI/TUI affordances.
+- **Purpose**: Local-first assistant that talks to Ollama-compatible models; main entrypoint is `ollama_agent/main.py`.
+- **Startup Flow**: `main()` loads `config.ini`, bootstraps Mem0/Qdrant, applies CLI overrides, and either handles CLI commands or launches the Textual TUI.
+- **Agent Factory**: `create_agent()` enforces reasoning effort via `validate_reasoning_effort()` and mirrors the active model into `Mem0Settings` so memories use the same LLM by default.
+- **Config Files**: Defaults live under `~/.ollama-agent/`; `config.ini` holds runtime settings, `instructions.md` overrides agent persona, and `tasks/*.yaml` stores saved prompts keyed by BLAKE2 hash prefixes.
+- **Session Storage**: `agent/session_manager.py` persists conversations in SQLite (`agent_sessions`, `agent_messages`) using `agents.SQLiteSession`; resetting or loading sessions updates the cached ID and TUI subtitle.
+- **Streaming Contract**: All non-blocking output flows through `OllamaAgent.run_async_streamed()` yielding events like `text_delta`, `reasoning_delta`, `tool_call`, and `tool_output` that drive both CLI and TUI renderers.
+- **CLI Streaming**: `cli._StreamingConsole` keeps Rich Live output responsive, pausing live updates whenever reasoning deltas arrive so the transcript stays readable.
+- **TUI Rendering**: `tui/renderers.py` manages incremental markdown and reasoning output (buffers tokens, rewrites RichLog lines); keep this cadence when adding event types to avoid flicker.
+- **Tooling**: Built-in tools live in `agent/tools.py` as `@function_tool`s (`execute_command`, `mem0_add_memory`, `mem0_search_memory`); add new tools here so both CLI and TUI pick them up automatically.
+- **Tool Timeout**: `_BUILTIN_TOOL_TIMEOUT` is global; `set_builtin_tool_timeout()` is called from CLI args and TUI setup so any new entrypoint must wire this through before invoking tools.
+- **Model Guardrails**: Before constructing agents we call `ensure_model_supports_tools()` which shells out to `ollama.show`; expect a runtime error if the model lacks `tools` capability or Ollama is unreachable.
+- **Reasoning Effort**: Effort values map to OpenAI Reasoning settings; the string `"disabled"` bypasses `ModelSettings`. Always validate user input with `validate_reasoning_effort()`.
+- **Mem0 Bootstrap**: `memory/bootstrap.ensure_qdrant_service()` spins up or reuses a `qdrant/qdrant:latest` Docker container bound to `mem0.port`; failures bubble up as `Mem0InitializationError` and abort startup.
+- **Mem0 Runtime**: `memory/manager` caches a singleton `mem0.Memory` per settings; updating settings clears the cache, so reuse `configure_mem0()` instead of instantiating Memory directly.
+- **MCP Integration**: `settings/mcp.initialize_mcp_servers()` reads `~/.ollama-agent/mcp_servers.json`, instantiates transport-specific servers (stdio/HTTP/SSE), wraps them in lightweight helper agents, and exposes `use_<name>` tools; cleanup runs via `agent.cleanup()` on shutdown.
+- **Task Workflow**: `TaskManager` writes YAML with `yaml.safe_dump`, IDs are first 8 hex chars of a blake2s digest; `task-run` resolves prefixes via `find_task_by_prefix()`.
+- **User Commands**: CLI supports `ollama-agent -p "..."`, `task-list`, `task-run <id>`, `task-delete <id>`; TUI binds Ctrl+R/S/L/T for session/task management and uses `run_worker()` to execute background coroutines safely.
+- **Extending Events**: If you introduce new stream event types, update `streaming.stream_agent_events()` consumer maps in both CLI and TUI to keep parity.
+- **External Dependencies**: Requires a running Ollama daemon (for `ollama.show`/`ollama.list`) and Docker access; document these prereqs in user-facing changes to prevent cryptic startup failures.
+- **Dev Setup**: Standard workflow is `python -m venv .venv`, `source .venv/bin/activate`, `pip install -e .`; the console script entry point `ollama-agent` will then resolve to `main()`.
+- **Testing Gap**: No automated tests ship today; manual validation typically involves running the CLI with a prompt plus hitting the TUI to verify streaming and task flows.
+- **Error Surfacing**: Operational errors are converted to user-facing strings/events (e.g., Mem0, MCP failures); prefer raising `ModelCapabilityError`/`Mem0InitializationError` so callers can surface clean messages.
+- **Instructions File**: `settings.configini.load_instructions()` auto-creates `instructions.md`; keep fallback text in sync with runtime behavior when changing default tool policies.
+- **New UI Elements**: Follow Textual patterns—declare CSS in class attributes, use `query_one()` in `on_mount()`, and ensure long-running work happens via async tasks (`run_worker`).
+- **Home Directory Writes**: Anything persisting user data should target the `~/.ollama-agent` subtree; respect existing filenames to avoid breaking upgrades.
