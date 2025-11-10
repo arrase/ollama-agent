@@ -11,8 +11,85 @@ from rich.table import Table
 
 from .agent import OllamaAgent
 from .tasks import Task, TaskManager
-from .streaming import stream_agent_events
+from .streaming import EventHandler, stream_agent_events
 from .utils import ALLOWED_REASONING_EFFORTS
+
+
+class _StreamingConsole:
+    """Stateful renderer for non-interactive streaming output."""
+
+    def __init__(self, console: Console) -> None:
+        self.console = console
+        self.live = Live(console=console, refresh_per_second=10)
+        self._text: list[str] = []
+        self._agent_banner_shown = False
+        self._reasoning = False
+        self._live_active = False
+
+    def close(self) -> None:
+        self._stop_live()
+        self.console.print()
+
+    def handlers(self) -> dict[str, EventHandler]:
+        return {
+            "text_delta": self._on_text_delta,
+            "reasoning_delta": self._on_reasoning_delta,
+            "tool_call": self._on_tool_call,
+            "tool_output": self._on_tool_output,
+        }
+
+    def on_error(self, event: dict[str, Any]) -> None:
+        self._stop_live()
+        self.console.print(
+            f"\n[red]❌ Error: {event.get('content', 'Unknown error')}[/red]"
+        )
+
+    def _start_live(self) -> None:
+        if not self._live_active:
+            self.live.start()
+            self._live_active = True
+
+    def _stop_live(self) -> None:
+        if self._live_active:
+            self.live.stop()
+            self._live_active = False
+
+    def _ensure_agent_banner(self) -> None:
+        if not self._agent_banner_shown:
+            self.console.print("\n[bold green]Agent:[/bold green]")
+            self._agent_banner_shown = True
+
+    def _conclude_reasoning(self) -> None:
+        if self._reasoning:
+            self._reasoning = False
+            self.console.print()
+
+    def _on_text_delta(self, event: dict[str, Any]) -> None:
+        self._conclude_reasoning()
+        self._ensure_agent_banner()
+        self._start_live()
+        self._text.append(event.get("content", ""))
+        self.live.update(Markdown("".join(self._text)))
+
+    def _on_reasoning_delta(self, event: dict[str, Any]) -> None:
+        if not self._reasoning:
+            self._stop_live()
+            self.console.print("\n[bold magenta]🧠 Thinking:[/bold magenta] ", end="")
+            self._reasoning = True
+        self.console.print(event.get("content", ""), end="", style="dim italic magenta")
+
+    def _on_tool_call(self, event: dict[str, Any]) -> None:
+        self._conclude_reasoning()
+        self._stop_live()
+        self.console.print(
+            f"\n[yellow]🔧 Calling tool: {event.get('name', 'unknown')}[/yellow]"
+        )
+
+    def _on_tool_output(self, event: dict[str, Any]) -> None:
+        self._stop_live()
+        output = event.get("output", "")
+        preview = f"{output[:100]}..." if len(output) > 100 else output
+        self.console.print(f"[cyan]📤 Tool output: {preview}[/cyan]\n")
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
@@ -63,93 +140,26 @@ def create_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-async def run_non_interactive(agent: OllamaAgent, prompt: str, model: Optional[str] = None, effort: Optional[str] = None) -> None:
+async def run_non_interactive(
+    agent: OllamaAgent,
+    prompt: str,
+    model: Optional[str] = None,
+    effort: Optional[str] = None,
+) -> None:
     """Stream agent output to the console."""
-    console = Console()
-    text_buffer: list[str] = []
-    live = Live(console=console, refresh_per_second=10)
-    live_active = False
-    agent_shown = False
-    in_reasoning = False
-
-    def start_live() -> None:
-        nonlocal live_active
-        if not live_active:
-            live.start()
-            live_active = True
-
-    def stop_live() -> None:
-        nonlocal live_active
-        if live_active:
-            live.stop()
-            live_active = False
-
-    def conclude_reasoning() -> None:
-        nonlocal in_reasoning
-        if in_reasoning:
-            in_reasoning = False
-            console.print()
-
-    def ensure_agent_banner() -> None:
-        nonlocal agent_shown
-        if not agent_shown:
-            console.print("\n[bold green]Agent:[/bold green]")
-            agent_shown = True
-
-    def handle_text_delta(event: dict[str, Any]) -> None:
-        conclude_reasoning()
-        ensure_agent_banner()
-        start_live()
-        text_buffer.append(event.get("content", ""))
-        live.update(Markdown("".join(text_buffer)))
-
-    def handle_reasoning_delta(event: dict[str, Any]) -> None:
-        nonlocal in_reasoning
-        if not in_reasoning:
-            stop_live()
-            console.print("\n[bold magenta]🧠 Thinking:[/bold magenta] ", end="")
-            in_reasoning = True
-        console.print(event.get("content", ""), end="",
-                      style="dim italic magenta")
-
-    def handle_tool_call(event: dict[str, Any]) -> None:
-        conclude_reasoning()
-        stop_live()
-        console.print(
-            f"\n[yellow]🔧 Calling tool: {event.get('name', 'unknown')}[/yellow]")
-
-    def handle_tool_output(event: dict[str, Any]) -> None:
-        stop_live()
-        output = event.get("output", "")
-        preview = f"{output[:100]}..." if len(output) > 100 else output
-        console.print(f"[cyan]📤 Tool output: {preview}[/cyan]\n")
-
-    handlers = {
-        "text_delta": handle_text_delta,
-        "reasoning_delta": handle_reasoning_delta,
-        "tool_call": handle_tool_call,
-        "tool_output": handle_tool_output,
-    }
-
-    def on_error(event: dict[str, Any]) -> None:
-        stop_live()
-        console.print(
-            f"\n[red]❌ Error: {event.get('content', 'Unknown error')}[/red]"
-        )
-
+    renderer = _StreamingConsole(Console())
     try:
         await stream_agent_events(
             agent,
             prompt,
-            handlers,
+            renderer.handlers(),
             model=model,
             reasoning_effort=effort,
-            on_error=on_error,
+            on_error=renderer.on_error,
             ignore={"agent_update"},
         )
-        stop_live()
-        console.print()
     finally:
+        renderer.close()
         await agent.cleanup()
 
 
