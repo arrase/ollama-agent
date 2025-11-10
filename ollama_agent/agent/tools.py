@@ -46,6 +46,14 @@ def _error(stderr: str, *, exit_code: int = -1) -> CommandResult:
 
 @function_tool
 def execute_command(command: str) -> CommandResult:
+    """Execute a shell command and return the result.
+
+    Args:
+        command: The shell command to execute.
+
+    Returns:
+        A CommandResult containing success status, stdout, stderr, and exit code.
+    """
     timeout = get_builtin_tool_timeout()
     try:
         result = subprocess.run(
@@ -73,7 +81,14 @@ def _mem0_error(message: str) -> Mem0ToolResult:
 
 @function_tool
 def mem0_add_memory(memory: str) -> Mem0ToolResult:
-    """Persist a new memory for the active user."""
+    """Persist a new memory for the active user.
+
+    Args:
+        memory: The memory content to store.
+
+    Returns:
+        A Mem0ToolResult indicating success or failure, with stored data or error message.
+    """
     try:
         payload = add_memory_entry(memory)
     except Mem0NotConfiguredError:
@@ -88,7 +103,15 @@ def mem0_add_memory(memory: str) -> Mem0ToolResult:
 
 @function_tool
 def mem0_search_memory(query: str, limit: Optional[int] = None) -> Mem0ToolResult:
-    """Search stored memories relevant to the provided query."""
+    """Search stored memories relevant to the provided query.
+
+    Args:
+        query: The search query to find relevant memories.
+        limit: Optional maximum number of memories to return.
+
+    Returns:
+        A Mem0ToolResult containing search results or error message.
+    """
     try:
         payload = search_memories(query, limit=limit)
     except Mem0NotConfiguredError:
