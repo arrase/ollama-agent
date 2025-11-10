@@ -8,13 +8,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, AsyncContextManager, Awaitable, Callable, Optional, cast
 
+from agents import Agent
 from agents.mcp import MCPServer, MCPServerSse, MCPServerStdio, MCPServerStreamableHttp
+
+from ..utils import ModelCapabilityError, ensure_model_supports_tools
 
 logger = logging.getLogger(__name__)
 _agents_mcp_logger = logging.getLogger("openai.agents")
 _agents_mcp_logger.setLevel(logging.CRITICAL)
 
 DEFAULT_MCP_CONFIG_PATH = Path.home() / ".ollama-agent" / "mcp_servers.json"
+_DEFAULT_AGENT_INSTRUCTIONS = (
+    "You operate the '{name}' MCP server. Always fulfill the user's request "
+    "by invoking the server tools and return their results directly."
+)
 
 
 @dataclass(slots=True)
@@ -24,6 +31,9 @@ class RunningMCPServer:
     name: str
     server: MCPServer
     _closer: Callable[[], Awaitable[None]]
+    agent: Optional[Agent] = None
+    tool_name: Optional[str] = None
+    tool_description: Optional[str] = None
 
     async def shutdown(self) -> None:
         """Tear down the server without raising on failure."""
@@ -166,7 +176,48 @@ def _build_server(name: str, config: dict[str, Any]) -> Optional[MCPServer]:
     return None
 
 
-async def initialize_mcp_servers(config_path: Optional[Path] = None) -> list[RunningMCPServer]:
+def _build_mcp_agent(
+    name: str,
+    server: MCPServer,
+    config: dict[str, Any],
+    default_model: Optional[str],
+) -> Optional[tuple[Agent, str, str]]:
+    agent_config = config.get("agent", {})
+    if not isinstance(agent_config, dict):
+        agent_config = {}
+
+    model = agent_config.get("model") or default_model
+    if not model:
+        logger.error("Skipping MCP server '%s': missing model for agent", name)
+        return None
+
+    try:
+        ensure_model_supports_tools(str(model))
+    except ModelCapabilityError as exc:
+        logger.error("Skipping MCP server '%s': %s", name, exc)
+        return None
+
+    instructions = agent_config.get("instructions") or _DEFAULT_AGENT_INSTRUCTIONS.format(name=name)
+    agent_name = agent_config.get("name") or f"{name}_agent"
+    tool_name = agent_config.get("tool_name") or f"use_{name}"
+    tool_description = agent_config.get("tool_description") or agent_config.get("handoff_description") or f"Delegate requests to the '{name}' MCP server"
+
+    agent = Agent(
+        name=agent_name,
+        model=str(model),
+        instructions=str(instructions),
+        mcp_servers=[server],
+        handoff_description=str(agent_config.get("handoff_description") or tool_description),
+    )
+
+    return agent, str(tool_name), str(tool_description)
+
+
+async def initialize_mcp_servers(
+    config_path: Optional[Path] = None,
+    *,
+    default_model: Optional[str] = None,
+) -> list[RunningMCPServer]:
     """Initialize MCP servers declared in the JSON config file."""
 
     config_path = config_path or DEFAULT_MCP_CONFIG_PATH
@@ -215,9 +266,27 @@ async def initialize_mcp_servers(config_path: Optional[Path] = None) -> list[Run
                          name, connect_error)
             continue
 
+        agent_bundle = _build_mcp_agent(
+            name,
+            entered_server,
+            raw_config,
+            default_model,
+        )
+        if not agent_bundle:
+            await stack.aclose()
+            continue
+
+        agent, tool_name, tool_description = agent_bundle
+
         running_servers.append(
-            RunningMCPServer(name=name, server=entered_server,
-                             _closer=stack.aclose)
+            RunningMCPServer(
+                name=name,
+                server=entered_server,
+                _closer=stack.aclose,
+                agent=agent,
+                tool_name=tool_name,
+                tool_description=tool_description,
+            )
         )
         logger.info("Initialized MCP server: %s", name)
 

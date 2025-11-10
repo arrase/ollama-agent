@@ -122,14 +122,21 @@ class OllamaAgent:
             return cached_agent
 
         model_settings = self._build_model_settings(selected_effort)
-        tools = [execute_command, mem0_add_memory, mem0_search_memory]
+        tools: list[Any] = [execute_command, mem0_add_memory, mem0_search_memory]
+        for entry in self.mcp_servers:
+            if entry.agent:
+                tools.append(
+                    entry.agent.as_tool(
+                        tool_name=entry.tool_name or f"use_{entry.name}",
+                        tool_description=entry.tool_description or f"Delegate tasks to the '{entry.name}' MCP agent",
+                    )
+                )
 
         agent_kwargs: dict[str, Any] = {
             "name": "Ollama Assistant",
             "instructions": self.instructions,
             "model": selected_model,
             "tools": tools,
-            "mcp_servers": [entry.server for entry in self.mcp_servers],
         }
         if model_settings is not None:
             agent_kwargs["model_settings"] = model_settings
@@ -140,7 +147,10 @@ class OllamaAgent:
 
     async def _ensure_mcp_servers_initialized(self) -> None:
         if not self.mcp_servers and self.mcp_config_path:
-            self.mcp_servers = await initialize_mcp_servers(self.mcp_config_path)
+            self.mcp_servers = await initialize_mcp_servers(
+                self.mcp_config_path,
+                default_model=self.model,
+            )
             if self.mcp_servers:
                 self._agent_cache.clear()
                 self.agent = self._create_agent()

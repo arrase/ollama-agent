@@ -8,6 +8,7 @@ Ollama Agent is a powerful command-line tool and Textual TUI (Terminal User Inte
 - **Non-Interactive CLI**: Execute single prompts directly from your command line for quick queries.
 - **Ollama Integration**: Connects to any Ollama-compatible API endpoint.
 - **Tool-Powered**: The agent can execute shell commands, allowing it to interact with your local environment to perform tasks.
+- **Delegated MCP Agents**: Each configured MCP server can run through its own lightweight agent with custom model and instructions.
 - **Session Management**: Conversations are automatically saved and can be reloaded, deleted, or switched between.
 - **Task Management**: Save frequently used prompts as "tasks" and execute them with a simple command.
 - **Configurable**: Easily configure the model, API endpoint, and agent reasoning effort.
@@ -199,6 +200,8 @@ Ollama Agent supports the Model Context Protocol (MCP) to extend the agent's cap
 
 To configure MCP servers, create a `mcp_servers.json` file at `~/.ollama-agent/mcp_servers.json`. See [MCP_SERVERS.md](./MCP_SERVERS.md) for detailed configuration instructions and examples.
 
+Each MCP entry may include an `agent` block. This spawns a dedicated helper agent whose tool is exposed to the main assistant, letting you pick an appropriate model, tone, or handoff description per server.
+
 **Quick Example:**
 
 ```json
@@ -206,13 +209,25 @@ To configure MCP servers, create a `mcp_servers.json` file at `~/.ollama-agent/m
   "mcpServers": {
     "filesystem": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/documents"]
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/documents"],
+      "agent": {
+        "name": "filesystem_helper",
+        "model": "gpt-oss:20b",
+        "instructions": "You broker requests to the filesystem MCP server and return results verbatim.",
+        "tool_name": "use_filesystem",
+        "tool_description": "Delegate file operations to the filesystem MCP agent"
+      }
     },
     "context7": {
       "httpUrl": "https://mcp.context7.com/mcp",
       "headers": {
         "CONTEXT7_API_KEY": "your-api-key-here",
         "Accept": "application/json, text/event-stream"
+      },
+      "agent": {
+        "model": "gpt-oss:8b",
+        "instructions": "You query the Context7 MCP service, summarising findings concisely.",
+        "tool_description": "Ask the Context7 MCP agent to gather structured knowledge"
       }
     }
   }
