@@ -9,9 +9,10 @@ from rich.live import Live
 from rich.markdown import Markdown
 from rich.table import Table
 
-from .agent import OllamaAgent
+from .main_agent import OllamaAgent
 from .tasks import Task, TaskManager
 from .streaming import stream_agent_events, ConsoleStreamingRenderer
+from .tasks_agent.runner_utils import run_non_interactive, find_task_or_exit
 from .utils import ALLOWED_REASONING_EFFORTS
 
 
@@ -63,37 +64,6 @@ def create_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-async def run_non_interactive(
-    agent: OllamaAgent,
-    prompt: str,
-    model: Optional[str] = None,
-    effort: Optional[str] = None,
-) -> None:
-    """Stream agent output to the console."""
-    renderer = ConsoleStreamingRenderer(Console())
-    try:
-        await stream_agent_events(
-            agent,
-            prompt,
-            renderer,
-            model=model,
-            reasoning_effort=effort,
-            ignore={"agent_update"},
-        )
-    finally:
-        renderer.close()
-        await agent.cleanup()
-
-
-def find_task_or_exit(task_manager: TaskManager, task_id: str, console: Console) -> tuple[str, Task]:
-    """Find a task by ID or prefix, exit if not found."""
-    result = task_manager.find_task_by_prefix(task_id)
-
-    if not result:
-        console.print(f"[red]Task not found: {task_id}[/red]")
-        raise SystemExit(1)
-
-    return result
 
 
 def list_tasks_command() -> None:
@@ -119,23 +89,7 @@ def list_tasks_command() -> None:
     console.print(table)
 
 
-async def run_task_command(task_id: str, agent_factory: Callable[..., OllamaAgent]) -> None:
-    """Execute a saved task."""
-    console = Console()
-    task_manager = TaskManager()
-
-    found_id, task = find_task_or_exit(task_manager, task_id, console)
-
-    console.print(
-        f"[bold cyan]Executing task:[/bold cyan] {task.title} ({found_id})")
-    console.print(f"[bold blue]Prompt:[/bold blue] {task.prompt}")
-    console.print(
-        f"[bold]Model:[/bold] {task.model} | [bold]Effort:[/bold] {task.reasoning_effort}")
-    console.print("")
-
-    agent = agent_factory(
-        model=task.model, reasoning_effort=task.reasoning_effort)
-    await run_non_interactive(agent, task.prompt)
+from ollama_agent.tasks_agent.runner import run_task
 
 
 def delete_task_command(task_id: str) -> None:
@@ -162,7 +116,7 @@ def handle_cli_commands(args: argparse.Namespace, agent_factory: Callable[..., O
         delete_task_command(args.task_id)
 
     def handle_task_run(args: argparse.Namespace) -> None:
-        asyncio.run(run_task_command(args.task_id, agent_factory))
+        asyncio.run(run_task(args.task_id, agent_factory))
 
     def handle_prompt(args: argparse.Namespace) -> None:
         agent = agent_factory(

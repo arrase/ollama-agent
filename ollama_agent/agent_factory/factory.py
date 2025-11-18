@@ -5,12 +5,12 @@ from typing import Optional
 
 from ..settings import configini as config
 from ..utils import ModelCapabilityError, validate_reasoning_effort
-from .agent import OllamaAgent
+from ollama_agent.main_agent.agent import OllamaAgent
 
 
 def create_agent(
     model: Optional[str] = None, reasoning_effort: Optional[str] = None
-) -> OllamaAgent:
+) -> "OllamaAgent":
     """Create OllamaAgent instance from config with optional overrides."""
     cfg = config.get_config()
     target_model = model or cfg.model

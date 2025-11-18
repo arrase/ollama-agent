@@ -1,8 +1,8 @@
 """Main entry point of the application."""
 
 from .settings import configini as config
-from .agent.factory import create_agent
-from .agent.tools import set_builtin_tool_timeout
+from .agent_factory.factory import create_agent
+from .main_agent.tools import set_builtin_tool_timeout
 from .memory import Mem0InitializationError, bootstrap_memory_backend
 from .tui.app import ChatInterface
 from .cli import create_argument_parser, handle_cli_commands
