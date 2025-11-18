@@ -155,32 +155,35 @@ def delete_task_command(task_id: str) -> None:
         console.print(f"[red]Error deleting task: {found_id}[/red]")
 
 
-def handle_task_list(args: argparse.Namespace) -> None:
-    list_tasks_command()
-
-def handle_task_delete(args: argparse.Namespace) -> None:
-    delete_task_command(args.task_id)
-
-def handle_task_run(args: argparse.Namespace) -> None:
-    asyncio.run(run_task_command(args.task_id))
-
-def handle_prompt(args: argparse.Namespace) -> None:
-    agent = create_agent(
-        model=args.model, reasoning_effort=args.effort)
-    asyncio.run(run_non_interactive(agent, args.prompt))
-
 def handle_cli_commands(args: argparse.Namespace) -> bool:
     """Handle CLI commands and return True if a command was handled."""
-    if args.command == "task-list":
-        handle_task_list(args)
+
+    def handle_task_list(args: argparse.Namespace) -> None:
+        list_tasks_command()
+
+    def handle_task_delete(args: argparse.Namespace) -> None:
+        delete_task_command(args.task_id)
+
+    def handle_task_run(args: argparse.Namespace) -> None:
+        asyncio.run(run_task_command(args.task_id))
+
+    def handle_prompt(args: argparse.Namespace) -> None:
+        agent = create_agent(
+            model=args.model, reasoning_effort=args.effort)
+        asyncio.run(run_non_interactive(agent, args.prompt))
+
+    command_handlers = {
+        "task-list": handle_task_list,
+        "task-delete": handle_task_delete,
+        "task-run": handle_task_run,
+    }
+
+    if args.command in command_handlers:
+        command_handlers[args.command](args)
         return True
-    if args.command == "task-delete":
-        handle_task_delete(args)
-        return True
-    if args.command == "task-run":
-        handle_task_run(args)
-        return True
+
     if args.prompt:
         handle_prompt(args)
         return True
+
     return False
