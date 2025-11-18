@@ -119,10 +119,7 @@ def list_tasks_command() -> None:
     console.print(table)
 
 
-from .factory import create_agent
-
-
-async def run_task_command(task_id: str) -> None:
+async def run_task_command(task_id: str, agent_factory: Callable[..., OllamaAgent]) -> None:
     """Execute a saved task."""
     console = Console()
     task_manager = TaskManager()
@@ -136,7 +133,7 @@ async def run_task_command(task_id: str) -> None:
         f"[bold]Model:[/bold] {task.model} | [bold]Effort:[/bold] {task.reasoning_effort}")
     console.print("")
 
-    agent = create_agent(
+    agent = agent_factory(
         model=task.model, reasoning_effort=task.reasoning_effort)
     await run_non_interactive(agent, task.prompt)
 
@@ -155,7 +152,7 @@ def delete_task_command(task_id: str) -> None:
         console.print(f"[red]Error deleting task: {found_id}[/red]")
 
 
-def handle_cli_commands(args: argparse.Namespace) -> bool:
+def handle_cli_commands(args: argparse.Namespace, agent_factory: Callable[..., OllamaAgent]) -> bool:
     """Handle CLI commands and return True if a command was handled."""
 
     def handle_task_list(args: argparse.Namespace) -> None:
@@ -165,10 +162,10 @@ def handle_cli_commands(args: argparse.Namespace) -> bool:
         delete_task_command(args.task_id)
 
     def handle_task_run(args: argparse.Namespace) -> None:
-        asyncio.run(run_task_command(args.task_id))
+        asyncio.run(run_task_command(args.task_id, agent_factory))
 
     def handle_prompt(args: argparse.Namespace) -> None:
-        agent = create_agent(
+        agent = agent_factory(
             model=args.model, reasoning_effort=args.effort)
         asyncio.run(run_non_interactive(agent, args.prompt))
 

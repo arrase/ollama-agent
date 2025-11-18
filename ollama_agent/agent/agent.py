@@ -73,11 +73,10 @@ class OllamaAgent:
     database_path: Optional[Path] = None
     mcp_config_path: Optional[Path] = None
     mem0_settings: Mem0Settings = field(default_factory=Mem0Settings)
+    mcp_servers: list[RunningMCPServer] = field(default_factory=list)
     instructions: str = field(init=False)
     client: AsyncOpenAI = field(init=False)
     agent: Agent = field(init=False)
-    mcp_servers: list[RunningMCPServer] = field(
-        init=False, default_factory=list)
     session_manager: SessionManager = field(init=False)
     _agent_cache: dict[tuple[str, ReasoningEffortValue], Agent] = field(
         init=False, default_factory=dict)
@@ -144,6 +143,10 @@ class OllamaAgent:
         agent = Agent(**agent_kwargs)
         self._agent_cache[cache_key] = agent
         return agent
+
+    async def initialize(self) -> None:
+        """Initialize the agent and its dependencies."""
+        await self._ensure_mcp_servers_initialized()
 
     async def _ensure_mcp_servers_initialized(self) -> None:
         if not self.mcp_servers and self.mcp_config_path:

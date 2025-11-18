@@ -108,8 +108,9 @@ class ChatInterface(App):
 
         yield Footer()
 
-    def on_mount(self) -> None:
+    async def on_mount(self) -> None:
         """Execute when the application is mounted."""
+        await self.agent.initialize()
         session_id = self.agent.get_session_id()
         self.title = "Ollama Agent - Chat"
         self._chat_log = self.query_one("#chat-log", RichLog)
