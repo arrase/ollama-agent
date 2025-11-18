@@ -2,11 +2,9 @@
 
 import argparse
 import asyncio
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 
 from rich.console import Console
-from rich.live import Live
-from rich.markdown import Markdown
 from rich.table import Table
 
 from .agent import OllamaAgent
@@ -96,10 +94,8 @@ def find_task_or_exit(task_manager: TaskManager, task_id: str, console: Console)
     return result
 
 
-def list_tasks_command() -> None:
+def list_tasks_command(task_manager: TaskManager, console: Console) -> None:
     """List all saved tasks."""
-    console = Console()
-    task_manager = TaskManager()
     tasks = task_manager.list_tasks()
 
     if not tasks:
@@ -119,11 +115,13 @@ def list_tasks_command() -> None:
     console.print(table)
 
 
-async def run_task_command(task_id: str, agent_factory: Callable[..., OllamaAgent]) -> None:
+async def run_task_command(
+    task_id: str,
+    agent_factory: Callable[..., OllamaAgent],
+    task_manager: TaskManager,
+    console: Console
+) -> None:
     """Execute a saved task."""
-    console = Console()
-    task_manager = TaskManager()
-
     found_id, task = find_task_or_exit(task_manager, task_id, console)
 
     console.print(
@@ -138,11 +136,8 @@ async def run_task_command(task_id: str, agent_factory: Callable[..., OllamaAgen
     await run_non_interactive(agent, task.prompt)
 
 
-def delete_task_command(task_id: str) -> None:
+def delete_task_command(task_id: str, task_manager: TaskManager, console: Console) -> None:
     """Delete a saved task."""
-    console = Console()
-    task_manager = TaskManager()
-
     found_id, task = find_task_or_exit(task_manager, task_id, console)
 
     if task_manager.delete_task(found_id):
@@ -154,33 +149,26 @@ def delete_task_command(task_id: str) -> None:
 
 def handle_cli_commands(args: argparse.Namespace, agent_factory: Callable[..., OllamaAgent]) -> bool:
     """Handle CLI commands and return True if a command was handled."""
+    console = Console()
+    task_manager = TaskManager()
 
-    def handle_task_list(args: argparse.Namespace) -> None:
-        list_tasks_command()
+    if args.command == "task-list":
+        list_tasks_command(task_manager, console)
+        return True
 
-    def handle_task_delete(args: argparse.Namespace) -> None:
-        delete_task_command(args.task_id)
+    if args.command == "task-delete":
+        delete_task_command(args.task_id, task_manager, console)
+        return True
 
-    def handle_task_run(args: argparse.Namespace) -> None:
-        asyncio.run(run_task_command(args.task_id, agent_factory))
-
-    def handle_prompt(args: argparse.Namespace) -> None:
-        agent = agent_factory(
-            model=args.model, reasoning_effort=args.effort)
-        asyncio.run(run_non_interactive(agent, args.prompt))
-
-    command_handlers = {
-        "task-list": handle_task_list,
-        "task-delete": handle_task_delete,
-        "task-run": handle_task_run,
-    }
-
-    if args.command in command_handlers:
-        command_handlers[args.command](args)
+    if args.command == "task-run":
+        asyncio.run(run_task_command(
+            args.task_id, agent_factory, task_manager, console))
         return True
 
     if args.prompt:
-        handle_prompt(args)
+        agent = agent_factory(
+            model=args.model, reasoning_effort=args.effort)
+        asyncio.run(run_non_interactive(agent, args.prompt))
         return True
 
     return False
