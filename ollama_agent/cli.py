@@ -68,6 +68,7 @@ async def run_non_interactive(
     effort: Optional[str] = None,
 ) -> None:
     """Stream agent output to the console."""
+    await agent.initialize()
     renderer = ConsoleStreamingRenderer(Console())
     try:
         await stream_agent_events(
