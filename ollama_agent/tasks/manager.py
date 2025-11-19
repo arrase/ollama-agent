@@ -6,11 +6,11 @@ import hashlib
 import logging
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Optional
 
 import yaml
 
-from .utils import DEFAULT_REASONING_EFFORT, ReasoningEffortValue, validate_reasoning_effort
+from ..utils import DEFAULT_REASONING_EFFORT, ReasoningEffortValue, validate_reasoning_effort
 
 logger = logging.getLogger(__name__)
 _HASH_LENGTH = 8
@@ -28,24 +28,14 @@ class Task:
         self.reasoning_effort = validate_reasoning_effort(
             self.reasoning_effort)
 
-    def to_dict(self) -> dict[str, object]:
-        return asdict(self)
-
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> "Task":
         return cls(
             title=str(data["title"]),
             prompt=str(data["prompt"]),
             model=str(data["model"]),
-            reasoning_effort=validate_reasoning_effort(
-                str(data.get("reasoning_effort", DEFAULT_REASONING_EFFORT))
-            ),
+            reasoning_effort=str(data.get("reasoning_effort", DEFAULT_REASONING_EFFORT)),
         )
-
-
-def compute_task_id(title: str) -> str:
-    digest = hashlib.blake2s(title.encode("utf-8"), digest_size=16).hexdigest()
-    return digest[:_HASH_LENGTH]
 
 
 class TaskManager:
@@ -56,16 +46,13 @@ class TaskManager:
     def _task_path(self, task_id: str) -> Path:
         return self.tasks_dir / f"{task_id}.yaml"
 
-    def _iter_tasks(self, pattern: str = "*.yaml") -> Iterator[tuple[str, Task]]:
-        for path in self.tasks_dir.glob(pattern):
-            task = self.load_task(path.stem)
-            if task:
-                yield path.stem, task
+    def _compute_id(self, title: str) -> str:
+        return hashlib.blake2s(title.encode("utf-8"), digest_size=16).hexdigest()[:_HASH_LENGTH]
 
     def save_task(self, task: Task) -> str:
-        task_id = compute_task_id(task.title)
+        task_id = self._compute_id(task.title)
         self._task_path(task_id).write_text(
-            yaml.safe_dump(task.to_dict(), allow_unicode=True),
+            yaml.safe_dump(asdict(task), allow_unicode=True),
             encoding="utf-8",
         )
         return task_id
@@ -77,7 +64,7 @@ class TaskManager:
         try:
             data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
             return Task.from_dict(data)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error("Error loading task %s: %s", task_id, exc)
             return None
 
@@ -87,15 +74,23 @@ class TaskManager:
             return True
         except FileNotFoundError:
             return False
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error("Error deleting task %s: %s", task_id, exc)
             return False
 
     def list_tasks(self) -> list[tuple[str, Task]]:
-        return sorted(self._iter_tasks(), key=lambda item: item[1].title.lower())
+        tasks = []
+        for path in self.tasks_dir.glob("*.yaml"):
+            if task := self.load_task(path.stem):
+                tasks.append((path.stem, task))
+        return sorted(tasks, key=lambda item: item[1].title.lower())
 
     def find_task_by_prefix(self, prefix: str) -> Optional[tuple[str, Task]]:
-        matches = list(self._iter_tasks(f"{prefix}*.yaml"))
+        matches = []
+        for path in self.tasks_dir.glob(f"{prefix}*.yaml"):
+            if task := self.load_task(path.stem):
+                matches.append((path.stem, task))
+
         if len(matches) == 1:
             return matches[0]
         if len(matches) > 1:
