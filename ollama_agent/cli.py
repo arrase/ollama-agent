@@ -9,8 +9,8 @@ from rich.table import Table
 
 from .agent import OllamaAgent
 from .tasks import Task, TaskManager
-from .streaming import stream_agent_events, ConsoleStreamingRenderer
-from .utils import ALLOWED_REASONING_EFFORTS
+from .models import ALLOWED_REASONING_EFFORTS
+from .runner import run_non_interactive
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
@@ -61,27 +61,6 @@ def create_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-async def run_non_interactive(
-    agent: OllamaAgent,
-    prompt: str,
-    model: Optional[str] = None,
-    effort: Optional[str] = None,
-) -> None:
-    """Stream agent output to the console."""
-    await agent.initialize()
-    renderer = ConsoleStreamingRenderer(Console())
-    try:
-        await stream_agent_events(
-            agent,
-            prompt,
-            renderer,
-            model=model,
-            reasoning_effort=effort,
-            ignore={"agent_update"},
-        )
-    finally:
-        renderer.close()
-        await agent.cleanup()
 
 
 def find_task_or_exit(task_manager: TaskManager, task_id: str, console: Console) -> tuple[str, Task]:
@@ -153,22 +132,18 @@ def handle_cli_commands(args: argparse.Namespace, agent_factory: Callable[..., O
     console = Console()
     task_manager = TaskManager()
 
-    if args.command == "task-list":
-        list_tasks_command(task_manager, console)
-        return True
+    commands = {
+        "task-list": lambda: list_tasks_command(task_manager, console),
+        "task-delete": lambda: delete_task_command(args.task_id, task_manager, console),
+        "task-run": lambda: asyncio.run(run_task_command(args.task_id, agent_factory, task_manager, console)),
+    }
 
-    if args.command == "task-delete":
-        delete_task_command(args.task_id, task_manager, console)
-        return True
-
-    if args.command == "task-run":
-        asyncio.run(run_task_command(
-            args.task_id, agent_factory, task_manager, console))
+    if args.command in commands:
+        commands[args.command]()
         return True
 
     if args.prompt:
-        agent = agent_factory(
-            model=args.model, reasoning_effort=args.effort)
+        agent = agent_factory(model=args.model, reasoning_effort=args.effort)
         asyncio.run(run_non_interactive(agent, args.prompt))
         return True
 

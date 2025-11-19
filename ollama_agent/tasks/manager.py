@@ -10,7 +10,7 @@ from typing import Optional
 
 import yaml
 
-from ..utils import DEFAULT_REASONING_EFFORT, ReasoningEffortValue, validate_reasoning_effort
+from ..models import DEFAULT_REASONING_EFFORT, ReasoningEffortValue, validate_reasoning_effort
 
 logger = logging.getLogger(__name__)
 _HASH_LENGTH = 8

@@ -4,7 +4,7 @@ from dataclasses import replace
 from typing import Optional
 
 from ..settings import configini as config
-from ..utils import ModelCapabilityError, validate_reasoning_effort
+from ..models import ModelCapabilityError, validate_reasoning_effort
 from .agent import OllamaAgent
 
 

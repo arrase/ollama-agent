@@ -16,14 +16,14 @@ from agents import (
     set_tracing_disabled,
 )
 from openai import AsyncOpenAI
-from openai.types.responses import ResponseReasoningTextDeltaEvent, ResponseTextDeltaEvent
 from openai.types.shared import Reasoning
 
 from ..memory import configure_mem0
 from ..settings.configini import Mem0Settings, load_instructions
 from ..settings.mcp import RunningMCPServer, cleanup_mcp_servers, initialize_mcp_servers
+from ..streaming import event_payloads
 from .tools import execute_command, mem0_add_memory, mem0_search_memory
-from ..utils import (
+from ..models import (
     ModelCapabilityError,
     ReasoningEffortValue,
     ensure_model_supports_tools,
@@ -34,34 +34,6 @@ from .session_manager import SessionManager
 logger = logging.getLogger(__name__)
 
 
-def _raw_event_payloads(data: Any) -> Iterable[dict[str, Any]]:
-    if isinstance(data, ResponseReasoningTextDeltaEvent) and data.delta:
-        yield {"type": "reasoning_delta", "content": data.delta}
-    elif isinstance(data, ResponseTextDeltaEvent) and data.delta:
-        yield {"type": "text_delta", "content": data.delta}
-
-
-def _item_event_payloads(item: Any) -> Iterable[dict[str, Any]]:
-    item_type = getattr(item, "type", "")
-    if item_type == "tool_call_item":
-        yield {"type": "tool_call", "name": getattr(item, "name", "unknown")}
-    elif item_type == "tool_call_output_item":
-        yield {"type": "tool_output", "output": str(getattr(item, "output", ""))}
-    elif item_type == "reasoning":
-        summary = getattr(item, "summary", "")
-        if summary:
-            yield {"type": "reasoning_summary", "content": summary}
-
-
-def _event_payloads(event: Any) -> Iterable[dict[str, Any]]:
-    event_type = getattr(event, "type", "")
-    if event_type == "raw_response_event":
-        yield from _raw_event_payloads(getattr(event, "data", None))
-    elif event_type == "run_item_stream_event":
-        yield from _item_event_payloads(getattr(event, "item", None))
-    elif event_type == "agent_updated_stream_event":
-        agent_name = getattr(getattr(event, "new_agent", None), "name", "unknown")
-        yield {"type": "agent_update", "name": agent_name}
 
 
 @dataclass(slots=True)
@@ -115,21 +87,19 @@ class OllamaAgent:
         selected_model = model or self.model
         selected_effort = reasoning_effort or self.reasoning_effort
         ensure_model_supports_tools(selected_model)
-        cache_key = (selected_model, selected_effort)
-        cached_agent = self._agent_cache.get(cache_key)
-        if cached_agent is not None:
-            return cached_agent
+        
+        key = (selected_model, selected_effort)
+        if key in self._agent_cache:
+            return self._agent_cache[key]
 
-        model_settings = self._build_model_settings(selected_effort)
         tools: list[Any] = [execute_command, mem0_add_memory, mem0_search_memory]
-        for entry in self.mcp_servers:
-            if entry.agent:
-                tools.append(
-                    entry.agent.as_tool(
-                        tool_name=entry.tool_name or f"use_{entry.name}",
-                        tool_description=entry.tool_description or f"Delegate tasks to the '{entry.name}' MCP agent",
-                    )
-                )
+        tools.extend(
+            entry.agent.as_tool(
+                tool_name=entry.tool_name or f"use_{entry.name}",
+                tool_description=entry.tool_description or f"Delegate tasks to the '{entry.name}' MCP agent",
+            )
+            for entry in self.mcp_servers if entry.agent
+        )
 
         agent_kwargs: dict[str, Any] = {
             "name": "Ollama Assistant",
@@ -137,11 +107,11 @@ class OllamaAgent:
             "model": selected_model,
             "tools": tools,
         }
-        if model_settings is not None:
-            agent_kwargs["model_settings"] = model_settings
+        if (settings := self._build_model_settings(selected_effort)):
+            agent_kwargs["model_settings"] = settings
 
         agent = Agent(**agent_kwargs)
-        self._agent_cache[cache_key] = agent
+        self._agent_cache[key] = agent
         return agent
 
     async def initialize(self) -> None:
@@ -150,10 +120,7 @@ class OllamaAgent:
 
     async def _ensure_mcp_servers_initialized(self) -> None:
         if not self.mcp_servers and self.mcp_config_path:
-            self.mcp_servers = await initialize_mcp_servers(
-                self.mcp_config_path,
-                default_model=self.model,
-            )
+            self.mcp_servers = await initialize_mcp_servers(self.mcp_config_path, default_model=self.model)
             if self.mcp_servers:
                 self._agent_cache.clear()
                 self.agent = self._create_agent()
@@ -162,13 +129,10 @@ class OllamaAgent:
         await self._ensure_mcp_servers_initialized()
         if not model and not reasoning_effort:
             return self.agent
-        selected_model = model or self.model
-        effort: ReasoningEffortValue = (
-            validate_reasoning_effort(reasoning_effort)
-            if reasoning_effort
-            else self.reasoning_effort
+        return self._create_agent(
+            model=model or self.model, 
+            reasoning_effort=validate_reasoning_effort(reasoning_effort) if reasoning_effort else self.reasoning_effort
         )
-        return self._create_agent(model=selected_model, reasoning_effort=effort)
 
     async def cleanup(self) -> None:
         if self.mcp_servers:
@@ -183,13 +147,9 @@ class OllamaAgent:
     ) -> str:
         try:
             agent = await self._get_agent(model, reasoning_effort)
-        except ModelCapabilityError as exc:
-            logger.error("Model without tool support: %s", exc)
-            return f"Error: {exc}"
-        try:
             result = await Runner.run(agent, input=prompt, session=self.session_manager.get_session())
             return str(result.final_output)
-        except Exception as exc:  # noqa: BLE001
+        except (ModelCapabilityError, Exception) as exc:
             logger.error("Error running agent: %s", exc)
             return f"Error: {exc}"
 
@@ -201,17 +161,11 @@ class OllamaAgent:
     ) -> AsyncGenerator[dict[str, Any], None]:
         try:
             agent = await self._get_agent(model, reasoning_effort)
-        except ModelCapabilityError as exc:
-            logger.error("Model capability error for streamed execution: %s", exc)
-            yield {"type": "error", "content": str(exc)}
-            return
-        try:
-            result = Runner.run_streamed(
-                agent, input=prompt, session=self.session_manager.get_session())
+            result = Runner.run_streamed(agent, input=prompt, session=self.session_manager.get_session())
             async for event in result.stream_events():
-                for payload in _event_payloads(event):
+                for payload in event_payloads(event):
                     yield payload
-        except Exception as exc:  # noqa: BLE001
+        except (ModelCapabilityError, Exception) as exc:
             logger.error("Error running streamed agent: %s", exc)
             yield {"type": "error", "content": str(exc)}
 

@@ -11,7 +11,7 @@ from typing import Any, AsyncContextManager, Awaitable, Callable, Optional, cast
 from agents import Agent
 from agents.mcp import MCPServer, MCPServerSse, MCPServerStdio, MCPServerStreamableHttp
 
-from ..utils import ModelCapabilityError, ensure_model_supports_tools
+from ..models import ModelCapabilityError, ensure_model_supports_tools
 
 logger = logging.getLogger(__name__)
 _agents_mcp_logger = logging.getLogger("openai.agents")

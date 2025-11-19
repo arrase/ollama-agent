@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from typing import Any, Dict, Optional, TypedDict
-
+from functools import wraps
 from agents import function_tool
 
 from ..memory import (
@@ -78,9 +78,24 @@ def execute_command(command: str) -> CommandResult:
 def _mem0_error(message: str) -> Mem0ToolResult:
     return {"success": False, "error": message}
 
+def mem0_tool(func):
+    """Decorator to handle Mem0 errors."""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return {"success": True, "data": func(*args, **kwargs)}
+        except Mem0NotConfiguredError:
+            return _mem0_error("Mem0 integration is not initialized")
+        except Mem0InitializationError as exc:
+            return _mem0_error(f"Mem0 initialization failed: {exc}")
+        except Exception as exc:  # noqa: BLE001
+            return _mem0_error(f"Failed to {func.__name__.replace('mem0_', '').replace('_', ' ')}: {exc}")
+    return wrapper
+
 
 @function_tool
-def mem0_add_memory(memory: str) -> Mem0ToolResult:
+@mem0_tool
+def mem0_add_memory(memory: str) -> Any:
     """Persist a new memory for the active user.
 
     Args:
@@ -89,20 +104,12 @@ def mem0_add_memory(memory: str) -> Mem0ToolResult:
     Returns:
         A Mem0ToolResult indicating success or failure, with stored data or error message.
     """
-    try:
-        payload = add_memory_entry(memory)
-    except Mem0NotConfiguredError:
-        return _mem0_error("Mem0 integration is not initialized")
-    except Mem0InitializationError as exc:
-        return _mem0_error(f"Mem0 initialization failed: {exc}")
-    except Exception as exc:  # noqa: BLE001
-        return _mem0_error(f"Failed to add memory: {exc}")
-
-    return {"success": True, "data": payload}
+    return add_memory_entry(memory)
 
 
 @function_tool
-def mem0_search_memory(query: str, limit: Optional[int] = None) -> Mem0ToolResult:
+@mem0_tool
+def mem0_search_memory(query: str, limit: Optional[int] = None) -> Any:
     """Search stored memories relevant to the provided query.
 
     Args:
@@ -112,13 +119,4 @@ def mem0_search_memory(query: str, limit: Optional[int] = None) -> Mem0ToolResul
     Returns:
         A Mem0ToolResult containing search results or error message.
     """
-    try:
-        payload = search_memories(query, limit=limit)
-    except Mem0NotConfiguredError:
-        return _mem0_error("Mem0 integration is not initialized")
-    except Mem0InitializationError as exc:
-        return _mem0_error(f"Mem0 initialization failed: {exc}")
-    except Exception as exc:  # noqa: BLE001
-        return _mem0_error(f"Failed to search memories: {exc}")
-
-    return {"success": True, "data": payload}
+    return search_memories(query, limit=limit)

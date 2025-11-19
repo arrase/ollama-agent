@@ -8,7 +8,7 @@ from textual.widgets import Button, Input, Label, Select, Static
 
 from ..agent import OllamaAgent
 from ..tasks import Task
-from ..utils import (
+from ..models import (
     ALLOWED_REASONING_EFFORTS,
     ModelCapabilityError,
     get_tool_compatible_models,

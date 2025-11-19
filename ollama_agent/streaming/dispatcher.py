@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Iterable
+from typing import Iterable, TYPE_CHECKING
 
-from ..agent import OllamaAgent
+if TYPE_CHECKING:
+    from ..agent import OllamaAgent
 from .renderer import StreamingRenderer
 
 logger = logging.getLogger(__name__)

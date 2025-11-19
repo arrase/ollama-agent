@@ -7,6 +7,10 @@ from typing import Any
 from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
+from rich.text import Text
+from textual.widgets import RichLog
+
+from ..tui.renderers import ReasoningRenderer, StreamingMarkdownRenderer
 
 
 class StreamingRenderer:
@@ -24,11 +28,6 @@ class StreamingRenderer:
 
     def close(self) -> None:
         """Close the renderer."""
-
-
-from ..tui.renderers import ReasoningRenderer, StreamingMarkdownRenderer
-from rich.text import Text
-from textual.widgets import RichLog
 
 
 class TUIStreamingRenderer(StreamingRenderer):

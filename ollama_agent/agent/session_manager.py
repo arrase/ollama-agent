@@ -38,14 +38,11 @@ class SessionManager:
         if not message_blob:
             return "No messages"
         try:
-            message_data = json.loads(message_blob)
+            data = json.loads(message_blob)
+            content = data.get("content") if isinstance(data, dict) else data
+            return (extract_text(content) or str(data))[:50]
         except (json.JSONDecodeError, TypeError):
             return "No content"
-
-        content: Any = message_data.get("content") if isinstance(
-            message_data, dict) else message_data
-        text_preview = extract_text(content)
-        return text_preview[:50] if text_preview else str(message_data)[:50]
 
     def reset_session(self) -> str:
         """Resets the current session and returns a new session ID."""
