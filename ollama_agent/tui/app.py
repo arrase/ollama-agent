@@ -170,7 +170,7 @@ class ChatInterface(App):
     def action_create_task(self) -> None:
         def on_save(task: Optional[Task]) -> None:
             if task:
-                task_id = self.task_manager.save_task(task)
+                task_id = self.task_manager.save(task)
                 self._log(f"Task saved: {task.title} ({task_id})", "italic cyan")
                 self._log("")
 
@@ -210,7 +210,7 @@ class ChatInterface(App):
         self._update_subtitle(session_id)
 
     async def _run_task(self, task_id: str) -> None:
-        task = self.task_manager.load_task(task_id)
+        task = self.task_manager.load(task_id)
         if not task:
             self._log(f"Task not found: {task_id}", "bold red", prefix="Error")
             return

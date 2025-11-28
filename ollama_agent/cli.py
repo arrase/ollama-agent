@@ -65,7 +65,7 @@ def create_argument_parser() -> argparse.ArgumentParser:
 
 def find_task_or_exit(task_manager: TaskManager, task_id: str, console: Console) -> tuple[str, Task]:
     """Find a task by ID or prefix, exit if not found."""
-    result = task_manager.find_task_by_prefix(task_id)
+    result = task_manager.find_by_prefix(task_id)
 
     if not result:
         console.print(f"[red]Task not found: {task_id}[/red]")
@@ -76,7 +76,7 @@ def find_task_or_exit(task_manager: TaskManager, task_id: str, console: Console)
 
 def list_tasks_command(task_manager: TaskManager, console: Console) -> None:
     """List all saved tasks."""
-    tasks = task_manager.list_tasks()
+    tasks = task_manager.list_all()
 
     if not tasks:
         console.print("[yellow]No tasks found.[/yellow]")
@@ -120,7 +120,7 @@ def delete_task_command(task_id: str, task_manager: TaskManager, console: Consol
     """Delete a saved task."""
     found_id, task = find_task_or_exit(task_manager, task_id, console)
 
-    if task_manager.delete_task(found_id):
+    if task_manager.delete(found_id):
         console.print(
             f"[green]Task deleted:[/green] {task.title} ({found_id})")
     else:

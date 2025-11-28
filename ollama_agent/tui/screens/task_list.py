@@ -16,7 +16,7 @@ class TaskListScreen(ListModalScreen):
         self.task_manager = task_manager
 
     def get_items(self) -> Iterable[object]:
-        return self.task_manager.list_tasks()
+        return self.task_manager.list_all()
 
     def render_items(self, items: list[object]) -> Iterable[Widget]:
         for item in items:
@@ -33,6 +33,6 @@ class TaskListScreen(ListModalScreen):
 
     def handle_action(self, action: str, item_id: str) -> bool:
         if action == "delete":
-            self.task_manager.delete_task(item_id)
+            self.task_manager.delete(item_id)
             return False  # Refresh
         return True  # Dismiss for "run"
