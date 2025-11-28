@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Awaitable, Callable, Optional
+from typing import Awaitable, Callable
 
 from agents import Agent
 from agents.mcp import MCPServer
@@ -23,31 +23,18 @@ DEFAULT_AGENT_INSTRUCTIONS = (
 
 @dataclass(slots=True)
 class RunningMCPServer:
-    """Active MCP server bound to its cleanup coroutine.
-
-    Attributes:
-        name: Human-readable name for the server.
-        server: The connected MCPServer instance.
-        _closer: Async function to clean up resources.
-        agent: Optional Agent instance for tool delegation.
-        tool_name: Name of the tool exposed by this server.
-        tool_description: Description of the tool's capabilities.
-    """
+    """Active MCP server with cleanup capability."""
 
     name: str
     server: MCPServer
     _closer: Callable[[], Awaitable[None]]
-    agent: Optional[Agent] = None
-    tool_name: Optional[str] = None
-    tool_description: Optional[str] = None
+    agent: Agent | None = None
+    tool_name: str | None = None
+    tool_description: str | None = None
 
     async def shutdown(self) -> None:
         """Tear down the server without raising on failure."""
         try:
             await self._closer()
-        except asyncio.CancelledError:
-            logger.debug("Cancellation while cleaning up MCP server '%s'", self.name)
-        except Exception as cleanup_error:
-            logger.debug(
-                "Error cleaning up MCP server '%s': %s", self.name, cleanup_error
-            )
+        except (asyncio.CancelledError, Exception) as e:
+            logger.debug("Error cleaning up MCP server '%s': %s", self.name, e)

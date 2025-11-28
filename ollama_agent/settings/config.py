@@ -1,10 +1,4 @@
-"""Application configuration management.
-
-This module consolidates all configuration loading including:
-- Main config.ini settings
-- Agent instructions
-- Mem0 settings
-"""
+"""Application configuration management."""
 
 from __future__ import annotations
 
@@ -24,7 +18,6 @@ DEFAULT_DATABASE_PATH = DEFAULT_CONFIG_DIR / "sessions.db"
 DEFAULT_MCP_CONFIG_PATH = DEFAULT_CONFIG_DIR / "mcp_servers.json"
 DEFAULT_INSTRUCTIONS_PATH = DEFAULT_CONFIG_DIR / "instructions.md"
 
-# Default agent instructions embedded directly
 DEFAULT_INSTRUCTIONS = """You are an AI Assistant.
 
 CORE OBJECTIVE
@@ -79,14 +72,13 @@ class Config:
     mem0: Mem0Settings = field(default_factory=Mem0Settings)
 
 
-def _coerce(value: str | None, cast: type, default: Any, label: str) -> Any:
+def _safe_cast(value: Any, cast: type, default: Any) -> Any:
     """Safely cast a value with fallback to default."""
     if value is None:
         return default
     try:
         return cast(value)
     except (TypeError, ValueError):
-        logger.warning("Invalid %s=%s, using %s", label, value, default)
         return default
 
 
@@ -102,51 +94,33 @@ def _write_default_config(path: Path, defaults: Config) -> None:
         "builtin_tool_timeout": str(defaults.builtin_tool_timeout),
         "mcp_config_path": str(defaults.mcp_config_path),
     }
+    parser["mem0"] = {k: str(v) for k, v in asdict(defaults.mem0).items()}
 
-    mem0_defaults = {k: str(v) for k, v in asdict(defaults.mem0).items()}
-    parser["mem0"] = mem0_defaults
-
-    with path.open("w", encoding="utf-8") as handle:
-        parser.write(handle)
+    with path.open("w", encoding="utf-8") as f:
+        parser.write(f)
 
 
-def _load_mem0(parser: configparser.ConfigParser) -> Mem0Settings:
-    """Load Mem0 settings from config parser."""
-    base_defaults = Mem0Settings()
-    defaults = asdict(base_defaults)
-    
-    if parser.has_section("mem0"):
-        defaults.update({k: v for k, v in parser.items("mem0")})
-        if "enabled" in defaults and defaults.get("enabled") not in {True, "true", "True", "1"}:
-            logger.warning("mem0.enabled is no longer supported; Mem0 is always enabled")
-
+def _load_mem0(section: dict[str, str]) -> Mem0Settings:
+    """Load Mem0 settings from config section."""
+    defaults = Mem0Settings()
     return Mem0Settings(
-        collection_name=str(defaults["collection_name"]),
-        host=str(defaults["host"]),
-        port=_coerce(defaults.get("port"), int, base_defaults.port, "mem0.port"),
-        embedding_model_dims=_coerce(
-            defaults.get("embedding_model_dims"),
-            int,
-            base_defaults.embedding_model_dims,
-            "mem0.embedding_model_dims",
+        collection_name=section.get("collection_name", defaults.collection_name),
+        host=section.get("host", defaults.host),
+        port=_safe_cast(section.get("port"), int, defaults.port),
+        embedding_model_dims=_safe_cast(
+            section.get("embedding_model_dims"), int, defaults.embedding_model_dims
         ),
-        llm_model=str(defaults["llm_model"]),
-        llm_temperature=_coerce(
-            defaults.get("llm_temperature"),
-            float,
-            base_defaults.llm_temperature,
-            "mem0.llm_temperature",
+        llm_model=section.get("llm_model", defaults.llm_model),
+        llm_temperature=_safe_cast(
+            section.get("llm_temperature"), float, defaults.llm_temperature
         ),
-        llm_max_tokens=_coerce(
-            defaults.get("llm_max_tokens"),
-            int,
-            base_defaults.llm_max_tokens,
-            "mem0.llm_max_tokens",
+        llm_max_tokens=_safe_cast(
+            section.get("llm_max_tokens"), int, defaults.llm_max_tokens
         ),
-        ollama_base_url=str(defaults["ollama_base_url"]),
-        embedder_model=str(defaults["embedder_model"]),
-        embedder_base_url=str(defaults["embedder_base_url"]),
-        user_id=str(defaults["user_id"]),
+        ollama_base_url=section.get("ollama_base_url", defaults.ollama_base_url),
+        embedder_model=section.get("embedder_model", defaults.embedder_model),
+        embedder_base_url=section.get("embedder_base_url", defaults.embedder_base_url),
+        user_id=section.get("user_id", defaults.user_id),
     )
 
 
@@ -164,28 +138,22 @@ def get_config(config_dir: Path | None = None) -> Config:
     parser = configparser.ConfigParser()
     parser.read(config_path)
 
-    mem0 = _load_mem0(parser)
-
-    get_default = parser.defaults().get
-    section = parser["default"] if parser.has_section("default") else {}
-
-    def _get(option: str, fallback: str) -> str:
-        return section.get(option, get_default(option, fallback))
+    section = dict(parser["default"]) if parser.has_section("default") else {}
+    mem0_section = dict(parser["mem0"]) if parser.has_section("mem0") else {}
 
     return Config(
-        model=_get("model", defaults.model),
-        base_url=_get("base_url", defaults.base_url),
-        api_key=_get("api_key", defaults.api_key),
-        reasoning_effort=_get("reasoning_effort", defaults.reasoning_effort),
-        database_path=Path(_get("database_path", str(defaults.database_path))),
-        builtin_tool_timeout=_coerce(
-            _get("builtin_tool_timeout", str(defaults.builtin_tool_timeout)),
-            int,
-            defaults.builtin_tool_timeout,
-            "default.builtin_tool_timeout",
+        model=section.get("model", defaults.model),
+        base_url=section.get("base_url", defaults.base_url),
+        api_key=section.get("api_key", defaults.api_key),
+        reasoning_effort=section.get("reasoning_effort", defaults.reasoning_effort),
+        database_path=Path(section.get("database_path", str(defaults.database_path))),
+        builtin_tool_timeout=_safe_cast(
+            section.get("builtin_tool_timeout"), int, defaults.builtin_tool_timeout
         ),
-        mcp_config_path=Path(_get("mcp_config_path", str(defaults.mcp_config_path))),
-        mem0=mem0,
+        mcp_config_path=Path(
+            section.get("mcp_config_path", str(defaults.mcp_config_path))
+        ),
+        mem0=_load_mem0(mem0_section),
     )
 
 
@@ -194,12 +162,9 @@ def load_instructions(instructions_path: Path = DEFAULT_INSTRUCTIONS_PATH) -> st
     if not instructions_path.exists():
         instructions_path.parent.mkdir(parents=True, exist_ok=True)
         instructions_path.write_text(DEFAULT_INSTRUCTIONS, encoding="utf-8")
-        logger.info("Created instructions file at %s", instructions_path)
         return DEFAULT_INSTRUCTIONS
 
     try:
-        content = instructions_path.read_text(encoding="utf-8").strip()
-        return content or DEFAULT_INSTRUCTIONS
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Error reading instructions %s: %s", instructions_path, exc)
+        return instructions_path.read_text(encoding="utf-8").strip() or DEFAULT_INSTRUCTIONS
+    except Exception:
         return DEFAULT_INSTRUCTIONS
