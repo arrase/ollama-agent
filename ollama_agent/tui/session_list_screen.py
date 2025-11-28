@@ -16,7 +16,7 @@ class SessionListScreen(ListModalScreen):
         self.agent = agent
 
     def load_items(self) -> Iterable[object]:
-        return self.agent.list_sessions()
+        return self.agent.session_manager.list_sessions()
 
     def render_rows(self, items: Sequence[object]):
         for session in items:
@@ -45,7 +45,7 @@ class SessionListScreen(ListModalScreen):
             self.dismiss(f"load:{button_id.removeprefix('load-')}")
         elif button_id.startswith("delete-"):
             session_id = button_id.removeprefix("delete-")
-            if self.agent.delete_session(session_id):
+            if self.agent.session_manager.delete_session(session_id):
                 self.refresh(recompose=True)
 
     @staticmethod

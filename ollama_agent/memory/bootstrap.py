@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import docker  # type: ignore
 from typing import Any, Dict, Iterable
-from ..settings.configini import Mem0Settings
+from .settings import Mem0Settings
 from docker.errors import APIError, DockerException, NotFound  # type: ignore
 
 

@@ -2,14 +2,14 @@
 
 import argparse
 import asyncio
-from typing import Callable, Optional
+from typing import Callable
 
 from rich.console import Console
 from rich.table import Table
 
 from .agent import OllamaAgent
+from .core import ALLOWED_REASONING_EFFORTS
 from .tasks import Task, TaskManager
-from .models import ALLOWED_REASONING_EFFORTS
 from .runner import run_non_interactive
 
 

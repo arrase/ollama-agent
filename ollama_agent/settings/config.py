@@ -1,4 +1,10 @@
-"""Application configuration management."""
+"""Application configuration management.
+
+This module consolidates all configuration loading including:
+- Main config.ini settings
+- Agent instructions
+- Mem0 settings
+"""
 
 from __future__ import annotations
 
@@ -6,6 +12,9 @@ import configparser
 import logging
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Any
+
+from ..memory.settings import Mem0Settings
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +24,7 @@ DEFAULT_DATABASE_PATH = DEFAULT_CONFIG_DIR / "sessions.db"
 DEFAULT_MCP_CONFIG_PATH = DEFAULT_CONFIG_DIR / "mcp_servers.json"
 DEFAULT_INSTRUCTIONS_PATH = DEFAULT_CONFIG_DIR / "instructions.md"
 
-# Default agent instructions
+# Default agent instructions embedded directly
 DEFAULT_INSTRUCTIONS = """You are an AI Assistant.
 
 CORE OBJECTIVE
@@ -24,7 +33,7 @@ Solve the user's task efficiently and transparently. Prefer tool use over guessi
 AVAILABLE TOOLS
 - execute_command(command: str): Run shell commands for inspection, listing files, reading small snippets (use `sed -n '1,120p' file` or `head -n 120` for partial reads). Avoid long-running builds unless user explicitly requests.
 - mem0_add_memory(memory: str): Persist a concise distilled fact the user explicitly wants remembered or that will clearly help later.
-- mem0_search_memory(query: str, limit: int | None = None): Retrieve prior stored facts before answering questions that depend on earlier context or when the user implies “you should know”. Use a focused query (main nouns only) and small limit (3–5) first; expand only if insufficient.
+- mem0_search_memory(query: str, limit: int | None = None): Retrieve prior stored facts before answering questions that depend on earlier context or when the user implies "you should know". Use a focused query (main nouns only) and small limit (3–5) first; expand only if insufficient.
 - use_<name>(...): (Injected MCP delegate tools). Offload specialized or remote tasks; provide clear, minimal instructions to them.
 
 MEMORY POLICY
@@ -49,30 +58,17 @@ If a tool call fails:
 If recovery is impossible, still provide a Final Answer summarizing what was attempted and the blocking issue.
 
 WHEN TO USE MEMORY TOOLS (CHECKLIST)
-Before answering: “Did I check memory if prior context matters?” If no → perform mem0_search_memory.
-Before finishing: “Did the user ask me to remember something?” If yes → mem0_add_memory.
+Before answering: "Did I check memory if prior context matters?" If no → perform mem0_search_memory.
+Before finishing: "Did the user ask me to remember something?" If yes → mem0_add_memory.
 
 If instructions change at runtime, they supersede this template.
 """
 
 
-@dataclass(eq=True)
-class Mem0Settings:
-    collection_name: str = "ollama-agent"
-    host: str = "localhost"
-    port: int = 6333
-    embedding_model_dims: int = 768
-    llm_model: str = "llama3.1:latest"
-    llm_temperature: float = 0.0
-    llm_max_tokens: int = 2000
-    ollama_base_url: str = "http://localhost:11434"
-    embedder_model: str = "nomic-embed-text:latest"
-    embedder_base_url: str = "http://localhost:11434"
-    user_id: str = "default"
-
-
 @dataclass
 class Config:
+    """Application configuration."""
+
     model: str = "gpt-oss:20b"
     base_url: str = "http://localhost:11434/v1/"
     api_key: str = "ollama"
@@ -83,7 +79,8 @@ class Config:
     mem0: Mem0Settings = field(default_factory=Mem0Settings)
 
 
-def _coerce(value: str | None, cast, default, label: str):
+def _coerce(value: str | None, cast: type, default: Any, label: str) -> Any:
+    """Safely cast a value with fallback to default."""
     if value is None:
         return default
     try:
@@ -94,6 +91,7 @@ def _coerce(value: str | None, cast, default, label: str):
 
 
 def _write_default_config(path: Path, defaults: Config) -> None:
+    """Write default configuration to file."""
     parser = configparser.ConfigParser()
     parser["default"] = {
         "model": defaults.model,
@@ -113,8 +111,10 @@ def _write_default_config(path: Path, defaults: Config) -> None:
 
 
 def _load_mem0(parser: configparser.ConfigParser) -> Mem0Settings:
+    """Load Mem0 settings from config parser."""
     base_defaults = Mem0Settings()
     defaults = asdict(base_defaults)
+    
     if parser.has_section("mem0"):
         defaults.update({k: v for k, v in parser.items("mem0")})
         if "enabled" in defaults and defaults.get("enabled") not in {True, "true", "True", "1"}:
@@ -151,6 +151,7 @@ def _load_mem0(parser: configparser.ConfigParser) -> Mem0Settings:
 
 
 def get_config(config_dir: Path | None = None) -> Config:
+    """Load configuration from file or create defaults."""
     config_dir = config_dir or DEFAULT_CONFIG_DIR
     config_path = config_dir / "config.ini"
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -189,6 +190,7 @@ def get_config(config_dir: Path | None = None) -> Config:
 
 
 def load_instructions(instructions_path: Path = DEFAULT_INSTRUCTIONS_PATH) -> str:
+    """Load agent instructions from file or return defaults."""
     if not instructions_path.exists():
         instructions_path.parent.mkdir(parents=True, exist_ok=True)
         instructions_path.write_text(DEFAULT_INSTRUCTIONS, encoding="utf-8")

@@ -1,41 +1,17 @@
-from typing import Any, Iterable
+"""Streaming module for agent events rendering."""
 
-from openai.types.responses import ResponseReasoningTextDeltaEvent, ResponseTextDeltaEvent
-
-from .dispatcher import stream_agent_events
-from .renderer import StreamingRenderer, ConsoleStreamingRenderer, TUIStreamingRenderer
+from .base import BufferedTokenRenderer, StreamingRenderer
+from .console_renderer import ConsoleStreamingRenderer
+from .events import event_payloads, stream_agent_events
+from .tui_renderer import ReasoningRenderer, StreamingMarkdownRenderer, TUIStreamingRenderer
 
 __all__ = [
-    "stream_agent_events",
-    "StreamingRenderer",
+    "BufferedTokenRenderer",
     "ConsoleStreamingRenderer",
+    "ReasoningRenderer",
+    "StreamingMarkdownRenderer",
+    "StreamingRenderer",
     "TUIStreamingRenderer",
     "event_payloads",
+    "stream_agent_events",
 ]
-
-
-def _raw_event_payloads(data: Any) -> Iterable[dict[str, Any]]:
-    if isinstance(data, ResponseReasoningTextDeltaEvent) and data.delta:
-        yield {"type": "reasoning_delta", "content": data.delta}
-    elif isinstance(data, ResponseTextDeltaEvent) and data.delta:
-        yield {"type": "text_delta", "content": data.delta}
-
-
-def _item_event_payloads(item: Any) -> Iterable[dict[str, Any]]:
-    item_type = getattr(item, "type", "")
-    if item_type == "tool_call_item":
-        yield {"type": "tool_call", "name": getattr(item, "name", "unknown")}
-    elif item_type == "tool_call_output_item":
-        yield {"type": "tool_output", "output": str(getattr(item, "output", ""))}
-    elif item_type == "reasoning" and (summary := getattr(item, "summary", "")):
-        yield {"type": "reasoning_summary", "content": summary}
-
-
-def event_payloads(event: Any) -> Iterable[dict[str, Any]]:
-    event_type = getattr(event, "type", "")
-    if event_type == "raw_response_event":
-        yield from _raw_event_payloads(getattr(event, "data", None))
-    elif event_type == "run_item_stream_event":
-        yield from _item_event_payloads(getattr(event, "item", None))
-    elif event_type == "agent_updated_stream_event":
-        yield {"type": "agent_update", "name": getattr(getattr(event, "new_agent", None), "name", "unknown")}

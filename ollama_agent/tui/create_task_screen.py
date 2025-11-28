@@ -7,13 +7,13 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Select, Static
 
 from ..agent import OllamaAgent
-from ..tasks import Task
-from ..models import (
+from ..core import (
     ALLOWED_REASONING_EFFORTS,
     ModelCapabilityError,
     get_tool_compatible_models,
     validate_reasoning_effort,
 )
+from ..tasks import Task
 
 
 class CreateTaskScreen(ModalScreen):

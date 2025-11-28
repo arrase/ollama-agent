@@ -1,11 +1,9 @@
 """Main entry point of the application."""
 
-from .settings import configini as config
-from .agent.factory import create_agent
-from .agent.tools import set_builtin_tool_timeout
-from .memory import Mem0InitializationError, bootstrap_memory_backend
-from .tui.app import ChatInterface
+from .agent import create_agent, set_tool_timeout
 from .cli import create_argument_parser, handle_cli_commands
+from .settings import get_config
+from .tui.app import ChatInterface
 
 
 def main() -> None:
@@ -13,20 +11,13 @@ def main() -> None:
     parser = create_argument_parser()
     args = parser.parse_args()
 
-    # Configure built-in tool timeout from args or config
-    cfg = config.get_config()
-    try:
-        bootstrap_memory_backend(cfg.mem0)
-    except Mem0InitializationError as exc:
-        raise SystemExit(str(exc)) from exc
-
-    builtin_tool_timeout = args.builtin_tool_timeout if args.builtin_tool_timeout is not None else cfg.builtin_tool_timeout
-    set_builtin_tool_timeout(builtin_tool_timeout)
+    cfg = get_config()
+    timeout = args.builtin_tool_timeout if args.builtin_tool_timeout is not None else cfg.builtin_tool_timeout
+    set_tool_timeout(timeout)
 
     if not handle_cli_commands(args, create_agent):
-        # If no CLI command was handled, start the TUI
         agent = create_agent(model=args.model, reasoning_effort=args.effort)
-        ChatInterface(agent, builtin_tool_timeout=builtin_tool_timeout).run()
+        ChatInterface(agent, tool_timeout=timeout).run()
 
 
 if __name__ == "__main__":

@@ -2,19 +2,16 @@
 
 from typing import Optional
 
-from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Vertical
 from textual.widgets import Footer, Header, Input, RichLog
 
-from ..agent import OllamaAgent
-from ..agent.tools import set_builtin_tool_timeout
-from ..streaming import stream_agent_events, TUIStreamingRenderer
+from ..agent import OllamaAgent, set_tool_timeout
+from ..streaming import TUIStreamingRenderer, stream_agent_events
 from ..tasks import TaskManager
 from .actions import UIActions
 from .chat_logger import ChatLogger
-from .renderers import ReasoningRenderer, StreamingMarkdownRenderer
 
 
 class ChatInterface(App):
@@ -55,7 +52,7 @@ class ChatInterface(App):
         Binding("ctrl+t", "create_task", "Create Task"),
     ]
 
-    def __init__(self, agent: OllamaAgent, builtin_tool_timeout: int = 30):
+    def __init__(self, agent: OllamaAgent, tool_timeout: int = 30):
         super().__init__()
         self.agent = agent
         self.task_manager = TaskManager()
@@ -63,7 +60,7 @@ class ChatInterface(App):
         self._input_field: Input | None = None
         self._chat_logger: ChatLogger | None = None
         self._actions: UIActions | None = None
-        set_builtin_tool_timeout(builtin_tool_timeout)
+        set_tool_timeout(tool_timeout)
 
     @property
     def chat_log(self) -> RichLog:
@@ -111,7 +108,7 @@ class ChatInterface(App):
     async def on_mount(self) -> None:
         """Execute when the application is mounted."""
         await self.agent.initialize()
-        session_id = self.agent.get_session_id()
+        session_id = self.agent.session_manager.get_session_id()
         self.title = "Ollama Agent - Chat"
         self._chat_log = self.query_one("#chat-log", RichLog)
         self._input_field = self.query_one("#user-input", Input)

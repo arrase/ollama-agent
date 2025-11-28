@@ -5,39 +5,26 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, AsyncGenerator, Iterable, Optional, cast
+from typing import Any, AsyncGenerator, Optional, cast
 
-from agents import (
-    Agent,
-    ModelSettings,
-    Runner,
-    set_default_openai_api,
-    set_default_openai_client,
-    set_tracing_disabled,
-)
+from agents import Agent, ModelSettings, Runner, set_default_openai_api, set_default_openai_client, set_tracing_disabled
 from openai import AsyncOpenAI
 from openai.types.shared import Reasoning
 
-from ..memory import configure_mem0
-from ..settings.configini import Mem0Settings, load_instructions
-from ..settings.mcp import RunningMCPServer, cleanup_mcp_servers, initialize_mcp_servers
+from ..core import ModelCapabilityError, ReasoningEffortValue, ensure_model_supports_tools, validate_reasoning_effort
+from ..memory import Mem0Settings, MemoryManager
+from ..settings import RunningMCPServer, cleanup_mcp_servers, initialize_mcp_servers, load_instructions
 from ..streaming import event_payloads
-from .tools import execute_command, mem0_add_memory, mem0_search_memory
-from ..models import (
-    ModelCapabilityError,
-    ReasoningEffortValue,
-    ensure_model_supports_tools,
-    validate_reasoning_effort,
-)
+from .builtin_tools import BUILTIN_TOOLS, set_memory_manager
 from .session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
 
-
-
 @dataclass(slots=True)
 class OllamaAgent:
+    """AI agent backed by Ollama-compatible API with tool support."""
+
     model: str
     base_url: str = "http://localhost:11434/v1/"
     api_key: str = "ollama"
@@ -45,144 +32,93 @@ class OllamaAgent:
     database_path: Optional[Path] = None
     mcp_config_path: Optional[Path] = None
     mem0_settings: Mem0Settings = field(default_factory=Mem0Settings)
-    mcp_servers: list[RunningMCPServer] = field(default_factory=list)
-    instructions: str = field(init=False)
-    client: AsyncOpenAI = field(init=False)
-    agent: Agent = field(init=False)
-    session_manager: SessionManager = field(init=False)
-    _agent_cache: dict[tuple[str, ReasoningEffortValue], Agent] = field(
-        init=False, default_factory=dict)
+
+    _mcp_servers: list[RunningMCPServer] = field(default_factory=list, init=False)
+    _instructions: str = field(init=False, default="")
+    _client: AsyncOpenAI = field(init=False)
+    _session_manager: SessionManager = field(init=False)
+    _memory_manager: MemoryManager = field(init=False)
+    _initialized: bool = field(init=False, default=False)
 
     def __post_init__(self) -> None:
-        self.reasoning_effort = validate_reasoning_effort(
-            self.reasoning_effort)
-        self.instructions = load_instructions()
+        self.reasoning_effort = validate_reasoning_effort(self.reasoning_effort)
+        self._instructions = load_instructions()
+        self._init_client()
+        self._memory_manager = MemoryManager(self.mem0_settings)
+        self._session_manager = SessionManager(self.database_path)
+        set_memory_manager(self._memory_manager)
 
+    @property
+    def session_manager(self) -> SessionManager:
+        return self._session_manager
+
+    def _init_client(self) -> None:
         set_tracing_disabled(True)
         set_default_openai_api("chat_completions")
-        self.client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
-        set_default_openai_client(self.client, use_for_tracing=False)
+        self._client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
+        set_default_openai_client(self._client, use_for_tracing=False)
 
-        configure_mem0(self.mem0_settings)
+    def _get_tools(self) -> list[Any]:
+        tools: list[Any] = list(BUILTIN_TOOLS)
+        for srv in self._mcp_servers:
+            if srv.agent:
+                tools.append(srv.agent.as_tool(
+                    tool_name=srv.tool_name or f"use_{srv.name}",
+                    tool_description=srv.tool_description or f"Delegate to '{srv.name}' MCP agent",
+                ))
+        return tools
 
-        self.session_manager = SessionManager(self.database_path)
-        self.agent = self._create_agent()
-
-    def _build_model_settings(
-        self, effort: ReasoningEffortValue | None = None
-    ) -> ModelSettings | None:
-        active_effort = effort or self.reasoning_effort
-        if active_effort == "disabled":
-            return None
-        return ModelSettings(
-            reasoning=Reasoning(effort=cast(Any, active_effort))
-        )
-
-    def _create_agent(
-        self,
-        *,
-        model: Optional[str] = None,
-        reasoning_effort: Optional[ReasoningEffortValue] = None,
-    ) -> Agent:
-        selected_model = model or self.model
-        selected_effort = reasoning_effort or self.reasoning_effort
-        ensure_model_supports_tools(selected_model)
-        
-        key = (selected_model, selected_effort)
-        if key in self._agent_cache:
-            return self._agent_cache[key]
-
-        tools: list[Any] = [execute_command, mem0_add_memory, mem0_search_memory]
-        tools.extend(
-            entry.agent.as_tool(
-                tool_name=entry.tool_name or f"use_{entry.name}",
-                tool_description=entry.tool_description or f"Delegate tasks to the '{entry.name}' MCP agent",
-            )
-            for entry in self.mcp_servers if entry.agent
-        )
-
-        agent_kwargs: dict[str, Any] = {
+    def _create_agent(self, model: str, effort: ReasoningEffortValue) -> Agent:
+        ensure_model_supports_tools(model)
+        kwargs: dict[str, Any] = {
             "name": "Ollama Assistant",
-            "instructions": self.instructions,
-            "model": selected_model,
-            "tools": tools,
+            "instructions": self._instructions,
+            "model": model,
+            "tools": self._get_tools(),
         }
-        if (settings := self._build_model_settings(selected_effort)):
-            agent_kwargs["model_settings"] = settings
-
-        agent = Agent(**agent_kwargs)
-        self._agent_cache[key] = agent
-        return agent
+        if effort != "disabled":
+            kwargs["model_settings"] = ModelSettings(reasoning=Reasoning(effort=cast(Any, effort)))
+        return Agent(**kwargs)
 
     async def initialize(self) -> None:
-        """Initialize the agent and its dependencies."""
-        await self._ensure_mcp_servers_initialized()
-
-    async def _ensure_mcp_servers_initialized(self) -> None:
-        if not self.mcp_servers and self.mcp_config_path:
-            self.mcp_servers = await initialize_mcp_servers(self.mcp_config_path, default_model=self.model)
-            if self.mcp_servers:
-                self._agent_cache.clear()
-                self.agent = self._create_agent()
-
-    async def _get_agent(self, model: Optional[str], reasoning_effort: Optional[str]) -> Agent:
-        await self._ensure_mcp_servers_initialized()
-        if not model and not reasoning_effort:
-            return self.agent
-        return self._create_agent(
-            model=model or self.model, 
-            reasoning_effort=validate_reasoning_effort(reasoning_effort) if reasoning_effort else self.reasoning_effort
-        )
+        if self._initialized:
+            return
+        if self.mcp_config_path:
+            self._mcp_servers = await initialize_mcp_servers(self.mcp_config_path, default_model=self.model)
+        self._initialized = True
 
     async def cleanup(self) -> None:
-        if self.mcp_servers:
-            await cleanup_mcp_servers(self.mcp_servers)
-            self.mcp_servers.clear()
+        if self._mcp_servers:
+            await cleanup_mcp_servers(self._mcp_servers)
+            self._mcp_servers.clear()
+        self._initialized = False
 
-    async def run_async(
-        self,
-        prompt: str,
-        model: Optional[str] = None,
-        reasoning_effort: Optional[str] = None,
-    ) -> str:
+    def _resolve(self, model: Optional[str], effort: Optional[str]) -> tuple[str, ReasoningEffortValue]:
+        return (
+            model or self.model,
+            validate_reasoning_effort(effort) if effort else self.reasoning_effort,
+        )
+
+    async def run_async(self, prompt: str, model: Optional[str] = None, reasoning_effort: Optional[str] = None) -> str:
+        await self.initialize()
+        m, e = self._resolve(model, reasoning_effort)
         try:
-            agent = await self._get_agent(model, reasoning_effort)
-            result = await Runner.run(agent, input=prompt, session=self.session_manager.get_session())
+            result = await Runner.run(self._create_agent(m, e), input=prompt, session=self._session_manager.get_session())
             return str(result.final_output)
         except (ModelCapabilityError, Exception) as exc:
-            logger.error("Error running agent: %s", exc)
+            logger.error("Agent error: %s", exc)
             return f"Error: {exc}"
 
     async def run_async_streamed(
-        self,
-        prompt: str,
-        model: Optional[str] = None,
-        reasoning_effort: Optional[str] = None,
+        self, prompt: str, model: Optional[str] = None, reasoning_effort: Optional[str] = None
     ) -> AsyncGenerator[dict[str, Any], None]:
+        await self.initialize()
+        m, e = self._resolve(model, reasoning_effort)
         try:
-            agent = await self._get_agent(model, reasoning_effort)
-            result = Runner.run_streamed(agent, input=prompt, session=self.session_manager.get_session())
+            result = Runner.run_streamed(self._create_agent(m, e), input=prompt, session=self._session_manager.get_session())
             async for event in result.stream_events():
                 for payload in event_payloads(event):
                     yield payload
         except (ModelCapabilityError, Exception) as exc:
-            logger.error("Error running streamed agent: %s", exc)
+            logger.error("Streamed agent error: %s", exc)
             yield {"type": "error", "content": str(exc)}
-
-    def reset_session(self) -> str:
-        return self.session_manager.reset_session()
-
-    def load_session(self, session_id: str) -> None:
-        self.session_manager.load_session(session_id)
-
-    def get_session_id(self) -> Optional[str]:
-        return self.session_manager.get_session_id()
-
-    def list_sessions(self) -> list[dict[str, Any]]:
-        return self.session_manager.list_sessions()
-
-    async def get_session_history(self, session_id: Optional[str] = None) -> list[Any]:
-        return await self.session_manager.get_session_history(session_id)
-
-    def delete_session(self, session_id: str) -> bool:
-        return self.session_manager.delete_session(session_id)

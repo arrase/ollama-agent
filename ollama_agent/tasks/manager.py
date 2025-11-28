@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
 
 import yaml
 
-from ..models import DEFAULT_REASONING_EFFORT, ReasoningEffortValue, validate_reasoning_effort
+from ..core import DEFAULT_REASONING_EFFORT, ReasoningEffortValue, validate_reasoning_effort
 
 logger = logging.getLogger(__name__)
 _HASH_LENGTH = 8
@@ -18,15 +18,15 @@ _HASH_LENGTH = 8
 
 @dataclass(slots=True)
 class Task:
+    """A saved task with title, prompt, model, and reasoning effort."""
+
     title: str
     prompt: str
     model: str
-    reasoning_effort: ReasoningEffortValue = field(
-        default=DEFAULT_REASONING_EFFORT)
+    reasoning_effort: ReasoningEffortValue = field(default=DEFAULT_REASONING_EFFORT)
 
     def __post_init__(self) -> None:
-        self.reasoning_effort = validate_reasoning_effort(
-            self.reasoning_effort)
+        self.reasoning_effort = validate_reasoning_effort(self.reasoning_effort)
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> "Task":
