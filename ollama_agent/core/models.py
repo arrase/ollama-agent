@@ -6,11 +6,7 @@ from typing import Iterable, cast
 
 import ollama
 
-from .types import (
-    ALLOWED_REASONING_EFFORTS,
-    DEFAULT_REASONING_EFFORT,
-    ReasoningEffortValue,
-)
+from .common import ALLOWED_REASONING_EFFORTS, DEFAULT_REASONING_EFFORT, ReasoningEffortValue
 
 logger = logging.getLogger(__name__)
 
@@ -20,47 +16,33 @@ class ModelCapabilityError(RuntimeError):
 
 
 @lru_cache(maxsize=None)
-def _capabilities_for_model(model: str) -> set[str]:
+def _get_capabilities(model: str) -> set[str]:
     """Fetch and cache capabilities for a model."""
     try:
         response = ollama.show(model)
     except Exception as exc:
-        raise ModelCapabilityError(
-            f"Failed to fetch metadata for model '{model}': {exc}"
-        ) from exc
+        raise ModelCapabilityError(f"Failed to fetch metadata for '{model}': {exc}") from exc
 
     payload = getattr(response, "capabilities", {})
     if isinstance(payload, dict):
         payload = payload.get("capabilities", [])
 
-    capabilities = {
-        str(item).lower()
-        for item in (
-            payload
-            if isinstance(payload, Iterable) and not isinstance(payload, str)
-            else [payload]
-        )
-        if item
-    }
-
-    if not capabilities:
-        logger.warning(
-            "Model '%s' does not expose capabilities in the Ollama response", model
-        )
-    return capabilities
+    if isinstance(payload, Iterable) and not isinstance(payload, str):
+        return {str(c).lower() for c in payload if c}
+    
+    logger.warning("Model '%s' does not expose capabilities", model)
+    return set()
 
 
 def model_supports_tools(model: str) -> bool:
     """Check if a model supports tool calls."""
-    return "tools" in _capabilities_for_model(model)
+    return "tools" in _get_capabilities(model)
 
 
 def ensure_model_supports_tools(model: str) -> None:
-    """Raise an error if the model doesn't support tools."""
+    """Raise ModelCapabilityError if the model doesn't support tools."""
     if not model_supports_tools(model):
-        raise ModelCapabilityError(
-            f"Model '{model}' does not allow tool usage (requires 'tools' capability)."
-        )
+        raise ModelCapabilityError(f"Model '{model}' does not support tools.")
 
 
 def get_tool_compatible_models(preferred: str | None = None) -> list[str]:
@@ -70,19 +52,15 @@ def get_tool_compatible_models(preferred: str | None = None) -> list[str]:
     except Exception as exc:
         raise ModelCapabilityError(f"Failed to list models: {exc}") from exc
 
-    names: list[str] = []
-    seen: set[str] = set()
-
+    names = []
     for item in models:
         name = getattr(item, "model", None)
-        if not name or name in seen:
-            continue
-        seen.add(name)
-        try:
-            if model_supports_tools(name):
-                names.append(name)
-        except ModelCapabilityError as exc:
-            logger.warning("Skipping model '%s': %s", name, exc)
+        if name and name not in names:
+            try:
+                if model_supports_tools(name):
+                    names.append(name)
+            except ModelCapabilityError:
+                pass
 
     if preferred:
         ensure_model_supports_tools(preferred)
@@ -96,9 +74,5 @@ def validate_reasoning_effort(effort: str) -> ReasoningEffortValue:
     """Validate and normalize reasoning effort value."""
     if effort in ALLOWED_REASONING_EFFORTS:
         return cast(ReasoningEffortValue, effort)
-    logger.warning(
-        "Invalid reasoning effort '%s', using default '%s'",
-        effort,
-        DEFAULT_REASONING_EFFORT,
-    )
+    logger.warning("Invalid reasoning effort '%s', using '%s'", effort, DEFAULT_REASONING_EFFORT)
     return DEFAULT_REASONING_EFFORT

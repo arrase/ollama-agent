@@ -1,11 +1,12 @@
 """Core module with types, models and shared utilities."""
 
-from .types import (
+from .common import (
     ALLOWED_REASONING_EFFORTS,
     DEFAULT_REASONING_EFFORT,
     CommandResult,
     Mem0ToolResult,
     ReasoningEffortValue,
+    extract_text,
 )
 from .models import (
     ModelCapabilityError,
@@ -14,7 +15,6 @@ from .models import (
     model_supports_tools,
     validate_reasoning_effort,
 )
-from .utils import extract_text
 
 __all__ = [
     # Types
