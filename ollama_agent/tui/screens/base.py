@@ -11,7 +11,9 @@ from textual.widgets import Button, Label
 
 # Common CSS for all modal screens
 MODAL_CSS = """
-    align: center middle;
+    ListModalScreen {
+        align: center middle;
+    }
 
     #modal-dialog {
         width: 90;
