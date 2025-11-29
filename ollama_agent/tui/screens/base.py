@@ -1,13 +1,15 @@
 """Base modal screen for list-based dialogs."""
 
-from typing import Callable, Iterable
+from typing import Iterable, Literal
 
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, VerticalScroll
+from textual.containers import Container, Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widget import Widget
 from textual.widgets import Button, Label
+
+ButtonVariant = Literal["default", "primary", "success", "warning", "error"]
 
 # Common CSS for all modal screens
 MODAL_CSS = """
@@ -104,11 +106,6 @@ class ListModalScreen(ModalScreen):
                 self.refresh(recompose=True)
 
 
-from typing import Literal
-
-ButtonVariant = Literal["default", "primary", "success", "warning", "error"]
-
-
 def make_row(
     text: str,
     item_id: str,
@@ -121,9 +118,6 @@ def make_row(
         item_id: ID to use in button IDs
         actions: List of (action_name, label, variant) tuples
     """
-    from textual.containers import Horizontal
-    from textual.widgets import Button, Label
-
     buttons = [
         Button(label, variant=variant, id=f"{action}-{item_id}", classes="entry-btn")
         for action, label, variant in actions
