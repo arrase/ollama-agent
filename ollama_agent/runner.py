@@ -15,17 +15,16 @@ async def run_non_interactive(
     effort: Optional[str] = None,
 ) -> None:
     """Stream agent output to the console."""
-    await agent.initialize()
     renderer = ConsoleStreamingRenderer(Console())
     try:
-        await stream_agent_events(
-            agent,
-            prompt,
-            renderer,
-            model=model,
-            reasoning_effort=effort,
-            ignore={"agent_update"},
-        )
+        async with agent.lifespan():
+            await stream_agent_events(
+                agent,
+                prompt,
+                renderer,
+                model=model,
+                reasoning_effort=effort,
+                ignore={"agent_update"},
+            )
     finally:
         renderer.close()
-        await agent.cleanup()

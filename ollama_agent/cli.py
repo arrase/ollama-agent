@@ -2,7 +2,7 @@
 
 import argparse
 import asyncio
-from typing import Callable
+from typing import Awaitable, Callable
 
 from rich.console import Console
 from rich.table import Table
@@ -40,111 +40,94 @@ def create_argument_parser() -> argparse.ArgumentParser:
         help="Set built-in tool execution timeout in seconds"
     )
 
-    # Task management subcommands
-    subparsers = parser.add_subparsers(
-        dest="command", help="Task management commands")
-
-    # task-list command
+    subparsers = parser.add_subparsers(dest="command", help="Task management commands")
     subparsers.add_parser("task-list", help="List all saved tasks")
 
-    # task-run command
     task_run = subparsers.add_parser("task-run", help="Execute a saved task")
-    task_run.add_argument("task_id", type=str,
-                          help="Task ID or prefix to execute")
+    task_run.add_argument("task_id", type=str, help="Task ID or prefix to execute")
 
-    # task-delete command
-    task_delete = subparsers.add_parser(
-        "task-delete", help="Delete a saved task")
-    task_delete.add_argument(
-        "task_id", type=str, help="Task ID or prefix to delete")
+    task_delete = subparsers.add_parser("task-delete", help="Delete a saved task")
+    task_delete.add_argument("task_id", type=str, help="Task ID or prefix to delete")
 
     return parser
 
 
+class CLIRunner:
+    """Encapsulates CLI command handling and shared state."""
 
+    def __init__(self, agent_factory: Callable[..., OllamaAgent]) -> None:
+        self.agent_factory = agent_factory
+        self.console = Console()
+        self.task_manager = TaskManager()
 
-def find_task_or_exit(task_manager: TaskManager, task_id: str, console: Console) -> tuple[str, Task]:
-    """Find a task by ID or prefix, exit if not found."""
-    result = task_manager.find_by_prefix(task_id)
+    def _find_task_or_exit(self, task_id: str) -> tuple[str, Task]:
+        result = self.task_manager.find_by_prefix(task_id)
+        if not result:
+            self.console.print(f"[red]Task not found: {task_id}[/red]")
+            raise SystemExit(1)
+        return result
 
-    if not result:
-        console.print(f"[red]Task not found: {task_id}[/red]")
-        raise SystemExit(1)
+    def list_tasks(self) -> None:
+        tasks = self.task_manager.list_all()
+        if not tasks:
+            self.console.print("[yellow]No tasks found.[/yellow]")
+            return
 
-    return result
+        table = Table(title="Saved Tasks", show_header=True, header_style="bold magenta")
+        table.add_column("ID", style="cyan", width=10)
+        table.add_column("Title", style="green")
+        table.add_column("Model", style="blue")
+        table.add_column("Effort", style="yellow")
 
+        for task_id, task in tasks:
+            table.add_row(task_id, task.title, task.model, task.reasoning_effort)
 
-def list_tasks_command(task_manager: TaskManager, console: Console) -> None:
-    """List all saved tasks."""
-    tasks = task_manager.list_all()
+        self.console.print(table)
 
-    if not tasks:
-        console.print("[yellow]No tasks found.[/yellow]")
-        return
+    async def run_task(self, task_id: str) -> None:
+        found_id, task = self._find_task_or_exit(task_id)
+        self.console.print(f"[bold cyan]Executing task:[/bold cyan] {task.title} ({found_id})")
+        self.console.print(f"[bold blue]Prompt:[/bold blue] {task.prompt}")
+        self.console.print(
+            f"[bold]Model:[/bold] {task.model} | [bold]Effort:[/bold] {task.reasoning_effort}"
+        )
+        self.console.print("")
 
-    table = Table(title="Saved Tasks", show_header=True,
-                  header_style="bold magenta")
-    table.add_column("ID", style="cyan", width=10)
-    table.add_column("Title", style="green")
-    table.add_column("Model", style="blue")
-    table.add_column("Effort", style="yellow")
+        agent = self.agent_factory(model=task.model, reasoning_effort=task.reasoning_effort)
+        await run_non_interactive(agent, task.prompt)
 
-    for task_id, task in tasks:
-        table.add_row(task_id, task.title, task.model, task.reasoning_effort)
+    def delete_task(self, task_id: str) -> None:
+        found_id, task = self._find_task_or_exit(task_id)
+        if self.task_manager.delete(found_id):
+            self.console.print(f"[green]Task deleted:[/green] {task.title} ({found_id})")
+        else:
+            self.console.print(f"[red]Error deleting task: {found_id}[/red]")
 
-    console.print(table)
+    async def run_prompt(self, prompt: str, model: str | None, effort: str | None) -> None:
+        agent = self.agent_factory(model=model, reasoning_effort=effort)
+        await run_non_interactive(agent, prompt)
 
+    def _run(self, coro: Awaitable[None]) -> None:
+        asyncio.run(coro)  # Thin wrapper for symmetry in command mapping
 
-async def run_task_command(
-    task_id: str,
-    agent_factory: Callable[..., OllamaAgent],
-    task_manager: TaskManager,
-    console: Console
-) -> None:
-    """Execute a saved task."""
-    found_id, task = find_task_or_exit(task_manager, task_id, console)
+    def handle(self, args: argparse.Namespace) -> bool:
+        commands = {
+            "task-list": lambda: self.list_tasks(),
+            "task-delete": lambda: self.delete_task(args.task_id),
+            "task-run": lambda: self._run(self.run_task(args.task_id)),
+        }
 
-    console.print(
-        f"[bold cyan]Executing task:[/bold cyan] {task.title} ({found_id})")
-    console.print(f"[bold blue]Prompt:[/bold blue] {task.prompt}")
-    console.print(
-        f"[bold]Model:[/bold] {task.model} | [bold]Effort:[/bold] {task.reasoning_effort}")
-    console.print("")
+        if args.command in commands:
+            commands[args.command]()
+            return True
 
-    agent = agent_factory(
-        model=task.model, reasoning_effort=task.reasoning_effort)
-    await run_non_interactive(agent, task.prompt)
+        if args.prompt:
+            self._run(self.run_prompt(args.prompt, args.model, args.effort))
+            return True
 
-
-def delete_task_command(task_id: str, task_manager: TaskManager, console: Console) -> None:
-    """Delete a saved task."""
-    found_id, task = find_task_or_exit(task_manager, task_id, console)
-
-    if task_manager.delete(found_id):
-        console.print(
-            f"[green]Task deleted:[/green] {task.title} ({found_id})")
-    else:
-        console.print(f"[red]Error deleting task: {found_id}[/red]")
+        return False
 
 
 def handle_cli_commands(args: argparse.Namespace, agent_factory: Callable[..., OllamaAgent]) -> bool:
     """Handle CLI commands and return True if a command was handled."""
-    console = Console()
-    task_manager = TaskManager()
-
-    commands = {
-        "task-list": lambda: list_tasks_command(task_manager, console),
-        "task-delete": lambda: delete_task_command(args.task_id, task_manager, console),
-        "task-run": lambda: asyncio.run(run_task_command(args.task_id, agent_factory, task_manager, console)),
-    }
-
-    if args.command in commands:
-        commands[args.command]()
-        return True
-
-    if args.prompt:
-        agent = agent_factory(model=args.model, reasoning_effort=args.effort)
-        asyncio.run(run_non_interactive(agent, args.prompt))
-        return True
-
-    return False
+    return CLIRunner(agent_factory).handle(args)

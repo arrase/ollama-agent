@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, AsyncGenerator, Optional, cast
@@ -92,6 +93,15 @@ class OllamaAgent:
             await cleanup_mcp_servers(self._mcp_servers)
             self._mcp_servers.clear()
         self._initialized = False
+
+    @asynccontextmanager
+    async def lifespan(self) -> AsyncGenerator["OllamaAgent", None]:
+        """Async context manager that guarantees initialize/cleanup pairs."""
+        await self.initialize()
+        try:
+            yield self
+        finally:
+            await self.cleanup()
 
     def _resolve(self, model: Optional[str], effort: Optional[str]) -> tuple[str, ReasoningEffortValue]:
         return (
