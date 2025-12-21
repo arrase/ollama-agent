@@ -24,10 +24,18 @@ class SessionListScreen(ListModalScreen):
             data = cast(dict[str, object], session)
             session_id = str(data.get("session_id", ""))
             count = int(data.get("message_count", 0) or 0)
-            preview = str(data.get("preview", ""))[:40]
+            preview = str(data.get("preview", "")).strip()
+            if not preview:
+                preview = "(no messages)"
+            preview = preview.replace("\n", " ")
+            preview = preview[:80]
             timestamp = self._format_time(str(data.get("last_message", "")))
 
-            text = f"[bold]{session_id[:8]}...[/bold] ({count} msgs)\n{timestamp}\n{preview}..."
+            text = (
+                f"[bold]{session_id[:8]}...[/bold] ({count} msgs)\n"
+                f"Last activity: {timestamp}\n"
+                f"{preview}"
+            )
             yield make_row(text, session_id, [
                 ("load", "Load", "primary"),
                 ("delete", "Delete", "error"),

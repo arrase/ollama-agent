@@ -7,7 +7,7 @@ from textual.binding import Binding
 from textual.containers import Container, Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widget import Widget
-from textual.widgets import Button, Label
+from textual.widgets import Button, Label, Static
 
 ButtonVariant = Literal["default", "primary", "success", "warning", "error"]
 
@@ -48,10 +48,25 @@ MODAL_CSS = """
     .entry-row {
         width: 100%;
         margin-bottom: 1;
+        height: auto;
     }
 
-    .entry-info { width: 3fr; }
-    .entry-btn { width: 1fr; min-width: 10; margin-left: 1; }
+    .entry-info {
+        width: 1fr;
+        height: auto;
+        padding-right: 1;
+    }
+
+    .entry-btn {
+        width: 12;
+        min-width: 12;
+        height: 3;
+        min-height: 3;
+        margin-left: 1;
+        content-align: center middle;
+        text-style: bold;
+        text-opacity: 100%;
+    }
 """
 
 
@@ -123,7 +138,7 @@ def make_row(
         for action, label, variant in actions
     ]
     return Horizontal(
-        Label(text, classes="entry-info"),
+        Static(text, classes="entry-info", markup=True),
         *buttons,
         classes="entry-row",
     )
