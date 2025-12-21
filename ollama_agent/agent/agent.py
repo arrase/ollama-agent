@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, AsyncGenerator, Optional, cast
 
-from agents import Agent, ModelSettings, Runner, set_default_openai_api, set_default_openai_client, set_tracing_disabled
+from agents import Agent, ModelSettings, RunConfig, Runner, set_default_openai_api, set_default_openai_client, set_tracing_disabled
 from openai import AsyncOpenAI
 from openai.types.shared import Reasoning
 
@@ -20,6 +20,39 @@ from .builtin_tools import BUILTIN_TOOLS, set_memory_manager
 from .session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
+
+
+def _maybe_attach_screen_context(prompt: object) -> object:
+    """If prompt is a string containing @dpN tokens, capture those displays and
+    convert the input into a Responses-style multimodal message list.
+    """
+    if not isinstance(prompt, str):
+        return prompt
+
+    if "@dp" not in prompt:
+        return prompt
+
+    # Lazy import to avoid requiring screenshot deps unless used.
+    from ..vision import build_multimodal_responses_input, capture_display_as_base64, extract_display_tokens
+
+    cleaned, displays = extract_display_tokens(prompt)
+    if not displays:
+        return prompt
+
+    images = [capture_display_as_base64(i) for i in displays]
+    return build_multimodal_responses_input(cleaned, images)
+
+
+def _merge_session_history_and_input(history: list[Any], new_input: list[Any]) -> list[Any]:
+    # Default behavior: append the new input items to the existing conversation history.
+    # openai-agents requires this callback when using `session` with list inputs.
+    return list(history) + list(new_input)
+
+
+def _run_config_for_input(prepared_input: object) -> RunConfig | None:
+    if isinstance(prepared_input, list):
+        return RunConfig(session_input_callback=_merge_session_history_and_input)
+    return None
 
 
 @dataclass(slots=True)
@@ -125,23 +158,35 @@ class OllamaAgent:
         """Ensure the agent is initialized (callers manage cleanup separately)."""
         await self.initialize()
 
-    async def run_async(self, prompt: str, model: Optional[str] = None, reasoning_effort: Optional[str] = None) -> str:
+    async def run_async(self, prompt: object, model: Optional[str] = None, reasoning_effort: Optional[str] = None) -> str:
         await self._ensure_ready()
         try:
             agent, session = self._prepare_run(model, reasoning_effort)
-            result = await Runner.run(agent, input=prompt, session=session)
+            prepared_input = _maybe_attach_screen_context(prompt)
+            result = await Runner.run(
+                agent,
+                input=prepared_input,
+                session=session,
+                run_config=_run_config_for_input(prepared_input),
+            )
             return str(result.final_output)
         except Exception as exc:
             logger.error("Agent error: %s", exc)
             return f"Error: {exc}"
 
     async def run_async_streamed(
-        self, prompt: str, model: Optional[str] = None, reasoning_effort: Optional[str] = None
+        self, prompt: object, model: Optional[str] = None, reasoning_effort: Optional[str] = None
     ) -> AsyncGenerator[dict[str, Any], None]:
         await self._ensure_ready()
         try:
             agent, session = self._prepare_run(model, reasoning_effort)
-            result = Runner.run_streamed(agent, input=prompt, session=session)
+            prepared_input = _maybe_attach_screen_context(prompt)
+            result = Runner.run_streamed(
+                agent,
+                input=prepared_input,
+                session=session,
+                run_config=_run_config_for_input(prepared_input),
+            )
             async for event in result.stream_events():
                 for payload in event_payloads(event):
                     yield payload

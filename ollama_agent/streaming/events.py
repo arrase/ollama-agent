@@ -56,7 +56,7 @@ def event_payloads(event: Any) -> Iterable[dict[str, Any]]:
 
 async def stream_agent_events(
     agent: "OllamaAgent",
-    prompt: str,
+    prompt: object,
     renderer: "StreamingRenderer",
     *,
     model: str | None = None,
@@ -79,7 +79,7 @@ async def stream_agent_events(
 
 async def stream_agent_events_with_renderer(
     agent: "OllamaAgent",
-    prompt: str,
+    prompt: object,
     renderer: "StreamingRenderer",
     *,
     model: str | None = None,

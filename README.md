@@ -21,8 +21,22 @@ Before you begin, ensure you have a running instance of [Ollama](https://ollama.
 For end-users, the recommended way to install `ollama-agent` is using `pipx`, which installs the application in an isolated environment.
 
 ```bash
-# Install from the local project directory
+# Install from GitHub
 pipx install git+https://github.com/arrase/ollama-agent.git
+```
+
+## Quick Start
+
+Start the interactive TUI:
+
+```bash
+ollama-agent
+```
+
+Or run a single prompt (non-interactive):
+
+```bash
+ollama-agent -p "List all files in the current directory as JSON."
 ```
 
 ## Usage
@@ -52,12 +66,26 @@ The TUI provides a rich, interactive experience with the following keybindings:
 You can run a single prompt directly from the command line:
 
 ```bash
-ollama-agent --prompt "List all files in the current directory as a json."
+ollama-agent --prompt "List all files in the current directory as JSON."
 # Or using the short form:
-ollama-agent -p "List all files in the current directory as a json."
+ollama-agent -p "List all files in the current directory as JSON."
 ```
 
-You can also override the configured model, reasoning effort, or built-in tool execution timeout:
+### Screen Vision (Screenshots)
+
+Screen vision is not limited to a specific mode: it works anywhere you can type a prompt (both TUI and CLI).
+
+Attach a screenshot of a monitor as context by including `@dpN` in your prompt (`N` is a 0-based monitor index):
+
+```bash
+ollama-agent -p "Describe what you see in @dp0"
+```
+
+If you include multiple tokens (e.g. `@dp0 @dp1`), the agent will capture and attach each requested monitor.
+
+### Common Options
+
+You can override the configured model, reasoning effort, or built-in tool execution timeout:
 
 ```bash
 ollama-agent --model "gpt-oss:20b" --effort "high" --prompt "What is the current date?"
@@ -79,7 +107,7 @@ ollama-agent -t 60 -p "Run a long-running task"
 - `-t`, `--builtin-tool-timeout`: Set built-in tool execution timeout in seconds
 
 
-### Task Management
+## Tasks
 
 ![Ollama Agent Tasks](./screenshots/tasks.png)
 
@@ -105,7 +133,7 @@ ollama-agent task-run <task_id>
 ollama-agent task-delete <task_id>
 ```
 
-### Configuration
+## Configuration
 
 On the first run, the application will create a default configuration file at `~/.ollama-agent/config.ini`. You can edit this file to permanently change the default model, API URL, and other settings.
 
@@ -146,7 +174,7 @@ embedder_base_url = http://localhost:11434
 user_id = default
 ```
 
-### Persistent Memory with Mem0
+## Persistent Memory with Mem0
 
 ![Ollama Agent Memory](./screenshots/memory.png)
 
@@ -176,7 +204,7 @@ To use Mem0:
   ollama pull nomic-embed-text:latest
   ```
 
-1. Adjust the `[mem0]` section in `~/.ollama-agent/config.ini` to match your environment.
+2. Adjust the `[mem0]` section in `~/.ollama-agent/config.ini` to match your environment.
 
 Once dependencies are installed, the agent exposes two tools via function calling:
 
@@ -185,7 +213,7 @@ Once dependencies are installed, the agent exposes two tools via function callin
 
 Because these tools are part of the normal tool list, both the CLI and TUI flows gain persistent recall without additional configuration.
 
-### Agent Instructions
+## Agent Instructions
 
 You can customize the agent's behavior by editing the instructions file at `~/.ollama-agent/instructions.md`. This file is automatically created on first use with default instructions.
 
@@ -210,7 +238,7 @@ When executing commands, always:
 Be concise, clear, and security-conscious. Never execute destructive commands without explicit user confirmation.
 ```
 
-### MCP Servers (Optional)
+## MCP Servers (Optional)
 
 Ollama Agent supports the Model Context Protocol (MCP) to extend the agent's capabilities with additional tools and context. MCP servers are **optional** and can provide features like filesystem access, Git operations, and custom APIs.
 
@@ -259,7 +287,7 @@ Interested in contributing? Great! Here’s how to get started.
 1. **Clone the repository:**
 
     ```bash
-    git clone https://github.com/your-username/ollama-agent.git
+    git clone https://github.com/arrase/ollama-agent.git
     cd ollama-agent
     ```
 
@@ -289,17 +317,24 @@ Interested in contributing? Great! Here’s how to get started.
 ### Project Structure
 
 - `ollama_agent/main.py`: Main entry point, handles CLI arguments and starts the TUI or non-interactive mode.
-- `ollama_agent/agent.py`: Core `OllamaAgent` class that manages the agent, client, and sessions using `openai-agents` library.
-- `ollama_agent/tasks.py`: `TaskManager` class for saving, loading, and managing tasks (stored as YAML files).
-- `ollama_agent/tools.py`: Defines the built-in tools available to the agent, such as `execute_command`.
-- `ollama_agent/memory.py`: Wraps Mem0 configuration and exposes helper functions for the persistent memory tools.
-- `ollama_agent/utils.py`: Utility functions and helper methods.
-- `ollama_agent/settings/configini.py`: Manages loading and creating the application's configuration file.
-- `ollama_agent/settings/mcp.py`: MCP servers configuration and initialization.
-- `ollama_agent/tui/app.py`: Main `ChatInterface` Textual app with keybindings.
-- `ollama_agent/tui/session_list_screen.py`: Modal screen for session selection.
-- `ollama_agent/tui/task_list_screen.py`: Modal screen for task management.
-- `ollama_agent/tui/create_task_screen.py`: Modal form for creating new tasks.
+- `ollama_agent/cli.py`: CLI plumbing and subcommands.
+- `ollama_agent/runner.py`: Orchestrates runs (TUI/CLI) and agent execution.
+- `ollama_agent/agent/agent.py`: Core agent implementation (OpenAI Agents SDK).
+- `ollama_agent/agent/factory.py`: Agent construction (main agent + delegated MCP agents).
+- `ollama_agent/agent/builtin_tools.py`: Built-in tools (e.g., local command execution).
+- `ollama_agent/agent/session_manager.py`: Session persistence and retrieval.
+- `ollama_agent/core/`: Shared utilities and models.
+- `ollama_agent/core/models.py`: Shared data models / types.
+- `ollama_agent/memory/`: Mem0 integration and memory bootstrapping.
+- `ollama_agent/memory/memory_manager.py`: Mem0 integration and memory tool wiring.
+- `ollama_agent/settings/config.py`: Loads and creates `config.ini`.
+- `ollama_agent/settings/mcp/`: MCP server config parsing and lifecycle.
+- `ollama_agent/streaming/`: Streaming events and renderers (console + TUI).
+- `ollama_agent/tasks/manager.py`: Saved prompt “tasks” management.
+- `ollama_agent/tui/app.py`: Main Textual application.
+- `ollama_agent/tui/screens/`: Textual screens (sessions, tasks, create task, etc.).
+- `ollama_agent/vision/screen.py`: Screen vision (screenshot capture and attachment).
+- `screenshots/`: Documentation screenshots used in the README.
 - `pyproject.toml`: Project metadata and dependencies.
 
 ### Contributions

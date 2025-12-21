@@ -8,7 +8,7 @@ from .streaming import ConsoleStreamingRenderer, stream_agent_events_with_render
 
 async def run_non_interactive(
     agent: OllamaAgent,
-    prompt: str,
+    prompt: object,
 ) -> None:
     """Stream agent output to the console."""
     renderer = ConsoleStreamingRenderer(Console())

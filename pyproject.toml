@@ -16,6 +16,8 @@ dependencies = [
     "ollama",
     "mem0ai",
     "docker",
+    "mss",
+    "Pillow",
 ]
 
 [project.scripts]
