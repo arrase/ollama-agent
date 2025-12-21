@@ -60,14 +60,14 @@ class OllamaAgent:
         set_default_openai_client(self._client, use_for_tracing=False)
 
     def _get_tools(self) -> list[Any]:
-        tools: list[Any] = list(BUILTIN_TOOLS)
-        for srv in self._mcp_servers:
-            if srv.agent:
-                tools.append(srv.agent.as_tool(
-                    tool_name=srv.tool_name or f"use_{srv.name}",
-                    tool_description=srv.tool_description or f"Delegate to '{srv.name}' MCP agent",
-                ))
-        return tools
+        return list(BUILTIN_TOOLS) + [
+            srv.agent.as_tool(
+                tool_name=srv.tool_name or f"use_{srv.name}",
+                tool_description=srv.tool_description or f"Delegate to '{srv.name}' MCP agent",
+            )
+            for srv in self._mcp_servers
+            if srv.agent
+        ]
 
     def _create_agent(self, model: str, effort: ReasoningEffortValue) -> Agent:
         ensure_model_supports_tools(model)
@@ -77,8 +77,12 @@ class OllamaAgent:
             "model": model,
             "tools": self._get_tools(),
         }
+
         if effort != "disabled":
-            kwargs["model_settings"] = ModelSettings(reasoning=Reasoning(effort=cast(Any, effort)))
+            kwargs["model_settings"] = ModelSettings(
+                reasoning=Reasoning(effort=cast(Any, effort))
+            )
+
         return Agent(**kwargs)
 
     async def initialize(self) -> None:
@@ -109,26 +113,38 @@ class OllamaAgent:
             validate_reasoning_effort(effort) if effort else self.reasoning_effort,
         )
 
-    async def run_async(self, prompt: str, model: Optional[str] = None, reasoning_effort: Optional[str] = None) -> str:
-        await self.initialize()
+    def _prepare_run(
+        self,
+        model: Optional[str],
+        reasoning_effort: Optional[str],
+    ) -> tuple[Agent, Any]:
         m, e = self._resolve(model, reasoning_effort)
+        return self._create_agent(m, e), self._session_manager.get_session()
+
+    async def _ensure_ready(self) -> None:
+        """Ensure the agent is initialized (callers manage cleanup separately)."""
+        await self.initialize()
+
+    async def run_async(self, prompt: str, model: Optional[str] = None, reasoning_effort: Optional[str] = None) -> str:
+        await self._ensure_ready()
         try:
-            result = await Runner.run(self._create_agent(m, e), input=prompt, session=self._session_manager.get_session())
+            agent, session = self._prepare_run(model, reasoning_effort)
+            result = await Runner.run(agent, input=prompt, session=session)
             return str(result.final_output)
-        except (ModelCapabilityError, Exception) as exc:
+        except Exception as exc:
             logger.error("Agent error: %s", exc)
             return f"Error: {exc}"
 
     async def run_async_streamed(
         self, prompt: str, model: Optional[str] = None, reasoning_effort: Optional[str] = None
     ) -> AsyncGenerator[dict[str, Any], None]:
-        await self.initialize()
-        m, e = self._resolve(model, reasoning_effort)
+        await self._ensure_ready()
         try:
-            result = Runner.run_streamed(self._create_agent(m, e), input=prompt, session=self._session_manager.get_session())
+            agent, session = self._prepare_run(model, reasoning_effort)
+            result = Runner.run_streamed(agent, input=prompt, session=session)
             async for event in result.stream_events():
                 for payload in event_payloads(event):
                     yield payload
-        except (ModelCapabilityError, Exception) as exc:
+        except Exception as exc:
             logger.error("Streamed agent error: %s", exc)
             yield {"type": "error", "content": str(exc)}

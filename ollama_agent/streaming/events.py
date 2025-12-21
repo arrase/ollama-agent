@@ -14,6 +14,27 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _payloads_raw_response_event(data: Any) -> Iterable[dict[str, Any]]:
+    if isinstance(data, ResponseReasoningTextDeltaEvent) and data.delta:
+        yield {"type": "reasoning_delta", "content": data.delta}
+    elif isinstance(data, ResponseTextDeltaEvent) and data.delta:
+        yield {"type": "text_delta", "content": data.delta}
+
+
+def _payloads_run_item_stream_event(item: Any) -> Iterable[dict[str, Any]]:
+    item_type = getattr(item, "type", "")
+    if item_type == "tool_call_item":
+        yield {"type": "tool_call", "name": getattr(item, "name", "unknown")}
+    elif item_type == "tool_call_output_item":
+        yield {"type": "tool_output", "output": str(getattr(item, "output", ""))}
+    elif item_type == "reasoning" and (summary := getattr(item, "summary", "")):
+        yield {"type": "reasoning_summary", "content": summary}
+
+
+def _payloads_agent_updated_stream_event(new_agent: Any) -> Iterable[dict[str, Any]]:
+    yield {"type": "agent_update", "name": getattr(new_agent, "name", "unknown")}
+
+
 def event_payloads(event: Any) -> Iterable[dict[str, Any]]:
     """Convert an agent streaming event into typed payload dictionaries.
 
@@ -22,28 +43,15 @@ def event_payloads(event: Any) -> Iterable[dict[str, Any]]:
     - run_item_stream_event: Tool calls and outputs
     - agent_updated_stream_event: Agent updates
     """
-    event_type = getattr(event, "type", "")
-
-    if event_type == "raw_response_event":
-        data = getattr(event, "data", None)
-        if isinstance(data, ResponseReasoningTextDeltaEvent) and data.delta:
-            yield {"type": "reasoning_delta", "content": data.delta}
-        elif isinstance(data, ResponseTextDeltaEvent) and data.delta:
-            yield {"type": "text_delta", "content": data.delta}
-
-    elif event_type == "run_item_stream_event":
-        item = getattr(event, "item", None)
-        item_type = getattr(item, "type", "")
-        if item_type == "tool_call_item":
-            yield {"type": "tool_call", "name": getattr(item, "name", "unknown")}
-        elif item_type == "tool_call_output_item":
-            yield {"type": "tool_output", "output": str(getattr(item, "output", ""))}
-        elif item_type == "reasoning" and (summary := getattr(item, "summary", "")):
-            yield {"type": "reasoning_summary", "content": summary}
-
-    elif event_type == "agent_updated_stream_event":
-        agent = getattr(event, "new_agent", None)
-        yield {"type": "agent_update", "name": getattr(agent, "name", "unknown")}
+    match getattr(event, "type", ""):
+        case "raw_response_event":
+            yield from _payloads_raw_response_event(getattr(event, "data", None))
+        case "run_item_stream_event":
+            yield from _payloads_run_item_stream_event(getattr(event, "item", None))
+        case "agent_updated_stream_event":
+            yield from _payloads_agent_updated_stream_event(
+                getattr(event, "new_agent", None)
+            )
 
 
 async def stream_agent_events(
@@ -67,3 +75,31 @@ async def stream_agent_events(
     except Exception as exc:
         logger.exception("Error streaming agent events: %s", exc)
         renderer.on_error({"type": "error", "content": str(exc)})
+
+
+async def stream_agent_events_with_renderer(
+    agent: "OllamaAgent",
+    prompt: str,
+    renderer: "StreamingRenderer",
+    *,
+    model: str | None = None,
+    reasoning_effort: str | None = None,
+    ignore: Iterable[str] | None = None,
+) -> None:
+    """Stream events and always close the renderer.
+
+    This helper intentionally does NOT manage agent lifecycle; callers decide
+    whether to wrap in `agent.lifespan()` (CLI) or manage initialize/cleanup
+    externally (TUI).
+    """
+    try:
+        await stream_agent_events(
+            agent,
+            prompt,
+            renderer,
+            model=model,
+            reasoning_effort=reasoning_effort,
+            ignore=ignore,
+        )
+    finally:
+        renderer.close()

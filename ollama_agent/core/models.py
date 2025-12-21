@@ -52,15 +52,18 @@ def get_tool_compatible_models(preferred: str | None = None) -> list[str]:
     except Exception as exc:
         raise ModelCapabilityError(f"Failed to list models: {exc}") from exc
 
-    names = []
+    names: list[str] = []
+    seen: set[str] = set()
     for item in models:
         name = getattr(item, "model", None)
-        if name and name not in names:
-            try:
-                if model_supports_tools(name):
-                    names.append(name)
-            except ModelCapabilityError:
-                pass
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        try:
+            if model_supports_tools(name):
+                names.append(name)
+        except ModelCapabilityError:
+            continue
 
     if preferred:
         ensure_model_supports_tools(preferred)

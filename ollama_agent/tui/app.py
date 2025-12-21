@@ -11,7 +11,7 @@ from textual.widgets import Footer, Header, Input, RichLog
 
 from ..agent import OllamaAgent, set_tool_timeout
 from ..core import extract_text
-from ..streaming import TUIStreamingRenderer, stream_agent_events
+from ..streaming import TUIStreamingRenderer, stream_agent_events_with_renderer
 from ..tasks import Task, TaskManager
 from .screens import CreateTaskScreen, SessionListScreen, TaskListScreen
 
@@ -138,15 +138,14 @@ class ChatInterface(App):
         model: Optional[str] = None,
         reasoning_effort: Optional[str] = None,
     ) -> None:
-        renderer = TUIStreamingRenderer(self.chat_log)
-        try:
-            await stream_agent_events(
-                self.agent, prompt, renderer,
-                model=model, reasoning_effort=reasoning_effort,
-                ignore={"agent_update"},
-            )
-        finally:
-            renderer.close()
+        await stream_agent_events_with_renderer(
+            self.agent,
+            prompt,
+            TUIStreamingRenderer(self.chat_log),
+            model=model,
+            reasoning_effort=reasoning_effort,
+            ignore={"agent_update"},
+        )
 
     # -------------------------------------------------------------------------
     # Actions

@@ -61,6 +61,14 @@ class TaskManager:
         self._path(task_id).write_text(task.to_yaml(), encoding="utf-8")
         return task_id
 
+    def _load_matches(self, pattern: str) -> list[tuple[str, Task]]:
+        """Load tasks matching a filename glob pattern."""
+        return [
+            (p.stem, task)
+            for p in self.tasks_dir.glob(pattern)
+            if (task := self.load(p.stem))
+        ]
+
     def load(self, task_id: str) -> Task | None:
         """Load a task by ID."""
         path = self._path(task_id)
@@ -85,20 +93,12 @@ class TaskManager:
 
     def list_all(self) -> list[tuple[str, Task]]:
         """List all tasks sorted by title."""
-        tasks = [
-            (p.stem, task)
-            for p in self.tasks_dir.glob("*.yaml")
-            if (task := self.load(p.stem))
-        ]
+        tasks = self._load_matches("*.yaml")
         return sorted(tasks, key=lambda x: x[1].title.lower())
 
     def find_by_prefix(self, prefix: str) -> tuple[str, Task] | None:
         """Find a task by ID prefix. Returns None if ambiguous or not found."""
-        matches = [
-            (p.stem, task)
-            for p in self.tasks_dir.glob(f"{prefix}*.yaml")
-            if (task := self.load(p.stem))
-        ]
+        matches = self._load_matches(f"{prefix}*.yaml")
         if len(matches) == 1:
             return matches[0]
         if matches:

@@ -1,30 +1,21 @@
 """Runner module for non-interactive execution."""
 
-from typing import Optional
-
 from rich.console import Console
 
 from .agent import OllamaAgent
-from .streaming import ConsoleStreamingRenderer, stream_agent_events
+from .streaming import ConsoleStreamingRenderer, stream_agent_events_with_renderer
 
 
 async def run_non_interactive(
     agent: OllamaAgent,
     prompt: str,
-    model: Optional[str] = None,
-    effort: Optional[str] = None,
 ) -> None:
     """Stream agent output to the console."""
     renderer = ConsoleStreamingRenderer(Console())
-    try:
-        async with agent.lifespan():
-            await stream_agent_events(
-                agent,
-                prompt,
-                renderer,
-                model=model,
-                reasoning_effort=effort,
-                ignore={"agent_update"},
-            )
-    finally:
-        renderer.close()
+    async with agent.lifespan():
+        await stream_agent_events_with_renderer(
+            agent,
+            prompt,
+            renderer,
+            ignore={"agent_update"},
+        )

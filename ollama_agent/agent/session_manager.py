@@ -70,18 +70,23 @@ class SessionManager:
                     SELECT s.session_id, COUNT(m.id) AS message_count,
                            s.created_at, s.updated_at,
                            (SELECT message_data FROM agent_messages
-                            WHERE session_id = s.session_id ORDER BY created_at ASC LIMIT 1) AS first_message
+                            WHERE session_id = s.session_id ORDER BY created_at ASC LIMIT 1) AS first_message_data
                     FROM agent_sessions s
                     LEFT JOIN agent_messages m ON s.session_id = m.session_id
                     GROUP BY s.session_id ORDER BY s.updated_at DESC
                 """).fetchall()
-            return [{
-                "session_id": r["session_id"],
-                "message_count": r["message_count"],
-                "first_message": r["created_at"] or "Unknown",
-                "last_message": r["updated_at"] or "Unknown",
-                "preview": self._preview(r["first_message"]),
-            } for r in rows]
+            return [
+                {
+                    "session_id": r["session_id"],
+                    "message_count": int(r["message_count"] or 0),
+                    # Keep these timestamp fields stable for UI consumers.
+                    "first_message": r["created_at"] or "Unknown",
+                    "last_message": r["updated_at"] or "Unknown",
+                    # Preview should be derived from the first stored message payload.
+                    "preview": self._preview(r["first_message_data"]),
+                }
+                for r in rows
+            ]
         except Exception as e:
             logger.error("Error listing sessions: %s", e)
             return []

@@ -72,12 +72,12 @@ class Config:
     mem0: Mem0Settings = field(default_factory=Mem0Settings)
 
 
-def _safe_cast(value: Any, cast: type, default: Any) -> Any:
+def _safe_cast(value: Any, caster: type, default: Any) -> Any:
     """Safely cast a value with fallback to default."""
     if value is None:
         return default
     try:
-        return cast(value)
+        return caster(value)
     except (TypeError, ValueError):
         return default
 
