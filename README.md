@@ -7,6 +7,7 @@ Ollama Agent is a powerful command-line tool and Textual TUI (Terminal User Inte
 - **Interactive Chat TUI**: A terminal-based chat interface for a seamless conversation experience.
 - **Non-Interactive CLI**: Execute single prompts directly from your command line for quick queries.
 - **Ollama Integration**: Connects to any Ollama-compatible API endpoint.
+- **Screen Vision (Screenshots)**: Attach monitor screenshots in prompts using `@dpN` for visual context.
 - **Tool-Powered**: The agent can execute shell commands, allowing it to interact with your local environment to perform tasks.
 - **Delegated MCP Agents**: Each configured MCP server can run through its own lightweight agent with custom model and instructions.
 - **Session Management**: Conversations are automatically saved and can be reloaded, deleted, or switched between.
