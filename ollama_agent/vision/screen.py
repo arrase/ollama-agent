@@ -57,8 +57,8 @@ def _require_display_session() -> None:
     # For X11 and Wayland, these env vars are commonly present.
     if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
         raise ScreenCaptureError(
-            "No se detecta una sesión gráfica (faltan DISPLAY/WAYLAND_DISPLAY). "
-            "No puedo capturar pantalla en modo headless."
+            "No graphical session detected (missing DISPLAY/WAYLAND_DISPLAY). "
+            "Screen capture is not available in headless mode."
         )
 
 
@@ -78,7 +78,7 @@ def capture_display_as_base64(
         import mss  # type: ignore
     except Exception as exc:  # pragma: no cover
         raise ScreenCaptureError(
-            "Falta la dependencia 'mss'. Instálala para usar @dpN."
+            "Missing dependency 'mss'. Install it to use @dpN."
         ) from exc
 
     # Prefer JPEG if Pillow is available; otherwise fall back to PNG.
@@ -91,13 +91,13 @@ def capture_display_as_base64(
     with mss.mss() as sct:
         monitors = getattr(sct, "monitors", None)
         if not monitors or not isinstance(monitors, list):
-            raise ScreenCaptureError("No se pudieron enumerar monitores para la captura.")
+            raise ScreenCaptureError("Unable to enumerate monitors for capture.")
 
         # mss uses monitors[1] as the first real monitor; monitors[0] is all monitors.
         mss_index = display_index + 1
         if mss_index < 1 or mss_index >= len(monitors):
             raise ScreenCaptureError(
-                f"Monitor inválido dp{display_index}. Disponibles: 0..{max(0, len(monitors) - 2)}"
+                f"Invalid monitor dp{display_index}. Available: 0..{max(0, len(monitors) - 2)}"
             )
 
         monitor = monitors[mss_index]
@@ -117,7 +117,7 @@ def capture_display_as_base64(
 
         png_bytes = mss.tools.to_png(shot.rgb, shot.size)
         if png_bytes is None:
-            raise ScreenCaptureError("Falló la conversión de captura a PNG.")
+            raise ScreenCaptureError("Failed to convert screenshot to PNG.")
         b64 = base64.b64encode(png_bytes).decode("ascii")
         return CapturedImage(mime_type="image/png", base64_data=b64)
 
