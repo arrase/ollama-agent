@@ -92,7 +92,7 @@ ollama-agent --model "gpt-oss:20b" --effort "high" --prompt "What is the current
 ollama-agent -m "gpt-oss:20b" -e "high" -p "What is the current date?"
 ```
 
-Note: reasoning effort (`--effort`) currently only has an effect with `gpt-oss` models. For other models, set `--effort disabled` (or `reasoning_effort=disabled` in config/tasks) to avoid unexpected behavior.
+**Note**: reasoning effort (`--effort`) currently **only has an effect with `gpt-oss` models**. For other models, set `--effort disabled` (or `reasoning_effort=disabled` in config/tasks) to avoid unexpected behavior.
 
 ```bash
 ollama-agent --builtin-tool-timeout 60 --prompt "Run a long-running task"
@@ -133,7 +133,7 @@ Then run it with:
 ollama-agent task-run <task_id>
 ```
 
-Note: there is currently no CLI/REPL command that creates tasks for you; the supported approach is to create these YAML files directly.
+**Note**: there is currently no CLI/REPL command that creates tasks for you; the supported approach is to create these YAML files directly.
 
 **List Tasks:**
 
