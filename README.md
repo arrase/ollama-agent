@@ -127,12 +127,6 @@ model: "gpt-oss:20b"
 reasoning_effort: "medium"  # low|medium|high|disabled
 ```
 
-Then run it with:
-
-```bash
-ollama-agent task-run <task_id>
-```
-
 **Note**: there is currently no CLI/REPL command that creates tasks for you; the supported approach is to create these YAML files directly.
 
 **List Tasks:**
