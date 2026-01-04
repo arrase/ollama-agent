@@ -1,48 +1,32 @@
 
-# Instructions for code agents (ollama-agent)
+# Copilot instructions (ollama-agent)
 
-## Quick Overview
-- CLI/REPL packaged as `ollama-agent` (entrypoint: `ollama_agent/main.py`, defined in `pyproject.toml`).
-- The core is `OllamaAgent` in `ollama_agent/agent/agent.py`: it creates an `agents.Agent` (openai-agents) using `AsyncOpenAI` and points to an Ollama-compatible endpoint (default `base_url` is `http://localhost:11434/v1/`).
-- Persistent state:
-  - Sessions/chats: SQLite via `agents.SQLiteSession` at `~/.ollama-agent/sessions.db` (`ollama_agent/agent/session_manager.py`).
-  - Config: `~/.ollama-agent/config.ini` (created on first run) (`ollama_agent/settings/config.py`).
-  - Instructions: `~/.ollama-agent/instructions.md` (created on first run; defaults from `ollama_agent/settings/default_instructions.md`).
-  - Tasks: YAML files in `~/.ollama-agent/tasks/*.yaml` (`ollama_agent/tasks/manager.py`).
+## Big picture
+- Package entrypoint: `ollama-agent` → `ollama_agent/main.py` (declared in `pyproject.toml`).
+- Core runtime: `OllamaAgent` in `ollama_agent/agent/agent.py` builds an `agents.Agent` (openai-agents) backed by `AsyncOpenAI` pointed at an Ollama-compatible API (`base_url` defaults to `http://localhost:11434/v1/`).
+- User state lives in `~/.ollama-agent/`: `config.ini`, `sessions.db`, `instructions.md`, `tasks/*.yaml`, and optional `mcp_servers.json`.
 
-## Main Flows
-- REPL: `ollama_agent/interfaces/repl.py` (slash commands) → `OllamaAgent.run_async_streamed()` → incremental rendering.
-- Non-interactive CLI: `ollama_agent/execution/runner.py` uses `stream_agent_events_with_renderer()`.
-- Streaming: events from openai-agents are normalized to payloads `{type: ...}` in `ollama_agent/streaming/events.py`.
+## Main flows (debug here first)
+- Non-interactive CLI: `ollama_agent/interfaces/cli.py` → `ollama_agent/execution/runner.py:run_non_interactive()` → `ollama_agent/streaming/events.py:stream_agent_events_with_renderer()`.
+- REPL: `ollama_agent/interfaces/repl.py` → `OllamaAgent.run_async_streamed()`; slash commands reuse task helpers from `ollama_agent/tasks/commands.py`.
+- Streaming: openai-agents events are normalized by `ollama_agent/streaming/events.py:event_payloads()` into `{type: ...}` payloads consumed by renderers.
 
-## Key Integrations (and where to touch them)
-- Built-in tools:
-  - Defined with `@agents.function_tool` in `ollama_agent/agent/builtin_tools.py`.
-  - Exposed by adding them to `BUILTIN_TOOLS`.
-  - Tool timeouts: `set_tool_timeout()` (ContextVar) is configured in `ollama_agent/main.py`.
-- Model capability gate: before creating the agent the support for tools is validated with `ensure_model_supports_tools()` (`ollama_agent/core/models.py`, it calls `ollama.show(model)` and looks for the `"tools"` capability).
-- Screen vision: the `@dpN` token in prompts → captures a screenshot and converts it to a multimodal input in the Responses style (`_maybe_attach_screen_context()` in `ollama_agent/agent/agent.py`, helpers in `ollama_agent/vision/screen.py`). Note: on Linux this requires `DISPLAY`/`WAYLAND_DISPLAY`.
-- Persistent memory (Mem0 + Qdrant): `MemoryManager` in `ollama_agent/memory/memory_manager.py`.
-  - On initialization, it starts/ensures Qdrant via Docker (`ollama_agent/memory/bootstrap.py`, container `ollama-agent-qdrant-<port>`).
-  - Memory tools: `mem0_add_memory`, `mem0_search_memory`.
-- MCP (optional): servers declared in `~/.ollama-agent/mcp_servers.json`.
-  - Lifecycle: `ollama_agent/settings/mcp/lifecycle.py`.
-  - Builders: `ollama_agent/settings/mcp/builders.py` (stdio/sse/streamable_http) and it creates a "delegated agent" that is exposed as a tool (named `use_<name>` by default).
+## Extension points & integrations
+- Built-in tools: add `@agents.function_tool` functions in `ollama_agent/agent/builtin_tools.py`, then include them in `BUILTIN_TOOLS`.
+- Tool timeout: controlled via a `ContextVar` (`set_tool_timeout()`), configured from config/CLI in `ollama_agent/main.py`.
+- Model capability gate: `ollama_agent/core/models.py:ensure_model_supports_tools()` checks `ollama.show(model)` for capability `"tools"` before agent creation.
+- Screen vision: `@dpN` tokens in string prompts trigger screenshot capture and multimodal conversion in `_maybe_attach_screen_context()` (`ollama_agent/vision/screen.py`). On Linux requires `DISPLAY` or `WAYLAND_DISPLAY`.
+- Mem0 memory: `ollama_agent/memory/memory_manager.py` ensures a Qdrant backend via Docker (`ollama_agent/memory/bootstrap.py`, container name `ollama-agent-qdrant-<port>`). Tools are `mem0_add_memory` / `mem0_search_memory`.
+- MCP servers (optional): loaded from `~/.ollama-agent/mcp_servers.json` in `OllamaAgent.initialize()` via `ollama_agent/settings/mcp/lifecycle.py`; each server becomes a delegated tool named `use_<name>` by default.
 
-## Project Conventions
-- Prefer `prompt: object` (string or multimodal list). If you include multimodal messages, preserve the callback pattern `RunConfig(session_input_callback=...)` in `OllamaAgent._prepare_input()`.
-- Agent runtime errors: `run_async()` returns a string `"Error: ..."` (it does not raise) and streaming emits a payload `{type:"error"}`.
-- Task IDs: only `[A-Za-z0-9_-]+` (validated by `TaskManager.validate_task_id`).
+## Project-specific conventions
+- `prompt` is intentionally typed as `object`: can be `str` or a multimodal `list`. If it’s a list, keep the `RunConfig(session_input_callback=_merge_session_history_and_input)` path intact.
+- Error behavior is non-raising by design: `run_async()` returns `"Error: ..."`; streaming yields `{type:"error"}`.
+- Tasks: YAML schema is `title`, `prompt`, `model`, optional `reasoning_effort` (see `ollama_agent/tasks/manager.py`). Task IDs must match `[A-Za-z0-9_-]+`.
 
-## Real-world Dev Workflows
-- Local setup:
-  - `python -m venv .venv && source .venv/bin/activate`
-  - `pip install -e .`
-- Run:
-  - REPL: `ollama-agent`
-  - Single prompt: `ollama-agent -p "..."`
-  - Override model/effort/timeout: `ollama-agent -m <model> -e <low|medium|high|disabled> -t <seconds> -p "..."`
-
-## When Making Changes
-- If you change CLI options: edit `ollama_agent/interfaces/cli.py` and maintain compatibility with `README.md`.
-- If you add new streaming payload types: update `ollama_agent/streaming/events.py` and the renderer(s) (`ollama_agent/streaming/console_renderer.py` and the REPL).
+## Dev workflow
+- Setup: `python3 -m venv .venv && source .venv/bin/activate && pip install -e .`
+- Run: `ollama-agent` or `ollama-agent -p "..."`.
+- Common overrides: `ollama-agent -m <model> -e <low|medium|high|disabled> -t <seconds> -p "..."`.
+- Note (README): `--effort` currently only affects `gpt-oss` models; use `disabled` for other models to avoid surprises.
+- If you change CLI flags/help, update both `ollama_agent/interfaces/cli.py` and `README.md`.
