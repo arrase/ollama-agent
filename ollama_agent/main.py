@@ -1,9 +1,8 @@
-"""Main entry point of the application."""
-
+import asyncio
 from .agent import create_agent, set_tool_timeout
 from .cli import create_argument_parser, handle_cli_commands
 from .settings import get_config
-from .tui.app import ChatInterface
+from .repl import OllamaREPL
 
 
 def main() -> None:
@@ -15,9 +14,16 @@ def main() -> None:
     timeout = args.builtin_tool_timeout if args.builtin_tool_timeout is not None else cfg.builtin_tool_timeout
     set_tool_timeout(timeout)
 
-    if not handle_cli_commands(args, create_agent):
-        agent = create_agent(model=args.model, reasoning_effort=args.effort)
-        ChatInterface(agent, tool_timeout=timeout).run()
+    if handle_cli_commands(args, create_agent):
+        return
+
+    # Resolve model/effort via REPL logic or pass default None to let REPL/agent handle it
+    repl = OllamaREPL(
+        agent_factory=create_agent,
+        model=args.model or cfg.model,
+        effort=args.effort or cfg.reasoning_effort
+    )
+    asyncio.run(repl.run())
 
 
 if __name__ == "__main__":

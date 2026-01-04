@@ -10,7 +10,6 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "openai",
-    "textual",
     "openai-agents",
     "PyYAML",
     "ollama",
@@ -18,6 +17,7 @@ dependencies = [
     "docker",
     "mss",
     "Pillow",
+    "prompt_toolkit",
 ]
 
 [project.scripts]
