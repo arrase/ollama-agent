@@ -2,6 +2,24 @@
 
 Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to interact with local AI models through an Ollama-compatible API. It provides a persistent chat experience, session management, and the ability to execute local shell commands, turning your local models into helpful assistants for your daily tasks.
 
+## Prerequisites (Important)
+
+Before installing/running the app, make sure you have:
+
+- **Ollama (or compatible API) running**.
+- **A model that supports tool calling** (required). If the selected model does not support tools/function-calling, the app will exit.
+- **Docker running** (Docker daemon available). On first run, the app will automatically pull and start the required backend container(s) for persistent memory (Qdrant).
+- **The embeddings model downloaded in Ollama**. By default, Mem0 uses `nomic-embed-text:latest`.
+- **Vision-capable model (optional)**: only required if you want to use Screen Vision (`@dpN`). If your model does not support vision, the app will still work but it won’t be able to “see” screenshots.
+
+```bash
+# Required for persistent memory backend (Qdrant)
+docker info
+
+# Required embeddings model (default)
+ollama pull nomic-embed-text:latest
+```
+
 ## Features
 
 - **Interactive REPL**: A modern, terminal-based chat interface with Markdown rendering and slash commands.
