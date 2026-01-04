@@ -154,6 +154,10 @@ class OllamaAgent:
         m, e = self._resolve(model, reasoning_effort)
         return self._create_agent(m, e), self._session_manager.get_session()
 
+    def _prepare_input(self, prompt: object) -> tuple[object, RunConfig | None]:
+        prepared = _maybe_attach_screen_context(prompt)
+        return prepared, _run_config_for_input(prepared)
+
     async def _ensure_ready(self) -> None:
         """Ensure the agent is initialized (callers manage cleanup separately)."""
         await self.initialize()
@@ -162,12 +166,12 @@ class OllamaAgent:
         await self._ensure_ready()
         try:
             agent, session = self._prepare_run(model, reasoning_effort)
-            prepared_input = _maybe_attach_screen_context(prompt)
+            prepared_input, run_config = self._prepare_input(prompt)
             result = await Runner.run(
                 agent,
                 input=prepared_input,
                 session=session,
-                run_config=_run_config_for_input(prepared_input),
+                run_config=run_config,
             )
             return str(result.final_output)
         except Exception as exc:
@@ -180,12 +184,12 @@ class OllamaAgent:
         await self._ensure_ready()
         try:
             agent, session = self._prepare_run(model, reasoning_effort)
-            prepared_input = _maybe_attach_screen_context(prompt)
+            prepared_input, run_config = self._prepare_input(prompt)
             result = Runner.run_streamed(
                 agent,
                 input=prepared_input,
                 session=session,
-                run_config=_run_config_for_input(prepared_input),
+                run_config=run_config,
             )
             async for event in result.stream_events():
                 for payload in event_payloads(event):

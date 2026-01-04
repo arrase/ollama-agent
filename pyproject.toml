@@ -26,3 +26,6 @@ ollama-agent = "ollama_agent.main:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["ollama_agent*"]
+
+[tool.setuptools.package-data]
+ollama_agent = ["settings/default_instructions.md"]

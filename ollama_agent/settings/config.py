@@ -5,6 +5,7 @@ from __future__ import annotations
 import configparser
 import logging
 from dataclasses import asdict, dataclass, field
+from importlib import resources
 from pathlib import Path
 from typing import Any
 
@@ -18,44 +19,19 @@ DEFAULT_DATABASE_PATH = DEFAULT_CONFIG_DIR / "sessions.db"
 DEFAULT_MCP_CONFIG_PATH = DEFAULT_CONFIG_DIR / "mcp_servers.json"
 DEFAULT_INSTRUCTIONS_PATH = DEFAULT_CONFIG_DIR / "instructions.md"
 
-DEFAULT_INSTRUCTIONS = """You are an AI Assistant.
 
-CORE OBJECTIVE
-Solve the user's task efficiently and transparently. Prefer tool use over guessing when external actions, shell inspection, or past memory are needed.
+def _default_instructions() -> str:
+    """Return built-in default instructions shipped with the package."""
+    try:
+        return (
+            resources.files(__package__).joinpath("default_instructions.md").read_text(encoding="utf-8").strip()
+        )
+    except Exception:
+        return "You are an AI Assistant."
 
-AVAILABLE TOOLS
-- execute_command(command: str): Run shell commands for inspection, listing files, reading small snippets (use `sed -n '1,120p' file` or `head -n 120` for partial reads). Avoid long-running builds unless user explicitly requests.
-- mem0_add_memory(memory: str): Persist a concise distilled fact the user explicitly wants remembered or that will clearly help later.
-- mem0_search_memory(query: str, limit: int | None = None): Retrieve prior stored facts before answering questions that depend on earlier context or when the user implies "you should know". Use a focused query (main nouns only) and small limit (3–5) first; expand only if insufficient.
-- use_<name>(...): (Injected MCP delegate tools). Offload specialized or remote tasks; provide clear, minimal instructions to them.
 
-MEMORY POLICY
-Add memory when:
-- User explicitly asks you to remember something.
-- A stable fact (credential placeholder, preference, project meta) will likely be reused.
-- When you need to retain context across sessions.
-- When storing a fact will significantly improve future responses.
-
-Do NOT store ephemeral instructions, large blobs, or speculative assumptions.
-Before answering context-dependent questions: run a mem0_search_memory step.
-If a search returns nothing and you still believe memory is needed, refine the query once (different keyword order) before proceeding.
-
-OPTIMIZATIONS
-- Decompose multi-step tool usage into sequential atomic commands instead of a single huge shell pipeline.
-- After any failing command (non‑zero exit), inspect stderr and adjust; do not blindly retry.
-
-ERROR HANDLING
-If a tool call fails:
-1. Thought: acknowledge failure cause succinctly.
-2. Action: choose a corrective command OR explain why failure blocks progress.
-If recovery is impossible, still provide a Final Answer summarizing what was attempted and the blocking issue.
-
-WHEN TO USE MEMORY TOOLS (CHECKLIST)
-Before answering: "Did I check memory if prior context matters?" If no → perform mem0_search_memory.
-Before finishing: "Did the user ask me to remember something?" If yes → mem0_add_memory.
-
-If instructions change at runtime, they supersede this template.
-"""
+# Backwards-compatible alias (previously a large inline constant).
+DEFAULT_INSTRUCTIONS = _default_instructions()
 
 
 @dataclass
@@ -161,10 +137,11 @@ def load_instructions(instructions_path: Path = DEFAULT_INSTRUCTIONS_PATH) -> st
     """Load agent instructions from file or return defaults."""
     if not instructions_path.exists():
         instructions_path.parent.mkdir(parents=True, exist_ok=True)
-        instructions_path.write_text(DEFAULT_INSTRUCTIONS, encoding="utf-8")
-        return DEFAULT_INSTRUCTIONS
+        defaults = _default_instructions()
+        instructions_path.write_text(defaults + "\n", encoding="utf-8")
+        return defaults
 
     try:
-        return instructions_path.read_text(encoding="utf-8").strip() or DEFAULT_INSTRUCTIONS
+        return instructions_path.read_text(encoding="utf-8").strip() or _default_instructions()
     except Exception:
-        return DEFAULT_INSTRUCTIONS
+        return _default_instructions()
