@@ -4,7 +4,7 @@ Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to i
 
 ## Features
 
-- **Interactive REPL**: A modern, terminal-based chat interface with Markdown rendering and slash commands (inspired by Claude Code).
+- **Interactive REPL**: A modern, terminal-based chat interface with Markdown rendering and slash commands.
 - **Non-Interactive CLI**: Execute single prompts directly from your command line for quick queries.
 - **Ollama Integration**: Connects to any Ollama-compatible API endpoint.
 - **Screen Vision (Screenshots)**: Attach monitor screenshots in prompts using `@dpN` for visual context.
