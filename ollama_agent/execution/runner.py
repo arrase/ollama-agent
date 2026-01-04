@@ -2,8 +2,8 @@
 
 from rich.console import Console
 
-from .agent import OllamaAgent
-from .streaming import ConsoleStreamingRenderer, stream_agent_events_with_renderer
+from ..agent import OllamaAgent
+from ..streaming import ConsoleStreamingRenderer, stream_agent_events_with_renderer
 
 
 async def run_non_interactive(

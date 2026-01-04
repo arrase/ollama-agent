@@ -1,7 +1,6 @@
 """REPL interface for Ollama Agent."""
 
 import asyncio
-import sys
 from typing import Callable, Optional
 
 from prompt_toolkit import PromptSession
@@ -12,9 +11,10 @@ from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-from .agent import OllamaAgent
-from .cli import CLIContext, delete_task, list_tasks, run_task
-from .runner import run_non_interactive
+from ..agent import OllamaAgent
+from ..execution.runner import run_non_interactive
+from ..tasks.commands import CLIContext, delete_task, list_tasks, run_task
+
 
 class OllamaREPL:
     """Read-Eval-Print Loop for interacting with the Ollama Agent."""
@@ -29,7 +29,7 @@ class OllamaREPL:
                 "prompt": "#ansiwhite bold",
             })
         )
-        # We need a context for reusing CLI task commands
+        # We need a context for reusing task commands
         self.ctx = CLIContext(agent_factory)
         self.active_agent: Optional[OllamaAgent] = None
 
@@ -83,78 +83,78 @@ class OllamaREPL:
 
         if cmd in ("/exit", "/quit"):
             raise EOFError
-        elif cmd == "/help":
+        if cmd == "/help":
             self.show_help()
-        elif cmd == "/clear":
+            return
+        if cmd == "/clear":
             self.console.clear()
-        elif cmd == "/tasks":
+            return
+        if cmd == "/tasks":
             list_tasks(self.ctx)
-        elif cmd == "/task-run":
+            return
+        if cmd == "/task-run":
             if not args:
                 self.console.print("[red]Usage: /task-run <task_id>[/red]")
                 return
             await run_task(self.ctx, args[0])
-        elif cmd == "/task-delete":
+            return
+        if cmd == "/task-delete":
             if not args:
                 self.console.print("[red]Usage: /task-delete <task_id>[/red]")
                 return
             delete_task(self.ctx, args[0])
-        elif cmd == "/new":
+            return
+        if cmd == "/new":
             if self.active_agent:
                 await self.active_agent.cleanup()
             self.active_agent = None
             self.console.print("[green]Started new session.[/green]")
-        else:
-            self.console.print(f"[red]Unknown command:[/red] {cmd}")
+            return
+
+        self.console.print(f"[red]Unknown command:[/red] {cmd}")
 
     async def handle_chat(self, prompt: str) -> None:
         """Send prompt to the agent and stream response."""
         if not self.active_agent:
             self.active_agent = self.agent_factory(
                 model=self.model,
-                reasoning_effort=self.effort
+                reasoning_effort=self.effort,
             )
-        
-        # self.console.print(f"[bold cyan]You:[/bold cyan] {prompt}")
+
         self.console.print("[bold green]Agent:[/bold green]")
-        
+
         full_response = ""
         live = Live(
-            console=self.console, 
-            refresh_per_second=12, 
-            vertical_overflow="visible"
+            console=self.console,
+            refresh_per_second=12,
+            vertical_overflow="visible",
         )
         live.start()
-        
+
         try:
             async for payload in self.active_agent.run_async_streamed(prompt):
-                 msg_type = payload.get("type")
-                 if msg_type == "text_delta":
-                     content = payload["content"]
-                     full_response += content
-                     live.update(Markdown(full_response))
-                 elif msg_type == "reasoning_delta":
-                     # We can't print to console easily inside live unless we stop/start
-                     # Or we append to markdown as blockquote?
-                     # For now, let's skip visual rendering of reasoning to keep markdown clean,
-                     # or maybe we can append it?
-                     pass
-                 elif msg_type == "tool_call":
-                     live.stop()
-                     self.console.print(f"[bold magenta]tool -> {payload.get('name')}...[/bold magenta]")
-                     live.start()
-                 elif msg_type == "tool_output":
-                      live.stop()
-                      self.console.print(f"[dim]<- {payload.get('output')}[/dim]")
-                      live.start()
-                 elif msg_type == "error":
-                     live.stop()
-                     self.console.print(f"[red]{payload['content']}[/red]")
-                     live.start()
-            
-            # Final update
+                msg_type = payload.get("type")
+                if msg_type == "text_delta":
+                    content = payload["content"]
+                    full_response += content
+                    live.update(Markdown(full_response))
+                elif msg_type == "reasoning_delta":
+                    pass
+                elif msg_type == "tool_call":
+                    live.stop()
+                    self.console.print(f"[bold magenta]tool -> {payload.get('name')}...[/bold magenta]")
+                    live.start()
+                elif msg_type == "tool_output":
+                    live.stop()
+                    self.console.print(f"[dim]<- {payload.get('output')}[/dim]")
+                    live.start()
+                elif msg_type == "error":
+                    live.stop()
+                    self.console.print(f"[red]{payload['content']}[/red]")
+                    live.start()
+
             live.update(Markdown(full_response))
-            
+
         except Exception as e:
             live.stop()
             self.console.print(f"[red]Error running agent: {e}[/red]")

@@ -1,8 +1,8 @@
 import asyncio
 from .agent import create_agent, set_tool_timeout
-from .cli import create_argument_parser, handle_cli_commands
+from .interfaces.cli import create_argument_parser, handle_cli_commands
 from .settings import get_config
-from .repl import OllamaREPL
+from .interfaces.repl import OllamaREPL
 
 
 def main() -> None:
@@ -28,3 +28,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
