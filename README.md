@@ -57,6 +57,7 @@ The REPL provides a persistent chat session. You can use slash commands to manag
 - `/clear`: Clear the screen.
 - `/tasks`: List saved tasks.
 - `/task-run <id>`: Run a specific task.
+- `/task-delete <id>`: Delete a specific task.
 - `/exit`: Quit the application.
 
 ### Non-Interactive Mode
@@ -91,6 +92,8 @@ ollama-agent --model "gpt-oss:20b" --effort "high" --prompt "What is the current
 ollama-agent -m "gpt-oss:20b" -e "high" -p "What is the current date?"
 ```
 
+Note: reasoning effort (`--effort`) currently only has an effect with `gpt-oss` models. For other models, set `--effort disabled` (or `reasoning_effort=disabled` in config/tasks) to avoid unexpected behavior.
+
 ```bash
 ollama-agent --builtin-tool-timeout 60 --prompt "Run a long-running task"
 # Or using short forms:
@@ -107,6 +110,30 @@ ollama-agent -t 60 -p "Run a long-running task"
 ## Tasks
 
 Tasks are saved prompts that can be executed repeatedly.
+
+**Create a Task (manual):**
+
+Tasks are stored as YAML files in `~/.ollama-agent/tasks/`. To create one, add a new file named `<task_id>.yaml` in that directory.
+
+- `<task_id>` can be any filesystem-safe ID (it will show up in `task-list` and is what you pass to `task-run`).
+- The YAML supports: `title`, `prompt`, `model`, and (optionally) `reasoning_effort`.
+
+Example:
+
+```yaml
+title: "List repo tree"
+prompt: "List all files in this repository as a tree."
+model: "gpt-oss:20b"
+reasoning_effort: "medium"  # low|medium|high|disabled
+```
+
+Then run it with:
+
+```bash
+ollama-agent task-run <task_id>
+```
+
+Note: there is currently no CLI/REPL command that creates tasks for you; the supported approach is to create these YAML files directly.
 
 **List Tasks:**
 
