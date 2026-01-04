@@ -7,10 +7,9 @@ name = "ollama-agent"
 version = "0.1.0"
 description = "Agente de IA para interactuar con modelos de lenguaje locales a través de Ollama"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "openai",
-    "textual",
     "openai-agents",
     "PyYAML",
     "ollama",
@@ -18,6 +17,7 @@ dependencies = [
     "docker",
     "mss",
     "Pillow",
+    "prompt_toolkit",
 ]
 
 [project.scripts]
@@ -26,3 +26,6 @@ ollama-agent = "ollama_agent.main:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["ollama_agent*"]
+
+[tool.setuptools.package-data]
+ollama_agent = ["settings/default_instructions.md"]

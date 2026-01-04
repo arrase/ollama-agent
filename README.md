@@ -1,10 +1,10 @@
 # Ollama Agent
 
-Ollama Agent is a powerful command-line tool and Textual TUI (Terminal User Interface) that allows you to interact with local AI models through an Ollama-compatible API. It provides a persistent chat experience, session management, and the ability to execute local shell commands, turning your local models into helpful assistants for your daily tasks.
+Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to interact with local AI models through an Ollama-compatible API. It provides a persistent chat experience, session management, and the ability to execute local shell commands, turning your local models into helpful assistants for your daily tasks.
 
 ## Features
 
-- **Interactive Chat TUI**: A terminal-based chat interface for a seamless conversation experience.
+- **Interactive REPL**: A modern, terminal-based chat interface with Markdown rendering and slash commands (inspired by Claude Code).
 - **Non-Interactive CLI**: Execute single prompts directly from your command line for quick queries.
 - **Ollama Integration**: Connects to any Ollama-compatible API endpoint.
 - **Screen Vision (Screenshots)**: Attach monitor screenshots in prompts using `@dpN` for visual context.
@@ -28,7 +28,7 @@ pipx install git+https://github.com/arrase/ollama-agent.git
 
 ## Quick Start
 
-Start the interactive TUI:
+Start the interactive REPL:
 
 ```bash
 ollama-agent
@@ -42,9 +42,7 @@ ollama-agent -p "List all files in the current directory as JSON."
 
 ## Usage
 
-### Interactive Mode (TUI)
-
-![Ollama Agent TUI](./screenshots/main.png)
+### Interactive Mode (REPL)
 
 To start the chat interface, simply run:
 
@@ -52,17 +50,16 @@ To start the chat interface, simply run:
 ollama-agent
 ```
 
-The TUI provides a rich, interactive experience with the following keybindings:
+The REPL provides a persistent chat session. You can use slash commands to manage the session:
 
-- `Ctrl+C`: Quit the application.
-- `Ctrl+R`: Start a new chat session.
-- `Ctrl+S`: List and load a previous session.
-- `Ctrl+L`: List, run, or delete saved tasks.
-- `Ctrl+T`: Create a new task.
+- `/help`: Show available commands.
+- `/new`: Start a new chat session (clears context).
+- `/clear`: Clear the screen.
+- `/tasks`: List saved tasks.
+- `/task-run <id>`: Run a specific task.
+- `/exit`: Quit the application.
 
 ### Non-Interactive Mode
-
-![Ollama Agent CLI](./screenshots/cli.png)
 
 You can run a single prompt directly from the command line:
 
@@ -74,7 +71,7 @@ ollama-agent -p "List all files in the current directory as JSON."
 
 ### Screen Vision (Screenshots)
 
-Screen vision is not limited to a specific mode: it works anywhere you can type a prompt (both TUI and CLI).
+Screen vision is not limited to a specific mode: it works anywhere you can type a prompt (both REPL and CLI).
 
 Attach a screenshot of a monitor as context by including `@dpN` in your prompt (`N` is a 0-based monitor index):
 
@@ -107,10 +104,7 @@ ollama-agent -t 60 -p "Run a long-running task"
 - `-e`, `--effort`: Set reasoning effort level (low, medium, high, disabled)
 - `-t`, `--builtin-tool-timeout`: Set built-in tool execution timeout in seconds
 
-
 ## Tasks
-
-![Ollama Agent Tasks](./screenshots/tasks.png)
 
 Tasks are saved prompts that can be executed repeatedly.
 
@@ -118,6 +112,7 @@ Tasks are saved prompts that can be executed repeatedly.
 
 ```bash
 ollama-agent task-list
+# or inside REPL: /tasks
 ```
 
 **Run a Task:**
@@ -126,158 +121,31 @@ Use the task ID (or a unique prefix) from the list to run it.
 
 ```bash
 ollama-agent task-run <task_id>
+# or inside REPL: /task-run <task_id>
 ```
 
 **Delete a Task:**
 
 ```bash
 ollama-agent task-delete <task_id>
+# or inside REPL: /task-delete <task_id>
 ```
 
 ## Configuration
 
 On the first run, the application will create a default configuration file at `~/.ollama-agent/config.ini`. You can edit this file to permanently change the default model, API URL, and other settings.
 
-**Configuration Options:**
-
-- `model`: The default AI model to use (default: `gpt-oss:20b`)
-- `base_url`: The Ollama API endpoint (default: `http://localhost:11434/v1/`)
-- `api_key`: API key for authentication (default: `ollama`)
-- `reasoning_effort`: Agent reasoning effort level - `low`, `medium`, or `high` (default: `medium`)
-- `database_path`: Path to the SQLite session database (default: `~/.ollama-agent/sessions.db`)
-- `builtin_tool_timeout`: Built-in tool execution timeout in seconds (default: `30`)
-- `mcp_config_path`: Path to MCP servers configuration file (default: `~/.ollama-agent/mcp_servers.json`)
-- `mem0.*`: Persistent memory configuration (adjust host/ports to match your setup)
-
-**Example `config.ini`:**
-
-```ini
-[default]
-model = gpt-oss:20b
-base_url = http://localhost:11434/v1/
-api_key = ollama
-reasoning_effort = medium
-database_path = /home/user/.ollama-agent/sessions.db
-builtin_tool_timeout = 30
-mcp_config_path = /home/user/.ollama-agent/mcp_servers.json
-
-[mem0]
-collection_name = ollama-agent
-host = localhost
-port = 6333
-embedding_model_dims = 768
-llm_model = llama3.1:latest
-llm_temperature = 0
-llm_max_tokens = 2000
-ollama_base_url = http://localhost:11434
-embedder_model = nomic-embed-text:latest
-embedder_base_url = http://localhost:11434
-user_id = default
-```
-
 ## Persistent Memory with Mem0
 
-![Ollama Agent Memory](./screenshots/memory.png)
-
 The agent can remember long-term facts by delegating storage and retrieval to [Mem0](https://github.com/mem0ai/mem0) running locally, backed by a Qdrant vector store that the agent automatically manages via Docker.
-
-#### Docker and automatic Qdrant startup
-
-- You need **Docker installed and the daemon running** on your system.
-- When the agent starts (or when Mem0 settings are updated), it will look for a Qdrant container. If none exists, it will **pull `qdrant/qdrant:latest` and start a background container** named `ollama-agent-qdrant-<PORT>` (fixed prefix + configured port) with restart policy `unless-stopped`.
-- The published port is taken from `mem0.port` (`6333` by default in the code). If you already have an external Qdrant instance, set `mem0.host` and `mem0.port` to point to it; the agent will still attempt to create a local container if it doesn't detect one exposing that port.
-- Check status with:
-
-  ```bash
-  docker ps --filter name=ollama-agent-qdrant
-  docker logs ollama-agent-qdrant-6333 | head -n 40
-  ```
-
-- To update the image: `docker rm -f ollama-agent-qdrant-6333` and start the agent again; it will re-create the container with the latest image.
-
-Summary: you only need Docker running; the agent will pull and start Qdrant in the background for you.
-
-To use Mem0:
-
-1. Pull an Ollama embed model:
-
-  ```bash
-  ollama pull nomic-embed-text:latest
-  ```
-
-2. Adjust the `[mem0]` section in `~/.ollama-agent/config.ini` to match your environment.
-
-Once dependencies are installed, the agent exposes two tools via function calling:
-
-- `mem0_add_memory(memory: str)` – stores a new memory for the single local user.
-- `mem0_search_memory(query: str, limit: int | None = None)` – retrieves relevant memories to augment the reply.
-
-Because these tools are part of the normal tool list, both the CLI and TUI flows gain persistent recall without additional configuration.
 
 ## Agent Instructions
 
 You can customize the agent's behavior by editing the instructions file at `~/.ollama-agent/instructions.md`. This file is automatically created on first use with default instructions.
 
-Simply edit the file to:
-
-- Change the agent's personality and tone
-- Add specific guidelines for responses
-- Include domain-specific knowledge
-- Customize tool usage behavior
-
-**Example instructions file:**
-
-```markdown
-You are a helpful AI assistant specialized in software development tasks.
-
-You have access to a tool that allows you to execute operating system commands.
-When executing commands, always:
-1. Explain what you're about to do
-2. Show the command before execution
-3. Summarize the results
-
-Be concise, clear, and security-conscious. Never execute destructive commands without explicit user confirmation.
-```
-
 ## MCP Servers (Optional)
 
 Ollama Agent supports the Model Context Protocol (MCP) to extend the agent's capabilities with additional tools and context. MCP servers are **optional** and can provide features like filesystem access, Git operations, and custom APIs.
-
-To configure MCP servers, create a `mcp_servers.json` file at `~/.ollama-agent/mcp_servers.json`. See [MCP_SERVERS.md](./MCP_SERVERS.md) for detailed configuration instructions and examples.
-
-Each MCP entry may include an `agent` block. This spawns a dedicated helper agent whose tool is exposed to the main assistant, letting you pick an appropriate model, tone, or handoff description per server.
-
-**Quick Example:**
-
-```json
-{
-  "mcpServers": {
-    "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/documents"],
-      "agent": {
-        "name": "filesystem_helper",
-        "model": "gpt-oss:20b",
-        "instructions": "You broker requests to the filesystem MCP server and return results verbatim.",
-        "tool_name": "use_filesystem",
-        "tool_description": "Delegate file operations to the filesystem MCP agent"
-      }
-    },
-    "context7": {
-      "httpUrl": "https://mcp.context7.com/mcp",
-      "headers": {
-        "CONTEXT7_API_KEY": "your-api-key-here",
-        "Accept": "application/json, text/event-stream"
-      },
-      "agent": {
-        "model": "gpt-oss:8b",
-        "instructions": "You query the Context7 MCP service, summarising findings concisely.",
-        "tool_description": "Ask the Context7 MCP agent to gather structured knowledge"
-      }
-    }
-  }
-}
-```
 
 ## For Developers
 
@@ -307,43 +175,12 @@ Interested in contributing? Great! Here’s how to get started.
     pip install -e .
     ```
 
-4. **Install development tools (optional):**
-
-    For a better development experience with Textual, you can install its development tools:
-
-    ```bash
-    pip install "textual[dev]"
-    ```
-
 ### Project Structure
 
-- `ollama_agent/main.py`: Main entry point, handles CLI arguments and starts the TUI or non-interactive mode.
-- `ollama_agent/cli.py`: CLI plumbing and subcommands.
-- `ollama_agent/runner.py`: Orchestrates runs (TUI/CLI) and agent execution.
+- `ollama_agent/main.py`: Main entry point, handles CLI arguments and starts the REPL or non-interactive mode.
+- `ollama_agent/interfaces/repl.py`: Interactive Read-Eval-Print Loop implementation.
+- `ollama_agent/interfaces/cli.py`: CLI plumbing and subcommands.
+- `ollama_agent/execution/runner.py`: Non-interactive execution helper.
+- `ollama_agent/tasks/commands.py`: Shared task subcommands used by CLI and REPL.
 - `ollama_agent/agent/agent.py`: Core agent implementation (OpenAI Agents SDK).
-- `ollama_agent/agent/factory.py`: Agent construction (main agent + delegated MCP agents).
-- `ollama_agent/agent/builtin_tools.py`: Built-in tools (e.g., local command execution).
-- `ollama_agent/agent/session_manager.py`: Session persistence and retrieval.
-- `ollama_agent/core/`: Shared utilities and models.
-- `ollama_agent/core/models.py`: Shared data models / types.
-- `ollama_agent/memory/`: Mem0 integration and memory bootstrapping.
-- `ollama_agent/memory/memory_manager.py`: Mem0 integration and memory tool wiring.
-- `ollama_agent/settings/config.py`: Loads and creates `config.ini`.
-- `ollama_agent/settings/mcp/`: MCP server config parsing and lifecycle.
-- `ollama_agent/streaming/`: Streaming events and renderers (console + TUI).
-- `ollama_agent/tasks/manager.py`: Saved prompt “tasks” management.
-- `ollama_agent/tui/app.py`: Main Textual application.
-- `ollama_agent/tui/screens/`: Textual screens (sessions, tasks, create task, etc.).
-- `ollama_agent/vision/screen.py`: Screen vision (screenshot capture and attachment).
-- `screenshots/`: Documentation screenshots used in the README.
-- `pyproject.toml`: Project metadata and dependencies.
-
-### Contributions
-
-Contributions are welcome! Please follow these steps:
-
-1. Fork the repository.
-2. Create a new branch for your feature or bug fix.
-3. Make your changes.
-4. Add tests for your changes if applicable (currently, the project needs more tests!).
-5. Submit a pull request with a clear description of your changes.
+- `ollama_agent/streaming/`: Streaming events and renderers (console).

@@ -1,6 +1,6 @@
 """Shared type definitions and utilities for the application."""
 
-from typing import Any, Dict, Literal, TypedDict
+from typing import Any, Literal, TypedDict
 
 # Reasoning effort types
 ReasoningEffortValue = Literal["low", "medium", "high", "disabled"]
@@ -23,7 +23,7 @@ class Mem0ToolResult(TypedDict, total=False):
     """Result from Mem0 operations."""
 
     success: bool
-    data: Dict[str, Any]
+    data: dict[str, Any]
     error: str
 
 
@@ -32,7 +32,7 @@ def extract_text(content: Any) -> str:
     if isinstance(content, str):
         return content
     if isinstance(content, list):
-        return " ".join(filter(None, (extract_text(item) for item in content))).strip()
+        return " ".join(filter(None, map(extract_text, content))).strip()
     if isinstance(content, dict):
         return extract_text(content.get("text") or content.get("content"))
     return ""

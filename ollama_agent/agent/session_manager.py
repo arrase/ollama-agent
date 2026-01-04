@@ -7,7 +7,7 @@ import logging
 import sqlite3
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from agents import SQLiteSession
 
@@ -36,13 +36,12 @@ class SessionManager:
         return SQLiteSession(session_id, self._db_path)
 
     @staticmethod
-    def _preview(message_blob: Optional[str]) -> str:
-        if not message_blob:
+    def _preview(blob: str | None) -> str:
+        if not blob:
             return "No messages"
         try:
-            data = json.loads(message_blob)
-            content = data.get("content") if isinstance(data, dict) else data
-            return (extract_text(content) or str(data))[:50]
+            data = json.loads(blob)
+            return (extract_text(data.get("content") if isinstance(data, dict) else data) or str(data))[:50]
         except (json.JSONDecodeError, TypeError):
             return "No content"
 
@@ -55,10 +54,10 @@ class SessionManager:
         self.session_id = session_id
         self.session = self._make_session(session_id)
 
-    def get_session_id(self) -> Optional[str]:
+    def get_session_id(self) -> str | None:
         return self.session_id
 
-    def get_session(self) -> Optional[SQLiteSession]:
+    def get_session(self) -> SQLiteSession | None:
         return self.session
 
     def list_sessions(self) -> list[dict[str, Any]]:
@@ -67,31 +66,18 @@ class SessionManager:
         try:
             with self._connect() as conn:
                 rows = conn.execute("""
-                    SELECT s.session_id, COUNT(m.id) AS message_count,
-                           s.created_at, s.updated_at,
-                           (SELECT message_data FROM agent_messages
-                            WHERE session_id = s.session_id ORDER BY created_at ASC LIMIT 1) AS first_message_data
-                    FROM agent_sessions s
-                    LEFT JOIN agent_messages m ON s.session_id = m.session_id
-                    GROUP BY s.session_id ORDER BY s.updated_at DESC
-                """).fetchall()
-            return [
-                {
-                    "session_id": r["session_id"],
-                    "message_count": int(r["message_count"] or 0),
-                    # Keep these timestamp fields stable for UI consumers.
-                    "first_message": r["created_at"] or "Unknown",
-                    "last_message": r["updated_at"] or "Unknown",
-                    # Preview should be derived from the first stored message payload.
-                    "preview": self._preview(r["first_message_data"]),
-                }
-                for r in rows
-            ]
+                    SELECT s.session_id, COUNT(m.id) AS message_count, s.created_at, s.updated_at,
+                           (SELECT message_data FROM agent_messages WHERE session_id = s.session_id ORDER BY created_at ASC LIMIT 1) AS first_message_data
+                    FROM agent_sessions s LEFT JOIN agent_messages m ON s.session_id = m.session_id
+                    GROUP BY s.session_id ORDER BY s.updated_at DESC""").fetchall()
+            return [{"session_id": r["session_id"], "message_count": int(r["message_count"] or 0),
+                     "first_message": r["created_at"] or "Unknown", "last_message": r["updated_at"] or "Unknown",
+                     "preview": self._preview(r["first_message_data"])} for r in rows]
         except Exception as e:
             logger.error("Error listing sessions: %s", e)
             return []
 
-    async def get_session_history(self, session_id: Optional[str] = None) -> list[Any]:
+    async def get_session_history(self, session_id: str | None = None) -> list[Any]:
         sid = session_id or self.session_id
         if not sid:
             return []

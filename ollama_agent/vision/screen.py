@@ -22,31 +22,14 @@ class CapturedImage:
 
 
 def extract_display_tokens(prompt: str) -> tuple[str, list[int]]:
-    """Extract @dpN tokens from a prompt.
-
-    Returns (clean_prompt, display_indexes).
-
-    Example: "describe @dp0" -> ("describe", [0])
-    """
+    """Extract @dpN tokens from a prompt. Returns (clean_prompt, display_indexes)."""
     indexes: list[int] = []
-
-    def _repl(match: re.Match[str]) -> str:
-        idx = int(match.group("index"))
-        indexes.append(idx)
+    def _repl(m: re.Match[str]) -> str:
+        indexes.append(int(m.group("index")))
         return ""
-
-    cleaned = _DISPLAY_TOKEN_RE.sub(_repl, prompt)
-    cleaned = " ".join(cleaned.split())
-
-    # keep order, remove duplicates
+    cleaned = " ".join(_DISPLAY_TOKEN_RE.sub(_repl, prompt).split())
     seen: set[int] = set()
-    unique: list[int] = []
-    for idx in indexes:
-        if idx not in seen:
-            seen.add(idx)
-            unique.append(idx)
-
-    return cleaned, unique
+    return cleaned, [i for i in indexes if not (i in seen or seen.add(i))]  # type: ignore[func-returns-value]
 
 
 def _require_display_session() -> None:
