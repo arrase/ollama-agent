@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
+import re
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
@@ -28,15 +28,9 @@ class Task:
 
     @classmethod
     def from_dict(cls, data: dict) -> Task:
-        return cls(
-            title=str(data.get("title", "")),
-            prompt=str(data.get("prompt", "")),
-            model=str(data.get("model", "")),
-            reasoning_effort=str(data.get("reasoning_effort", DEFAULT_REASONING_EFFORT)),
-        )
-
-    def to_yaml(self) -> str:
-        return yaml.safe_dump(asdict(self), allow_unicode=True)
+        get = data.get
+        return cls(str(get("title", "")), str(get("prompt", "")), str(get("model", "")),
+                   str(get("reasoning_effort", DEFAULT_REASONING_EFFORT)))
 
 
 class TaskManager:
@@ -52,22 +46,29 @@ class TaskManager:
         return self.tasks_dir / f"{task_id}.yaml"
 
     @staticmethod
-    def _hash(text: str) -> str:
-        return hashlib.blake2s(text.encode(), digest_size=4).hexdigest()
-
-    def save(self, task: Task) -> str:
-        """Save a task and return its ID."""
-        task_id = self._hash(task.title)
-        self._path(task_id).write_text(task.to_yaml(), encoding="utf-8")
+    def validate_task_id(task_id: str) -> str:
+        """Validate task_id: letters, numbers, underscore, dash only."""
+        task_id = (task_id or "").strip()
+        if not task_id or not re.fullmatch(r"[A-Za-z0-9_-]+", task_id):
+            raise ValueError("Invalid task_id. Use only letters, numbers, '_' and '-'.")
         return task_id
 
-    def _load_matches(self, pattern: str) -> list[tuple[str, Task]]:
-        """Load tasks matching a filename glob pattern."""
-        return [
-            (p.stem, task)
-            for p in self.tasks_dir.glob(pattern)
-            if (task := self.load(p.stem))
-        ]
+    def save(self, task_id: str, task: Task, *, overwrite: bool = False) -> str:
+        """Save a task and return its ID."""
+        task_id = self.validate_task_id(task_id)
+        path = self._path(task_id)
+        if path.exists() and not overwrite:
+            raise FileExistsError(f"Task already exists: {task_id}")
+        path.write_text(yaml.safe_dump(asdict(task), allow_unicode=True), encoding="utf-8")
+        return task_id
+
+    def find_matches(self, prefix: str) -> list[tuple[str, Task]]:
+        """Return all tasks whose id starts with prefix."""
+        if not (prefix := (prefix or "").strip()):
+            return []
+        if (task := self.load(prefix)) is not None:  # Fast-path: exact match
+            return [(prefix, task)]
+        return [(p.stem, t) for p in self.tasks_dir.glob(f"{prefix}*.yaml") if (t := self.load(p.stem))]
 
     def load(self, task_id: str) -> Task | None:
         """Load a task by ID."""
@@ -85,22 +86,12 @@ class TaskManager:
         try:
             self._path(task_id).unlink()
             return True
-        except FileNotFoundError:
-            return False
-        except Exception as e:
-            logger.error("Error deleting task %s: %s", task_id, e)
+        except (FileNotFoundError, OSError) as e:
+            if isinstance(e, OSError):
+                logger.error("Error deleting task %s: %s", task_id, e)
             return False
 
     def list_all(self) -> list[tuple[str, Task]]:
         """List all tasks sorted by title."""
-        tasks = self._load_matches("*.yaml")
+        tasks = [(p.stem, t) for p in self.tasks_dir.glob("*.yaml") if (t := self.load(p.stem))]
         return sorted(tasks, key=lambda x: x[1].title.lower())
-
-    def find_by_prefix(self, prefix: str) -> tuple[str, Task] | None:
-        """Find a task by ID prefix. Returns None if ambiguous or not found."""
-        matches = self._load_matches(f"{prefix}*.yaml")
-        if len(matches) == 1:
-            return matches[0]
-        if matches:
-            logger.warning("Ambiguous prefix '%s': %s", prefix, [m[0] for m in matches])
-        return None

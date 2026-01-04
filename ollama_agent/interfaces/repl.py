@@ -11,7 +11,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 from ..agent import OllamaAgent
-from ..tasks.commands import CLIContext, delete_task, list_tasks, run_task
+from ..tasks.commands import CLIContext, create_task, delete_task, list_tasks, run_task
 
 
 class OllamaREPL:
@@ -28,7 +28,7 @@ class OllamaREPL:
             })
         )
         # We need a context for reusing task commands
-        self.ctx = CLIContext(agent_factory)
+        self.ctx = CLIContext(agent_factory, console=self.console)
         self.active_agent: OllamaAgent | None = None
 
     async def cleanup(self) -> None:
@@ -52,7 +52,10 @@ class OllamaREPL:
         try:
             while True:
                 try:
-                    user_input = await self.session.prompt_async(HTML("<b>>>> </b>"))
+                    user_input = await self.session.prompt_async(
+                        HTML("<b>>>> </b>"),
+                        multiline=False,
+                    )
                     user_input = user_input.strip()
 
                     if not user_input:
@@ -92,12 +95,72 @@ class OllamaREPL:
                 if not args:
                     self.console.print("[red]Usage: /task-run <task_id>[/red]")
                     return
-                await run_task(self.ctx, args[0])
+                try:
+                    await run_task(self.ctx, args[0])
+                except SystemExit:
+                    return
             case "/task-delete":
                 if not args:
                     self.console.print("[red]Usage: /task-delete <task_id>[/red]")
                     return
-                delete_task(self.ctx, args[0])
+                try:
+                    delete_task(self.ctx, args[0])
+                except SystemExit:
+                    return
+            case "/task-create":
+                if not args:
+                    self.console.print(
+                        "[red]Usage: /task-create <task_id> [--force][/red]"
+                    )
+                    return
+
+                task_id = args[0]
+                force = "--force" in args[1:]
+
+                title = (await self.session.prompt_async(HTML("<b>title> </b>"))).strip()
+
+                model = (
+                    await self.session.prompt_async(
+                        HTML(f"<b>model</b> (default: {self.model})> ")
+                    )
+                ).strip()
+                if not model:
+                    model = self.model
+
+                effort = (
+                    await self.session.prompt_async(
+                        HTML(f"<b>effort</b> (default: {self.effort})> ")
+                    )
+                ).strip()
+                if not effort:
+                    effort = self.effort
+
+                self.console.print(
+                    "[dim]Enter the task prompt (multiline). Finish with Esc+Enter.[/dim]"
+                )
+
+                buf = self.session.default_buffer
+                old_multiline = buf.multiline
+                try:
+                    task_prompt = await self.session.prompt_async(
+                        HTML("<b>prompt> </b>"),
+                        multiline=True,
+                    )
+                finally:
+                    buf.multiline = old_multiline
+
+                try:
+                    create_task(
+                        self.ctx,
+                        task_id,
+                        title=title,
+                        prompt=task_prompt,
+                        model=model,
+                        reasoning_effort=effort,
+                        force=force,
+                    )
+                except SystemExit:
+                    return
             case "/new":
                 if self.active_agent:
                     await self.active_agent.cleanup()
@@ -162,6 +225,7 @@ class OllamaREPL:
         [green]/exit[/green], [green]/quit[/green]  Exit the REPL
         [green]/clear[/green]         Clear the screen
         [green]/tasks[/green]         List saved tasks
+        [green]/task-create[/green]   Create a task (Usage: /task-create <id> [--force])
         [green]/task-run[/green]      Run a saved task (Usage: /task-run <id>)
         [green]/task-delete[/green]   Delete a saved task (Usage: /task-delete <id>)
         [green]/new[/green]           Start a new chat session (clears context)

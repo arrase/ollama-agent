@@ -111,9 +111,30 @@ ollama-agent -t 60 -p "Run a long-running task"
 
 Tasks are saved prompts that can be executed repeatedly.
 
-**Create a Task (manual):**
+**Create a Task (CLI):**
 
-**Note**: there is currently no CLI/REPL command that creates tasks for you; the supported approach is to create these YAML files directly.
+```bash
+ollama-agent task-create <task_id> \
+    --title "My task title" \
+    --task-prompt "Do the thing" \
+    --task-model "gpt-oss:20b" \
+    --task-effort "medium"
+```
+
+- Use `--force` to overwrite an existing task.
+- `task_id` must be filesystem-safe (letters, numbers, `_`, `-`).
+
+**Create a Task (REPL):**
+
+Inside the REPL:
+
+```text
+/task-create <task_id>
+```
+
+The REPL will prompt you for title/model/effort and then lets you enter a **multiline** prompt (finish with Esc+Enter).
+
+**Create a Task (manual YAML):**
 
 Tasks are stored as YAML files in `~/.ollama-agent/tasks/`. To create one, add a new file named `<task_id>.yaml` in that directory.
 
