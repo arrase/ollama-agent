@@ -270,10 +270,10 @@ class OllamaREPL:
             for msg in history[-10:]:  # Show last 10 messages
                 if msg["role"] == "user":
                     content = msg["content"][:200] + "..." if len(msg["content"]) > 200 else msg["content"]
-                    self.console.print(f"[bold blue]You:[/bold blue] {content}")
+                    self.console.print(f"[bold blue]>>>[/bold blue] {content}")
                 else:
                     content = msg["content"][:300] + "..." if len(msg["content"]) > 300 else msg["content"]
-                    self.console.print(f"[bold green]Agent:[/bold green] {content}")
+                    self.console.print(f"{content}")
                 self.console.print()
             
             if len(history) > 10:
@@ -318,43 +318,66 @@ class OllamaREPL:
                 reasoning_effort=self.effort,
             )
 
-        self.console.print("[bold green]Agent:[/bold green]")
-
         full_response = ""
-        with Live(
+        reasoning_active = False
+        response_banner_shown = False
+        live = Live(
             console=self.console,
             refresh_per_second=12,
             vertical_overflow="visible",
-        ) as live:
-            try:
-                async for payload in self.active_agent.run_async_streamed(prompt):
-                    msg_type = payload.get("type")
-                    if msg_type == "text_delta":
-                        content = payload["content"]
-                        full_response += content
-                        live.update(Markdown(full_response))
-                    elif msg_type == "reasoning_delta":
-                        pass
-                    elif msg_type == "tool_call":
-                        live.stop()
+        )
+        try:
+            async for payload in self.active_agent.run_async_streamed(prompt):
+                msg_type = payload.get("type")
+                if msg_type == "text_delta":
+                    # End reasoning block if active
+                    if reasoning_active:
+                        reasoning_active = False
+                        self.console.print()
+                    # Show banner before first text (like ConsoleStreamingRenderer)
+                    if not response_banner_shown:
+                        self.console.print()
+                        response_banner_shown = True
+                        live.start()
+                    content = payload["content"]
+                    full_response += content
+                    live.update(Markdown(full_response))
+                elif msg_type == "reasoning_delta":
+                    if not reasoning_active:
                         self.console.print(
-                            f"[bold magenta]tool -> {payload.get('name')}...[/bold magenta]"
+                            "\n[bold magenta]🧠 Thinking:[/bold magenta] ", end=""
                         )
-                        live.start()
-                    elif msg_type == "tool_output":
-                        live.stop()
-                        self.console.print(f"[dim]<- {payload.get('output')}[/dim]")
-                        live.start()
-                    elif msg_type == "error":
-                        live.stop()
-                        self.console.print(f"[red]{payload['content']}[/red]")
-                        live.start()
+                        reasoning_active = True
+                    self.console.print(
+                        payload.get("content", ""), end="", style="dim italic magenta"
+                    )
+                elif msg_type == "tool_call":
+                    if reasoning_active:
+                        reasoning_active = False
+                        self.console.print()
+                    live.stop()
+                    self.console.print(
+                        f"\n[bold magenta]tool -> {payload.get('name')}...[/bold magenta]"
+                    )
+                elif msg_type == "tool_output":
+                    self.console.print(f"[dim]<- {payload.get('output')}[/dim]")
+                elif msg_type == "error":
+                    live.stop()
+                    self.console.print(f"[red]{payload['content']}[/red]")
 
-                live.update(Markdown(full_response))
+            # End reasoning block if still active at the end
+            if reasoning_active:
+                self.console.print()
+            if not response_banner_shown:
+                self.console.print()
+                live.start()
+            live.update(Markdown(full_response))
 
-            except Exception as e:
-                live.stop()
-                self.console.print(f"[red]Error running agent: {e}[/red]")
+        except Exception as e:
+            live.stop()
+            self.console.print(f"[red]Error running agent: {e}[/red]")
+        finally:
+            live.stop()
 
         self.console.print()
 

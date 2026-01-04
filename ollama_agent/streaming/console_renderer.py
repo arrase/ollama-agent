@@ -69,7 +69,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
 
     def _ensure_banner(self) -> None:
         if not self._agent_banner_shown:
-            self.console.print("\n[bold green]Agent:[/bold green]")
+            self.console.print()
             self._agent_banner_shown = True
 
     def _end_reasoning(self) -> None:
