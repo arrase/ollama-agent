@@ -35,8 +35,6 @@ ollama pull nomic-embed-text:latest
 
 ## Installation
 
-Before you begin, ensure you have a running instance of [Ollama](https://ollama.com/) or another compatible API server.
-
 For end-users, the recommended way to install `ollama-agent` is using `pipx`, which installs the application in an isolated environment.
 
 ```bash
