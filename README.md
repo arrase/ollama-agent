@@ -2,6 +2,19 @@
 
 Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to interact with local AI models through an Ollama-compatible API. It provides a persistent chat experience, session management, and the ability to execute local shell commands, turning your local models into helpful assistants for your daily tasks.
 
+## Features
+
+- **Interactive REPL**: A modern, terminal-based chat interface with Markdown rendering and slash commands.
+- **Non-Interactive CLI**: Execute single prompts directly from your command line for quick queries.
+- **Ollama Integration**: Connects to any Ollama-compatible API endpoint.
+- **Screen Vision (Screenshots)**: Attach monitor screenshots in prompts using `@dpN` for visual context.
+- **Tool-Powered**: The agent can execute shell commands, allowing it to interact with your local environment to perform tasks.
+- **Delegated MCP Agents**: Each configured MCP server can run through its own lightweight agent with custom model and instructions.
+- **Session Management**: Conversations are automatically saved and can be reloaded, deleted, or switched between.
+- **Task Management**: Save frequently used prompts as "tasks" and execute them with a simple command.
+- **Configurable**: Easily configure the model, API endpoint, and agent reasoning effort.
+- **Mem0 Memory Layer**: Persistent memory backed by Mem0 + Qdrant, exposed through function-calling tools.
+
 ## Prerequisites (Important)
 
 Before installing/running the app, make sure you have:
@@ -19,19 +32,6 @@ docker info
 # Required embeddings model (default)
 ollama pull nomic-embed-text:latest
 ```
-
-## Features
-
-- **Interactive REPL**: A modern, terminal-based chat interface with Markdown rendering and slash commands.
-- **Non-Interactive CLI**: Execute single prompts directly from your command line for quick queries.
-- **Ollama Integration**: Connects to any Ollama-compatible API endpoint.
-- **Screen Vision (Screenshots)**: Attach monitor screenshots in prompts using `@dpN` for visual context.
-- **Tool-Powered**: The agent can execute shell commands, allowing it to interact with your local environment to perform tasks.
-- **Delegated MCP Agents**: Each configured MCP server can run through its own lightweight agent with custom model and instructions.
-- **Session Management**: Conversations are automatically saved and can be reloaded, deleted, or switched between.
-- **Task Management**: Save frequently used prompts as "tasks" and execute them with a simple command.
-- **Configurable**: Easily configure the model, API endpoint, and agent reasoning effort.
-- **Mem0 Memory Layer**: Persistent memory backed by Mem0 + Qdrant, exposed through function-calling tools.
 
 ## Installation
 
