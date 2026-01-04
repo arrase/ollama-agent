@@ -113,6 +113,8 @@ Tasks are saved prompts that can be executed repeatedly.
 
 **Create a Task (manual):**
 
+**Note**: there is currently no CLI/REPL command that creates tasks for you; the supported approach is to create these YAML files directly.
+
 Tasks are stored as YAML files in `~/.ollama-agent/tasks/`. To create one, add a new file named `<task_id>.yaml` in that directory.
 
 - `<task_id>` can be any filesystem-safe ID (it will show up in `task-list` and is what you pass to `task-run`).
@@ -126,8 +128,6 @@ prompt: "List all files in this repository as a tree."
 model: "gpt-oss:20b"
 reasoning_effort: "medium"  # low|medium|high|disabled
 ```
-
-**Note**: there is currently no CLI/REPL command that creates tasks for you; the supported approach is to create these YAML files directly.
 
 **List Tasks:**
 
