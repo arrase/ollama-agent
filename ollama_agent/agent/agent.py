@@ -6,13 +6,13 @@ import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, AsyncGenerator, Optional, cast
+from typing import Any, AsyncGenerator, cast
 
 from agents import Agent, ModelSettings, RunConfig, Runner, set_default_openai_api, set_default_openai_client, set_tracing_disabled
 from openai import AsyncOpenAI
 from openai.types.shared import Reasoning
 
-from ..core import ModelCapabilityError, ReasoningEffortValue, ensure_model_supports_tools, validate_reasoning_effort
+from ..core import ReasoningEffortValue, ensure_model_supports_tools, validate_reasoning_effort
 from ..memory import Mem0Settings, MemoryManager
 from ..settings import RunningMCPServer, cleanup_mcp_servers, initialize_mcp_servers, load_instructions
 from ..streaming import event_payloads
@@ -48,13 +48,6 @@ def _merge_session_history_and_input(history: list[Any], new_input: list[Any]) -
     # openai-agents requires this callback when using `session` with list inputs.
     return list(history) + list(new_input)
 
-
-def _run_config_for_input(prepared_input: object) -> RunConfig | None:
-    if isinstance(prepared_input, list):
-        return RunConfig(session_input_callback=_merge_session_history_and_input)
-    return None
-
-
 @dataclass(slots=True)
 class OllamaAgent:
     """AI agent backed by Ollama-compatible API with tool support."""
@@ -63,8 +56,8 @@ class OllamaAgent:
     base_url: str = "http://localhost:11434/v1/"
     api_key: str = "ollama"
     reasoning_effort: ReasoningEffortValue = "medium"
-    database_path: Optional[Path] = None
-    mcp_config_path: Optional[Path] = None
+    database_path: Path | None = None
+    mcp_config_path: Path | None = None
     mem0_settings: Mem0Settings = field(default_factory=Mem0Settings)
 
     _mcp_servers: list[RunningMCPServer] = field(default_factory=list, init=False)
@@ -93,14 +86,10 @@ class OllamaAgent:
         set_default_openai_client(self._client, use_for_tracing=False)
 
     def _get_tools(self) -> list[Any]:
-        return list(BUILTIN_TOOLS) + [
-            srv.agent.as_tool(
-                tool_name=srv.tool_name or f"use_{srv.name}",
-                tool_description=srv.tool_description or f"Delegate to '{srv.name}' MCP agent",
-            )
-            for srv in self._mcp_servers
-            if srv.agent
-        ]
+        mcp_tools = [srv.agent.as_tool(tool_name=srv.tool_name or f"use_{srv.name}",
+                     tool_description=srv.tool_description or f"Delegate to '{srv.name}' MCP agent")
+                     for srv in self._mcp_servers if srv.agent]
+        return [*BUILTIN_TOOLS, *mcp_tools]
 
     def _create_agent(self, model: str, effort: ReasoningEffortValue) -> Agent:
         ensure_model_supports_tools(model)
@@ -140,7 +129,7 @@ class OllamaAgent:
         finally:
             await self.cleanup()
 
-    def _resolve(self, model: Optional[str], effort: Optional[str]) -> tuple[str, ReasoningEffortValue]:
+    def _resolve(self, model: str | None, effort: str | None) -> tuple[str, ReasoningEffortValue]:
         return (
             model or self.model,
             validate_reasoning_effort(effort) if effort else self.reasoning_effort,
@@ -148,22 +137,23 @@ class OllamaAgent:
 
     def _prepare_run(
         self,
-        model: Optional[str],
-        reasoning_effort: Optional[str],
+        model: str | None,
+        reasoning_effort: str | None,
     ) -> tuple[Agent, Any]:
         m, e = self._resolve(model, reasoning_effort)
         return self._create_agent(m, e), self._session_manager.get_session()
 
     def _prepare_input(self, prompt: object) -> tuple[object, RunConfig | None]:
         prepared = _maybe_attach_screen_context(prompt)
-        return prepared, _run_config_for_input(prepared)
+        run_config = (
+            RunConfig(session_input_callback=_merge_session_history_and_input)
+            if isinstance(prepared, list)
+            else None
+        )
+        return prepared, run_config
 
-    async def _ensure_ready(self) -> None:
-        """Ensure the agent is initialized (callers manage cleanup separately)."""
+    async def run_async(self, prompt: object, model: str | None = None, reasoning_effort: str | None = None) -> str:
         await self.initialize()
-
-    async def run_async(self, prompt: object, model: Optional[str] = None, reasoning_effort: Optional[str] = None) -> str:
-        await self._ensure_ready()
         try:
             agent, session = self._prepare_run(model, reasoning_effort)
             prepared_input, run_config = self._prepare_input(prompt)
@@ -179,9 +169,9 @@ class OllamaAgent:
             return f"Error: {exc}"
 
     async def run_async_streamed(
-        self, prompt: object, model: Optional[str] = None, reasoning_effort: Optional[str] = None
+        self, prompt: object, model: str | None = None, reasoning_effort: str | None = None
     ) -> AsyncGenerator[dict[str, Any], None]:
-        await self._ensure_ready()
+        await self.initialize()
         try:
             agent, session = self._prepare_run(model, reasoning_effort)
             prepared_input, run_config = self._prepare_input(prompt)

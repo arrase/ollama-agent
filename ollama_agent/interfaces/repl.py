@@ -1,7 +1,6 @@
 """REPL interface for Ollama Agent."""
 
-import asyncio
-from typing import Callable, Optional
+from typing import Callable
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import HTML
@@ -12,7 +11,6 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 from ..agent import OllamaAgent
-from ..execution.runner import run_non_interactive
 from ..tasks.commands import CLIContext, delete_task, list_tasks, run_task
 
 
@@ -31,7 +29,7 @@ class OllamaREPL:
         )
         # We need a context for reusing task commands
         self.ctx = CLIContext(agent_factory)
-        self.active_agent: Optional[OllamaAgent] = None
+        self.active_agent: OllamaAgent | None = None
 
     async def cleanup(self) -> None:
         """Clean up resources."""
@@ -81,37 +79,32 @@ class OllamaREPL:
         cmd = parts[0].lower()
         args = parts[1:]
 
-        if cmd in ("/exit", "/quit"):
-            raise EOFError
-        if cmd == "/help":
-            self.show_help()
-            return
-        if cmd == "/clear":
-            self.console.clear()
-            return
-        if cmd == "/tasks":
-            list_tasks(self.ctx)
-            return
-        if cmd == "/task-run":
-            if not args:
-                self.console.print("[red]Usage: /task-run <task_id>[/red]")
-                return
-            await run_task(self.ctx, args[0])
-            return
-        if cmd == "/task-delete":
-            if not args:
-                self.console.print("[red]Usage: /task-delete <task_id>[/red]")
-                return
-            delete_task(self.ctx, args[0])
-            return
-        if cmd == "/new":
-            if self.active_agent:
-                await self.active_agent.cleanup()
-            self.active_agent = None
-            self.console.print("[green]Started new session.[/green]")
-            return
-
-        self.console.print(f"[red]Unknown command:[/red] {cmd}")
+        match cmd:
+            case "/exit" | "/quit":
+                raise EOFError
+            case "/help":
+                self.show_help()
+            case "/clear":
+                self.console.clear()
+            case "/tasks":
+                list_tasks(self.ctx)
+            case "/task-run":
+                if not args:
+                    self.console.print("[red]Usage: /task-run <task_id>[/red]")
+                    return
+                await run_task(self.ctx, args[0])
+            case "/task-delete":
+                if not args:
+                    self.console.print("[red]Usage: /task-delete <task_id>[/red]")
+                    return
+                delete_task(self.ctx, args[0])
+            case "/new":
+                if self.active_agent:
+                    await self.active_agent.cleanup()
+                self.active_agent = None
+                self.console.print("[green]Started new session.[/green]")
+            case _:
+                self.console.print(f"[red]Unknown command:[/red] {cmd}")
 
     async def handle_chat(self, prompt: str) -> None:
         """Send prompt to the agent and stream response."""
@@ -124,43 +117,42 @@ class OllamaREPL:
         self.console.print("[bold green]Agent:[/bold green]")
 
         full_response = ""
-        live = Live(
+        with Live(
             console=self.console,
             refresh_per_second=12,
             vertical_overflow="visible",
-        )
-        live.start()
+        ) as live:
+            try:
+                async for payload in self.active_agent.run_async_streamed(prompt):
+                    msg_type = payload.get("type")
+                    if msg_type == "text_delta":
+                        content = payload["content"]
+                        full_response += content
+                        live.update(Markdown(full_response))
+                    elif msg_type == "reasoning_delta":
+                        pass
+                    elif msg_type == "tool_call":
+                        live.stop()
+                        self.console.print(
+                            f"[bold magenta]tool -> {payload.get('name')}...[/bold magenta]"
+                        )
+                        live.start()
+                    elif msg_type == "tool_output":
+                        live.stop()
+                        self.console.print(f"[dim]<- {payload.get('output')}[/dim]")
+                        live.start()
+                    elif msg_type == "error":
+                        live.stop()
+                        self.console.print(f"[red]{payload['content']}[/red]")
+                        live.start()
 
-        try:
-            async for payload in self.active_agent.run_async_streamed(prompt):
-                msg_type = payload.get("type")
-                if msg_type == "text_delta":
-                    content = payload["content"]
-                    full_response += content
-                    live.update(Markdown(full_response))
-                elif msg_type == "reasoning_delta":
-                    pass
-                elif msg_type == "tool_call":
-                    live.stop()
-                    self.console.print(f"[bold magenta]tool -> {payload.get('name')}...[/bold magenta]")
-                    live.start()
-                elif msg_type == "tool_output":
-                    live.stop()
-                    self.console.print(f"[dim]<- {payload.get('output')}[/dim]")
-                    live.start()
-                elif msg_type == "error":
-                    live.stop()
-                    self.console.print(f"[red]{payload['content']}[/red]")
-                    live.start()
+                live.update(Markdown(full_response))
 
-            live.update(Markdown(full_response))
+            except Exception as e:
+                live.stop()
+                self.console.print(f"[red]Error running agent: {e}[/red]")
 
-        except Exception as e:
-            live.stop()
-            self.console.print(f"[red]Error running agent: {e}[/red]")
-        finally:
-            live.stop()
-            self.console.print()
+        self.console.print()
 
     def show_help(self) -> None:
         """Show available commands."""

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from contextvars import ContextVar
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from agents import function_tool
 
@@ -16,50 +16,21 @@ if TYPE_CHECKING:
 
 # Context variables for thread-safe access
 _tool_timeout: ContextVar[int] = ContextVar("tool_timeout", default=30)
-_memory_manager: ContextVar[Optional["MemoryManager"]] = ContextVar("memory_manager", default=None)
+_memory_manager: ContextVar[MemoryManager | None] = ContextVar("memory_manager", default=None)
 
-
-def set_tool_timeout(timeout: int) -> None:
-    """Set timeout for command execution."""
-    _tool_timeout.set(timeout)
-
-
-def get_tool_timeout() -> int:
-    """Get current command timeout."""
-    return _tool_timeout.get()
-
-
-def set_memory_manager(manager: Optional["MemoryManager"]) -> None:
-    """Set the active MemoryManager."""
-    _memory_manager.set(manager)
-
-
-def get_memory_manager() -> Optional["MemoryManager"]:
-    """Get the current MemoryManager."""
-    return _memory_manager.get()
+set_tool_timeout = _tool_timeout.set
+get_tool_timeout = _tool_timeout.get
+set_memory_manager = _memory_manager.set
+get_memory_manager = _memory_manager.get
 
 
 @function_tool
 def execute_command(command: str) -> CommandResult:
-    """Execute a shell command and return the result.
-
-    Args:
-        command: The shell command to execute.
-
-    Returns:
-        A CommandResult with success status, stdout, stderr, and exit code.
-    """
+    """Execute a shell command and return the result."""
     timeout = get_tool_timeout()
     try:
-        proc = subprocess.run(
-            command, shell=True, capture_output=True, text=True, timeout=timeout
-        )
-        return {
-            "success": proc.returncode == 0,
-            "stdout": proc.stdout,
-            "stderr": proc.stderr,
-            "exit_code": proc.returncode,
-        }
+        p = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=timeout)
+        return {"success": p.returncode == 0, "stdout": p.stdout, "stderr": p.stderr, "exit_code": p.returncode}
     except subprocess.TimeoutExpired:
         return {"success": False, "stdout": "", "stderr": f"Timeout after {timeout}s", "exit_code": -1}
     except Exception as e:
@@ -87,7 +58,7 @@ def mem0_add_memory(memory: str) -> Mem0ToolResult:
 
 
 @function_tool
-def mem0_search_memory(query: str, limit: Optional[int] = None) -> Mem0ToolResult:
+def mem0_search_memory(query: str, limit: int | None = None) -> Mem0ToolResult:
     """Search stored memories relevant to the query."""
     return _mem0_call("search", query, limit=limit)
 

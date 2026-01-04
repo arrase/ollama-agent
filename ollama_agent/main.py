@@ -11,18 +11,12 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = get_config()
-    timeout = args.builtin_tool_timeout if args.builtin_tool_timeout is not None else cfg.builtin_tool_timeout
-    set_tool_timeout(timeout)
+    set_tool_timeout(cfg.builtin_tool_timeout if args.builtin_tool_timeout is None else args.builtin_tool_timeout)
 
     if handle_cli_commands(args, create_agent):
         return
 
-    # Resolve model/effort via REPL logic or pass default None to let REPL/agent handle it
-    repl = OllamaREPL(
-        agent_factory=create_agent,
-        model=args.model or cfg.model,
-        effort=args.effort or cfg.reasoning_effort
-    )
+    repl = OllamaREPL(agent_factory=create_agent, model=args.model or cfg.model, effort=args.effort or cfg.reasoning_effort)
     asyncio.run(repl.run())
 
 

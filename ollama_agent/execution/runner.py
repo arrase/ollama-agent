@@ -11,11 +11,10 @@ async def run_non_interactive(
     prompt: object,
 ) -> None:
     """Stream agent output to the console."""
-    renderer = ConsoleStreamingRenderer(Console())
     async with agent.lifespan():
         await stream_agent_events_with_renderer(
             agent,
             prompt,
-            renderer,
+            ConsoleStreamingRenderer(Console()),
             ignore={"agent_update"},
         )

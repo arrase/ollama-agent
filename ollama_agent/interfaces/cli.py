@@ -6,7 +6,7 @@ from typing import Callable
 
 from ..agent import OllamaAgent
 from ..core import ALLOWED_REASONING_EFFORTS
-from ..execution.runner import run_non_interactive
+from ..execution import run_non_interactive
 from ..tasks.commands import CLIContext, delete_task, list_tasks, run_task
 
 
@@ -56,11 +56,6 @@ def create_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-async def run_prompt(ctx: CLIContext, prompt: str, model: str | None, effort: str | None) -> None:
-    agent = ctx.agent_factory(model=model, reasoning_effort=effort)
-    await run_non_interactive(agent, prompt)
-
-
 def handle_cli_commands(args: argparse.Namespace, agent_factory: Callable[..., OllamaAgent]) -> bool:
     """Handle CLI commands and return True if a command was handled."""
     ctx = CLIContext(agent_factory)
@@ -75,7 +70,8 @@ def handle_cli_commands(args: argparse.Namespace, agent_factory: Callable[..., O
         return True
 
     if args.prompt:
-        asyncio.run(run_prompt(ctx, args.prompt, args.model, args.effort))
+        agent = ctx.agent_factory(model=args.model, reasoning_effort=args.effort)
+        asyncio.run(run_non_interactive(agent, args.prompt))
         return True
 
     return False

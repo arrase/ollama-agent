@@ -1,13 +1,12 @@
 """Shared task management commands used by CLI and REPL."""
 
-import asyncio
 from typing import Callable
 
 from rich.console import Console
 from rich.table import Table
 
 from ..agent import OllamaAgent
-from ..execution.runner import run_non_interactive
+from ..execution import run_non_interactive
 from .manager import Task, TaskManager
 
 

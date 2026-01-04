@@ -1,7 +1,6 @@
 """Agent factory for creating OllamaAgent instances."""
 
 from dataclasses import replace
-from typing import Optional
 
 from ..core import ModelCapabilityError, validate_reasoning_effort
 from ..memory import Mem0InitializationError, Mem0Settings
@@ -9,7 +8,7 @@ from ..settings import get_config
 from .agent import OllamaAgent
 
 
-def create_agent(model: Optional[str] = None, reasoning_effort: Optional[str] = None) -> OllamaAgent:
+def create_agent(model: str | None = None, reasoning_effort: str | None = None) -> OllamaAgent:
     """Create OllamaAgent from config with optional overrides."""
     cfg = get_config()
     target_model = model or cfg.model

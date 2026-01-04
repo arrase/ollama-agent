@@ -23,8 +23,8 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         self._live_active = False
 
     def on_text_delta(self, event: dict[str, Any]) -> None:
-        self._conclude_reasoning()
-        self._ensure_agent_banner()
+        self._end_reasoning()
+        self._ensure_banner()
         self._start_live()
         self._text.append(event.get("content", ""))
         self.live.update(Markdown("".join(self._text)))
@@ -37,11 +37,9 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         self.console.print(event.get("content", ""), end="", style="dim italic magenta")
 
     def on_tool_call(self, event: dict[str, Any]) -> None:
-        self._conclude_reasoning()
+        self._end_reasoning()
         self._stop_live()
-        self.console.print(
-            f"\n[yellow]🔧 Calling tool: {event.get('name', 'unknown')}[/yellow]"
-        )
+        self.console.print(f"\n[yellow]🔧 Calling tool: {event.get('name', 'unknown')}[/yellow]")
 
     def on_tool_output(self, event: dict[str, Any]) -> None:
         self._stop_live()
@@ -69,12 +67,12 @@ class ConsoleStreamingRenderer(StreamingRenderer):
             self.live.stop()
             self._live_active = False
 
-    def _ensure_agent_banner(self) -> None:
+    def _ensure_banner(self) -> None:
         if not self._agent_banner_shown:
             self.console.print("\n[bold green]Agent:[/bold green]")
             self._agent_banner_shown = True
 
-    def _conclude_reasoning(self) -> None:
+    def _end_reasoning(self) -> None:
         if self._reasoning:
             self._reasoning = False
             self.console.print()

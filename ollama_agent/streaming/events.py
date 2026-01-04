@@ -62,10 +62,13 @@ async def stream_agent_events(
     model: str | None = None,
     reasoning_effort: str | None = None,
     ignore: Iterable[str] | None = None,
+    auto_close: bool = False,
 ) -> None:
-    """Dispatch streamed agent events to the provided renderer."""
+    """Dispatch streamed agent events to the provided renderer.
+    
+    If auto_close=True, renderer.close() is called in finally block.
+    """
     ignored = set(ignore or ())
-
     try:
         async for event in agent.run_async_streamed(
             prompt, model=model, reasoning_effort=reasoning_effort
@@ -75,31 +78,13 @@ async def stream_agent_events(
     except Exception as exc:
         logger.exception("Error streaming agent events: %s", exc)
         renderer.on_error({"type": "error", "content": str(exc)})
-
-
-async def stream_agent_events_with_renderer(
-    agent: "OllamaAgent",
-    prompt: object,
-    renderer: "StreamingRenderer",
-    *,
-    model: str | None = None,
-    reasoning_effort: str | None = None,
-    ignore: Iterable[str] | None = None,
-) -> None:
-    """Stream events and always close the renderer.
-
-    This helper intentionally does NOT manage agent lifecycle; callers decide
-    whether to wrap in `agent.lifespan()` (CLI) or manage initialize/cleanup
-    externally (TUI).
-    """
-    try:
-        await stream_agent_events(
-            agent,
-            prompt,
-            renderer,
-            model=model,
-            reasoning_effort=reasoning_effort,
-            ignore=ignore,
-        )
     finally:
-        renderer.close()
+        if auto_close:
+            renderer.close()
+
+
+# Backwards-compatible alias
+async def stream_agent_events_with_renderer(
+    agent: "OllamaAgent", prompt: object, renderer: "StreamingRenderer", **kwargs
+) -> None:
+    await stream_agent_events(agent, prompt, renderer, auto_close=True, **kwargs)

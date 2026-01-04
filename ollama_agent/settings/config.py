@@ -78,26 +78,15 @@ def _write_default_config(path: Path, defaults: Config) -> None:
 
 def _load_mem0(section: dict[str, str]) -> Mem0Settings:
     """Load Mem0 settings from config section."""
-    defaults = Mem0Settings()
+    d = Mem0Settings()
+    g, c = section.get, _safe_cast
     return Mem0Settings(
-        collection_name=section.get("collection_name", defaults.collection_name),
-        host=section.get("host", defaults.host),
-        port=_safe_cast(section.get("port"), int, defaults.port),
-        embedding_model_dims=_safe_cast(
-            section.get("embedding_model_dims"), int, defaults.embedding_model_dims
-        ),
-        llm_model=section.get("llm_model", defaults.llm_model),
-        llm_temperature=_safe_cast(
-            section.get("llm_temperature"), float, defaults.llm_temperature
-        ),
-        llm_max_tokens=_safe_cast(
-            section.get("llm_max_tokens"), int, defaults.llm_max_tokens
-        ),
-        ollama_base_url=section.get("ollama_base_url", defaults.ollama_base_url),
-        embedder_model=section.get("embedder_model", defaults.embedder_model),
-        embedder_base_url=section.get("embedder_base_url", defaults.embedder_base_url),
-        user_id=section.get("user_id", defaults.user_id),
-    )
+        collection_name=g("collection_name", d.collection_name), host=g("host", d.host),
+        port=c(g("port"), int, d.port), embedding_model_dims=c(g("embedding_model_dims"), int, d.embedding_model_dims),
+        llm_model=g("llm_model", d.llm_model), llm_temperature=c(g("llm_temperature"), float, d.llm_temperature),
+        llm_max_tokens=c(g("llm_max_tokens"), int, d.llm_max_tokens), ollama_base_url=g("ollama_base_url", d.ollama_base_url),
+        embedder_model=g("embedder_model", d.embedder_model), embedder_base_url=g("embedder_base_url", d.embedder_base_url),
+        user_id=g("user_id", d.user_id))
 
 
 def get_config(config_dir: Path | None = None) -> Config:
