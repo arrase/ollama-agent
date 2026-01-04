@@ -6,6 +6,7 @@ import json
 import logging
 import sqlite3
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,17 @@ class SessionManager:
         return SQLiteSession(session_id, self._db_path)
 
     @staticmethod
+    def _to_local_time(utc_str: str | None) -> str:
+        """Convert UTC timestamp string to local timezone."""
+        if not utc_str:
+            return "Unknown"
+        try:
+            utc_dt = datetime.fromisoformat(utc_str.replace("Z", "+00:00"))
+            return (utc_dt if utc_dt.tzinfo else utc_dt.replace(tzinfo=timezone.utc)).astimezone().strftime("%Y-%m-%d %H:%M")
+        except (ValueError, TypeError):
+            return utc_str[:16] if len(utc_str) > 16 else utc_str
+
+    @staticmethod
     def _preview(blob: str | None) -> str:
         if not blob:
             return "No messages"
@@ -51,14 +63,10 @@ class SessionManager:
         return self.session_id
 
     def load_session(self, session_id: str) -> None:
-        self.session_id = session_id
-        self.session = self._make_session(session_id)
+        self.session_id, self.session = session_id, self._make_session(session_id)
 
-    def get_session_id(self) -> str | None:
-        return self.session_id
-
-    def get_session(self) -> SQLiteSession | None:
-        return self.session
+    def get_session_id(self) -> str | None: return self.session_id
+    def get_session(self) -> SQLiteSession | None: return self.session
 
     def list_sessions(self, limit: int = 10, offset: int = 0) -> list[dict[str, Any]]:
         if not self.storage_path.exists():
@@ -71,7 +79,8 @@ class SessionManager:
                     FROM agent_sessions s LEFT JOIN agent_messages m ON s.session_id = m.session_id
                     GROUP BY s.session_id ORDER BY s.updated_at DESC LIMIT ? OFFSET ?""", (limit, offset)).fetchall()
             return [{"session_id": r["session_id"], "message_count": int(r["message_count"] or 0),
-                     "first_message": r["created_at"] or "Unknown", "last_message": r["updated_at"] or "Unknown",
+                     "first_message": self._to_local_time(r["created_at"]),
+                     "last_message": self._to_local_time(r["updated_at"]),
                      "preview": self._preview(r["first_message_data"])} for r in rows]
         except Exception as e:
             logger.error("Error listing sessions: %s", e)
@@ -85,25 +94,16 @@ class SessionManager:
         try:
             with self._connect() as conn:
                 rows = conn.execute(
-                    "SELECT message_data FROM agent_messages WHERE session_id = ? ORDER BY created_at ASC",
-                    (sid,)
+                    "SELECT message_data FROM agent_messages WHERE session_id = ? ORDER BY created_at ASC", (sid,)
                 ).fetchall()
-            
             messages: list[dict[str, str]] = []
             for row in rows:
                 if not row["message_data"]:
                     continue
                 try:
                     data = json.loads(row["message_data"])
-                    role = data.get("role")
-                    if role == "user":
-                        content = extract_text(data.get("content", ""))
-                        if content:
-                            messages.append({"role": "user", "content": content})
-                    elif role == "assistant":
-                        content = extract_text(data.get("content", ""))
-                        if content:
-                            messages.append({"role": "assistant", "content": content})
+                    if (role := data.get("role")) in ("user", "assistant") and (content := extract_text(data.get("content", ""))):
+                        messages.append({"role": role, "content": content})
                 except (json.JSONDecodeError, TypeError):
                     continue
             return messages
@@ -112,8 +112,7 @@ class SessionManager:
             return []
 
     async def get_session_history(self, session_id: str | None = None) -> list[Any]:
-        sid = session_id or self.session_id
-        if not sid:
+        if not (sid := session_id or self.session_id):
             return []
         try:
             return list(await self._make_session(sid).get_items())
@@ -133,4 +132,5 @@ class SessionManager:
             return True
         except Exception as e:
             logger.error("Error deleting session: %s", e)
+            return False
             return False

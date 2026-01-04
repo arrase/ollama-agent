@@ -27,10 +27,9 @@ class Task:
         self.reasoning_effort = validate_reasoning_effort(self.reasoning_effort)
 
     @classmethod
-    def from_dict(cls, data: dict) -> Task:
-        get = data.get
-        return cls(str(get("title", "")), str(get("prompt", "")), str(get("model", "")),
-                   str(get("reasoning_effort", DEFAULT_REASONING_EFFORT)))
+    def from_dict(cls, d: dict) -> Task:
+        return cls(str(d.get("title", "")), str(d.get("prompt", "")), str(d.get("model", "")),
+                   str(d.get("reasoning_effort", DEFAULT_REASONING_EFFORT)))
 
 
 class TaskManager:
@@ -55,8 +54,7 @@ class TaskManager:
 
     def save(self, task_id: str, task: Task, *, overwrite: bool = False) -> str:
         """Save a task and return its ID."""
-        task_id = self.validate_task_id(task_id)
-        path = self._path(task_id)
+        path = self._path(task_id := self.validate_task_id(task_id))
         if path.exists() and not overwrite:
             raise FileExistsError(f"Task already exists: {task_id}")
         path.write_text(yaml.safe_dump(asdict(task), allow_unicode=True), encoding="utf-8")

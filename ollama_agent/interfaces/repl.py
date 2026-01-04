@@ -164,9 +164,16 @@ class OllamaREPL:
             case "/new":
                 if self.active_agent:
                     self.active_agent.session_manager.reset_session()
-                    self.console.print("[green]Started new session.[/green]")
-                else:
-                    self.console.print("[yellow]No active session to reset.[/yellow]")
+                self.console.clear()
+                self.console.print(
+                    Panel(
+                        f"[bold green]Ollama Agent REPL[/bold green]\n"
+                        f"Model: [cyan]{self.model}[/cyan] | Effort: [cyan]{self.effort}[/cyan]\n"
+                        "Type [bold]/help[/bold] for commands or just start typing to chat.",
+                        title="New Session",
+                        border_style="green",
+                    )
+                )
             case "/sessions":
                 page = int(args[0]) if args and args[0].isdigit() else 1
                 await self._list_sessions(page=page)

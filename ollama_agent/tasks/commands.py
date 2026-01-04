@@ -18,77 +18,55 @@ class CLIContext:
     console: Console = field(default_factory=Console)
     task_manager: TaskManager = field(default_factory=TaskManager)
 
+    def _find_or_exit(self, task_id: str) -> tuple[str, Task]:
+        matches = self.task_manager.find_matches(task_id)
+        if len(matches) != 1:
+            msg = f"Task not found: {task_id}" if not matches else \
+                  f"Ambiguous prefix: {task_id} -> {', '.join(t[0] for t in matches)}"
+            self.console.print(f"[red]{msg}[/red]")
+            raise SystemExit(1)
+        return matches[0]
 
-def find_task_or_exit(ctx: CLIContext, task_id: str) -> tuple[str, Task]:
-    matches = ctx.task_manager.find_matches(task_id)
-    if not matches:
-        ctx.console.print(f"[red]Task not found: {task_id}[/red]")
-        raise SystemExit(1)
-    if len(matches) > 1:
-        ctx.console.print(f"[red]Ambiguous task prefix:[/red] {task_id} -> {', '.join(tid for tid, _ in matches)}")
-        raise SystemExit(1)
-    return matches[0]
+    def _require(self, value: str, name: str) -> str:
+        if not (v := (value or "").strip().strip("\n")):
+            self.console.print(f"[red]{name} cannot be empty.[/red]")
+            raise SystemExit(1)
+        return v
 
 
 def list_tasks(ctx: CLIContext) -> None:
-    tasks = ctx.task_manager.list_all()
-    if not tasks:
+    if not (tasks := ctx.task_manager.list_all()):
         ctx.console.print("[yellow]No tasks found.[/yellow]")
         return
-
     table = Table(title="Saved Tasks", show_header=True, header_style="bold magenta")
-    table.add_column("ID", style="cyan", width=10)
-    table.add_column("Title", style="green")
-    table.add_column("Model", style="blue")
-    table.add_column("Effort", style="yellow")
-
-    for task_id, task in tasks:
-        table.add_row(task_id, task.title, task.model, task.reasoning_effort)
-
+    for col, style in [("ID", "cyan"), ("Title", "green"), ("Model", "blue"), ("Effort", "yellow")]:
+        table.add_column(col, style=style)
+    for tid, t in tasks:
+        table.add_row(tid, t.title, t.model, t.reasoning_effort)
     ctx.console.print(table)
 
 
 async def run_task(ctx: CLIContext, task_id: str) -> None:
-    found_id, task = find_task_or_exit(ctx, task_id)
-    ctx.console.print(f"[bold cyan]Executing task:[/bold cyan] {task.title} ({found_id})")
-    ctx.console.print(f"[bold blue]Prompt:[/bold blue] {task.prompt}")
-    ctx.console.print(
-        f"[bold]Model:[/bold] {task.model} | [bold]Effort:[/bold] {task.reasoning_effort}"
-    )
-    ctx.console.print("")
-
-    agent = ctx.agent_factory(model=task.model, reasoning_effort=task.reasoning_effort)
-    await run_non_interactive(agent, task.prompt)
+    tid, t = ctx._find_or_exit(task_id)
+    ctx.console.print(f"[bold cyan]Executing:[/bold cyan] {t.title} ({tid})\n"
+                      f"[bold blue]Prompt:[/bold blue] {t.prompt}\n"
+                      f"[bold]Model:[/bold] {t.model} | [bold]Effort:[/bold] {t.reasoning_effort}\n")
+    await run_non_interactive(ctx.agent_factory(model=t.model, reasoning_effort=t.reasoning_effort), t.prompt)
 
 
 def delete_task(ctx: CLIContext, task_id: str) -> None:
-    found_id, task = find_task_or_exit(ctx, task_id)
-    if ctx.task_manager.delete(found_id):
-        ctx.console.print(f"[green]Task deleted:[/green] {task.title} ({found_id})")
-    else:
-        ctx.console.print(f"[red]Error deleting task: {found_id}[/red]")
+    tid, t = ctx._find_or_exit(task_id)
+    msg = f"[green]Task deleted:[/green] {t.title} ({tid})" if ctx.task_manager.delete(tid) \
+          else f"[red]Error deleting task: {tid}[/red]"
+    ctx.console.print(msg)
 
 
-def _exit_if_empty(ctx: CLIContext, value: str, field: str) -> str:
-    if not (value := (value or "").strip()):
-        ctx.console.print(f"[red]{field} cannot be empty.[/red]")
-        raise SystemExit(1)
-    return value
-
-
-def create_task(
-    ctx: CLIContext, task_id: str, *, title: str, prompt: str, model: str,
-    reasoning_effort: str | None = None, force: bool = False,
-) -> None:
-    title = _exit_if_empty(ctx, title, "Title")
-    prompt = _exit_if_empty(ctx, prompt.strip("\n") if prompt else "", "Prompt")
-    model = _exit_if_empty(ctx, model, "Model")
-
-    task = Task(title=title, prompt=prompt, model=model,
-                reasoning_effort=reasoning_effort or "medium")
+def create_task(ctx: CLIContext, task_id: str, *, title: str, prompt: str, model: str,
+                reasoning_effort: str | None = None, force: bool = False) -> None:
+    task = Task(ctx._require(title, "Title"), ctx._require(prompt, "Prompt"),
+                ctx._require(model, "Model"), reasoning_effort or "medium")
     try:
-        saved_id = ctx.task_manager.save(task_id, task, overwrite=force)
-        ctx.console.print(f"[green]Task created:[/green] {task.title} ({saved_id})")
+        ctx.console.print(f"[green]Task created:[/green] {task.title} ({ctx.task_manager.save(task_id, task, overwrite=force)})")
     except FileExistsError:
         ctx.console.print(f"[red]Task already exists:[/red] {task_id} (use --force to overwrite)")
         raise SystemExit(1)

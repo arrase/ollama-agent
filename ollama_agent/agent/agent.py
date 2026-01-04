@@ -23,30 +23,19 @@ logger = logging.getLogger(__name__)
 
 
 def _maybe_attach_screen_context(prompt: object) -> object:
-    """If prompt is a string containing @dpN tokens, capture those displays and
-    convert the input into a Responses-style multimodal message list.
-    """
-    if not isinstance(prompt, str):
+    """Convert @dpN tokens in string prompts to multimodal input."""
+    if not isinstance(prompt, str) or "@dp" not in prompt:
         return prompt
-
-    if "@dp" not in prompt:
-        return prompt
-
-    # Lazy import to avoid requiring screenshot deps unless used.
     from ..vision import build_multimodal_responses_input, capture_display_as_base64, extract_display_tokens
-
     cleaned, displays = extract_display_tokens(prompt)
     if not displays:
         return prompt
-
-    images = [capture_display_as_base64(i) for i in displays]
-    return build_multimodal_responses_input(cleaned, images)
+    return build_multimodal_responses_input(cleaned, [capture_display_as_base64(i) for i in displays])
 
 
 def _merge_session_history_and_input(history: list[Any], new_input: list[Any]) -> list[Any]:
-    # Default behavior: append the new input items to the existing conversation history.
-    # openai-agents requires this callback when using `session` with list inputs.
-    return list(history) + list(new_input)
+    """Append new input to conversation history (required by openai-agents for list inputs)."""
+    return [*history, *new_input]
 
 @dataclass(slots=True)
 class OllamaAgent:
@@ -86,26 +75,16 @@ class OllamaAgent:
         set_default_openai_client(self._client, use_for_tracing=False)
 
     def _get_tools(self) -> list[Any]:
-        mcp_tools = [srv.agent.as_tool(tool_name=srv.tool_name or f"use_{srv.name}",
-                     tool_description=srv.tool_description or f"Delegate to '{srv.name}' MCP agent")
-                     for srv in self._mcp_servers if srv.agent]
-        return [*BUILTIN_TOOLS, *mcp_tools]
+        return [*BUILTIN_TOOLS, *(srv.agent.as_tool(
+            tool_name=srv.tool_name or f"use_{srv.name}",
+            tool_description=srv.tool_description or f"Delegate to '{srv.name}' MCP agent"
+        ) for srv in self._mcp_servers if srv.agent)]
 
     def _create_agent(self, model: str, effort: ReasoningEffortValue) -> Agent:
         ensure_model_supports_tools(model)
-        kwargs: dict[str, Any] = {
-            "name": "Ollama Assistant",
-            "instructions": self._instructions,
-            "model": model,
-            "tools": self._get_tools(),
-        }
-
-        if effort != "disabled":
-            kwargs["model_settings"] = ModelSettings(
-                reasoning=Reasoning(effort=cast(Any, effort))
-            )
-
-        return Agent(**kwargs)
+        settings = ModelSettings(reasoning=Reasoning(effort=cast(Any, effort))) if effort != "disabled" else None
+        return Agent(name="Ollama Assistant", instructions=self._instructions, model=model,
+                     tools=self._get_tools(), **(dict(model_settings=settings) if settings else {}))
 
     async def initialize(self) -> None:
         if self._initialized:
