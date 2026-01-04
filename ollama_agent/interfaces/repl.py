@@ -163,11 +163,145 @@ class OllamaREPL:
                     return
             case "/new":
                 if self.active_agent:
-                    await self.active_agent.cleanup()
-                self.active_agent = None
-                self.console.print("[green]Started new session.[/green]")
+                    self.active_agent.session_manager.reset_session()
+                    self.console.print("[green]Started new session.[/green]")
+                else:
+                    self.console.print("[yellow]No active session to reset.[/yellow]")
+            case "/sessions":
+                page = int(args[0]) if args and args[0].isdigit() else 1
+                await self._list_sessions(page=page)
+            case "/session-load":
+                if not args:
+                    self.console.print("[red]Usage: /session-load <session_id>[/red]")
+                    return
+                await self._load_session(args[0])
+            case "/session-delete":
+                if not args:
+                    self.console.print("[red]Usage: /session-delete <session_id>[/red]")
+                    return
+                await self._delete_session(args[0])
             case _:
                 self.console.print(f"[red]Unknown command:[/red] {cmd}")
+
+    async def _list_sessions(self, page: int = 1, per_page: int = 10) -> None:
+        """List saved sessions with pagination."""
+        # Ensure we have an agent to access the session manager
+        if not self.active_agent:
+            self.active_agent = self.agent_factory(
+                model=self.model,
+                reasoning_effort=self.effort,
+            )
+
+        offset = (page - 1) * per_page
+        sessions = self.active_agent.session_manager.list_sessions(limit=per_page, offset=offset)
+        
+        if not sessions:
+            if page == 1:
+                self.console.print("[yellow]No saved sessions found.[/yellow]")
+            else:
+                self.console.print(f"[yellow]No more sessions (page {page} is empty).[/yellow]")
+            return
+
+        current_id = self.active_agent.session_manager.get_session_id()
+
+        self.console.print(f"[bold]Sessions (page {page}):[/bold]")
+        self.console.print("[dim]─" * 60 + "[/dim]")
+        for i, s in enumerate(sessions, 1):
+            is_current = s["session_id"] == current_id
+            marker = " [green]◀ current[/green]" if is_current else ""
+            short_id = s["session_id"][:8]
+            preview = s["preview"][:40] + "..." if len(s["preview"]) > 40 else s["preview"]
+            self.console.print(
+                f"[cyan]{short_id}[/cyan] │ {s['message_count']:>3} msgs │ {s['last_message'][:16]} │ [dim]{preview}[/dim]{marker}"
+            )
+        self.console.print("[dim]─" * 60 + "[/dim]")
+        
+        nav_hint = f"/sessions {page + 1}" if len(sessions) == per_page else ""
+        if nav_hint:
+            self.console.print(f"[dim]Next page: {nav_hint} | Load: /session-load <id>[/dim]")
+        else:
+            self.console.print("[dim]Use /session-load <id> to continue a conversation[/dim]")
+
+    async def _load_session(self, session_id_prefix: str) -> None:
+        """Load a session and display its conversation history."""
+        # Ensure we have an agent to access the session manager
+        if not self.active_agent:
+            self.active_agent = self.agent_factory(
+                model=self.model,
+                reasoning_effort=self.effort,
+            )
+
+        sessions = self.active_agent.session_manager.list_sessions(limit=100)
+        matches = [s for s in sessions if s["session_id"].startswith(session_id_prefix)]
+
+        if not matches:
+            self.console.print(f"[red]No session found matching '{session_id_prefix}'[/red]")
+            return
+
+        if len(matches) > 1:
+            self.console.print(f"[yellow]Multiple sessions match '{session_id_prefix}':[/yellow]")
+            for m in matches[:5]:
+                self.console.print(f"  [cyan]{m['session_id'][:8]}[/cyan] - {m['preview'][:40]}")
+            return
+
+        target = matches[0]
+        
+        # Get conversation history BEFORE loading (to display it)
+        history = self.active_agent.session_manager.get_readable_history(target["session_id"])
+        
+        # Now load the session
+        self.active_agent.session_manager.load_session(target["session_id"])
+        
+        # Display header
+        self.console.print(f"\n[bold green]━━━ Session Loaded: {target['session_id'][:8]}... ━━━[/bold green]")
+        self.console.print(f"[dim]Messages: {target['message_count']} | Last active: {target['last_message']}[/dim]\n")
+        
+        # Display conversation history
+        if history:
+            self.console.print("[bold]Conversation History:[/bold]")
+            self.console.print("[dim]─" * 50 + "[/dim]")
+            for msg in history[-10:]:  # Show last 10 messages
+                if msg["role"] == "user":
+                    content = msg["content"][:200] + "..." if len(msg["content"]) > 200 else msg["content"]
+                    self.console.print(f"[bold blue]You:[/bold blue] {content}")
+                else:
+                    content = msg["content"][:300] + "..." if len(msg["content"]) > 300 else msg["content"]
+                    self.console.print(f"[bold green]Agent:[/bold green] {content}")
+                self.console.print()
+            
+            if len(history) > 10:
+                self.console.print(f"[dim]... and {len(history) - 10} earlier messages[/dim]\n")
+            self.console.print("[dim]─" * 50 + "[/dim]")
+        
+        self.console.print("[green]✓ Session loaded. Continue typing to resume the conversation.[/green]\n")
+
+    async def _delete_session(self, session_id_prefix: str) -> None:
+        """Delete a session by ID or prefix."""
+        # Ensure we have an agent to access the session manager
+        if not self.active_agent:
+            self.active_agent = self.agent_factory(
+                model=self.model,
+                reasoning_effort=self.effort,
+            )
+
+        sessions = self.active_agent.session_manager.list_sessions(limit=100)
+        matches = [s for s in sessions if s["session_id"].startswith(session_id_prefix)]
+
+        if not matches:
+            self.console.print(f"[red]No session found matching '{session_id_prefix}'[/red]")
+            return
+
+        if len(matches) > 1:
+            self.console.print(f"[yellow]Multiple sessions match '{session_id_prefix}':[/yellow]")
+            for m in matches[:5]:
+                self.console.print(f"  [cyan]{m['session_id'][:8]}[/cyan] - {m['preview'][:40]}")
+            return
+
+        target = matches[0]
+        if self.active_agent.session_manager.delete_session(target["session_id"]):
+            self.console.print(f"[green]✓ Deleted session:[/green] [cyan]{target['session_id'][:8]}[/cyan]")
+        else:
+            self.console.print("[red]Failed to delete session[/red]")
 
     async def handle_chat(self, prompt: str) -> None:
         """Send prompt to the agent and stream response."""
@@ -221,13 +355,20 @@ class OllamaREPL:
         """Show available commands."""
         help_text = """
         [bold]Available Commands:[/bold]
-        [green]/help[/green]          Show this help message
-        [green]/exit[/green], [green]/quit[/green]  Exit the REPL
-        [green]/clear[/green]         Clear the screen
-        [green]/tasks[/green]         List saved tasks
-        [green]/task-create[/green]   Create a task (Usage: /task-create <id> [--force])
-        [green]/task-run[/green]      Run a saved task (Usage: /task-run <id>)
-        [green]/task-delete[/green]   Delete a saved task (Usage: /task-delete <id>)
-        [green]/new[/green]           Start a new chat session (clears context)
+        [green]/help[/green]            Show this help message
+        [green]/exit[/green], [green]/quit[/green]    Exit the REPL
+        [green]/clear[/green]           Clear the screen
+
+        [bold]Session Management:[/bold]
+        [green]/new[/green]             Start a new chat session (clears context)
+        [green]/sessions[/green]        List saved sessions (Usage: /sessions [page])
+        [green]/session-load[/green]    Load a saved session (Usage: /session-load <id>)
+        [green]/session-delete[/green]  Delete a saved session (Usage: /session-delete <id>)
+
+        [bold]Task Management:[/bold]
+        [green]/tasks[/green]           List saved tasks
+        [green]/task-create[/green]     Create a task (Usage: /task-create <id> [--force])
+        [green]/task-run[/green]        Run a saved task (Usage: /task-run <id>)
+        [green]/task-delete[/green]     Delete a saved task (Usage: /task-delete <id>)
         """
         self.console.print(Panel(help_text.strip(), title="Help"))

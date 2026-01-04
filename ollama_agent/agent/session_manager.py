@@ -60,7 +60,7 @@ class SessionManager:
     def get_session(self) -> SQLiteSession | None:
         return self.session
 
-    def list_sessions(self) -> list[dict[str, Any]]:
+    def list_sessions(self, limit: int = 10, offset: int = 0) -> list[dict[str, Any]]:
         if not self.storage_path.exists():
             return []
         try:
@@ -69,12 +69,46 @@ class SessionManager:
                     SELECT s.session_id, COUNT(m.id) AS message_count, s.created_at, s.updated_at,
                            (SELECT message_data FROM agent_messages WHERE session_id = s.session_id ORDER BY created_at ASC LIMIT 1) AS first_message_data
                     FROM agent_sessions s LEFT JOIN agent_messages m ON s.session_id = m.session_id
-                    GROUP BY s.session_id ORDER BY s.updated_at DESC""").fetchall()
+                    GROUP BY s.session_id ORDER BY s.updated_at DESC LIMIT ? OFFSET ?""", (limit, offset)).fetchall()
             return [{"session_id": r["session_id"], "message_count": int(r["message_count"] or 0),
                      "first_message": r["created_at"] or "Unknown", "last_message": r["updated_at"] or "Unknown",
                      "preview": self._preview(r["first_message_data"])} for r in rows]
         except Exception as e:
             logger.error("Error listing sessions: %s", e)
+            return []
+
+    def get_readable_history(self, session_id: str | None = None) -> list[dict[str, str]]:
+        """Get conversation history as readable user/assistant messages."""
+        sid = session_id or self.session_id
+        if not sid or not self.storage_path.exists():
+            return []
+        try:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT message_data FROM agent_messages WHERE session_id = ? ORDER BY created_at ASC",
+                    (sid,)
+                ).fetchall()
+            
+            messages: list[dict[str, str]] = []
+            for row in rows:
+                if not row["message_data"]:
+                    continue
+                try:
+                    data = json.loads(row["message_data"])
+                    role = data.get("role")
+                    if role == "user":
+                        content = extract_text(data.get("content", ""))
+                        if content:
+                            messages.append({"role": "user", "content": content})
+                    elif role == "assistant":
+                        content = extract_text(data.get("content", ""))
+                        if content:
+                            messages.append({"role": "assistant", "content": content})
+                except (json.JSONDecodeError, TypeError):
+                    continue
+            return messages
+        except Exception as e:
+            logger.error("Error getting readable history: %s", e)
             return []
 
     async def get_session_history(self, session_id: str | None = None) -> list[Any]:
