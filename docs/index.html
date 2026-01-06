@@ -30,7 +30,6 @@
       <nav class="nav" aria-label="Navigation">
         <a href="#capabilities">Capabilities</a>
         <a href="#usage">Usage</a>
-        <a href="#architecture">Architecture</a>
         <a href="#configuration">Configuration</a>
       </nav>
     </div>
@@ -236,55 +235,7 @@
       </div>
     </section>
 
-    <section id="architecture" class="section">
-      <div class="container">
-        <h2>Architecture (overview)</h2>
-        <p class="sublead">Designed for streaming, tool calling, and local extensibility.</p>
 
-        <div class="arch">
-          <div class="arch__col">
-            <div class="arch__box">
-              <div class="arch__title">Interfaces</div>
-              <div class="arch__text">CLI (non-interactive) · REPL (chat + commands)</div>
-            </div>
-            <div class="arch__arrow" aria-hidden="true">↓</div>
-            <div class="arch__box">
-              <div class="arch__title">Runner / Streaming</div>
-              <div class="arch__text">Normalized events: text, reasoning, tools, errors</div>
-            </div>
-          </div>
-
-          <div class="arch__col">
-            <div class="arch__box">
-              <div class="arch__title">OllamaAgent</div>
-              <div class="arch__text">OpenAI-compatible client → Ollama endpoint · SQLite sessions · Instructions</div>
-            </div>
-            <div class="arch__arrow" aria-hidden="true">↓</div>
-            <div class="arch__box">
-              <div class="arch__title">Tools</div>
-              <div class="arch__text">Shell · Mem0 · RAG · (Optional) MCP servers as delegated tools</div>
-            </div>
-          </div>
-
-          <div class="arch__col">
-            <div class="arch__box">
-              <div class="arch__title">Data layers</div>
-              <div class="arch__text">Mem0/Qdrant (memory) · Local Qdrant (RAG) · ~./ollama-agent/*</div>
-            </div>
-            <div class="arch__arrow" aria-hidden="true">↓</div>
-            <div class="arch__box">
-              <div class="arch__title">Vision</div>
-              <div class="arch__text">@dpN → capture via mss → multimodal input</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="note">
-          <strong>Streaming:</strong> the console renderer shows Markdown deltas, “Thinking” (reasoning), and tool calls.
-          If a tool takes too long, a configurable timeout applies.
-        </div>
-      </div>
-    </section>
 
     <section id="configuration" class="section section--alt">
       <div class="container">
