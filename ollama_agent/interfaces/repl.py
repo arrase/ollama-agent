@@ -2,6 +2,7 @@
 
 from typing import Callable
 
+import ollama
 from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.styles import Style
@@ -11,6 +12,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 from ..agent import OllamaAgent
+from ..core import ModelCapabilityError, model_supports_tools
 from ..tasks.commands import CLIContext, create_task, delete_task, list_tasks, run_task
 
 
@@ -187,6 +189,13 @@ class OllamaREPL:
                     self.console.print("[red]Usage: /session-delete <session_id>[/red]")
                     return
                 await self._delete_session(args[0])
+            case "/models":
+                self._list_models()
+            case "/model-set":
+                if not args:
+                    self.console.print("[red]Usage: /model-set <model_name>[/red]")
+                    return
+                await self._set_model(args[0])
             case _:
                 self.console.print(f"[red]Unknown command:[/red] {cmd}")
 
@@ -310,6 +319,111 @@ class OllamaREPL:
         else:
             self.console.print("[red]Failed to delete session[/red]")
 
+    def _list_models(self) -> None:
+        """List available Ollama models."""
+        try:
+            response = ollama.list()
+            models = getattr(response, "models", [])
+            if not models:
+                self.console.print("[yellow]No models found in Ollama.[/yellow]")
+                return
+            
+            self.console.print("[bold]Available Models:[/bold]")
+            self.console.print("[dim]─" * 60 + "[/dim]")
+            for item in models:
+                name = getattr(item, "model", None)
+                if not name:
+                    continue
+                is_current = name == self.model
+                marker = " [green]◀ current[/green]" if is_current else ""
+                size_bytes = getattr(item, "size", 0)
+                size_gb = size_bytes / (1024 ** 3) if size_bytes else 0
+                size_str = f"{size_gb:.1f}GB" if size_gb else ""
+                
+                # Check tool support
+                try:
+                    has_tools = model_supports_tools(name)
+                    tool_icon = "[green]✓[/green]" if has_tools else "[red]✗[/red]"
+                except ModelCapabilityError:
+                    tool_icon = "[yellow]?[/yellow]"
+                
+                self.console.print(f"  {tool_icon} [cyan]{name}[/cyan] {size_str}{marker}")
+            self.console.print("[dim]─" * 60 + "[/dim]")
+            self.console.print("[dim]✓ = supports tools | Use /model-set <model> to switch[/dim]")
+        except Exception as e:
+            self.console.print(f"[red]Error listing models: {e}[/red]")
+
+    async def _set_model(self, model_name: str) -> None:
+        """Switch to a different model while preserving the conversation."""
+        # Verify the model exists
+        try:
+            response = ollama.list()
+            models = getattr(response, "models", [])
+            available = {getattr(m, "model", "") for m in models}
+            if model_name not in available:
+                self.console.print(f"[red]Model '{model_name}' not found.[/red]")
+                self.console.print("[dim]Use /model-list to see available models.[/dim]")
+                return
+        except Exception as e:
+            self.console.print(f"[red]Error checking model: {e}[/red]")
+            return
+
+        if model_name == self.model:
+            self.console.print(f"[yellow]Already using model '{model_name}'.[/yellow]")
+            return
+
+        # Check if model supports tools before switching
+        try:
+            if not model_supports_tools(model_name):
+                self.console.print(f"[red]Model '{model_name}' does not support tools.[/red]")
+                self.console.print("[dim]The agent requires tool support to function.[/dim]")
+                return
+        except ModelCapabilityError as e:
+            self.console.print(f"[red]Cannot verify model capabilities: {e}[/red]")
+            return
+
+        old_model = self.model
+        
+        # Preserve the current session state
+        old_session_manager = self.active_agent.session_manager if self.active_agent else None
+        old_session_id = old_session_manager.get_session_id() if old_session_manager else None
+
+        # Clean up the old agent
+        if self.active_agent:
+            await self.active_agent.cleanup()
+            self.active_agent = None
+
+        # Update to the new model
+        self.model = model_name
+
+        # Create and initialize the new agent
+        try:
+            self.active_agent = self.agent_factory(
+                model=self.model,
+                reasoning_effort=self.effort,
+            )
+            await self.active_agent.initialize()
+        except (ModelCapabilityError, SystemExit) as e:
+            self.console.print(f"[red]Failed to create agent with model '{model_name}': {e}[/red]")
+            # Restore old model
+            self.model = old_model
+            self.active_agent = self.agent_factory(
+                model=self.model,
+                reasoning_effort=self.effort,
+            )
+            if old_session_id:
+                self.active_agent.session_manager.load_session(old_session_id)
+            return
+
+        # Restore the session to continue the conversation
+        if old_session_id:
+            self.active_agent.session_manager.load_session(old_session_id)
+
+        self.console.print(
+            f"[green]✓ Switched from [cyan]{old_model}[/cyan] to [cyan]{model_name}[/cyan][/green]"
+        )
+        self.console.print("[dim]Conversation preserved. Continue chatting.[/dim]")
+
     async def handle_chat(self, prompt: str) -> None:
         """Send prompt to the agent and stream response."""
         if not self.active_agent:
@@ -388,6 +502,10 @@ class OllamaREPL:
         [green]/help[/green]            Show this help message
         [green]/exit[/green], [green]/quit[/green]    Exit the REPL
         [green]/clear[/green]           Clear the screen
+
+        [bold]Model Management:[/bold]
+        [green]/models[/green]          List available Ollama models
+        [green]/model-set[/green]       Switch to a different model (Usage: /model-set <model>)
 
         [bold]Session Management:[/bold]
         [green]/new[/green]             Start a new chat session (clears context)

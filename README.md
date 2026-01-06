@@ -67,6 +67,11 @@ The REPL provides a persistent chat session. You can use slash commands to manag
 - `/help`: Show available commands.
 - `/new`: Start a new chat session (clears context).
 - `/clear`: Clear the screen.
+- `/models`: List available Ollama models (shows tool support).
+- `/model-set <model>`: Switch to a different model (conversation preserved).
+- `/sessions`: List saved sessions.
+- `/session-load <id>`: Load a saved session.
+- `/session-delete <id>`: Delete a saved session.
 - `/tasks`: List saved tasks.
 - `/task-run <id>`: Run a specific task.
 - `/task-delete <id>`: Delete a specific task.
