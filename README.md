@@ -381,11 +381,13 @@ Interested in contributing? Great! Here’s how to get started.
 
 ### Project Structure
 
-- `ollama_agent/main.py`: Main entry point, handles CLI arguments and starts the REPL or non-interactive mode.
-- `ollama_agent/interfaces/repl.py`: Interactive Read-Eval-Print Loop implementation.
-- `ollama_agent/interfaces/cli.py`: CLI plumbing and subcommands.
-- `ollama_agent/execution/runner.py`: Non-interactive execution helper.
-- `ollama_agent/tasks/commands.py`: Shared task subcommands used by CLI and REPL.
-- `ollama_agent/agent/agent.py`: Core agent implementation (OpenAI Agents SDK).
-- `ollama_agent/streaming/`: Streaming events and renderers (console).
-- `ollama_agent/rag/`: RAG module for document storage and retrieval using Qdrant.
+- `ollama_agent/main.py`: Main application entry point.
+- `ollama_agent/interfaces/`: CLI and REPL interface implementations.
+- `ollama_agent/agent/`: Core agent logic, session management, and tools.
+- `ollama_agent/tasks/`: Task management system.
+- `ollama_agent/rag/`: RAG implementation for context retrieval.
+- `ollama_agent/memory/`: Mem0 integration for long-term memory.
+- `ollama_agent/vision/`: Screen vision and screenshot analysis.
+- `ollama_agent/execution/`: execution helpers.
+- `ollama_agent/streaming/`: Console output streaming and rendering.
+- `ollama_agent/settings/`: Application configuration handling.
