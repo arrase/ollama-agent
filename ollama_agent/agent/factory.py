@@ -20,6 +20,8 @@ def create_agent(model: str | None = None, reasoning_effort: str | None = None) 
     if not mem0.llm_model or mem0.llm_model == Mem0Settings().llm_model:
         mem0 = replace(mem0, llm_model=target_model)
 
+    rag = cfg.rag
+
     try:
         return OllamaAgent(
             model=target_model,
@@ -29,6 +31,7 @@ def create_agent(model: str | None = None, reasoning_effort: str | None = None) 
             database_path=cfg.database_path,
             mcp_config_path=cfg.mcp_config_path,
             mem0_settings=mem0,
+            rag_settings=rag,
         )
     except (ModelCapabilityError, Mem0InitializationError) as e:
         raise SystemExit(str(e)) from e

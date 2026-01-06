@@ -5,6 +5,7 @@ from .common import (
     DEFAULT_REASONING_EFFORT,
     CommandResult,
     Mem0ToolResult,
+    RAGToolResult,
     ReasoningEffortValue,
     extract_text,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "CommandResult",
     "DEFAULT_REASONING_EFFORT",
     "Mem0ToolResult",
+    "RAGToolResult",
     "ReasoningEffortValue",
     # Models
     "ModelCapabilityError",

@@ -9,6 +9,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 from ..memory.settings import Mem0Settings
+from ..rag.settings import RAGSettings
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ class Config:
     mcp_config_path: Path = field(
         default_factory=lambda: DEFAULT_MCP_CONFIG_PATH)
     mem0: Mem0Settings = field(default_factory=Mem0Settings)
+    rag: RAGSettings = field(default_factory=RAGSettings)
 
 
 def _safe_cast(value: Any, caster: type, default: Any) -> Any:
@@ -64,6 +66,19 @@ def _load_mem0(section: dict[str, str]) -> Mem0Settings:
         user_id=g("user_id", d.user_id))
 
 
+def _load_rag(section: dict[str, str]) -> RAGSettings:
+    d, g, c = RAGSettings(), section.get, _safe_cast
+    return RAGSettings(
+        rag_dir=g("rag_dir", d.rag_dir),
+        embedder_model=g("embedder_model", d.embedder_model),
+        embedder_base_url=g("embedder_base_url", d.embedder_base_url),
+        embedding_dims=c(g("embedding_dims"), int, d.embedding_dims),
+        default_top_k=c(g("default_top_k"), int, d.default_top_k),
+        chunk_size=c(g("chunk_size"), int, d.chunk_size),
+        chunk_overlap=c(g("chunk_overlap"), int, d.chunk_overlap),
+    )
+
+
 def get_config(config_dir: Path | None = None) -> Config:
     """Load configuration from file or create defaults."""
     config_dir = config_dir or DEFAULT_CONFIG_DIR
@@ -80,6 +95,7 @@ def get_config(config_dir: Path | None = None) -> Config:
         }
         parser["mem0"] = {k: str(v) for k, v in asdict(
             defaults.mem0).items() if not k.startswith("_")}
+        parser["rag"] = {k: str(v) for k, v in asdict(defaults.rag).items()}
         with config_path.open("w", encoding="utf-8") as f:
             parser.write(f)
         return defaults
@@ -88,6 +104,7 @@ def get_config(config_dir: Path | None = None) -> Config:
     parser.read(config_path)
     section = dict(parser["default"]) if parser.has_section("default") else {}
     mem0_section = dict(parser["mem0"]) if parser.has_section("mem0") else {}
+    rag_section = dict(parser["rag"]) if parser.has_section("rag") else {}
 
     return Config(
         model=section.get("model", defaults.model),
@@ -102,6 +119,7 @@ def get_config(config_dir: Path | None = None) -> Config:
         mcp_config_path=Path(section.get(
             "mcp_config_path", str(defaults.mcp_config_path))),
         mem0=_load_mem0(mem0_section),
+        rag=_load_rag(rag_section),
     )
 
 

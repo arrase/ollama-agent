@@ -14,9 +14,10 @@ from openai.types.shared import Reasoning
 
 from ..core import ReasoningEffortValue, ensure_model_supports_tools, validate_reasoning_effort
 from ..memory import Mem0Settings, MemoryManager
+from ..rag import RAGManager, RAGSettings
 from ..settings import RunningMCPServer, cleanup_mcp_servers, initialize_mcp_servers, load_instructions
 from ..streaming import event_payloads
-from .builtin_tools import BUILTIN_TOOLS, set_memory_manager
+from .builtin_tools import BUILTIN_TOOLS, set_memory_manager, set_rag_manager
 from .session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ class OllamaAgent:
     database_path: Path | None = None
     mcp_config_path: Path | None = None
     mem0_settings: Mem0Settings = field(default_factory=Mem0Settings)
+    rag_settings: RAGSettings = field(default_factory=RAGSettings)
 
     _mcp_servers: list[RunningMCPServer] = field(
         default_factory=list, init=False)
@@ -56,6 +58,7 @@ class OllamaAgent:
     _client: AsyncOpenAI = field(init=False)
     _session_manager: SessionManager = field(init=False)
     _memory_manager: MemoryManager = field(init=False)
+    _rag_manager: RAGManager = field(init=False)
     _initialized: bool = field(init=False, default=False)
 
     def __post_init__(self) -> None:
@@ -64,12 +67,18 @@ class OllamaAgent:
         self._instructions = load_instructions()
         self._init_client()
         self._memory_manager = MemoryManager(self.mem0_settings)
+        self._rag_manager = RAGManager(self.rag_settings)
         self._session_manager = SessionManager(self.database_path)
         set_memory_manager(self._memory_manager)
+        set_rag_manager(self._rag_manager)
 
     @property
     def session_manager(self) -> SessionManager:
         return self._session_manager
+
+    @property
+    def rag_manager(self) -> RAGManager:
+        return self._rag_manager
 
     def _init_client(self) -> None:
         set_tracing_disabled(True)

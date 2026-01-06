@@ -17,6 +17,8 @@ dependencies = [
     "mss",
     "Pillow",
     "prompt_toolkit",
+    "qdrant-client",
+    "rich",
 ]
 
 [project.scripts]

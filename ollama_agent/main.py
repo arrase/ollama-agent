@@ -18,7 +18,8 @@ def main() -> None:
         return
 
     repl = OllamaREPL(agent_factory=create_agent, model=args.model or cfg.model,
-                      effort=args.effort or cfg.reasoning_effort)
+                      effort=args.effort or cfg.reasoning_effort,
+                      rag_database=getattr(args, 'rag', None))
     asyncio.run(repl.run())
 
 

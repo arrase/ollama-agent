@@ -7,6 +7,18 @@ from typing import Callable
 from ..agent import OllamaAgent
 from ..core import ALLOWED_REASONING_EFFORTS
 from ..execution import run_non_interactive
+from ..rag import (
+    RAGContext,
+    RAGManager,
+    add_rag_directory,
+    add_rag_file,
+    create_rag_database,
+    delete_rag_database,
+    list_rag_databases,
+    load_rag_database,
+    search_rag,
+)
+from ..settings import get_config
 from ..tasks.commands import CLIContext, create_task, delete_task, list_tasks, run_task
 
 
@@ -31,6 +43,12 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         "--builtin-tool-timeout",
         type=int,
         help="Set built-in tool execution timeout in seconds",
+    )
+    parser.add_argument(
+        "--rag",
+        type=str,
+        metavar="DATABASE",
+        help="Load a RAG database for the session",
     )
 
 
@@ -82,6 +100,39 @@ def _add_task_subcommands(parser: argparse.ArgumentParser) -> None:
     task_delete_parser.add_argument(
         "task_id", type=str, help="Task ID or prefix to delete")
 
+    # RAG subcommands
+    subparsers.add_parser("rag-list", help="List all RAG databases")
+
+    rag_create_parser = subparsers.add_parser(
+        "rag-create", help="Create a new RAG database")
+    rag_create_parser.add_argument(
+        "name", type=str, help="Name for the new RAG database")
+
+    rag_delete_parser = subparsers.add_parser(
+        "rag-delete", help="Delete a RAG database")
+    rag_delete_parser.add_argument(
+        "name", type=str, help="Name or prefix of the database to delete")
+
+    rag_add_parser = subparsers.add_parser(
+        "rag-add", help="Add file(s) to a RAG database")
+    rag_add_parser.add_argument(
+        "database", type=str, help="Name of the RAG database")
+    rag_add_parser.add_argument(
+        "path", type=str, help="File or directory path to add")
+    rag_add_parser.add_argument(
+        "--dir", action="store_true",
+        help="Treat path as directory and add all files recursively")
+
+    rag_search_parser = subparsers.add_parser(
+        "rag-search", help="Search a RAG database")
+    rag_search_parser.add_argument(
+        "database", type=str, help="Name of the RAG database")
+    rag_search_parser.add_argument(
+        "query", type=str, help="Search query")
+    rag_search_parser.add_argument(
+        "-k", "--top-k", type=int, default=5,
+        help="Number of results to return (default: 5)")
+
 
 def create_argument_parser() -> argparse.ArgumentParser:
     """Create and configure argument parser."""
@@ -98,6 +149,19 @@ def create_argument_parser() -> argparse.ArgumentParser:
 def handle_cli_commands(args: argparse.Namespace, agent_factory: Callable[..., OllamaAgent]) -> bool:
     """Handle CLI commands and return True if a command was handled."""
     ctx = CLIContext(agent_factory)
+    cfg = get_config()
+    rag_ctx = RAGContext(rag_manager=RAGManager(cfg.rag))
+
+    def _rag_add() -> None:
+        load_rag_database(rag_ctx, args.database)
+        if args.dir:
+            add_rag_directory(rag_ctx, args.path)
+        else:
+            add_rag_file(rag_ctx, args.path)
+
+    def _rag_search() -> None:
+        load_rag_database(rag_ctx, args.database)
+        search_rag(rag_ctx, args.query, args.top_k)
 
     handlers = {
         "task-list": lambda: list_tasks(ctx),
@@ -112,6 +176,12 @@ def handle_cli_commands(args: argparse.Namespace, agent_factory: Callable[..., O
             reasoning_effort=(args.task_effort or args.effort),
             force=bool(args.force),
         ),
+        # RAG commands
+        "rag-list": lambda: list_rag_databases(rag_ctx),
+        "rag-create": lambda: create_rag_database(rag_ctx, args.name),
+        "rag-delete": lambda: delete_rag_database(rag_ctx, args.name),
+        "rag-add": _rag_add,
+        "rag-search": _rag_search,
     }
     if args.command in handlers:
         handlers[args.command]()
@@ -120,6 +190,13 @@ def handle_cli_commands(args: argparse.Namespace, agent_factory: Callable[..., O
     if args.prompt:
         agent = ctx.agent_factory(
             model=args.model, reasoning_effort=args.effort)
+        # Load RAG database if specified
+        if getattr(args, 'rag', None):
+            try:
+                agent.rag_manager.load_database(args.rag)
+            except Exception as e:
+                rag_ctx.console.print(f"[red]Failed to load RAG database '{args.rag}': {e}[/red]")
+                raise SystemExit(1)
         asyncio.run(run_non_interactive(agent, args.prompt))
         return True
 

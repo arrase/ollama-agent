@@ -27,6 +27,15 @@ class Mem0ToolResult(TypedDict, total=False):
     error: str
 
 
+class RAGToolResult(TypedDict, total=False):
+    """Result from RAG operations."""
+
+    success: bool
+    context: str
+    results: list[dict[str, Any]]
+    error: str
+
+
 def extract_text(content: Any) -> str:
     """Best-effort conversion of agent payload content into plain text."""
     if isinstance(content, str):

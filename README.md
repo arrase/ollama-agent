@@ -15,6 +15,7 @@ Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to i
 - **Task Management**: Save frequently used prompts as "tasks" and execute them with a simple command.
 - **Configurable**: Easily configure the model, API endpoint, and agent reasoning effort.
 - **Mem0 Memory Layer**: Persistent memory backed by Mem0 + Qdrant, exposed through function-calling tools.
+- **RAG (Retrieval Augmented Generation)**: Create and manage document databases for context-aware responses using local embeddings and Qdrant.
 
 ## Prerequisites (Important)
 
@@ -22,11 +23,11 @@ Before installing/running the app, make sure you have:
 
 - **Ollama (or compatible API) running**.
 - **A model that supports tool calling** (required). If the selected model does not support tools/function-calling, the app will exit.
-- **The embeddings model downloaded in Ollama**. By default, Mem0 uses `nomic-embed-text:latest`.
-- **Vision-capable model (optional)**: only required if you want to use Screen Vision (`@dpN`). If your model does not support vision, the app will still work but it won’t be able to “see” screenshots.
+- **The embeddings model downloaded in Ollama**. By default, Mem0 and RAG use `nomic-embed-text:latest`.
+- **Vision-capable model (optional)**: only required if you want to use Screen Vision (`@dpN`). If your model does not support vision, the app will still work but it won't be able to "see" screenshots.
 
 ```bash
-# Required embeddings model (default)
+# Required embeddings model (default for Mem0 and RAG)
 ollama pull nomic-embed-text:latest
 ```
 
@@ -76,6 +77,15 @@ The REPL provides a persistent chat session. You can use slash commands to manag
 - `/tasks`: List saved tasks.
 - `/task-run <id>`: Run a specific task.
 - `/task-delete <id>`: Delete a specific task.
+- `/rag`: Show current RAG database status.
+- `/rag-list`: List available RAG databases.
+- `/rag-create <name>`: Create a new RAG database.
+- `/rag-load <name>`: Load a RAG database for the session.
+- `/rag-unload`: Unload the current RAG database.
+- `/rag-add <path>`: Add a file to the loaded RAG database.
+- `/rag-add <path> --dir`: Add all files from a directory.
+- `/rag-search <query>`: Search the loaded RAG database.
+- `/rag-delete <name>`: Delete a RAG database.
 - `/exit`: Quit the application.
 
 ### Non-Interactive Mode
@@ -124,6 +134,7 @@ ollama-agent -t 60 -p "Run a long-running task"
 - `-p`, `--prompt`: Provide a prompt for non-interactive mode
 - `-e`, `--effort`: Set reasoning effort level (low, medium, high, disabled)
 - `-t`, `--builtin-tool-timeout`: Set built-in tool execution timeout in seconds
+- `--rag <database>`: Load a RAG database for the session
 
 ## Tasks
 
@@ -208,6 +219,130 @@ In `~/.ollama-agent/config.ini` under `[mem0]`:
 qdrant_path= ~/.ollama-agent/memory
 ```
 
+## RAG (Retrieval Augmented Generation)
+
+RAG allows the agent to search through your documents and use relevant context when answering questions. Documents are chunked, embedded using Ollama, and stored in local Qdrant databases.
+
+### RAG Databases
+
+RAG databases are stored in `~/.ollama-agent/rag/<name>/`. Each database is independent and can contain documents from different sources.
+
+**Create a Database (CLI):**
+
+```bash
+ollama-agent rag-create my-docs
+```
+
+**Create a Database (REPL):**
+
+```text
+/rag-create my-docs
+```
+
+**List Databases:**
+
+```bash
+ollama-agent rag-list
+# or inside REPL: /rag-list
+```
+
+**Delete a Database:**
+
+```bash
+ollama-agent rag-delete my-docs
+# or inside REPL: /rag-delete my-docs
+```
+
+### Adding Documents
+
+Before adding documents, you need to load a database (in REPL) or specify it in the command (CLI).
+
+**Add a Single File (CLI):**
+
+```bash
+ollama-agent rag-add my-docs /path/to/document.md
+```
+
+**Add a Directory (CLI):**
+
+```bash
+ollama-agent rag-add my-docs /path/to/folder --dir
+```
+
+**Add Files (REPL):**
+
+First load the database, then add files:
+
+```text
+/rag-load my-docs
+/rag-add /path/to/document.md
+/rag-add /path/to/folder --dir
+```
+
+Supported file types include: `.txt`, `.md`, `.py`, `.js`, `.ts`, `.json`, `.yaml`, `.yml`, `.html`, `.css`, `.xml`, `.csv`, `.rst`, `.ini`, `.cfg`, `.sh`
+
+### Searching Documents
+
+**Search (CLI):**
+
+```bash
+ollama-agent rag-search my-docs "how to configure the agent"
+# Limit results:
+ollama-agent rag-search my-docs "configuration" -k 3
+```
+
+**Search (REPL):**
+
+```text
+/rag-load my-docs
+/rag-search how to configure the agent
+/rag-search configuration -k 3
+```
+
+### Using RAG with Prompts
+
+Once a RAG database is loaded, the agent can automatically search it using the `rag_search` tool, which returns both formatted context and detailed results with relevance scores.
+
+**Start REPL with RAG:**
+
+```bash
+ollama-agent --rag my-docs
+```
+
+**Use RAG in Non-Interactive Mode:**
+
+```bash
+ollama-agent --rag my-docs -p "What does the documentation say about configuration?"
+```
+
+**Switch RAG Database (REPL):**
+
+```text
+/rag-load another-db
+```
+
+### Configure RAG
+
+In `~/.ollama-agent/config.ini` under `[rag]`:
+
+```ini
+[rag]
+rag_dir = ~/.ollama-agent/rag
+embedder_model = nomic-embed-text:latest
+embedder_base_url = http://localhost:11434
+embedding_dims = 768
+default_top_k = 5
+chunk_size = 500
+chunk_overlap = 50
+```
+
+- `rag_dir`: Directory where RAG databases are stored
+- `embedder_model`: Ollama model used for generating embeddings
+- `embedding_dims`: Dimension of the embedding vectors (must match the model)
+- `default_top_k`: Default number of results to return in searches
+- `chunk_size`: Maximum size of text chunks (in characters)
+- `chunk_overlap`: Overlap between consecutive chunks
+
 ## Agent Instructions
 
 You can customize the agent's behavior by editing the instructions file at `~/.ollama-agent/instructions.md`. This file is automatically created on first use with default instructions.
@@ -253,3 +388,4 @@ Interested in contributing? Great! Here’s how to get started.
 - `ollama_agent/tasks/commands.py`: Shared task subcommands used by CLI and REPL.
 - `ollama_agent/agent/agent.py`: Core agent implementation (OpenAI Agents SDK).
 - `ollama_agent/streaming/`: Streaming events and renderers (console).
+- `ollama_agent/rag/`: RAG module for document storage and retrieval using Qdrant.
