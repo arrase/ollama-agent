@@ -1,6 +1,7 @@
 """Mem0 settings configuration."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 
@@ -8,10 +9,13 @@ from typing import Any
 class Mem0Settings:
     """Configuration for Mem0 persistent memory integration."""
 
-    # Qdrant
+    # Qdrant (embedded/local)
     collection_name: str = "ollama-agent"
-    host: str = "localhost"
-    port: int = 6333
+    qdrant_path: str = field(default_factory=lambda: str(Path.home() / ".ollama-agent" / "memory"))
+    # Always persist Qdrant local storage across runs.
+    # This must not be user-configurable because disabling it causes data loss
+    # between separate CLI invocations.
+    _qdrant_on_disk: bool = field(default=True, init=False, repr=False, compare=False)
     embedding_model_dims: int = 768
 
     # LLM
@@ -29,14 +33,18 @@ class Mem0Settings:
 
     def to_mem0_config(self) -> dict[str, Any]:
         """Build Mem0 configuration dictionary."""
+        qdrant_cfg: dict[str, Any] = {
+            "collection_name": self.collection_name,
+            "path": self.qdrant_path,
+            "on_disk": self._qdrant_on_disk,
+            "embedding_model_dims": self.embedding_model_dims,
+        }
+
         return {
             "vector_store": {
                 "provider": "qdrant",
                 "config": {
-                    "collection_name": self.collection_name,
-                    "host": self.host,
-                    "port": self.port,
-                    "embedding_model_dims": self.embedding_model_dims,
+                    **qdrant_cfg,
                 },
             },
             "llm": {

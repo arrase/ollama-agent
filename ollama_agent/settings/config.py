@@ -70,7 +70,8 @@ def _write_default_config(path: Path, defaults: Config) -> None:
         "builtin_tool_timeout": str(defaults.builtin_tool_timeout),
         "mcp_config_path": str(defaults.mcp_config_path),
     }
-    parser["mem0"] = {k: str(v) for k, v in asdict(defaults.mem0).items()}
+    mem0_dict = {k: v for k, v in asdict(defaults.mem0).items() if not k.startswith("_")}
+    parser["mem0"] = {k: str(v) for k, v in mem0_dict.items()}
 
     with path.open("w", encoding="utf-8") as f:
         parser.write(f)
@@ -81,8 +82,9 @@ def _load_mem0(section: dict[str, str]) -> Mem0Settings:
     d = Mem0Settings()
     g, c = section.get, _safe_cast
     return Mem0Settings(
-        collection_name=g("collection_name", d.collection_name), host=g("host", d.host),
-        port=c(g("port"), int, d.port), embedding_model_dims=c(g("embedding_model_dims"), int, d.embedding_model_dims),
+        collection_name=g("collection_name", d.collection_name),
+        qdrant_path=g("qdrant_path", d.qdrant_path),
+        embedding_model_dims=c(g("embedding_model_dims"), int, d.embedding_model_dims),
         llm_model=g("llm_model", d.llm_model), llm_temperature=c(g("llm_temperature"), float, d.llm_temperature),
         llm_max_tokens=c(g("llm_max_tokens"), int, d.llm_max_tokens), ollama_base_url=g("ollama_base_url", d.ollama_base_url),
         embedder_model=g("embedder_model", d.embedder_model), embedder_base_url=g("embedder_base_url", d.embedder_base_url),

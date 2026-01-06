@@ -6,8 +6,6 @@ import logging
 from typing import Any
 
 from mem0 import Memory  # type: ignore
-
-from .bootstrap import MemoryBootstrapError, ensure_qdrant_service
 from .settings import Mem0Settings
 
 logger = logging.getLogger(__name__)
@@ -29,15 +27,6 @@ class MemoryManager:
     def __init__(self, settings: Mem0Settings) -> None:
         self.settings = settings
         self._memory: Memory | None = None
-        self._ensure_backend()
-
-    def _ensure_backend(self) -> None:
-        """Ensure Qdrant backend is available."""
-        try:
-            ensure_qdrant_service(self.settings)
-        except MemoryBootstrapError as e:
-            logger.error("Failed to start Qdrant: %s", e)
-            raise Mem0InitializationError(str(e)) from e
 
     @property
     def memory(self) -> Memory:

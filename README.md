@@ -21,14 +21,10 @@ Before installing/running the app, make sure you have:
 
 - **Ollama (or compatible API) running**.
 - **A model that supports tool calling** (required). If the selected model does not support tools/function-calling, the app will exit.
-- **Docker running** (Docker daemon available). On first run, the app will automatically pull and start the required backend container(s) for persistent memory (Qdrant).
 - **The embeddings model downloaded in Ollama**. By default, Mem0 uses `nomic-embed-text:latest`.
 - **Vision-capable model (optional)**: only required if you want to use Screen Vision (`@dpN`). If your model does not support vision, the app will still work but it won’t be able to “see” screenshots.
 
 ```bash
-# Required for persistent memory backend (Qdrant)
-docker info
-
 # Required embeddings model (default)
 ollama pull nomic-embed-text:latest
 ```
@@ -195,7 +191,16 @@ On the first run, the application will create a default configuration file at `~
 
 ## Persistent Memory with Mem0
 
-The agent can remember long-term facts by delegating storage and retrieval to [Mem0](https://github.com/mem0ai/mem0) running locally, backed by a Qdrant vector store that the agent automatically manages via Docker.
+The agent can remember long-term facts by delegating storage and retrieval to [Mem0](https://github.com/mem0ai/mem0) running locally, backed by embedded/local Qdrant storage.
+
+### Configure Mem0 storage path
+
+In `~/.ollama-agent/config.ini` under `[mem0]`:
+
+```ini
+[mem0]
+qdrant_path= ~/.ollama-agent/memory
+```
 
 ## Agent Instructions
 

@@ -16,7 +16,7 @@
 - Tool timeout: controlled via a `ContextVar` (`set_tool_timeout()`), configured from config/CLI in `ollama_agent/main.py`.
 - Model capability gate: `ollama_agent/core/models.py:ensure_model_supports_tools()` checks `ollama.show(model)` for capability `"tools"` before agent creation.
 - Screen vision: `@dpN` tokens in string prompts trigger screenshot capture and multimodal conversion in `_maybe_attach_screen_context()` (`ollama_agent/vision/screen.py`). On Linux requires `DISPLAY` or `WAYLAND_DISPLAY`.
-- Mem0 memory: `ollama_agent/memory/memory_manager.py` ensures a Qdrant backend via Docker (`ollama_agent/memory/bootstrap.py`, container name `ollama-agent-qdrant-<port>`). Tools are `mem0_add_memory` / `mem0_search_memory`.
+- Mem0 memory: `ollama_agent/memory/memory_manager.py` uses Mem0 + embedded/local Qdrant storage via `mem0.qdrant_path`. Tools are `mem0_add_memory` / `mem0_search_memory`.
 - MCP servers (optional): loaded from `~/.ollama-agent/mcp_servers.json` in `OllamaAgent.initialize()` via `ollama_agent/settings/mcp/lifecycle.py`; each server becomes a delegated tool named `use_<name>` by default.
 
 ## Project-specific conventions
