@@ -37,6 +37,7 @@ def _merge_session_history_and_input(history: list[Any], new_input: list[Any]) -
     """Append new input to conversation history (required by openai-agents for list inputs)."""
     return [*history, *new_input]
 
+
 @dataclass(slots=True)
 class OllamaAgent:
     """AI agent backed by Ollama-compatible API with tool support."""
@@ -49,7 +50,8 @@ class OllamaAgent:
     mcp_config_path: Path | None = None
     mem0_settings: Mem0Settings = field(default_factory=Mem0Settings)
 
-    _mcp_servers: list[RunningMCPServer] = field(default_factory=list, init=False)
+    _mcp_servers: list[RunningMCPServer] = field(
+        default_factory=list, init=False)
     _instructions: str = field(init=False, default="")
     _client: AsyncOpenAI = field(init=False)
     _session_manager: SessionManager = field(init=False)
@@ -57,7 +59,8 @@ class OllamaAgent:
     _initialized: bool = field(init=False, default=False)
 
     def __post_init__(self) -> None:
-        self.reasoning_effort = validate_reasoning_effort(self.reasoning_effort)
+        self.reasoning_effort = validate_reasoning_effort(
+            self.reasoning_effort)
         self._instructions = load_instructions()
         self._init_client()
         self._memory_manager = MemoryManager(self.mem0_settings)
@@ -71,7 +74,8 @@ class OllamaAgent:
     def _init_client(self) -> None:
         set_tracing_disabled(True)
         set_default_openai_api("chat_completions")
-        self._client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
+        self._client = AsyncOpenAI(
+            base_url=self.base_url, api_key=self.api_key)
         set_default_openai_client(self._client, use_for_tracing=False)
 
     def _get_tools(self) -> list[Any]:
@@ -82,7 +86,8 @@ class OllamaAgent:
 
     def _create_agent(self, model: str, effort: ReasoningEffortValue) -> Agent:
         ensure_model_supports_tools(model)
-        settings = ModelSettings(reasoning=Reasoning(effort=cast(Any, effort))) if effort != "disabled" else None
+        settings = ModelSettings(reasoning=Reasoning(
+            effort=cast(Any, effort))) if effort != "disabled" else None
         return Agent(name="Ollama Assistant", instructions=self._instructions, model=model,
                      tools=self._get_tools(), **(dict(model_settings=settings) if settings else {}))
 
@@ -111,7 +116,8 @@ class OllamaAgent:
     def _resolve(self, model: str | None, effort: str | None) -> tuple[str, ReasoningEffortValue]:
         return (
             model or self.model,
-            validate_reasoning_effort(effort) if effort else self.reasoning_effort,
+            validate_reasoning_effort(
+                effort) if effort else self.reasoning_effort,
         )
 
     def _prepare_run(

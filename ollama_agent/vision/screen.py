@@ -31,7 +31,8 @@ def extract_display_tokens(prompt: str) -> tuple[str, list[int]]:
     """Extract @dpN tokens from prompt. Returns (cleaned_prompt, unique_indexes)."""
     indexes = [int(m.group(1)) for m in _DISPLAY_TOKEN_RE.finditer(prompt)]
     cleaned = " ".join(_DISPLAY_TOKEN_RE.sub("", prompt).split())
-    return cleaned, list(dict.fromkeys(indexes))  # preserva orden, elimina duplicados
+    # preserva orden, elimina duplicados
+    return cleaned, list(dict.fromkeys(indexes))
 
 
 def _require_display_session() -> None:

@@ -11,15 +11,16 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = get_config()
-    set_tool_timeout(cfg.builtin_tool_timeout if args.builtin_tool_timeout is None else args.builtin_tool_timeout)
+    set_tool_timeout(
+        cfg.builtin_tool_timeout if args.builtin_tool_timeout is None else args.builtin_tool_timeout)
 
     if handle_cli_commands(args, create_agent):
         return
 
-    repl = OllamaREPL(agent_factory=create_agent, model=args.model or cfg.model, effort=args.effort or cfg.reasoning_effort)
+    repl = OllamaREPL(agent_factory=create_agent, model=args.model or cfg.model,
+                      effort=args.effort or cfg.reasoning_effort)
     asyncio.run(repl.run())
 
 
 if __name__ == "__main__":
     main()
-

@@ -21,10 +21,12 @@ class Task:
     title: str
     prompt: str
     model: str
-    reasoning_effort: ReasoningEffortValue = field(default=DEFAULT_REASONING_EFFORT)
+    reasoning_effort: ReasoningEffortValue = field(
+        default=DEFAULT_REASONING_EFFORT)
 
     def __post_init__(self) -> None:
-        self.reasoning_effort = validate_reasoning_effort(self.reasoning_effort)
+        self.reasoning_effort = validate_reasoning_effort(
+            self.reasoning_effort)
 
     @classmethod
     def from_dict(cls, d: dict) -> Task:
@@ -49,7 +51,8 @@ class TaskManager:
         """Validate task_id: letters, numbers, underscore, dash only."""
         task_id = (task_id or "").strip()
         if not task_id or not re.fullmatch(r"[A-Za-z0-9_-]+", task_id):
-            raise ValueError("Invalid task_id. Use only letters, numbers, '_' and '-'.")
+            raise ValueError(
+                "Invalid task_id. Use only letters, numbers, '_' and '-'.")
         return task_id
 
     def save(self, task_id: str, task: Task, *, overwrite: bool = False) -> str:
@@ -57,7 +60,8 @@ class TaskManager:
         path = self._path(task_id := self.validate_task_id(task_id))
         if path.exists() and not overwrite:
             raise FileExistsError(f"Task already exists: {task_id}")
-        path.write_text(yaml.safe_dump(asdict(task), allow_unicode=True), encoding="utf-8")
+        path.write_text(yaml.safe_dump(
+            asdict(task), allow_unicode=True), encoding="utf-8")
         return task_id
 
     def find_matches(self, prefix: str) -> list[tuple[str, Task]]:
@@ -91,5 +95,6 @@ class TaskManager:
 
     def list_all(self) -> list[tuple[str, Task]]:
         """List all tasks sorted by title."""
-        tasks = [(p.stem, t) for p in self.tasks_dir.glob("*.yaml") if (t := self.load(p.stem))]
+        tasks = [(p.stem, t) for p in self.tasks_dir.glob(
+            "*.yaml") if (t := self.load(p.stem))]
         return sorted(tasks, key=lambda x: x[1].title.lower())

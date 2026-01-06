@@ -11,7 +11,8 @@ from ..tasks.commands import CLIContext, create_task, delete_task, list_tasks, r
 
 
 def _add_common_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("-m", "--model", type=str, help="Specify the AI model to use")
+    parser.add_argument("-m", "--model", type=str,
+                        help="Specify the AI model to use")
     parser.add_argument(
         "-p",
         "--prompt",
@@ -34,12 +35,16 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
 
 
 def _add_task_subcommands(parser: argparse.ArgumentParser) -> None:
-    subparsers = parser.add_subparsers(dest="command", help="Task management commands")
+    subparsers = parser.add_subparsers(
+        dest="command", help="Task management commands")
     subparsers.add_parser("task-list", help="List all saved tasks")
 
-    task_create_parser = subparsers.add_parser("task-create", help="Create a new task")
-    task_create_parser.add_argument("task_id", type=str, help="Task ID (filename stem)")
-    task_create_parser.add_argument("--title", type=str, required=True, help="Task title")
+    task_create_parser = subparsers.add_parser(
+        "task-create", help="Create a new task")
+    task_create_parser.add_argument(
+        "task_id", type=str, help="Task ID (filename stem)")
+    task_create_parser.add_argument(
+        "--title", type=str, required=True, help="Task title")
     task_create_parser.add_argument(
         "--task-prompt",
         type=str,
@@ -67,11 +72,15 @@ def _add_task_subcommands(parser: argparse.ArgumentParser) -> None:
         help="Overwrite task if it already exists",
     )
 
-    task_run_parser = subparsers.add_parser("task-run", help="Execute a saved task")
-    task_run_parser.add_argument("task_id", type=str, help="Task ID or prefix to execute")
+    task_run_parser = subparsers.add_parser(
+        "task-run", help="Execute a saved task")
+    task_run_parser.add_argument(
+        "task_id", type=str, help="Task ID or prefix to execute")
 
-    task_delete_parser = subparsers.add_parser("task-delete", help="Delete a saved task")
-    task_delete_parser.add_argument("task_id", type=str, help="Task ID or prefix to delete")
+    task_delete_parser = subparsers.add_parser(
+        "task-delete", help="Delete a saved task")
+    task_delete_parser.add_argument(
+        "task_id", type=str, help="Task ID or prefix to delete")
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
@@ -109,7 +118,8 @@ def handle_cli_commands(args: argparse.Namespace, agent_factory: Callable[..., O
         return True
 
     if args.prompt:
-        agent = ctx.agent_factory(model=args.model, reasoning_effort=args.effort)
+        agent = ctx.agent_factory(
+            model=args.model, reasoning_effort=args.effort)
         asyncio.run(run_non_interactive(agent, args.prompt))
         return True
 

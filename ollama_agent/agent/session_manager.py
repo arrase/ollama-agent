@@ -63,7 +63,8 @@ class SessionManager:
         return self.session_id
 
     def load_session(self, session_id: str) -> None:
-        self.session_id, self.session = session_id, self._make_session(session_id)
+        self.session_id, self.session = session_id, self._make_session(
+            session_id)
 
     def get_session_id(self) -> str | None: return self.session_id
     def get_session(self) -> SQLiteSession | None: return self.session
@@ -94,7 +95,8 @@ class SessionManager:
         try:
             with self._connect() as conn:
                 rows = conn.execute(
-                    "SELECT message_data FROM agent_messages WHERE session_id = ? ORDER BY created_at ASC", (sid,)
+                    "SELECT message_data FROM agent_messages WHERE session_id = ? ORDER BY created_at ASC", (
+                        sid,)
                 ).fetchall()
             messages: list[dict[str, str]] = []
             for row in rows:
@@ -126,11 +128,11 @@ class SessionManager:
         try:
             with self._connect() as conn:
                 for table in ("agent_messages", "agent_sessions"):
-                    conn.execute(f"DELETE FROM {table} WHERE session_id = ?", (session_id,))
+                    conn.execute(
+                        f"DELETE FROM {table} WHERE session_id = ?", (session_id,))
             if session_id == self.session_id:
                 self.reset_session()
             return True
         except Exception as e:
             logger.error("Error deleting session: %s", e)
-            return False
             return False

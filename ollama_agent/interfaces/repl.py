@@ -1,7 +1,6 @@
 """REPL interface for Ollama Agent."""
 
 from typing import Callable
-
 import ollama
 from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import HTML
@@ -10,7 +9,6 @@ from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
-
 from ..agent import OllamaAgent
 from ..core import ModelCapabilityError, model_supports_tools
 from ..tasks.commands import CLIContext, create_task, delete_task, list_tasks, run_task
@@ -20,54 +18,35 @@ class OllamaREPL:
     """Read-Eval-Print Loop for interacting with the Ollama Agent."""
 
     def __init__(self, agent_factory: Callable[..., OllamaAgent], model: str, effort: str):
-        self.agent_factory = agent_factory
-        self.model = model
-        self.effort = effort
+        self.agent_factory, self.model, self.effort = agent_factory, model, effort
         self.console = Console()
         self.session = PromptSession(
-            style=Style.from_dict({
-                "prompt": "#ansiwhite bold",
-            })
-        )
-        # We need a context for reusing task commands
+            style=Style.from_dict({"prompt": "#ansiwhite bold"}))
         self.ctx = CLIContext(agent_factory, console=self.console)
         self.active_agent: OllamaAgent | None = None
 
+    def _ensure_agent(self) -> OllamaAgent:
+        if not self.active_agent:
+            self.active_agent = self.agent_factory(
+                model=self.model, reasoning_effort=self.effort)
+        return self.active_agent
+
     async def cleanup(self) -> None:
-        """Clean up resources."""
         if self.active_agent:
             await self.active_agent.cleanup()
             self.active_agent = None
 
     async def run(self) -> None:
-        """Start the REPL loop."""
-        self.console.print(
-            Panel(
-                f"[bold green]Ollama Agent REPL[/bold green]\n"
-                f"Model: [cyan]{self.model}[/cyan] | Effort: [cyan]{self.effort}[/cyan]\n"
-                "Type [bold]/help[/bold] for commands or just start typing to chat.",
-                title="Welcome",
-                border_style="green",
-            )
-        )
-
+        self.console.print(Panel(
+            f"[bold green]Ollama Agent REPL[/bold green]\n"
+            f"Model: [cyan]{self.model}[/cyan] | Effort: [cyan]{self.effort}[/cyan]\n"
+            "Type [bold]/help[/bold] for commands or just start typing to chat.",
+            title="Welcome", border_style="green"))
         try:
             while True:
                 try:
-                    user_input = await self.session.prompt_async(
-                        HTML("<b>>>> </b>"),
-                        multiline=False,
-                    )
-                    user_input = user_input.strip()
-
-                    if not user_input:
-                        continue
-
-                    if user_input.startswith("/"):
-                        await self.handle_command(user_input)
-                    else:
-                        await self.handle_chat(user_input)
-
+                    if user_input := (await self.session.prompt_async(HTML("<b>>>> </b>"))).strip():
+                        await (self.handle_command(user_input) if user_input.startswith("/") else self.handle_chat(user_input))
                 except KeyboardInterrupt:
                     continue
                 except EOFError:
@@ -80,425 +59,279 @@ class OllamaREPL:
 
     async def handle_command(self, command: str) -> None:
         """Handle slash commands."""
-        parts = command.split()
-        cmd = parts[0].lower()
-        args = parts[1:]
+        parts, cmd, args = command.split(), command.split()[
+            0].lower(), command.split()[1:]
+
+        async def _require_arg(usage: str) -> str | None:
+            if not args:
+                self.console.print(f"[red]Usage: {usage}[/red]")
+            return args[0] if args else None
 
         match cmd:
-            case "/exit" | "/quit":
-                raise EOFError
-            case "/help":
-                self.show_help()
-            case "/clear":
-                self.console.clear()
-            case "/tasks":
-                list_tasks(self.ctx)
+            case "/exit" | "/quit": raise EOFError
+            case "/help": self.show_help()
+            case "/clear": self.console.clear()
+            case "/tasks": list_tasks(self.ctx)
             case "/task-run":
-                if not args:
-                    self.console.print("[red]Usage: /task-run <task_id>[/red]")
-                    return
-                try:
-                    await run_task(self.ctx, args[0])
-                except SystemExit:
-                    return
+                if tid := await _require_arg("/task-run <task_id>"):
+                    try:
+                        await run_task(self.ctx, tid)
+                    except SystemExit:
+                        pass
             case "/task-delete":
-                if not args:
-                    self.console.print("[red]Usage: /task-delete <task_id>[/red]")
-                    return
-                try:
-                    delete_task(self.ctx, args[0])
-                except SystemExit:
-                    return
+                if tid := await _require_arg("/task-delete <task_id>"):
+                    try:
+                        delete_task(self.ctx, tid)
+                    except SystemExit:
+                        pass
             case "/task-create":
                 if not args:
                     self.console.print(
-                        "[red]Usage: /task-create <task_id> [--force][/red]"
-                    )
+                        "[red]Usage: /task-create <task_id> [--force][/red]")
                     return
-
-                task_id = args[0]
-                force = "--force" in args[1:]
-
+                task_id, force = args[0], "--force" in args[1:]
                 title = (await self.session.prompt_async(HTML("<b>title> </b>"))).strip()
-
-                model = (
-                    await self.session.prompt_async(
-                        HTML(f"<b>model</b> (default: {self.model})> ")
-                    )
-                ).strip()
-                if not model:
-                    model = self.model
-
-                effort = (
-                    await self.session.prompt_async(
-                        HTML(f"<b>effort</b> (default: {self.effort})> ")
-                    )
-                ).strip()
-                if not effort:
-                    effort = self.effort
-
+                model = (await self.session.prompt_async(HTML(f"<b>model</b> (default: {self.model})> "))).strip() or self.model
+                effort = (await self.session.prompt_async(HTML(f"<b>effort</b> (default: {self.effort})> "))).strip() or self.effort
                 self.console.print(
-                    "[dim]Enter the task prompt (multiline). Finish with Esc+Enter.[/dim]"
-                )
-
-                buf = self.session.default_buffer
-                old_multiline = buf.multiline
+                    "[dim]Enter the task prompt (multiline). Finish with Esc+Enter.[/dim]")
+                buf, old_multiline = self.session.default_buffer, self.session.default_buffer.multiline
                 try:
-                    task_prompt = await self.session.prompt_async(
-                        HTML("<b>prompt> </b>"),
-                        multiline=True,
-                    )
+                    task_prompt = await self.session.prompt_async(HTML("<b>prompt> </b>"), multiline=True)
                 finally:
                     buf.multiline = old_multiline
-
                 try:
-                    create_task(
-                        self.ctx,
-                        task_id,
-                        title=title,
-                        prompt=task_prompt,
-                        model=model,
-                        reasoning_effort=effort,
-                        force=force,
-                    )
+                    create_task(self.ctx, task_id, title=title, prompt=task_prompt,
+                                model=model, reasoning_effort=effort, force=force)
                 except SystemExit:
-                    return
+                    pass
             case "/new":
                 if self.active_agent:
                     self.active_agent.session_manager.reset_session()
                 self.console.clear()
-                self.console.print(
-                    Panel(
-                        f"[bold green]Ollama Agent REPL[/bold green]\n"
-                        f"Model: [cyan]{self.model}[/cyan] | Effort: [cyan]{self.effort}[/cyan]\n"
-                        "Type [bold]/help[/bold] for commands or just start typing to chat.",
-                        title="New Session",
-                        border_style="green",
-                    )
-                )
-            case "/sessions":
-                page = int(args[0]) if args and args[0].isdigit() else 1
-                await self._list_sessions(page=page)
+                self.console.print(Panel(
+                    f"[bold green]Ollama Agent REPL[/bold green]\n"
+                    f"Model: [cyan]{self.model}[/cyan] | Effort: [cyan]{self.effort}[/cyan]\n"
+                    "Type [bold]/help[/bold] for commands or just start typing to chat.",
+                    title="New Session", border_style="green"))
+            case "/sessions": await self._list_sessions(page=int(args[0]) if args and args[0].isdigit() else 1)
             case "/session-load":
-                if not args:
-                    self.console.print("[red]Usage: /session-load <session_id>[/red]")
-                    return
-                await self._load_session(args[0])
+                if sid := await _require_arg("/session-load <session_id>"):
+                    await self._load_session(sid)
             case "/session-delete":
-                if not args:
-                    self.console.print("[red]Usage: /session-delete <session_id>[/red]")
-                    return
-                await self._delete_session(args[0])
-            case "/models":
-                self._list_models()
+                if sid := await _require_arg("/session-delete <session_id>"):
+                    await self._delete_session(sid)
+            case "/models": self._list_models()
             case "/model-set":
-                if not args:
-                    self.console.print("[red]Usage: /model-set <model_name>[/red]")
-                    return
-                await self._set_model(args[0])
-            case _:
-                self.console.print(f"[red]Unknown command:[/red] {cmd}")
+                if mid := await _require_arg("/model-set <model_name>"):
+                    await self._set_model(mid)
+            case _: self.console.print(f"[red]Unknown command:[/red] {cmd}")
 
     async def _list_sessions(self, page: int = 1, per_page: int = 10) -> None:
-        """List saved sessions with pagination."""
-        # Ensure we have an agent to access the session manager
-        if not self.active_agent:
-            self.active_agent = self.agent_factory(
-                model=self.model,
-                reasoning_effort=self.effort,
-            )
-
-        offset = (page - 1) * per_page
-        sessions = self.active_agent.session_manager.list_sessions(limit=per_page, offset=offset)
-        
+        agent = self._ensure_agent()
+        sessions = agent.session_manager.list_sessions(
+            limit=per_page, offset=(page - 1) * per_page)
         if not sessions:
-            if page == 1:
-                self.console.print("[yellow]No saved sessions found.[/yellow]")
-            else:
-                self.console.print(f"[yellow]No more sessions (page {page} is empty).[/yellow]")
-            return
-
-        current_id = self.active_agent.session_manager.get_session_id()
-
-        self.console.print(f"[bold]Sessions (page {page}):[/bold]")
-        self.console.print("[dim]─" * 60 + "[/dim]")
-        for i, s in enumerate(sessions, 1):
-            is_current = s["session_id"] == current_id
-            marker = " [green]◀ current[/green]" if is_current else ""
-            short_id = s["session_id"][:8]
-            preview = s["preview"][:40] + "..." if len(s["preview"]) > 40 else s["preview"]
             self.console.print(
-                f"[cyan]{short_id}[/cyan] │ {s['message_count']:>3} msgs │ {s['last_message'][:16]} │ [dim]{preview}[/dim]{marker}"
-            )
+                f"[yellow]{'No saved sessions found.' if page == 1 else f'No more sessions (page {page} is empty).'}[/yellow]")
+            return
+        current_id = agent.session_manager.get_session_id()
+        self.console.print(
+            f"[bold]Sessions (page {page}):[/bold]\n[dim]─" + "─" * 59 + "[/dim]")
+        for s in sessions:
+            marker = " [green]◀ current[/green]" if s["session_id"] == current_id else ""
+            preview = s["preview"][:40] + \
+                "..." if len(s["preview"]) > 40 else s["preview"]
+            self.console.print(
+                f"[cyan]{s['session_id'][:8]}[/cyan] │ {s['message_count']:>3} msgs │ {s['last_message'][:16]} │ [dim]{preview}[/dim]{marker}")
         self.console.print("[dim]─" * 60 + "[/dim]")
-        
-        nav_hint = f"/sessions {page + 1}" if len(sessions) == per_page else ""
-        if nav_hint:
-            self.console.print(f"[dim]Next page: {nav_hint} | Load: /session-load <id>[/dim]")
-        else:
-            self.console.print("[dim]Use /session-load <id> to continue a conversation[/dim]")
+        hint = f"Next page: /sessions {page + 1} | " if len(
+            sessions) == per_page else ""
+        self.console.print(f"[dim]{hint}Load: /session-load <id>[/dim]")
+
+    def _find_session(self, prefix: str, sessions: list) -> dict | None:
+        matches = [s for s in sessions if s["session_id"].startswith(prefix)]
+        if not matches:
+            self.console.print(
+                f"[red]No session found matching '{prefix}'[/red]")
+            return None
+        if len(matches) > 1:
+            self.console.print(
+                f"[yellow]Multiple sessions match '{prefix}':[/yellow]")
+            for m in matches[:5]:
+                self.console.print(
+                    f"  [cyan]{m['session_id'][:8]}[/cyan] - {m['preview'][:40]}")
+            return None
+        return matches[0]
 
     async def _load_session(self, session_id_prefix: str) -> None:
-        """Load a session and display its conversation history."""
-        # Ensure we have an agent to access the session manager
-        if not self.active_agent:
-            self.active_agent = self.agent_factory(
-                model=self.model,
-                reasoning_effort=self.effort,
-            )
-
-        sessions = self.active_agent.session_manager.list_sessions(limit=100)
-        matches = [s for s in sessions if s["session_id"].startswith(session_id_prefix)]
-
-        if not matches:
-            self.console.print(f"[red]No session found matching '{session_id_prefix}'[/red]")
+        agent = self._ensure_agent()
+        if not (target := self._find_session(session_id_prefix, agent.session_manager.list_sessions(limit=100))):
             return
-
-        if len(matches) > 1:
-            self.console.print(f"[yellow]Multiple sessions match '{session_id_prefix}':[/yellow]")
-            for m in matches[:5]:
-                self.console.print(f"  [cyan]{m['session_id'][:8]}[/cyan] - {m['preview'][:40]}")
-            return
-
-        target = matches[0]
-        
-        # Get conversation history BEFORE loading (to display it)
-        history = self.active_agent.session_manager.get_readable_history(target["session_id"])
-        
-        # Now load the session
-        self.active_agent.session_manager.load_session(target["session_id"])
-        
-        # Display header
-        self.console.print(f"\n[bold green]━━━ Session Loaded: {target['session_id'][:8]}... ━━━[/bold green]")
-        self.console.print(f"[dim]Messages: {target['message_count']} | Last active: {target['last_message']}[/dim]\n")
-        
-        # Display conversation history
+        history = agent.session_manager.get_readable_history(
+            target["session_id"])
+        agent.session_manager.load_session(target["session_id"])
+        self.console.print(
+            f"\n[bold green]━━━ Session Loaded: {target['session_id'][:8]}... ━━━[/bold green]")
+        self.console.print(
+            f"[dim]Messages: {target['message_count']} | Last active: {target['last_message']}[/dim]\n")
         if history:
-            self.console.print("[bold]Conversation History:[/bold]")
-            self.console.print("[dim]─" * 50 + "[/dim]")
-            for msg in history[-10:]:  # Show last 10 messages
-                if msg["role"] == "user":
-                    content = msg["content"][:200] + "..." if len(msg["content"]) > 200 else msg["content"]
-                    self.console.print(f"[bold blue]>>>[/bold blue] {content}")
-                else:
-                    content = msg["content"][:300] + "..." if len(msg["content"]) > 300 else msg["content"]
-                    self.console.print(f"{content}")
-                self.console.print()
-            
+            self.console.print(
+                "[bold]Conversation History:[/bold]\n[dim]─" + "─" * 49 + "[/dim]")
+            for msg in history[-10:]:
+                limit = 200 if msg["role"] == "user" else 300
+                content = msg["content"][:limit] + \
+                    "..." if len(msg["content"]) > limit else msg["content"]
+                prefix = "[bold blue]>>>[/bold blue] " if msg["role"] == "user" else ""
+                self.console.print(f"{prefix}{content}\n")
             if len(history) > 10:
-                self.console.print(f"[dim]... and {len(history) - 10} earlier messages[/dim]\n")
+                self.console.print(
+                    f"[dim]... and {len(history) - 10} earlier messages[/dim]\n")
             self.console.print("[dim]─" * 50 + "[/dim]")
-        
-        self.console.print("[green]✓ Session loaded. Continue typing to resume the conversation.[/green]\n")
+        self.console.print(
+            "[green]✓ Session loaded. Continue typing to resume the conversation.[/green]\n")
 
     async def _delete_session(self, session_id_prefix: str) -> None:
-        """Delete a session by ID or prefix."""
-        # Ensure we have an agent to access the session manager
-        if not self.active_agent:
-            self.active_agent = self.agent_factory(
-                model=self.model,
-                reasoning_effort=self.effort,
-            )
-
-        sessions = self.active_agent.session_manager.list_sessions(limit=100)
-        matches = [s for s in sessions if s["session_id"].startswith(session_id_prefix)]
-
-        if not matches:
-            self.console.print(f"[red]No session found matching '{session_id_prefix}'[/red]")
+        agent = self._ensure_agent()
+        if not (target := self._find_session(session_id_prefix, agent.session_manager.list_sessions(limit=100))):
             return
-
-        if len(matches) > 1:
-            self.console.print(f"[yellow]Multiple sessions match '{session_id_prefix}':[/yellow]")
-            for m in matches[:5]:
-                self.console.print(f"  [cyan]{m['session_id'][:8]}[/cyan] - {m['preview'][:40]}")
-            return
-
-        target = matches[0]
-        if self.active_agent.session_manager.delete_session(target["session_id"]):
-            self.console.print(f"[green]✓ Deleted session:[/green] [cyan]{target['session_id'][:8]}[/cyan]")
-        else:
-            self.console.print("[red]Failed to delete session[/red]")
+        msg = f"[green]✓ Deleted session:[/green] [cyan]{target['session_id'][:8]}[/cyan]" \
+            if agent.session_manager.delete_session(target["session_id"]) else "[red]Failed to delete session[/red]"
+        self.console.print(msg)
 
     def _list_models(self) -> None:
-        """List available Ollama models."""
         try:
-            response = ollama.list()
-            models = getattr(response, "models", [])
+            models = getattr(ollama.list(), "models", [])
             if not models:
-                self.console.print("[yellow]No models found in Ollama.[/yellow]")
+                self.console.print(
+                    "[yellow]No models found in Ollama.[/yellow]")
                 return
-            
-            self.console.print("[bold]Available Models:[/bold]")
-            self.console.print("[dim]─" * 60 + "[/dim]")
+            self.console.print(
+                "[bold]Available Models:[/bold]\n[dim]─" + "─" * 59 + "[/dim]")
             for item in models:
-                name = getattr(item, "model", None)
-                if not name:
+                if not (name := getattr(item, "model", None)):
                     continue
-                is_current = name == self.model
-                marker = " [green]◀ current[/green]" if is_current else ""
-                size_bytes = getattr(item, "size", 0)
-                size_gb = size_bytes / (1024 ** 3) if size_bytes else 0
+                marker = " [green]◀ current[/green]" if name == self.model else ""
+                size_gb = getattr(item, "size", 0) / (1024 ** 3)
                 size_str = f"{size_gb:.1f}GB" if size_gb else ""
-                
-                # Check tool support
                 try:
-                    has_tools = model_supports_tools(name)
-                    tool_icon = "[green]✓[/green]" if has_tools else "[red]✗[/red]"
+                    tool_icon = "[green]✓[/green]" if model_supports_tools(
+                        name) else "[red]✗[/red]"
                 except ModelCapabilityError:
                     tool_icon = "[yellow]?[/yellow]"
-                
-                self.console.print(f"  {tool_icon} [cyan]{name}[/cyan] {size_str}{marker}")
-            self.console.print("[dim]─" * 60 + "[/dim]")
-            self.console.print("[dim]✓ = supports tools | Use /model-set <model> to switch[/dim]")
+                self.console.print(
+                    f"  {tool_icon} [cyan]{name}[/cyan] {size_str}{marker}")
+            self.console.print(
+                "[dim]─" * 60 + "[/dim]\n[dim]✓ = supports tools | Use /model-set <model> to switch[/dim]")
         except Exception as e:
             self.console.print(f"[red]Error listing models: {e}[/red]")
 
     async def _set_model(self, model_name: str) -> None:
-        """Switch to a different model while preserving the conversation."""
-        # Verify the model exists
         try:
-            response = ollama.list()
-            models = getattr(response, "models", [])
-            available = {getattr(m, "model", "") for m in models}
+            available = {getattr(m, "model", "")
+                         for m in getattr(ollama.list(), "models", [])}
             if model_name not in available:
-                self.console.print(f"[red]Model '{model_name}' not found.[/red]")
-                self.console.print("[dim]Use /model-list to see available models.[/dim]")
+                self.console.print(
+                    f"[red]Model '{model_name}' not found.[/red]\n[dim]Use /models to see available models.[/dim]")
                 return
         except Exception as e:
             self.console.print(f"[red]Error checking model: {e}[/red]")
             return
-
         if model_name == self.model:
-            self.console.print(f"[yellow]Already using model '{model_name}'.[/yellow]")
+            self.console.print(
+                f"[yellow]Already using model '{model_name}'.[/yellow]")
             return
-
-        # Check if model supports tools before switching
         try:
             if not model_supports_tools(model_name):
-                self.console.print(f"[red]Model '{model_name}' does not support tools.[/red]")
-                self.console.print("[dim]The agent requires tool support to function.[/dim]")
+                self.console.print(
+                    f"[red]Model '{model_name}' does not support tools.[/red]\n[dim]The agent requires tool support.[/dim]")
                 return
         except ModelCapabilityError as e:
-            self.console.print(f"[red]Cannot verify model capabilities: {e}[/red]")
+            self.console.print(
+                f"[red]Cannot verify model capabilities: {e}[/red]")
             return
 
         old_model = self.model
-        
-        # Preserve the current session state
-        old_session_manager = self.active_agent.session_manager if self.active_agent else None
-        old_session_id = old_session_manager.get_session_id() if old_session_manager else None
+        old_session_id = self.active_agent.session_manager.get_session_id(
+        ) if self.active_agent else None
 
-        # Clean up the old agent
         if self.active_agent:
             await self.active_agent.cleanup()
             self.active_agent = None
 
-        # Update to the new model
         self.model = model_name
-
-        # Create and initialize the new agent
         try:
             self.active_agent = self.agent_factory(
-                model=self.model,
-                reasoning_effort=self.effort,
-            )
+                model=self.model, reasoning_effort=self.effort)
             await self.active_agent.initialize()
         except (ModelCapabilityError, SystemExit) as e:
-            self.console.print(f"[red]Failed to create agent with model '{model_name}': {e}[/red]")
-            # Restore old model
+            self.console.print(
+                f"[red]Failed to create agent with model '{model_name}': {e}[/red]")
             self.model = old_model
             self.active_agent = self.agent_factory(
-                model=self.model,
-                reasoning_effort=self.effort,
-            )
+                model=self.model, reasoning_effort=self.effort)
             if old_session_id:
                 self.active_agent.session_manager.load_session(old_session_id)
             return
 
-        # Restore the session to continue the conversation
         if old_session_id:
             self.active_agent.session_manager.load_session(old_session_id)
-
         self.console.print(
-            f"[green]✓ Switched from [cyan]{old_model}[/cyan] to [cyan]{model_name}[/cyan][/green]"
-        )
-        self.console.print("[dim]Conversation preserved. Continue chatting.[/dim]")
+            f"[green]✓ Switched from [cyan]{old_model}[/cyan] to [cyan]{model_name}[/cyan][/green]\n[dim]Conversation preserved. Continue chatting.[/dim]")
 
     async def handle_chat(self, prompt: str) -> None:
-        """Send prompt to the agent and stream response."""
-        if not self.active_agent:
-            self.active_agent = self.agent_factory(
-                model=self.model,
-                reasoning_effort=self.effort,
-            )
-
-        full_response = ""
-        reasoning_active = False
-        response_banner_shown = False
-        live = Live(
-            console=self.console,
-            refresh_per_second=12,
-            vertical_overflow="visible",
-        )
+        agent = self._ensure_agent()
+        full_response, reasoning_active, response_banner_shown = "", False, False
+        live = Live(console=self.console, refresh_per_second=12,
+                    vertical_overflow="visible")
         try:
-            async for payload in self.active_agent.run_async_streamed(prompt):
+            async for payload in agent.run_async_streamed(prompt):
                 msg_type = payload.get("type")
                 if msg_type == "text_delta":
-                    # End reasoning block if active
                     if reasoning_active:
                         reasoning_active = False
                         self.console.print()
-                    # Show banner before first text (like ConsoleStreamingRenderer)
                     if not response_banner_shown:
                         self.console.print()
                         response_banner_shown = True
                         live.start()
-                    content = payload["content"]
-                    full_response += content
+                    full_response += payload["content"]
                     live.update(Markdown(full_response))
                 elif msg_type == "reasoning_delta":
                     if not reasoning_active:
                         self.console.print(
-                            "\n[bold magenta]🧠 Thinking:[/bold magenta] ", end=""
-                        )
+                            "\n[bold magenta]🧠 Thinking:[/bold magenta] ", end="")
                         reasoning_active = True
-                    self.console.print(
-                        payload.get("content", ""), end="", style="dim italic magenta"
-                    )
+                    self.console.print(payload.get(
+                        "content", ""), end="", style="dim italic magenta")
                 elif msg_type == "tool_call":
                     if reasoning_active:
                         reasoning_active = False
                         self.console.print()
                     live.stop()
                     self.console.print(
-                        f"\n[bold magenta]tool -> {payload.get('name')}...[/bold magenta]"
-                    )
+                        f"\n[bold magenta]tool -> {payload.get('name')}...[/bold magenta]")
                 elif msg_type == "tool_output":
-                    self.console.print(f"[dim]<- {payload.get('output')}[/dim]")
+                    self.console.print(
+                        f"[dim]<- {payload.get('output')}[/dim]")
                 elif msg_type == "error":
                     live.stop()
                     self.console.print(f"[red]{payload['content']}[/red]")
-
-            # End reasoning block if still active at the end
             if reasoning_active:
                 self.console.print()
             if not response_banner_shown:
                 self.console.print()
                 live.start()
             live.update(Markdown(full_response))
-
         except Exception as e:
             live.stop()
             self.console.print(f"[red]Error running agent: {e}[/red]")
         finally:
             live.stop()
-
         self.console.print()
 
     def show_help(self) -> None:
-        """Show available commands."""
-        help_text = """
-        [bold]Available Commands:[/bold]
+        self.console.print(Panel("""[bold]Available Commands:[/bold]
         [green]/help[/green]            Show this help message
         [green]/exit[/green], [green]/quit[/green]    Exit the REPL
         [green]/clear[/green]           Clear the screen
@@ -517,6 +350,4 @@ class OllamaREPL:
         [green]/tasks[/green]           List saved tasks
         [green]/task-create[/green]     Create a task (Usage: /task-create <id> [--force])
         [green]/task-run[/green]        Run a saved task (Usage: /task-run <id>)
-        [green]/task-delete[/green]     Delete a saved task (Usage: /task-delete <id>)
-        """
-        self.console.print(Panel(help_text.strip(), title="Help"))
+        [green]/task-delete[/green]     Delete a saved task (Usage: /task-delete <id>)""", title="Help"))

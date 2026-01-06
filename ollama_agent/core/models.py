@@ -21,7 +21,8 @@ def _get_capabilities(model: str) -> set[str]:
     try:
         response = ollama.show(model)
     except Exception as exc:
-        raise ModelCapabilityError(f"Failed to fetch metadata for '{model}': {exc}") from exc
+        raise ModelCapabilityError(
+            f"Failed to fetch metadata for '{model}': {exc}") from exc
 
     payload = getattr(response, "capabilities", {})
     if isinstance(payload, dict):
@@ -29,7 +30,7 @@ def _get_capabilities(model: str) -> set[str]:
 
     if isinstance(payload, Iterable) and not isinstance(payload, str):
         return {str(c).lower() for c in payload if c}
-    
+
     logger.warning("Model '%s' does not expose capabilities", model)
     return set()
 
@@ -77,5 +78,6 @@ def validate_reasoning_effort(effort: str) -> ReasoningEffortValue:
     """Validate and normalize reasoning effort value."""
     if effort in ALLOWED_REASONING_EFFORTS:
         return cast(ReasoningEffortValue, effort)
-    logger.warning("Invalid reasoning effort '%s', using '%s'", effort, DEFAULT_REASONING_EFFORT)
+    logger.warning("Invalid reasoning effort '%s', using '%s'",
+                   effort, DEFAULT_REASONING_EFFORT)
     return DEFAULT_REASONING_EFFORT

@@ -13,6 +13,7 @@ from .types import DEFAULT_AGENT_INSTRUCTIONS
 
 logger = logging.getLogger(__name__)
 
+
 def _get(cfg: dict, *keys: str) -> Any:
     """Return first present key's value."""
     return next((cfg[k] for k in keys if k in cfg), None)
@@ -42,27 +43,34 @@ def _create_stdio_server(name: str, config: dict[str, Any]) -> MCPServerStdio | 
     """Create stdio MCP server from config."""
     if not (command := config.get("command")):
         return None
-    params = {"command": command, **{k: config[k] for k in ("args", "env", "cwd", "encoding", "encoding_error_handler") if k in config}}
-    return MCPServerStdio(name=name, params=params, **_extract(config, _COMMON_KEYS))  # type: ignore[arg-type]
+    params = {"command": command, **{k: config[k] for k in (
+        "args", "env", "cwd", "encoding", "encoding_error_handler") if k in config}}
+    # type: ignore[arg-type]
+    return MCPServerStdio(name=name, params=params, **_extract(config, _COMMON_KEYS))
 
 
 def _create_http_server(name: str, config: dict[str, Any], use_sse: bool = False) -> MCPServerSse | MCPServerStreamableHttp | None:
     """Create HTTP-based MCP server (SSE or Streamable HTTP)."""
     if not (url := _get(config, "url", "httpUrl")):
         return None
-    params, common = {"url": url, **_extract(config, _HTTP_KEYS)}, _extract(config, _COMMON_KEYS)
+    params, common = {
+        "url": url, **_extract(config, _HTTP_KEYS)}, _extract(config, _COMMON_KEYS)
     if use_sse:
         params.pop("terminate_on_close", None)
-        return MCPServerSse(name=name, params=params, **common)  # type: ignore[arg-type]
-    return MCPServerStreamableHttp(name=name, params=params, **common)  # type: ignore[arg-type]
+        # type: ignore[arg-type]
+        return MCPServerSse(name=name, params=params, **common)
+    # type: ignore[arg-type]
+    return MCPServerStreamableHttp(name=name, params=params, **common)
 
 
 def build_server(name: str, config: dict[str, Any]) -> MCPServer | None:
     """Instantiate an MCP server based on configuration."""
-    transport = (_get(config, "type", "transport") or "").lower() if isinstance(_get(config, "type", "transport"), str) else ""
+    transport = (_get(config, "type", "transport") or "").lower(
+    ) if isinstance(_get(config, "type", "transport"), str) else ""
     if not transport:
-        transport = "stdio" if config.get("command") else "streamable_http" if _get(config, "httpUrl", "url") else ""
-    
+        transport = "stdio" if config.get("command") else "streamable_http" if _get(
+            config, "httpUrl", "url") else ""
+
     builders = {
         "stdio": lambda: _create_stdio_server(name, config),
         "process": lambda: _create_stdio_server(name, config),
@@ -104,14 +112,16 @@ def build_mcp_agent(
         or agent_cfg.get("handoff_description")
         or f"Delegate requests to the '{name}' MCP server"
     )
-    instructions = agent_cfg.get("instructions") or DEFAULT_AGENT_INSTRUCTIONS.format(name=name)
+    instructions = agent_cfg.get(
+        "instructions") or DEFAULT_AGENT_INSTRUCTIONS.format(name=name)
 
     agent = Agent(
         name=agent_cfg.get("name") or f"{name}_agent",
         model=str(model),
         instructions=str(instructions),
         mcp_servers=[server],
-        handoff_description=str(agent_cfg.get("handoff_description") or tool_description),
+        handoff_description=str(agent_cfg.get(
+            "handoff_description") or tool_description),
     )
 
     return agent, str(tool_name), str(tool_description)

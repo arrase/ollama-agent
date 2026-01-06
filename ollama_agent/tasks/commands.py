@@ -22,7 +22,7 @@ class CLIContext:
         matches = self.task_manager.find_matches(task_id)
         if len(matches) != 1:
             msg = f"Task not found: {task_id}" if not matches else \
-                  f"Ambiguous prefix: {task_id} -> {', '.join(t[0] for t in matches)}"
+                f"Ambiguous prefix: {task_id} -> {', '.join(t[0] for t in matches)}"
             self.console.print(f"[red]{msg}[/red]")
             raise SystemExit(1)
         return matches[0]
@@ -38,7 +38,8 @@ def list_tasks(ctx: CLIContext) -> None:
     if not (tasks := ctx.task_manager.list_all()):
         ctx.console.print("[yellow]No tasks found.[/yellow]")
         return
-    table = Table(title="Saved Tasks", show_header=True, header_style="bold magenta")
+    table = Table(title="Saved Tasks", show_header=True,
+                  header_style="bold magenta")
     for col, style in [("ID", "cyan"), ("Title", "green"), ("Model", "blue"), ("Effort", "yellow")]:
         table.add_column(col, style=style)
     for tid, t in tasks:
@@ -57,7 +58,7 @@ async def run_task(ctx: CLIContext, task_id: str) -> None:
 def delete_task(ctx: CLIContext, task_id: str) -> None:
     tid, t = ctx._find_or_exit(task_id)
     msg = f"[green]Task deleted:[/green] {t.title} ({tid})" if ctx.task_manager.delete(tid) \
-          else f"[red]Error deleting task: {tid}[/red]"
+        else f"[red]Error deleting task: {tid}[/red]"
     ctx.console.print(msg)
 
 
@@ -66,9 +67,11 @@ def create_task(ctx: CLIContext, task_id: str, *, title: str, prompt: str, model
     task = Task(ctx._require(title, "Title"), ctx._require(prompt, "Prompt"),
                 ctx._require(model, "Model"), reasoning_effort or "medium")
     try:
-        ctx.console.print(f"[green]Task created:[/green] {task.title} ({ctx.task_manager.save(task_id, task, overwrite=force)})")
+        ctx.console.print(
+            f"[green]Task created:[/green] {task.title} ({ctx.task_manager.save(task_id, task, overwrite=force)})")
     except FileExistsError:
-        ctx.console.print(f"[red]Task already exists:[/red] {task_id} (use --force to overwrite)")
+        ctx.console.print(
+            f"[red]Task already exists:[/red] {task_id} (use --force to overwrite)")
         raise SystemExit(1)
     except ValueError as e:
         ctx.console.print(f"[red]{e}[/red]")
