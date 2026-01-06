@@ -1,289 +1,178 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="color-scheme" content="dark light" />
-  <title>Ollama Agent — CLI/REPL for local models with tools, vision, memory, and RAG</title>
-  <meta name="description" content="Ollama Agent: a modern CLI + REPL to chat with local models via an Ollama-compatible API, with tool calling, local shell execution, screenshot vision, persistent memory (Mem0), and local RAG with Qdrant." />
-  <link rel="stylesheet" href="assets/styles.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ollama Agent - Local AI Assistant</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
-  <a class="skip" href="#content">Skip to content</a>
 
-  <header class="header">
-    <div class="container header__inner">
-      <div class="brand">
-        <div class="logo" aria-hidden="true">
-          <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M32 6c10.493 0 19 8.507 19 19 0 13.6-12.9 25.8-17.7 30.1a2 2 0 0 1-2.6 0C25.9 50.8 13 38.6 13 25 13 14.507 21.507 6 32 6Z" class="logo__pin"/>
-            <path d="M24 26.5c0-4.418 3.582-8 8-8s8 3.582 8 8-3.582 8-8 8-8-3.582-8-8Z" class="logo__core"/>
-            <path d="M18 43c6.5 5.8 15.5 5.8 22 0" class="logo__arc"/>
-          </svg>
+    <header>
+        <div class="container">
+            <nav>
+                <a href="#" class="logo">Ollama<span>Agent</span></a>
+                <ul class="nav-links">
+                    <li><a href="#features">Features</a></li>
+                    <li><a href="#usage">Usage</a></li>
+                    <li><a href="#gallery">Gallery</a></li>
+                    <li><a href="https://github.com/arrase/ollama-agent" target="_blank"><i class="fab fa-github"></i> GitHub</a></li>
+                </ul>
+            </nav>
         </div>
-        <div>
-          <div class="brand__name">Ollama Agent</div>
-          <div class="brand__tag">CLI + REPL · Tools · Vision · Memory · RAG · MCP</div>
-        </div>
-      </div>
+    </header>
 
-      <nav class="nav" aria-label="Navigation">
-        <a href="#capabilities">Capabilities</a>
-        <a href="#usage">Usage</a>
-        <a href="#configuration">Configuration</a>
-      </nav>
-    </div>
-  </header>
-
-  <main id="content">
     <section class="hero">
-      <div class="container hero__grid">
-        <div>
-          <h1>A real local agent: terminal-first, with tools, vision, memory, and RAG.</h1>
-          <p class="lead">
-            <strong>Ollama Agent</strong> is a modern <em>CLI</em> and <em>REPL</em> to interact with local models through an
-            Ollama-compatible API. It keeps persistent sessions, can run tools (like local shell commands), attaches screenshots
-            with <code>@dpN</code>, and adds advanced capabilities with <strong>Mem0</strong>, <strong>Qdrant</strong>, and <strong>MCP</strong> servers.
-          </p>
-
-          <div class="cta">
-            <a class="btn btn--primary" href="#usage">Get started</a>
-            <a class="btn btn--ghost" href="#capabilities">See capabilities</a>
-          </div>
-
-          <div class="codeblock" data-copy>
-            <div class="codeblock__top">
-              <span class="codeblock__label">Install (pipx)</span>
-              <button class="codeblock__copy" type="button">Copy</button>
+        <div class="container">
+            <h1>Your Local AI Assistant</h1>
+            <p>A powerful command-line interface and REPL for interacting with local Ollama models. <br>Featuring tool execution, screen vision, memory management, and RAG capabilities.</p>
+            
+            <div class="hero-buttons">
+                <a href="#usage" class="cta-button">Get Started</a>
+                <a href="https://github.com/arrase/ollama-agent" class="secondary-button" target="_blank">View on GitHub</a>
             </div>
-            <pre><code>pipx install git+https://github.com/arrase/ollama-agent.git</code></pre>
-          </div>
 
-          <div class="note">
-            <strong>Key requirement:</strong> the selected model must support <strong>tool calling</strong> (capability <code>tools</code>),
-            otherwise the app exits with a capability error.
-          </div>
+            <img src="assets/img/agent_repl_main.png" alt="Ollama Agent Interface" class="hero-image" onclick="openModal(this.src)">
         </div>
-
-        <div class="hero__media">
-          <div class="media__card">
-            <div class="media__title">Interactive REPL (Markdown, slash commands)</div>
-            <img class="media__img" src="assets/img/agent_repl_main.png" alt="Screenshot of the Ollama Agent REPL" loading="lazy" />
-          </div>
-          <div class="media__card">
-            <div class="media__title">Non-interactive CLI (streaming)</div>
-            <img class="media__img" src="assets/img/agent_noninteractive_main.png" alt="Screenshot of non-interactive mode" loading="lazy" />
-          </div>
-        </div>
-      </div>
     </section>
 
-    <section id="capabilities" class="section">
-      <div class="container">
-        <h2>Capabilities (what it actually does)</h2>
-        <p class="sublead">A concise overview of what’s implemented in the project runtime.</p>
-
-        <div class="grid">
-          <article class="card">
-            <h3>CLI + REPL</h3>
-            <p>Fast mode (single prompt) and conversational mode with Markdown rendering and <code>/</code> commands.</p>
-            <ul class="list">
-              <li><code>ollama-agent -p "..."</code> (non-interactive)</li>
-              <li><code>ollama-agent</code> (REPL with history)</li>
-            </ul>
-          </article>
-
-          <article class="card">
-            <h3>Persistent sessions</h3>
-            <p>Automatically stores conversations and lets you list/load/delete sessions from the REPL.</p>
-            <ul class="list">
-              <li>SQLite storage in <code>~/.ollama-agent/sessions.db</code></li>
-              <li>Commands: <code>/sessions</code>, <code>/session-load</code>, <code>/session-delete</code></li>
-            </ul>
-          </article>
-
-          <article class="card">
-            <h3>Real tool calling</h3>
-            <p>Integrates tools via <em>function calling</em> plus event streaming (calls, outputs, text deltas, reasoning deltas).</p>
-            <ul class="list">
-              <li><code>execute_command</code> (local shell with timeout)</li>
-              <li>Events: <code>tool_call</code>, <code>tool_output</code>, <code>text_delta</code>, <code>reasoning_delta</code></li>
-            </ul>
-          </article>
-
-          <article class="card">
-            <h3>Screenshot vision</h3>
-            <p>Attaches monitor screenshots in prompts via <code>@dpN</code> (N starts at 0) and converts them to multimodal input.</p>
-            <ul class="list">
-              <li>Supports multiple: <code>@dp0 @dp1</code></li>
-              <li>On Linux requires <code>DISPLAY</code> or <code>WAYLAND_DISPLAY</code></li>
-            </ul>
-          </article>
-
-          <article class="card">
-            <h3>Persistent memory (Mem0)</h3>
-            <p>Exposes tools to store and search memories: <code>mem0_add_memory</code> and <code>mem0_search_memory</code>.</p>
-            <ul class="list">
-              <li>Back-end: Mem0 + local Qdrant (configurable path)</li>
-              <li>Normalized result (success, error, data)</li>
-            </ul>
-          </article>
-
-          <article class="card">
-            <h3>Local RAG (Qdrant)</h3>
-            <p>Manages document databases, chunking, embeddings via Ollama, and local semantic search.</p>
-            <ul class="list">
-              <li>CLI commands: <code>rag-create</code>, <code>rag-add</code>, <code>rag-search</code>…</li>
-              <li>Tool: <code>rag_search</code> returns ready-to-use context</li>
-            </ul>
-          </article>
-
-          <article class="card">
-            <h3>Reusable tasks</h3>
-            <p>Save prompts as YAML tasks and run them by ID or prefix (CLI and REPL).</p>
-            <ul class="list">
-              <li>Directory: <code>~/.ollama-agent/tasks/*.yaml</code></li>
-              <li>Schema: <code>title</code>, <code>prompt</code>, <code>model</code>, <code>reasoning_effort</code></li>
-            </ul>
-          </article>
-
-          <article class="card">
-            <h3>Delegation via MCP</h3>
-            <p>Loads optional MCP servers and exposes them as tools <code>use_&lt;name&gt;</code> (or a custom tool name).</p>
-            <ul class="list">
-              <li>Config: <code>~/.ollama-agent/mcp_servers.json</code></li>
-              <li>Each MCP can have its own model/instructions</li>
-            </ul>
-          </article>
-
-          <article class="card">
-            <h3>Ollama compatibility</h3>
-            <p>Uses an OpenAI-compatible client pointing by default to <code>http://localhost:11434/v1/</code>.</p>
-            <ul class="list">
-              <li>Supports per-session model switching (REPL: <code>/model-set</code>)</li>
-              <li>Validates effort: <code>low|medium|high|disabled</code></li>
-            </ul>
-          </article>
+    <section id="features">
+        <div class="container">
+            <h2>Key Features</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <i class="fas fa-terminal feature-icon"></i>
+                    <h3>Interactive REPL</h3>
+                    <p>Modern terminal-based chat interface with Markdown rendering, slash commands, and session history management.</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-tools feature-icon"></i>
+                    <h3>Tool Execution</h3>
+                    <p>Empower your AI to execute shell commands and interact with your local environment to perform real tasks.</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-tasks feature-icon"></i>
+                    <h3>Task Automation</h3>
+                    <p>Save complex prompts and configurations as reusable tasks. Run frequently used workflows with a single command.</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-database feature-icon"></i>
+                    <h3>Deep RAG</h3>
+                    <p>Create and manage multiple vector knowledge bases. Index documents and directories to query them contextually.</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-eye feature-icon"></i>
+                    <h3>Screen Vision</h3>
+                    <p>Let the model "see" your screen. Use <code>@dpN</code> to attach screenshots of display N for visual context.</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-brain feature-icon"></i>
+                    <h3>Mem0 Memory</h3>
+                    <p>Persistent memory layer backed by Mem0 and Qdrant, allowing the agent to remember context across sessions.</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-server feature-icon"></i>
+                    <h3>MCP Support</h3>
+                    <p>Integrate with Model Context Protocol (MCP) servers to extend capabilities with external tools and data.</p>
+                </div>
+            </div>
         </div>
-      </div>
     </section>
 
-    <section id="usage" class="section section--alt">
-      <div class="container">
-        <h2>Usage</h2>
-        <div class="two">
-          <div>
-            <h3>Non-interactive mode</h3>
-            <p>Ideal for quick queries or scripts; output is streamed to the console.</p>
-            <div class="codeblock" data-copy>
-              <div class="codeblock__top">
-                <span class="codeblock__label">Example</span>
-                <button class="codeblock__copy" type="button">Copy</button>
-              </div>
-              <pre><code>ollama-agent -p "List all files in the current directory as JSON."</code></pre>
+    <section id="gallery">
+        <div class="container">
+            <h2>Gallery</h2>
+            <div class="gallery-grid">
+                <div class="gallery-item" onclick="openModal('assets/img/agent_repl_main.png')">
+                    <img src="assets/img/agent_repl_main.png" alt="Interactive REPL Session">
+                    <div class="gallery-caption">Interactive REPL Session with Markdown</div>
+                </div>
+                <div class="gallery-item" onclick="openModal('assets/img/agent_noninteractive_main.png')">
+                    <img src="assets/img/agent_noninteractive_main.png" alt="Non-Interactive CLI Mode">
+                    <div class="gallery-caption">Non-Interactive Mode for Quick Tasks</div>
+                </div>
             </div>
-
-            <h3>Vision (screenshots)</h3>
-            <div class="codeblock" data-copy>
-              <div class="codeblock__top">
-                <span class="codeblock__label">Example</span>
-                <button class="codeblock__copy" type="button">Copy</button>
-              </div>
-              <pre><code>ollama-agent -p "Describe what you see in @dp0"</code></pre>
-            </div>
-
-            <h3>RAG (load into the session)</h3>
-            <div class="codeblock" data-copy>
-              <div class="codeblock__top">
-                <span class="codeblock__label">Example</span>
-                <button class="codeblock__copy" type="button">Copy</button>
-              </div>
-              <pre><code>ollama-agent --rag my-docs -p "What does the document say about X?"</code></pre>
-            </div>
-          </div>
-
-          <div>
-            <h3>Interactive REPL</h3>
-            <p>A chat-like experience with <code>/</code> commands for sessions, models, tasks, and RAG.</p>
-
-            <div class="codeblock" data-copy>
-              <div class="codeblock__top">
-                <span class="codeblock__label">Start</span>
-                <button class="codeblock__copy" type="button">Copy</button>
-              </div>
-              <pre><code>ollama-agent</code></pre>
-            </div>
-
-            <div class="table">
-              <div class="table__row table__head">
-                <div>Command</div>
-                <div>What it does</div>
-              </div>
-              <div class="table__row"><div><code>/models</code></div><div>List available models and their tool support</div></div>
-              <div class="table__row"><div><code>/model-set &lt;model&gt;</code></div><div>Switch models without losing session context</div></div>
-              <div class="table__row"><div><code>/sessions</code></div><div>List persisted sessions</div></div>
-              <div class="table__row"><div><code>/session-load &lt;id&gt;</code></div><div>Load a session by prefix</div></div>
-              <div class="table__row"><div><code>/tasks</code></div><div>List saved tasks</div></div>
-              <div class="table__row"><div><code>/task-run &lt;id&gt;</code></div><div>Run a task</div></div>
-              <div class="table__row"><div><code>/rag</code></div><div>Show current RAG status</div></div>
-              <div class="table__row"><div><code>/rag-load &lt;name&gt;</code></div><div>Load a RAG database</div></div>
-              <div class="table__row"><div><code>/rag-add &lt;path&gt; [--dir]</code></div><div>Add a file or directory to the loaded database</div></div>
-              <div class="table__row"><div><code>/rag-search &lt;query&gt; [-k N]</code></div><div>Search the RAG database</div></div>
-            </div>
-          </div>
         </div>
-      </div>
     </section>
 
-
-
-    <section id="configuration" class="section section--alt">
-      <div class="container">
-        <h2>Configuration and state</h2>
-        <div class="two">
-          <div>
-            <h3>Files in <code>~/.ollama-agent/</code></h3>
-            <ul class="list">
-              <li><code>config.ini</code> — default model, endpoint, timeouts, etc.</li>
-              <li><code>sessions.db</code> — persisted sessions (SQLite)</li>
-              <li><code>instructions.md</code> — agent instructions</li>
-              <li><code>tasks/*.yaml</code> — saved tasks</li>
-              <li><code>mcp_servers.json</code> — MCP servers (optional)</li>
-              <li><code>rag/&lt;name&gt;/</code> — local RAG databases</li>
-            </ul>
-          </div>
-          <div>
-            <h3>Common parameters</h3>
-            <div class="codeblock" data-copy>
-              <div class="codeblock__top">
-                <span class="codeblock__label">Example</span>
-                <button class="codeblock__copy" type="button">Copy</button>
-              </div>
-              <pre><code>ollama-agent -m "gpt-oss:20b" -e "high" -t 60 -p "What date is it today?"</code></pre>
+    <section id="usage">
+        <div class="container">
+            <h2>Getting Started</h2>
+            
+            <div class="command-group">
+                <p class="command-title">Requirements</p>
+                <p>Ensure you have <a href="https://ollama.com" target="_blank" style="color:var(--accent-color)">Ollama</a> running with a tool-capable model (like llama3.1) and an embedding model.</p>
+                <pre><code>ollama pull llama3.1
+ollama pull nomic-embed-text</code></pre>
             </div>
-            <p class="muted">
-              Note: the <code>--effort</code> parameter currently only affects <code>gpt-oss</code> models; for other models it’s recommended
-              to use <code>disabled</code> to avoid surprises.
-            </p>
-          </div>
+
+            <div class="command-group">
+                <p class="command-title">Installation</p>
+                <pre><code>pipx install ollama-agent</code></pre>
+            </div>
+
+            <div class="command-group">
+                <p class="command-title">Interactive Mode</p>
+                <p>Start the chat interface to begin a session.</p>
+                <pre><code>ollama-agent</code></pre>
+            </div>
+
+            <div class="command-group">
+                <p class="command-title">One-off Commands</p>
+                <p>Execute a single prompt directly from your shell.</p>
+                <pre><code>ollama-agent -p "Find large files in /var/log and summarize them"</code></pre>
+            </div>
         </div>
-      </div>
     </section>
 
-    <footer class="footer">
-      <div class="container footer__inner">
-        <div>
-          <div class="footer__title">Ollama Agent</div>
-          <div class="footer__meta">A CLI/REPL for local models with tool calling, vision, memory, and RAG.</div>
+    <footer>
+        <div class="container">
+            <p>Developed with ❤️ for local AI enthusiasts.</p>
+            <p><a href="https://github.com/arrase/ollama-agent">View Source on GitHub</a></p>
         </div>
-        <div class="footer__links">
-          <a href="https://github.com/arrase/ollama-agent" rel="noreferrer" target="_blank">GitHub</a>
-          <a href="#content">Top</a>
-        </div>
-      </div>
     </footer>
-  </main>
 
-  <script src="assets/script.js"></script>
+    <!-- Image Modal -->
+    <div id="imgModal" class="image-modal">
+        <span class="close-modal" onclick="closeModal()">&times;</span>
+        <img class="modal-content" id="modalImg">
+    </div>
+
+    <script>
+        function openModal(src) {
+            const modal = document.getElementById("imgModal");
+            const modalImg = document.getElementById("modalImg");
+            modal.style.display = "flex";
+            // Use setTimeout to allow display:flex to apply before adding opacity class for transition
+            setTimeout(() => {
+                modal.classList.add("show");
+            }, 10);
+            modalImg.src = src;
+        }
+
+        function closeModal() {
+            const modal = document.getElementById("imgModal");
+            modal.classList.remove("show");
+            setTimeout(() => {
+                modal.style.display = "none";
+            }, 300);
+        }
+
+        // Close on outside click
+        window.onclick = function(event) {
+            const modal = document.getElementById("imgModal");
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+
+        // Close on Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === "Escape") {
+                closeModal();
+            }
+        });
+    </script>
 </body>
 </html>
