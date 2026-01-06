@@ -7,6 +7,7 @@ Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to i
 - **Interactive REPL**: A modern, terminal-based chat interface with Markdown rendering and slash commands.
 - **Non-Interactive CLI**: Execute single prompts directly from your command line for quick queries.
 - **Ollama Integration**: Connects to any Ollama-compatible API endpoint.
+- **Per-session Model Switching**: Change the model mid-conversation and continue from that point with the new model (context preserved). The change is not permanent and only affects the current session.
 - **Screen Vision (Screenshots)**: Attach monitor screenshots in prompts using `@dpN` for visual context.
 - **Tool-Powered**: The agent can execute shell commands, allowing it to interact with your local environment to perform tasks.
 - **Delegated MCP Agents**: Each configured MCP server can run through its own lightweight agent with custom model and instructions.
