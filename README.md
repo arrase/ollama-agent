@@ -58,8 +58,6 @@ ollama-agent -p "List all files in the current directory as JSON."
 
 ### Interactive Mode (REPL)
 
-![Interactive REPL screenshot](screenshots/agent_repl_main.png)
-
 To start the chat interface, simply run:
 
 ```bash
@@ -91,8 +89,6 @@ The REPL provides a persistent chat session. You can use slash commands to manag
 - `/exit`: Quit the application.
 
 ### Non-Interactive Mode
-
-![Non-interactive CLI screenshot](screenshots/agent_noninteractive_main.png)
 
 You can run a single prompt directly from the command line:
 
