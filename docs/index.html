@@ -74,25 +74,95 @@
                     </div>
                 </div>
 
-                <!-- Tools -->
+                <!-- Non-Interactive Mode -->
                 <div class="feature-item">
                     <div class="feature-header">
-                        <div class="feature-icon"><i class="fas fa-tools"></i></div>
+                        <div class="feature-icon"><i class="fas fa-bolt"></i></div>
                         <div>
-                            <h3>Tool Execution</h3>
-                            <p class="feature-description">The agent can interact with your system to perform real-world actions.</p>
+                            <h3>Non-Interactive Mode</h3>
+                            <p class="feature-description">Execute single-shot tasks directly from your shell.</p>
                         </div>
                     </div>
                     <div class="feature-body">
                         <div class="usage-box">
-                            <p class="usage-title">Built-in Capabilities</p>
+                            <p class="usage-title">CLI Args</p>
                             <table class="cmd-table">
-                                <tr><td>execute_command</td><td>Run shell commands securely</td></tr>
+                                <tr><td>-p "..."</td><td>Prompt to execute immediately</td></tr>
+                                <tr><td>--rag &lt;db&gt;</td><td>Use specific RAG database</td></tr>
                             </table>
                         </div>
-                        <div class="feature-code">
+                         <div class="feature-code">
+# Example
+ollama-agent -p "Summarize README.md" --rag docs_db</div>
+                    </div>
+                </div>
+
+
+
+                <!-- Deep RAG -->
+                <div class="feature-item">
+                    <div class="feature-header">
+                        <div class="feature-icon"><i class="fas fa-database"></i></div>
+                        <div>
+                            <h3>Deep RAG</h3>
+                            <p class="feature-description">Contextual Retrieval Augmented Generation using local vector stores.</p>
+                        </div>
+                    </div>
+                    <div class="feature-body">
+                        <div class="usage-box">
+                            <p class="usage-title">Management Commands</p>
+                            <table class="cmd-table">
+                                <tr><td>/rag-create &lt;name&gt;</td><td>Initialize a new knowledge base</td></tr>
+                                <tr><td>/rag-add &lt;path&gt;</td><td>Ingest file or directory</td></tr>
+                                <tr><td>/rag-load &lt;name&gt;</td><td>Activate a specific DB</td></tr>
+                                <tr><td>/rag-search &lt;q&gt;</td><td>Manual semantic search</td></tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Memory -->
+                <div class="feature-item">
+                    <div class="feature-header">
+                        <div class="feature-icon"><i class="fas fa-brain"></i></div>
+                        <div>
+                            <h3>Mem0 Memory</h3>
+                            <p class="feature-description">Long-term persistence powered by Mem0 and Qdrant.</p>
+                        </div>
+                    </div>
+                    <div class="feature-body">
+                        <p style="color:#b2bec3; margin-bottom:10px">The agent automatically stores and retrieves user preferences and context across sessions.</p>
+                         <div class="usage-box">
+                            <p class="usage-title">Actions</p>
+                            <table class="cmd-table">
+                                <tr><td>mem0_add_memory</td><td>Tool to explicitly save facts</td></tr>
+                                <tr><td>mem0_search</td><td>Tool to recall information</td></tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Screen Vision -->
+                <div class="feature-item">
+                    <div class="feature-header">
+                        <div class="feature-icon"><i class="fas fa-eye"></i></div>
+                        <div>
+                            <h3>Screen Vision</h3>
+                            <p class="feature-description">Give your agent eyes. Capture and analyze your screen contents.</p>
+                        </div>
+                    </div>
+                    <div class="feature-body">
+                        <p style="color:#b2bec3; margin-bottom:10px">Supported on Linux (X11/Wayland).</p>
+                        <div class="usage-box">
+                            <p class="usage-title">Syntax</p>
+                            <table class="cmd-table">
+                                <tr><td>@dp0</td><td>Capture primary display</td></tr>
+                                <tr><td>@dp1</td><td>Capture second monitor</td></tr>
+                            </table>
+                        </div>
+                         <div class="feature-code">
 # Example prompt
-"Find all Python files in src/ modified in the last 24h"</div>
+"Look at @dp0 and help me fix this error message"</div>
                     </div>
                 </div>
 
@@ -124,73 +194,6 @@ prompt: |
                     </div>
                 </div>
 
-                <!-- Deep RAG -->
-                <div class="feature-item">
-                    <div class="feature-header">
-                        <div class="feature-icon"><i class="fas fa-database"></i></div>
-                        <div>
-                            <h3>Deep RAG</h3>
-                            <p class="feature-description">Contextual Retrieval Augmented Generation using local vector stores.</p>
-                        </div>
-                    </div>
-                    <div class="feature-body">
-                        <div class="usage-box">
-                            <p class="usage-title">Management Commands</p>
-                            <table class="cmd-table">
-                                <tr><td>/rag-create &lt;name&gt;</td><td>Initialize a new knowledge base</td></tr>
-                                <tr><td>/rag-add &lt;path&gt;</td><td>Ingest file or directory</td></tr>
-                                <tr><td>/rag-load &lt;name&gt;</td><td>Activate a specific DB</td></tr>
-                                <tr><td>/rag-search &lt;q&gt;</td><td>Manual semantic search</td></tr>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Screen Vision -->
-                <div class="feature-item">
-                    <div class="feature-header">
-                        <div class="feature-icon"><i class="fas fa-eye"></i></div>
-                        <div>
-                            <h3>Screen Vision</h3>
-                            <p class="feature-description">Give your agent eyes. Capture and analyze your screen contents.</p>
-                        </div>
-                    </div>
-                    <div class="feature-body">
-                        <p style="color:#b2bec3; margin-bottom:10px">Supported on Linux (X11/Wayland).</p>
-                        <div class="usage-box">
-                            <p class="usage-title">Syntax</p>
-                            <table class="cmd-table">
-                                <tr><td>@dp0</td><td>Capture primary display</td></tr>
-                                <tr><td>@dp1</td><td>Capture second monitor</td></tr>
-                            </table>
-                        </div>
-                         <div class="feature-code">
-# Example prompt
-"Look at @dp0 and help me fix this error message"</div>
-                    </div>
-                </div>
-
-                <!-- Memory -->
-                <div class="feature-item">
-                    <div class="feature-header">
-                        <div class="feature-icon"><i class="fas fa-brain"></i></div>
-                        <div>
-                            <h3>Mem0 Memory</h3>
-                            <p class="feature-description">Long-term persistence powered by Mem0 and Qdrant.</p>
-                        </div>
-                    </div>
-                    <div class="feature-body">
-                        <p style="color:#b2bec3; margin-bottom:10px">The agent automatically stores and retrieves user preferences and context across sessions.</p>
-                         <div class="usage-box">
-                            <p class="usage-title">Actions</p>
-                            <table class="cmd-table">
-                                <tr><td>mem0_add_memory</td><td>Tool to explicitly save facts</td></tr>
-                                <tr><td>mem0_search</td><td>Tool to recall information</td></tr>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- MCP -->
                 <div class="feature-item">
                     <div class="feature-header">
@@ -214,26 +217,27 @@ prompt: |
                     </div>
                 </div>
 
-                <!-- Non-Interactive Mode -->
+
+
+                <!-- Tools -->
                 <div class="feature-item">
                     <div class="feature-header">
-                        <div class="feature-icon"><i class="fas fa-bolt"></i></div>
+                        <div class="feature-icon"><i class="fas fa-tools"></i></div>
                         <div>
-                            <h3>Non-Interactive Mode</h3>
-                            <p class="feature-description">Execute single-shot tasks directly from your shell.</p>
+                            <h3>Tool Execution</h3>
+                            <p class="feature-description">The agent can interact with your system to perform real-world actions.</p>
                         </div>
                     </div>
                     <div class="feature-body">
                         <div class="usage-box">
-                            <p class="usage-title">CLI Args</p>
+                            <p class="usage-title">Built-in Capabilities</p>
                             <table class="cmd-table">
-                                <tr><td>-p "..."</td><td>Prompt to execute immediately</td></tr>
-                                <tr><td>--rag &lt;db&gt;</td><td>Use specific RAG database</td></tr>
+                                <tr><td>execute_command</td><td>Run shell commands securely</td></tr>
                             </table>
                         </div>
-                         <div class="feature-code">
-# Example
-ollama-agent -p "Summarize README.md" --rag docs_db</div>
+                        <div class="feature-code">
+# Example prompt
+"Find all Python files in src/ modified in the last 24h"</div>
                     </div>
                 </div>
 
