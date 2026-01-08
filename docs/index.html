@@ -16,7 +16,6 @@
                 <ul class="nav-links">
                     <li><a href="#features">Features</a></li>
                     <li><a href="#usage">Usage</a></li>
-                    <li><a href="#gallery">Gallery</a></li>
                     <li><a href="https://github.com/arrase/ollama-agent" target="_blank"><i class="fab fa-github"></i> GitHub</a></li>
                 </ul>
             </nav>
@@ -33,7 +32,17 @@
                 <a href="https://github.com/arrase/ollama-agent" class="secondary-button" target="_blank">View on GitHub</a>
             </div>
 
-            <img src="assets/img/agent_repl_main.png" alt="Ollama Agent Interface" class="hero-image" onclick="openModal(this.src)">
+            <!-- Image Modal relocated -->
+            <div id="imgModal" class="image-modal">
+                <div class="gallery-item">
+                    <img src="assets/img/agent_repl_main.png" alt="Interactive Mode">
+                    <div class="gallery-caption">Interactive REPL Session with Markdown</div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/img/agent_noninteractive_main.png" alt="Non-Interactive Mode">
+                    <div class="gallery-caption">Non-Interactive Mode for Quick Tasks</div>
+                </div>
+            </div>
         </div>
     </section>
 
@@ -205,22 +214,29 @@ prompt: |
                     </div>
                 </div>
 
-            </div>
-        </div>
-    </section>
+                <!-- Non-Interactive Mode -->
+                <div class="feature-item">
+                    <div class="feature-header">
+                        <div class="feature-icon"><i class="fas fa-bolt"></i></div>
+                        <div>
+                            <h3>Non-Interactive Mode</h3>
+                            <p class="feature-description">Execute single-shot tasks directly from your shell.</p>
+                        </div>
+                    </div>
+                    <div class="feature-body">
+                        <div class="usage-box">
+                            <p class="usage-title">CLI Args</p>
+                            <table class="cmd-table">
+                                <tr><td>-p "..."</td><td>Prompt to execute immediately</td></tr>
+                                <tr><td>--rag &lt;db&gt;</td><td>Use specific RAG database</td></tr>
+                            </table>
+                        </div>
+                         <div class="feature-code">
+# Example
+ollama-agent -p "Summarize README.md" --rag docs_db</div>
+                    </div>
+                </div>
 
-    <section id="gallery">
-        <div class="container">
-            <h2>Gallery</h2>
-            <div class="gallery-grid">
-                <div class="gallery-item" onclick="openModal('assets/img/agent_repl_main.png')">
-                    <img src="assets/img/agent_repl_main.png" alt="Interactive REPL Session">
-                    <div class="gallery-caption">Interactive REPL Session with Markdown</div>
-                </div>
-                <div class="gallery-item" onclick="openModal('assets/img/agent_noninteractive_main.png')">
-                    <img src="assets/img/agent_noninteractive_main.png" alt="Non-Interactive CLI Mode">
-                    <div class="gallery-caption">Non-Interactive Mode for Quick Tasks</div>
-                </div>
             </div>
         </div>
     </section>
@@ -262,46 +278,5 @@ ollama pull nomic-embed-text</code></pre>
         </div>
     </footer>
 
-    <!-- Image Modal -->
-    <div id="imgModal" class="image-modal">
-        <span class="close-modal" onclick="closeModal()">&times;</span>
-        <img class="modal-content" id="modalImg">
-    </div>
-
-    <script>
-        function openModal(src) {
-            const modal = document.getElementById("imgModal");
-            const modalImg = document.getElementById("modalImg");
-            modal.style.display = "flex";
-            // Use setTimeout to allow display:flex to apply before adding opacity class for transition
-            setTimeout(() => {
-                modal.classList.add("show");
-            }, 10);
-            modalImg.src = src;
-        }
-
-        function closeModal() {
-            const modal = document.getElementById("imgModal");
-            modal.classList.remove("show");
-            setTimeout(() => {
-                modal.style.display = "none";
-            }, 300);
-        }
-
-        // Close on outside click
-        window.onclick = function(event) {
-            const modal = document.getElementById("imgModal");
-            if (event.target == modal) {
-                closeModal();
-            }
-        }
-
-        // Close on Escape key
-        document.addEventListener('keydown', function(event) {
-            if (event.key === "Escape") {
-                closeModal();
-            }
-        });
-    </script>
 </body>
 </html>

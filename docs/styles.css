@@ -173,9 +173,9 @@ h2::after {
 
 /* New Feature List Layout */
 .feature-list {
-    display: flex;
-    flex-direction: column;
-    gap: 60px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 30px;
 }
 
 .feature-item {
@@ -392,50 +392,32 @@ footer a {
     text-decoration: none;
 }
 
-/* Modal */
+/* Modal converted to Hero Gallery */
 .image-modal {
-    display: none; /* Hidden by default */
-    position: fixed;
-    z-index: 2000;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    overflow: auto;
-    background-color: rgba(0,0,0,0.9);
+    display: flex;
     justify-content: center;
-    align-items: center;
-    opacity: 0;
-    transition: opacity 0.3s ease;
+    gap: 20px;
+    margin-top: 40px;
+    width: 100%;
 }
 
-.image-modal.show {
-    opacity: 1;
-}
-
-.modal-content {
-    max-width: 90%;
-    max-height: 90%;
-    border-radius: 5px;
-    box-shadow: 0 0 20px rgba(0,0,0,0.5);
-}
-
-.close-modal {
-    position: absolute;
-    top: 20px;
-    right: 35px;
-    color: #f1f1f1;
-    font-size: 40px;
-    font-weight: bold;
-    cursor: pointer;
-}
-
-.close-modal:hover {
-    color: var(--accent-color);
+.image-modal .gallery-item {
+    max-width: 45%;
+    /* Override or add specific styles if needed */
 }
 
 /* Responsive */
 @media (max-width: 768px) {
+    .image-modal {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .image-modal .gallery-item {
+        max-width: 90%;
+        margin-bottom: 20px;
+    }
+
     .nav-links {
         display: none;
     }
@@ -451,6 +433,10 @@ footer a {
     
     .feature-icon {
         margin: 0 auto;
+    }
+
+    .feature-list {
+        grid-template-columns: 1fr;
     }
 
     .gallery-grid {
