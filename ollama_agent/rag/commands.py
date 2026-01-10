@@ -122,39 +122,6 @@ def add_rag_directory(ctx: RAGContext, dir_path: str) -> None:
         raise SystemExit(1)
 
 
-def search_rag(ctx: RAGContext, query: str, top_k: int = 5) -> None:
-    """Search the current RAG database."""
-    try:
-        results = ctx.rag_manager.search(query, top_k)
-        if not results:
-            ctx.console.print("[yellow]No results found.[/yellow]")
-            return
-
-        ctx.console.print(f"[bold]Search Results ({len(results)}):[/bold]")
-        ctx.console.print("[dim]─" + "─" * 59 + "[/dim]")
-
-        for i, r in enumerate(results, 1):
-            score = r.get("score", 0)
-            source = r.get("filename", r.get("source", "unknown"))
-            content = r.get("content", "")[:200]
-            if len(r.get("content", "")) > 200:
-                content += "..."
-
-            ctx.console.print(
-                f"[cyan]{i}.[/cyan] [bold]{source}[/bold] "
-                f"[dim](score: {score:.3f})[/dim]"
-            )
-            ctx.console.print(f"   {content}")
-            ctx.console.print()
-
-    except RAGNotLoadedError:
-        ctx.console.print("[red]No RAG database loaded.[/red] Use /rag-load <name> first.")
-        raise SystemExit(1)
-    except RAGError as e:
-        ctx.console.print(f"[red]{e}[/red]")
-        raise SystemExit(1)
-
-
 def show_rag_status(ctx: RAGContext) -> None:
     """Show current RAG status."""
     current = ctx.rag_manager.current_database

@@ -18,7 +18,6 @@ from ..rag import (
     delete_rag_database,
     list_rag_databases,
     load_rag_database,
-    search_rag,
     show_rag_status,
     unload_rag_database,
 )
@@ -194,24 +193,6 @@ class OllamaREPL:
                         add_rag_directory(self._get_rag_ctx(), path)
                     else:
                         add_rag_file(self._get_rag_ctx(), path)
-                except SystemExit:
-                    pass
-            case "/rag-search":
-                if not args:
-                    self.console.print("[red]Usage: /rag-search <query> [-k <num>][/red]")
-                    return
-                top_k = 5
-                if "-k" in args:
-                    k_idx = args.index("-k")
-                    if k_idx + 1 < len(args) and args[k_idx + 1].isdigit():
-                        top_k = int(args[k_idx + 1])
-                        query = " ".join(args[:k_idx])
-                    else:
-                        query = " ".join(args[:k_idx])
-                else:
-                    query = " ".join(args)
-                try:
-                    search_rag(self._get_rag_ctx(), query, top_k)
                 except SystemExit:
                     pass
             case _: self.console.print(f"[red]Unknown command:[/red] {cmd}")
@@ -448,5 +429,4 @@ class OllamaREPL:
         [green]/rag-delete[/green]      Delete a RAG database (Usage: /rag-delete <name>)
         [green]/rag-load[/green]        Load a RAG database (Usage: /rag-load <name>)
         [green]/rag-unload[/green]      Unload the current RAG database
-        [green]/rag-add[/green]         Add file(s) to RAG (Usage: /rag-add <path> [--dir])
-        [green]/rag-search[/green]      Search RAG database (Usage: /rag-search <query> [-k num])""", title="Help"))
+        [green]/rag-add[/green]         Add file(s) to RAG (Usage: /rag-add <path> [--dir])""", title="Help"))

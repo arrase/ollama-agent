@@ -8,7 +8,6 @@ from .commands import (
     delete_rag_database,
     list_rag_databases,
     load_rag_database,
-    search_rag,
     show_rag_status,
     unload_rag_database,
 )
@@ -39,7 +38,6 @@ __all__ = [
     "delete_rag_database",
     "list_rag_databases",
     "load_rag_database",
-    "search_rag",
     "show_rag_status",
     "unload_rag_database",
 ]

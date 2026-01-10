@@ -84,7 +84,6 @@ The REPL provides a persistent chat session. You can use slash commands to manag
 - `/rag-unload`: Unload the current RAG database.
 - `/rag-add <path>`: Add a file to the loaded RAG database.
 - `/rag-add <path> --dir`: Add all files from a directory.
-- `/rag-search <query>`: Search the loaded RAG database.
 - `/rag-delete <name>`: Delete a RAG database.
 - `/exit`: Quit the application.
 
@@ -283,21 +282,7 @@ Supported file types include: `.txt`, `.md`, `.py`, `.js`, `.ts`, `.json`, `.yam
 
 ### Searching Documents
 
-**Search (CLI):**
-
-```bash
-ollama-agent rag-search my-docs "how to configure the agent"
-# Limit results:
-ollama-agent rag-search my-docs "configuration" -k 3
-```
-
-**Search (REPL):**
-
-```text
-/rag-load my-docs
-/rag-search how to configure the agent
-/rag-search configuration -k 3
-```
+Manual query commands have been removed from both CLI and REPL. Load a RAG database and ask your question normally — the agent will use the `rag_search` tool automatically when it needs document context.
 
 ### Using RAG with Prompts
 

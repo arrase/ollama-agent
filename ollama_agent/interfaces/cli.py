@@ -16,7 +16,6 @@ from ..rag import (
     delete_rag_database,
     list_rag_databases,
     load_rag_database,
-    search_rag,
 )
 from ..settings import get_config
 from ..tasks.commands import CLIContext, create_task, delete_task, list_tasks, run_task
@@ -123,15 +122,7 @@ def _add_task_subcommands(parser: argparse.ArgumentParser) -> None:
         "--dir", action="store_true",
         help="Treat path as directory and add all files recursively")
 
-    rag_search_parser = subparsers.add_parser(
-        "rag-search", help="Search a RAG database")
-    rag_search_parser.add_argument(
-        "database", type=str, help="Name of the RAG database")
-    rag_search_parser.add_argument(
-        "query", type=str, help="Search query")
-    rag_search_parser.add_argument(
-        "-k", "--top-k", type=int, default=5,
-        help="Number of results to return (default: 5)")
+    # NOTE: Manual RAG query subcommand intentionally removed.
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
@@ -159,10 +150,6 @@ def handle_cli_commands(args: argparse.Namespace, agent_factory: Callable[..., O
         else:
             add_rag_file(rag_ctx, args.path)
 
-    def _rag_search() -> None:
-        load_rag_database(rag_ctx, args.database)
-        search_rag(rag_ctx, args.query, args.top_k)
-
     handlers = {
         "task-list": lambda: list_tasks(ctx),
         "task-delete": lambda: delete_task(ctx, args.task_id),
@@ -181,7 +168,6 @@ def handle_cli_commands(args: argparse.Namespace, agent_factory: Callable[..., O
         "rag-create": lambda: create_rag_database(rag_ctx, args.name),
         "rag-delete": lambda: delete_rag_database(rag_ctx, args.name),
         "rag-add": _rag_add,
-        "rag-search": _rag_search,
     }
     if args.command in handlers:
         handlers[args.command]()
