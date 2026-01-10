@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import hashlib
 import logging
 import mimetypes
@@ -12,7 +13,14 @@ from typing import Any
 
 import ollama
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    MatchValue,
+    PointStruct,
+    VectorParams,
+)
 
 from .settings import RAGSettings
 
@@ -173,26 +181,31 @@ class RAGManager:
         if not content.strip():
             raise RAGError(f"File is empty: {file_path}")
 
+        # Remove any previously indexed chunks for this file to avoid stale points
+        # when chunking changes (e.g., file edits, config changes).
+        self._delete_source_points(client, str(path))
+
         # Chunk the content
         chunks = self._chunk_text(content)
 
-        # Generate embeddings and store
-        points = []
-        for i, chunk in enumerate(chunks):
-            embedding = self._get_embedding(chunk)
+        # Generate embeddings in batch and store
+        embeddings = self._get_embeddings(chunks)
+        points: list[PointStruct] = []
+        for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=False)):
             point_id = self._generate_point_id(str(path), i)
-
-            points.append(PointStruct(
-                id=point_id,
-                vector=embedding,
-                payload={
-                    "content": chunk,
-                    "source": str(path),
-                    "filename": path.name,
-                    "chunk_index": i,
-                    "total_chunks": len(chunks),
-                },
-            ))
+            points.append(
+                PointStruct(
+                    id=point_id,
+                    vector=embedding,
+                    payload={
+                        "content": chunk,
+                        "source": str(path),
+                        "filename": path.name,
+                        "chunk_index": i,
+                        "total_chunks": len(chunks),
+                    },
+                )
+            )
 
         client.upsert(collection_name=self.COLLECTION_NAME, points=points)
 
@@ -281,17 +294,69 @@ class RAGManager:
 
     def _get_embedding(self, text: str) -> list[float]:
         """Generate embedding for text using Ollama."""
+        embeddings = self._get_embeddings([text])
+        return embeddings[0] if embeddings else []
+
+    def _get_embeddings(self, texts: list[str]) -> list[list[float]]:
+        """Generate embeddings for a batch of texts using Ollama."""
+        if not texts:
+            return []
         try:
             client = ollama.Client(host=self.settings.embedder_base_url)
             response = client.embed(
                 model=self.settings.embedder_model,
-                input=text,
+                input=texts,
             )
-            # Handle both single and batch responses
-            embeddings = response.get("embeddings", [[]])
-            return embeddings[0] if embeddings else []
+            embeddings: list[list[float]] = response.get("embeddings", []) or []
+
+            if len(embeddings) != len(texts):
+                raise RAGError(
+                    f"Embedding generation returned {len(embeddings)} vectors for {len(texts)} inputs"
+                )
+
+            expected = self.settings.embedding_dims
+            for idx, vec in enumerate(embeddings):
+                if expected and len(vec) != expected:
+                    raise RAGError(
+                        f"Embedding dims mismatch at index {idx}: expected {expected}, got {len(vec)}"
+                    )
+
+            return embeddings
+        except RAGError:
+            raise
         except Exception as e:
             raise RAGError(f"Embedding generation failed: {e}") from e
+
+    def _delete_source_points(self, client: QdrantClient, source: str) -> None:
+        """Delete all points previously indexed for a given source path."""
+        try:
+            client.delete(
+                collection_name=self.COLLECTION_NAME,
+                points_selector=Filter(
+                    must=[
+                        FieldCondition(
+                            key="source",
+                            match=MatchValue(value=source),
+                        )
+                    ]
+                ),
+                wait=True,
+            )
+        except TypeError:
+            # Older qdrant-client versions may not support wait= or this signature.
+            client.delete(
+                collection_name=self.COLLECTION_NAME,
+                points_selector=Filter(
+                    must=[
+                        FieldCondition(
+                            key="source",
+                            match=MatchValue(value=source),
+                        )
+                    ]
+                ),
+            )
+        except Exception as e:
+            raise RAGError(f"Failed to delete existing points for source '{source}': {e}") from e
 
     def _chunk_text(self, text: str) -> list[str]:
         """Split text into overlapping chunks."""
@@ -341,7 +406,6 @@ class RAGManager:
     @staticmethod
     def _validate_name(name: str) -> str:
         """Validate database name."""
-        import re
         name = (name or "").strip()
         if not name or not re.fullmatch(r"[A-Za-z0-9_-]+", name):
             raise RAGError("Invalid name. Use only letters, numbers, '_' and '-'.")
