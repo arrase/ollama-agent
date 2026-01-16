@@ -1,6 +1,6 @@
 # Ollama Agent
 
-Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to interact with local AI models through an Ollama-compatible API. It provides a persistent chat experience, session management, and the ability to execute local shell commands, turning your local models into helpful assistants for your daily tasks.
+Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to interact with local AI models. It provides a persistent chat experience, session management, and the ability to execute local shell commands, turning your local models into helpful assistants for your daily tasks.
 
 ## Features
 
