@@ -19,6 +19,7 @@ from ..settings import RunningMCPServer, cleanup_mcp_servers, initialize_mcp_ser
 from ..streaming import event_payloads
 from .builtin_tools import BUILTIN_TOOLS, set_memory_manager, set_rag_manager
 from .session_manager import SessionManager
+from ..vision import build_multimodal_responses_input, capture_display_as_base64, extract_display_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,6 @@ def _maybe_attach_screen_context(prompt: object) -> object:
     """Convert @dpN tokens in string prompts to multimodal input."""
     if not isinstance(prompt, str) or "@dp" not in prompt:
         return prompt
-    from ..vision import build_multimodal_responses_input, capture_display_as_base64, extract_display_tokens
     cleaned, displays = extract_display_tokens(prompt)
     if not displays:
         return prompt
