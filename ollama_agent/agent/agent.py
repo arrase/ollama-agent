@@ -15,7 +15,7 @@ from langchain.agents.middleware import HostExecutionPolicy
 from langchain.agents.middleware import wrap_tool_call
 from langchain_openai import ChatOpenAI
 
-from ..core import ReasoningEffortValue, assistant_text_from_messages, extract_text, final_text_from_state
+from ..core import ReasoningEffortValue, assistant_text_from_messages, final_text_from_state
 from ..core import validate_reasoning_effort
 from ..core import ensure_model_supports_tools
 from ..memory import Mem0Settings, MemoryManager
@@ -26,6 +26,20 @@ from .session_manager import SessionManager
 from ..vision import build_multimodal_responses_input, capture_display_as_base64, extract_display_tokens
 
 logger = logging.getLogger(__name__)
+
+
+def _streaming_text(content: Any) -> str:
+    """Extract text from a streaming chunk without altering whitespace."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, dict):
+        return content.get("text", "") if content.get("type") == "text" else ""
+    if isinstance(content, list):
+        return "".join(
+            b["text"] for b in content
+            if isinstance(b, dict) and b.get("type") == "text" and isinstance(b.get("text"), str)
+        )
+    return ""
 
 
 def _deepagents_backend_factory(_: Any) -> FilesystemBackend:
@@ -238,7 +252,7 @@ class OllamaAgent:
 
         last_state: Any | None = None
         emitted_text = ""
-        emitted_from_messages = ""
+        emitted_from_messages = False
         try:
             async for mode, event in agent.astream(
                 {"messages": self._build_messages_with_history(history, prompt)},
@@ -251,20 +265,18 @@ class OllamaAgent:
                 # Capture aggregate state (includes the full assistant message).
                 if mode == "values" and isinstance(event, dict):
                     last_state = event
-                    messages = event.get("messages")
-                    current = assistant_text_from_messages(messages) if isinstance(messages, list) else ""
-                    # Only use values-streaming if we are not already streaming via messages.
-                    if not emitted_from_messages and current and current != emitted_text:
-                        if current.startswith(emitted_text):
-                            delta = current[len(emitted_text) :]
-                            emitted_text = current
-                            if delta:
-                                yield {"type": "text_delta", "content": delta}
-                        else:
-                            # If the stream does not monotonically append (rare),
-                            # fall back to emitting the full current text once.
-                            emitted_text = current
-                            yield {"type": "text_delta", "content": current}
+                    if not emitted_from_messages:
+                        messages = event.get("messages")
+                        current = assistant_text_from_messages(messages) if isinstance(messages, list) else ""
+                        if current and current != emitted_text:
+                            if current.startswith(emitted_text):
+                                delta = current[len(emitted_text) :]
+                                emitted_text = current
+                                if delta:
+                                    yield {"type": "text_delta", "content": delta}
+                            else:
+                                emitted_text = current
+                                yield {"type": "text_delta", "content": current}
                     continue
 
                 if mode == "messages":
@@ -275,16 +287,14 @@ class OllamaAgent:
                     if chunk_type == "tool" or "tool" in chunk_name:
                         continue
 
+                    # Extract text from streaming chunk without stripping whitespace
+                    # (each token may carry leading/trailing spaces that are significant).
                     content = getattr(chunk, "content", None)
-                    text = extract_text(content)
+                    text = _streaming_text(content)
                     if text:
-                        emitted_from_messages += text
+                        emitted_from_messages = True
                         yield {"type": "text_delta", "content": text}
                     continue
-
-                # NOTE: With Ollama /v1/responses streaming, "messages" chunks can arrive
-                # without whitespace (e.g. 'Est' 'os' 'son'...), so we ignore them and
-                # stream via the aggregated "values" state above.
 
             final = final_text_from_state(last_state) if last_state is not None else emitted_text
             if final:

@@ -39,14 +39,14 @@ class RAGToolResult(TypedDict, total=False):
     error: str
 
 
-def extract_text(content: Any) -> str:
+def extract_text(content: Any, *, sep: str = " ") -> str:
     """Best-effort conversion of agent payload content into plain text."""
     if isinstance(content, str):
         return content
     if isinstance(content, list):
-        return " ".join(filter(None, map(extract_text, content))).strip()
+        return sep.join(filter(None, (extract_text(c, sep=sep) for c in content))).strip()
     if isinstance(content, dict):
-        return extract_text(content.get("text") or content.get("content"))
+        return extract_text(content.get("text") or content.get("content"), sep=sep)
     return ""
 
 
