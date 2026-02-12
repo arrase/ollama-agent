@@ -6,7 +6,7 @@ from typing import Callable
 
 from ..agent import OllamaAgent
 from ..core import ALLOWED_REASONING_EFFORTS
-from ..execution import run_non_interactive
+from ..streaming import run_non_interactive
 from ..rag import (
     RAGContext,
     RAGManager,
@@ -157,37 +157,21 @@ def handle_cli_commands(args: argparse.Namespace, agent_factory: Callable[..., O
             add_rag_file(rag_ctx, args.path)
 
     cmd = getattr(args, "_handler", None) or args.command
-    if cmd == "task-list":
-        list_tasks(ctx)
-        return True
-    if cmd == "task-delete":
-        delete_task(ctx, args.task_id)
-        return True
-    if cmd == "task-run":
-        asyncio.run(run_task(ctx, args.task_id))
-        return True
-    if cmd == "task-create":
-        create_task(
-            ctx,
-            args.task_id,
-            title=args.title,
-            prompt=args.task_prompt,
+    handlers = {
+        "task-list": lambda: list_tasks(ctx),
+        "task-delete": lambda: delete_task(ctx, args.task_id),
+        "task-run": lambda: asyncio.run(run_task(ctx, args.task_id)),
+        "task-create": lambda: create_task(
+            ctx, args.task_id, title=args.title, prompt=args.task_prompt,
             model=(args.task_model or args.model or ""),
-            reasoning_effort=(args.task_effort or args.effort),
-            force=bool(args.force),
-        )
-        return True
-    if cmd == "rag-list":
-        list_rag_databases(rag_ctx)
-        return True
-    if cmd == "rag-create":
-        create_rag_database(rag_ctx, args.name)
-        return True
-    if cmd == "rag-delete":
-        delete_rag_database(rag_ctx, args.name)
-        return True
-    if cmd == "rag-add":
-        _rag_add()
+            reasoning_effort=(args.task_effort or args.effort), force=bool(args.force)),
+        "rag-list": lambda: list_rag_databases(rag_ctx),
+        "rag-create": lambda: create_rag_database(rag_ctx, args.name),
+        "rag-delete": lambda: delete_rag_database(rag_ctx, args.name),
+        "rag-add": _rag_add,
+    }
+    if cmd in handlers:
+        handlers[cmd]()
         return True
 
     if args.prompt:

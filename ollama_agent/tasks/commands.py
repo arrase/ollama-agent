@@ -7,8 +7,8 @@ from rich.console import Console
 from rich.table import Table
 
 from ..agent import OllamaAgent
-from ..execution import run_non_interactive
-from ..core import resolve_unique_prefix
+from ..streaming import run_non_interactive
+from ..core import find_or_exit, resolve_unique_prefix
 from .manager import Task, TaskManager
 
 
@@ -20,17 +20,13 @@ class CLIContext:
     task_manager: TaskManager = field(default_factory=TaskManager)
 
     def _find_or_exit(self, task_id: str) -> tuple[str, Task]:
-        # Fast path: exact/unique matches as implemented by TaskManager.
         matches = self.task_manager.find_matches(task_id)
         if len(matches) == 1:
             return matches[0]
-
-        # Fallback: replicate prior error message format.
         candidates = [p.stem for p in self.task_manager.tasks_dir.glob("*.yaml")]
         resolved = resolve_unique_prefix(task_id, sorted(candidates))
         if resolved and (t := self.task_manager.load(resolved)) is not None:
             return (resolved, t)
-
         msg = (
             f"Task not found: {task_id}"
             if not matches

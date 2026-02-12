@@ -1,6 +1,9 @@
 """Shared type definitions and utilities for the application."""
 
+import re
 from typing import Any, Literal, TypedDict
+
+from rich.console import Console
 
 # Reasoning effort types
 ReasoningEffortValue = Literal["low", "medium", "high", "disabled"]
@@ -93,3 +96,27 @@ def resolve_unique_prefix(prefix: str, candidates: list[str]) -> str | None:
     if len(matches) == 1:
         return matches[0]
     return None
+
+
+def validate_identifier(name: str, label: str = "identifier") -> str:
+    """Validate that *name* contains only [A-Za-z0-9_-]. Raises ValueError otherwise."""
+    name = (name or "").strip()
+    if not name or not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+        raise ValueError(f"Invalid {label}. Use only letters, numbers, '_' and '-'.")
+    return name
+
+
+def find_or_exit(
+    prefix: str,
+    candidates: list[str],
+    console: Console,
+    *,
+    label: str = "item",
+) -> str:
+    """Resolve a unique prefix match from *candidates* or exit with an error message."""
+    if resolved := resolve_unique_prefix(prefix, candidates):
+        return resolved
+    matches = [c for c in candidates if c.startswith((prefix or "").strip())]
+    msg = f"{label} not found: {prefix}" if not matches else f"Ambiguous prefix: {prefix} -> {', '.join(matches)}"
+    console.print(f"[red]{msg}[/red]")
+    raise SystemExit(1)

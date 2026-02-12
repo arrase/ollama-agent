@@ -15,7 +15,7 @@ from langchain.agents.middleware import HostExecutionPolicy
 from langchain.agents.middleware import wrap_tool_call
 from langchain_openai import ChatOpenAI
 
-from ..core import ReasoningEffortValue, assistant_text_from_messages, final_text_from_state
+from ..core import ReasoningEffortValue, assistant_text_from_messages, extract_text, final_text_from_state
 from ..core import validate_reasoning_effort
 from ..core import ensure_model_supports_tools
 from ..memory import Mem0Settings, MemoryManager
@@ -26,22 +26,6 @@ from .session_manager import SessionManager
 from ..vision import build_multimodal_responses_input, capture_display_as_base64, extract_display_tokens
 
 logger = logging.getLogger(__name__)
-
-
-def _text_from_content_blocks(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, dict):
-        if content.get("type") == "text" and isinstance(content.get("text"), str):
-            return content["text"]
-        return ""
-    if isinstance(content, list):
-        parts: list[str] = []
-        for block in content:
-            if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str):
-                parts.append(block["text"])
-        return "".join(parts)
-    return ""
 
 
 def _deepagents_backend_factory(_: Any) -> FilesystemBackend:
@@ -69,12 +53,13 @@ def _maybe_attach_screen_context(prompt: object) -> dict[str, Any]:
 async def _stream_tool_events(request, handler):
     """Emit tool_call/tool_output events so the existing renderers keep working."""
     runtime = getattr(request, "runtime", None)
-    tool_name = (
-        getattr(request, "name", None)
-        or getattr(request, "tool_name", None)
-        or getattr(getattr(request, "tool", None), "name", None)
-        or getattr(getattr(request, "tool", None), "__name__", None)
-        or "unknown"
+    tool_name = next(
+        (n for attr in ("name", "tool_name")
+         if (n := getattr(request, attr, None)))
+        or (n for obj in (getattr(request, "tool", None),)
+            if obj for attr in ("name", "__name__")
+            if (n := getattr(obj, attr, None))),
+        "unknown",
     )
     if runtime is not None:
         try:
@@ -291,7 +276,7 @@ class OllamaAgent:
                         continue
 
                     content = getattr(chunk, "content", None)
-                    text = _text_from_content_blocks(content)
+                    text = extract_text(content)
                     if text:
                         emitted_from_messages += text
                         yield {"type": "text_delta", "content": text}

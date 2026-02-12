@@ -98,6 +98,4 @@ def build_multimodal_responses_input(
     return [{"role": "user", "content": blocks}]
 
 
-def build_multimodal_user_message(text: str, images: Iterable[CapturedImage]) -> dict[str, Any]:
-    """Convenience wrapper returning a single user message dict."""
-    return build_multimodal_responses_input(text, images)[0]
+

@@ -10,7 +10,6 @@ from pathlib import Path
 
 APP_DIR = Path.home() / ".ollama-agent"
 
-CONFIG_INI_PATH = APP_DIR / "config.ini"
 INSTRUCTIONS_PATH = APP_DIR / "instructions.md"
 DATABASE_PATH = APP_DIR / "sessions.db"
 MCP_SERVERS_PATH = APP_DIR / "mcp_servers.json"

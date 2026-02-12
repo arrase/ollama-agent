@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import re
 import hashlib
 import logging
 import mimetypes
 import shutil
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +21,7 @@ from qdrant_client.models import (
 )
 
 from .settings import RAGSettings
+from ..core.common import validate_identifier
 
 logger = logging.getLogger(__name__)
 
@@ -37,16 +36,6 @@ class RAGNotLoadedError(RAGError):
 
 class RAGDatabaseExistsError(RAGError):
     """Raised when attempting to create a database that already exists."""
-
-
-@dataclass
-class RAGDocument:
-    """Represents a document chunk in the RAG database."""
-
-    content: str
-    source: str
-    chunk_index: int
-    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class RAGManager:
@@ -279,19 +268,6 @@ class RAGManager:
             for hit in results
         ]
 
-    def get_context(self, query: str, top_k: int | None = None) -> str:
-        """Get formatted context from RAG for use in prompts."""
-        results = self.search(query, top_k)
-        if not results:
-            return ""
-
-        context_parts = []
-        for r in results:
-            source = r.get("filename", r.get("source", "unknown"))
-            context_parts.append(f"[Source: {source}]\n{r['content']}")
-
-        return "\n\n---\n\n".join(context_parts)
-
     def _get_embedding(self, text: str) -> list[float]:
         """Generate embedding for text using Ollama."""
         embeddings = self._get_embeddings([text])
@@ -329,32 +305,12 @@ class RAGManager:
 
     def _delete_source_points(self, client: QdrantClient, source: str) -> None:
         """Delete all points previously indexed for a given source path."""
+        filt = Filter(must=[FieldCondition(key="source", match=MatchValue(value=source))])
         try:
-            client.delete(
-                collection_name=self.COLLECTION_NAME,
-                points_selector=Filter(
-                    must=[
-                        FieldCondition(
-                            key="source",
-                            match=MatchValue(value=source),
-                        )
-                    ]
-                ),
-                wait=True,
-            )
+            client.delete(collection_name=self.COLLECTION_NAME, points_selector=filt, wait=True)
         except TypeError:
-            # Older qdrant-client versions may not support wait= or this signature.
-            client.delete(
-                collection_name=self.COLLECTION_NAME,
-                points_selector=Filter(
-                    must=[
-                        FieldCondition(
-                            key="source",
-                            match=MatchValue(value=source),
-                        )
-                    ]
-                ),
-            )
+            # Older qdrant-client versions may not support wait=.
+            client.delete(collection_name=self.COLLECTION_NAME, points_selector=filt)
         except Exception as e:
             raise RAGError(f"Failed to delete existing points for source '{source}': {e}") from e
 
@@ -406,10 +362,10 @@ class RAGManager:
     @staticmethod
     def _validate_name(name: str) -> str:
         """Validate database name."""
-        name = (name or "").strip()
-        if not name or not re.fullmatch(r"[A-Za-z0-9_-]+", name):
-            raise RAGError("Invalid name. Use only letters, numbers, '_' and '-'.")
-        return name
+        try:
+            return validate_identifier(name, "name")
+        except ValueError as e:
+            raise RAGError(str(e)) from e
 
     @staticmethod
     def _generate_point_id(source: str, chunk_index: int) -> int:

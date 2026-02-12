@@ -4,12 +4,12 @@ from typing import Callable
 from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.styles import Style
+import ollama
 from rich.console import Console
-from rich.live import Live
-from rich.markdown import Markdown
 from rich.panel import Panel
 from ..agent import OllamaAgent
 from ..core import ModelCapabilityError, model_supports_tools, resolve_unique_prefix
+from ..streaming import ConsoleStreamingRenderer, stream_agent_events
 from ..rag import (
     RAGContext,
     add_rag_directory,
@@ -51,6 +51,16 @@ class OllamaREPL:
             self.active_agent = self.agent_factory(
                 model=self.model, reasoning_effort=self.effort)
         return self.active_agent
+
+    @staticmethod
+    async def _safe(fn, *args, **kwargs):
+        """Call fn(*args, **kwargs), silencing SystemExit (already printed)."""
+        try:
+            result = fn(*args, **kwargs)
+            if hasattr(result, '__await__'):
+                await result
+        except SystemExit:
+            pass
 
     async def cleanup(self) -> None:
         if self.active_agent:
@@ -109,16 +119,10 @@ class OllamaREPL:
             case "/tasks": list_tasks(self.ctx)
             case "/task-run":
                 if tid := await _require_arg("/task-run <task_id>"):
-                    try:
-                        await run_task(self.ctx, tid)
-                    except SystemExit:
-                        pass
+                    await self._safe(run_task, self.ctx, tid)
             case "/task-delete":
                 if tid := await _require_arg("/task-delete <task_id>"):
-                    try:
-                        delete_task(self.ctx, tid)
-                    except SystemExit:
-                        pass
+                    await self._safe(delete_task, self.ctx, tid)
             case "/task-create":
                 if not args:
                     self.console.print(
@@ -135,11 +139,8 @@ class OllamaREPL:
                     task_prompt = await self.session.prompt_async(HTML("<b>prompt> </b>"), multiline=True)
                 finally:
                     buf.multiline = old_multiline
-                try:
-                    create_task(self.ctx, task_id, title=title, prompt=task_prompt,
-                                model=model, reasoning_effort=effort, force=force)
-                except SystemExit:
-                    pass
+                await self._safe(create_task, self.ctx, task_id, title=title, prompt=task_prompt,
+                                 model=model, reasoning_effort=effort, force=force)
             case "/new":
                 if self.active_agent:
                     self.active_agent.session_manager.reset_session()
@@ -165,22 +166,13 @@ class OllamaREPL:
             case "/rag-list": list_rag_databases(self._get_rag_ctx())
             case "/rag-create":
                 if name := await _require_arg("/rag-create <name>"):
-                    try:
-                        create_rag_database(self._get_rag_ctx(), name)
-                    except SystemExit:
-                        pass
+                    await self._safe(create_rag_database, self._get_rag_ctx(), name)
             case "/rag-delete":
                 if name := await _require_arg("/rag-delete <name>"):
-                    try:
-                        delete_rag_database(self._get_rag_ctx(), name)
-                    except SystemExit:
-                        pass
+                    await self._safe(delete_rag_database, self._get_rag_ctx(), name)
             case "/rag-load":
                 if name := await _require_arg("/rag-load <name>"):
-                    try:
-                        load_rag_database(self._get_rag_ctx(), name)
-                    except SystemExit:
-                        pass
+                    await self._safe(load_rag_database, self._get_rag_ctx(), name)
             case "/rag-unload":
                 unload_rag_database(self._get_rag_ctx())
             case "/rag-add":
@@ -188,13 +180,7 @@ class OllamaREPL:
                     self.console.print("[red]Usage: /rag-add <file_or_dir> [--dir][/red]")
                     return
                 path, is_dir = args[0], "--dir" in args[1:]
-                try:
-                    if is_dir:
-                        add_rag_directory(self._get_rag_ctx(), path)
-                    else:
-                        add_rag_file(self._get_rag_ctx(), path)
-                except SystemExit:
-                    pass
+                await self._safe(add_rag_directory if is_dir else add_rag_file, self._get_rag_ctx(), path)
             case _: self.console.print(f"[red]Unknown command:[/red] {cmd}")
 
     async def _list_sessions(self, page: int = 1, per_page: int = 10) -> None:
@@ -353,55 +339,8 @@ class OllamaREPL:
 
     async def handle_chat(self, prompt: str) -> None:
         agent = self._ensure_agent()
-        full_response, reasoning_active, response_banner_shown = "", False, False
-        live = Live(console=self.console, refresh_per_second=12,
-                    vertical_overflow="visible")
-        try:
-            async for payload in agent.run_async_streamed(prompt):
-                msg_type = payload.get("type")
-                if msg_type == "text_delta":
-                    if reasoning_active:
-                        reasoning_active = False
-                        self.console.print()
-                    if not response_banner_shown:
-                        self.console.print()
-                        response_banner_shown = True
-                        live.start()
-                    full_response += payload["content"]
-                    live.update(Markdown(full_response))
-                elif msg_type == "reasoning_delta":
-                    if not reasoning_active:
-                        self.console.print(
-                            "\n[bold magenta]🧠 Thinking:[/bold magenta] ", end="")
-                        reasoning_active = True
-                    self.console.print(payload.get(
-                        "content", ""), end="", style="dim italic magenta")
-                elif msg_type == "tool_call":
-                    if reasoning_active:
-                        reasoning_active = False
-                        self.console.print()
-                    live.stop()
-                    self.console.print(
-                        f"\n[bold magenta]tool -> {payload.get('name')}...[/bold magenta]")
-                elif msg_type == "tool_output":
-                    out_len = payload.get("output_len")
-                    suffix = f" ({out_len} chars)" if isinstance(out_len, int) else ""
-                    self.console.print(f"[dim]<- (tool output oculto){suffix}[/dim]")
-                elif msg_type == "error":
-                    live.stop()
-                    self.console.print(f"[red]{payload['content']}[/red]")
-            if reasoning_active:
-                self.console.print()
-            if not response_banner_shown:
-                self.console.print()
-                live.start()
-            live.update(Markdown(full_response))
-        except Exception as e:
-            live.stop()
-            self.console.print(f"[red]Error running agent: {e}[/red]")
-        finally:
-            live.stop()
-        self.console.print()
+        renderer = ConsoleStreamingRenderer(self.console)
+        await stream_agent_events(agent, prompt, renderer, auto_close=True)
 
     def show_help(self) -> None:
         self.console.print(Panel("""[bold]Available Commands:[/bold]

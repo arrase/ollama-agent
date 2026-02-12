@@ -24,7 +24,7 @@ async def stream_agent_events(
     model: str | None = None,
     reasoning_effort: str | None = None,
     ignore: Iterable[str] | None = None,
-    auto_close: bool = False,
+    auto_close: bool = True,
 ) -> None:
     ignored = set(ignore or ())
     try:
@@ -40,7 +40,12 @@ async def stream_agent_events(
             renderer.close()
 
 
-async def stream_agent_events_with_renderer(
-    agent: "OllamaAgent", prompt: object, renderer: "StreamingRenderer", **kwargs: Any
-) -> None:
-    await stream_agent_events(agent, prompt, renderer, auto_close=True, **kwargs)
+async def run_non_interactive(agent: "OllamaAgent", prompt: object) -> None:
+    """Stream agent output to the console."""
+    from rich.console import Console
+    from .console_renderer import ConsoleStreamingRenderer
+
+    async with agent.lifespan():
+        await stream_agent_events(
+            agent, prompt, ConsoleStreamingRenderer(Console()), ignore={"agent_update"},
+        )

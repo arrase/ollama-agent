@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
 import yaml
 
-from ..core import DEFAULT_REASONING_EFFORT, ReasoningEffortValue, validate_reasoning_effort
+from ..core import DEFAULT_REASONING_EFFORT, ReasoningEffortValue, validate_reasoning_effort, validate_identifier
 from ..settings.paths import TASKS_DIR
 
 logger = logging.getLogger(__name__)
@@ -50,11 +49,7 @@ class TaskManager:
     @staticmethod
     def validate_task_id(task_id: str) -> str:
         """Validate task_id: letters, numbers, underscore, dash only."""
-        task_id = (task_id or "").strip()
-        if not task_id or not re.fullmatch(r"[A-Za-z0-9_-]+", task_id):
-            raise ValueError(
-                "Invalid task_id. Use only letters, numbers, '_' and '-'.")
-        return task_id
+        return validate_identifier(task_id, "task_id")
 
     def save(self, task_id: str, task: Task, *, overwrite: bool = False) -> str:
         """Save a task and return its ID."""

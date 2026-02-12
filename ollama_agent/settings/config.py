@@ -7,10 +7,13 @@ import logging
 from dataclasses import asdict, dataclass, field
 from importlib import resources
 from pathlib import Path
-from typing import Any
-from ..memory.settings import Mem0Settings
-from ..rag.settings import RAGSettings
+from typing import TYPE_CHECKING, Any
+
 from .paths import APP_DIR, DATABASE_PATH, INSTRUCTIONS_PATH, MCP_SERVERS_PATH
+
+if TYPE_CHECKING:
+    from ..memory.settings import Mem0Settings
+    from ..rag.settings import RAGSettings
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +35,18 @@ class Config:
     database_path: Path = field(default_factory=lambda: DATABASE_PATH)
     builtin_tool_timeout: int = 30
     mcp_config_path: Path = field(default_factory=lambda: MCP_SERVERS_PATH)
-    mem0: Mem0Settings = field(default_factory=Mem0Settings)
-    rag: RAGSettings = field(default_factory=RAGSettings)
+    mem0: Mem0Settings = field(default_factory=lambda: _lazy_mem0_settings())
+    rag: RAGSettings = field(default_factory=lambda: _lazy_rag_settings())
+
+
+def _lazy_mem0_settings():
+    from ..memory.settings import Mem0Settings as _M
+    return _M()
+
+
+def _lazy_rag_settings():
+    from ..rag.settings import RAGSettings as _R
+    return _R()
 
 
 def _safe_cast(value: Any, caster: type, default: Any) -> Any:
@@ -46,6 +59,7 @@ def _safe_cast(value: Any, caster: type, default: Any) -> Any:
 
 
 def _load_mem0(section: dict[str, str]) -> Mem0Settings:
+    from ..memory.settings import Mem0Settings
     d = Mem0Settings()
     g = section.get
     c = _safe_cast
@@ -64,6 +78,7 @@ def _load_mem0(section: dict[str, str]) -> Mem0Settings:
 
 
 def _load_rag(section: dict[str, str]) -> RAGSettings:
+    from ..rag.settings import RAGSettings
     d, g, c = RAGSettings(), section.get, _safe_cast
     return RAGSettings(
         rag_dir=g("rag_dir", d.rag_dir),

@@ -13,7 +13,6 @@ from .commands import (
 )
 from .manager import (
     RAGDatabaseExistsError,
-    RAGDocument,
     RAGError,
     RAGManager,
     RAGNotLoadedError,
@@ -25,7 +24,6 @@ __all__ = [
     "DEFAULT_RAG_DIR",
     "RAGSettings",
     # Manager
-    "RAGDocument",
     "RAGError",
     "RAGDatabaseExistsError",
     "RAGManager",
