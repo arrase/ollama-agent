@@ -13,9 +13,9 @@ from deepagents.backends import FilesystemBackend
 from langchain.agents.middleware import ShellToolMiddleware
 from langchain.agents.middleware import HostExecutionPolicy
 from langchain.agents.middleware import wrap_tool_call
-from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
 
-from ..core import ReasoningEffortValue, validate_reasoning_effort
+from ..core import ReasoningEffortValue, extract_text, validate_reasoning_effort
 from ..core import ensure_model_supports_tools
 from ..memory import Mem0Settings, MemoryManager
 from ..rag import RAGManager, RAGSettings
@@ -27,6 +27,38 @@ from ..vision import build_multimodal_responses_input, capture_display_as_base64
 logger = logging.getLogger(__name__)
 
 
+def _assistant_text_from_messages(messages: list[Any]) -> str:
+    """Best-effort: return the latest assistant/AI textual content.
+
+    With Responses API, intermediate AI messages can contain only function_call
+    blocks; those must be ignored (no fallback to raw str()).
+    """
+    for msg in reversed(messages):
+        msg_type = str(getattr(msg, "type", "") or "").lower()
+        cls_name = getattr(msg, "__class__", type(msg)).__name__.lower()
+        if msg_type == "ai" or "aimessage" in cls_name or cls_name == "ai":
+            text = extract_text(getattr(msg, "content", None))
+            if text:
+                return text
+    return ""
+
+
+def _text_from_content_blocks(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, dict):
+        if content.get("type") == "text" and isinstance(content.get("text"), str):
+            return content["text"]
+        return ""
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str):
+                parts.append(block["text"])
+        return "".join(parts)
+    return ""
+
+
 def _deepagents_backend_factory(_: Any) -> FilesystemBackend:
     # DeepAgents uses StateBackend by default (ephemeral, starts empty), which makes
     # tools like `ls/read_file/...` operate on an empty virtual filesystem.
@@ -34,40 +66,18 @@ def _deepagents_backend_factory(_: Any) -> FilesystemBackend:
     return FilesystemBackend(root_dir=Path.cwd(), virtual_mode=True)
 
 
-def _effort_guidance(model: str, effort: ReasoningEffortValue) -> str:
-    if effort == "disabled":
-        return ""
-    if "gpt-oss" not in model.lower():
-        return ""
-    match effort:
-        case "low":
-            return """\
-Reasoning effort: LOW.
-- Keep reasoning brief.
-- Prefer direct answers.
-"""
-        case "medium":
-            return """\
-Reasoning effort: MEDIUM.
-- Think step-by-step internally.
-- Keep the final answer concise.
-"""
-        case "high":
-            return """\
-Reasoning effort: HIGH.
-- Be thorough and careful.
-- Double-check assumptions and edge cases.
-"""
-        case _:
-            return ""
-
-
 def _final_text_from_state(state: Any) -> str:
     try:
         messages = state.get("messages") if isinstance(state, dict) else None
-        if messages:
+        if isinstance(messages, list) and messages:
+            text = _assistant_text_from_messages(messages)
+            if text:
+                return text
+
+            # Fallback: keep prior behavior if we couldn't find assistant text.
             last = messages[-1]
-            return str(getattr(last, "content", last) or "")
+            content = getattr(last, "content", last)
+            return extract_text(content) or str(content or "")
     except Exception:
         pass
     return str(state)
@@ -109,7 +119,15 @@ async def _stream_tool_events(request, handler):
     if runtime is not None:
         try:
             content = getattr(result, "content", result)
-            runtime.stream_writer({"type": "tool_output", "output": str(content)})
+            content_str = str(content)
+            # Tool outputs can be large; they are intended for the model, not the UI.
+            # Emit only small metadata so CLI/REPL can show progress without dumping
+            # the full payload.
+            runtime.stream_writer({
+                "type": "tool_output",
+                "output": "",
+                "output_len": len(content_str),
+            })
         except Exception:
             pass
     return result
@@ -125,12 +143,16 @@ def _shell_policy_from_timeout(timeout_s: int):
         return HostExecutionPolicy()
 
 
+def _is_gpt_oss(model: str) -> bool:
+    return "gpt-oss" in (model or "").lower()
+
+
 @dataclass(slots=True)
 class OllamaAgent:
     """AI agent backed by Ollama with tool support."""
 
     model: str
-    base_url: str = "http://localhost:11434/v1/"  # kept for config compatibility (not used by ChatOllama)
+    base_url: str = "http://localhost:11434/v1/"  # OpenAI-compatible Ollama endpoint
     api_key: str = "ollama"  # kept for config compatibility
     reasoning_effort: ReasoningEffortValue = "medium"
     database_path: Path | None = None
@@ -166,7 +188,12 @@ class OllamaAgent:
         if self._initialized:
             return
         if self.mcp_config_path:
-            self._mcp_servers = await initialize_mcp_servers(self.mcp_config_path, default_model=self.model)
+            self._mcp_servers = await initialize_mcp_servers(
+                self.mcp_config_path,
+                default_model=self.model,
+                base_url=self.base_url,
+                api_key=self.api_key,
+            )
         self._initialized = True
 
     async def cleanup(self) -> None:
@@ -195,19 +222,24 @@ class OllamaAgent:
             *(srv.delegate_tool for srv in self._mcp_servers if getattr(srv, "delegate_tool", None)),
         ]
 
-    def _build_system_prompt(self, model: str, effort: ReasoningEffortValue) -> str:
-        extra = _effort_guidance(model, effort)
-        shell_note = (
-            "\n\nShell tool notes:\n"
-            "- Use shell to run shell commands inside the workspace root.\n"
-            "- Do not assume shell state persists across separate runs.\n"
-        )
-        return "\n\n".join(p for p in (self._instructions, extra, shell_note) if p)
-
     def _build_deep_agent(self, model: str, effort: ReasoningEffortValue):
         ensure_model_supports_tools(model)
 
-        llm = ChatOllama(model=model, temperature=0)
+        # `reasoning_effort` must work for gpt-oss models as in the main branch,
+        # but the system prompt must remain exclusively user-defined.
+        openai_kwargs: dict[str, Any] = {
+            "model_name": model,
+            "openai_api_base": self.base_url,
+            "openai_api_key": self.api_key,
+            "temperature": 0,
+            # Use the OpenAI Responses API (Ollama supports /v1/responses).
+            "use_responses_api": True,
+            "streaming": True,
+        }
+        if _is_gpt_oss(model) and effort != "disabled":
+            openai_kwargs["reasoning_effort"] = effort
+
+        llm = ChatOpenAI(**openai_kwargs)
         shell_mw = ShellToolMiddleware(
             workspace_root=Path.cwd(),
             execution_policy=_shell_policy_from_timeout(get_tool_timeout()),
@@ -216,7 +248,7 @@ class OllamaAgent:
         return create_deep_agent(
             model=llm,
             tools=self._get_tools(),
-            system_prompt=self._build_system_prompt(model, effort),
+            system_prompt=self._instructions,
             backend=_deepagents_backend_factory,
             middleware=[cast(Any, shell_mw), _stream_tool_events_mw],
         )
@@ -256,29 +288,57 @@ class OllamaAgent:
         user_text_for_history = prompt if isinstance(prompt, str) else str(prompt)
         self._session_manager.append_message("user", user_text_for_history)
 
-        full_text: list[str] = []
+        last_state: Any | None = None
+        emitted_text = ""
+        emitted_from_messages = ""
         try:
             async for mode, event in agent.astream(
                 {"messages": self._build_messages_with_history(history, prompt)},
-                stream_mode=["messages", "custom"],
+                stream_mode=["messages", "custom", "values"],
             ):
                 if mode == "custom" and isinstance(event, dict) and event.get("type"):
                     yield cast(dict[str, Any], event)
                     continue
 
-                # Best-effort token streaming from message chunks.
-                if mode == "messages":
-                    chunk = None
-                    if isinstance(event, tuple) and event:
-                        chunk = event[0]
-                    else:
-                        chunk = event
-                    content = getattr(chunk, "content", None)
-                    if isinstance(content, str) and content:
-                        full_text.append(content)
-                        yield {"type": "text_delta", "content": content}
+                # Capture aggregate state (includes the full assistant message).
+                if mode == "values" and isinstance(event, dict):
+                    last_state = event
+                    messages = event.get("messages")
+                    current = _assistant_text_from_messages(messages) if isinstance(messages, list) else ""
+                    # Only use values-streaming if we are not already streaming via messages.
+                    if not emitted_from_messages and current and current != emitted_text:
+                        if current.startswith(emitted_text):
+                            delta = current[len(emitted_text) :]
+                            emitted_text = current
+                            if delta:
+                                yield {"type": "text_delta", "content": delta}
+                        else:
+                            # If the stream does not monotonically append (rare),
+                            # fall back to emitting the full current text once.
+                            emitted_text = current
+                            yield {"type": "text_delta", "content": current}
+                    continue
 
-            final = "".join(full_text)
+                if mode == "messages":
+                    chunk = event[0] if isinstance(event, tuple) and event else event
+
+                    chunk_type = str(getattr(chunk, "type", "") or "").lower()
+                    chunk_name = getattr(chunk, "__class__", type(chunk)).__name__.lower()
+                    if chunk_type == "tool" or "tool" in chunk_name:
+                        continue
+
+                    content = getattr(chunk, "content", None)
+                    text = _text_from_content_blocks(content)
+                    if text:
+                        emitted_from_messages += text
+                        yield {"type": "text_delta", "content": text}
+                    continue
+
+                # NOTE: With Ollama /v1/responses streaming, "messages" chunks can arrive
+                # without whitespace (e.g. 'Est' 'os' 'son'...), so we ignore them and
+                # stream via the aggregated "values" state above.
+
+            final = _final_text_from_state(last_state) if last_state is not None else emitted_text
             if final:
                 self._session_manager.append_message("assistant", final)
         except Exception as exc:

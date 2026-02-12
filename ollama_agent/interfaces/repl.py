@@ -382,8 +382,9 @@ class OllamaREPL:
                     self.console.print(
                         f"\n[bold magenta]tool -> {payload.get('name')}...[/bold magenta]")
                 elif msg_type == "tool_output":
-                    self.console.print(
-                        f"[dim]<- {payload.get('output')}[/dim]")
+                    out_len = payload.get("output_len")
+                    suffix = f" ({out_len} chars)" if isinstance(out_len, int) else ""
+                    self.console.print(f"[dim]<- (tool output oculto){suffix}[/dim]")
                 elif msg_type == "error":
                     live.stop()
                     self.console.print(f"[red]{payload['content']}[/red]")

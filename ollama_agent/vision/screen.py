@@ -92,7 +92,7 @@ def build_multimodal_responses_input(
 
     blocks: list[dict[str, Any]] = []
     for img in images:
-        blocks.append({"type": "image_url", "image_url": img.data_url})
+        blocks.append({"type": "image_url", "image_url": {"url": img.data_url}})
     if text:
         blocks.append({"type": "text", "text": text})
     return [{"role": "user", "content": blocks}]

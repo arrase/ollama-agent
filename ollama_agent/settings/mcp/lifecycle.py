@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from deepagents import create_deep_agent
-from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
 from langchain.tools import tool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
@@ -117,7 +117,21 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
         logger.error("Failed to initialize MCP server '%s': %s", name, exc)
         return None
 
-    llm = ChatOllama(model=str(model), temperature=0)
+    # Use the same OpenAI-compatible transport as the main agent (Ollama /v1).
+    llm = ChatOpenAI(
+        **{
+            "model_name": str(model),
+            "openai_api_base": str(
+                config.get("base_url")
+                or config.get("openai_api_base")
+                or "http://localhost:11434/v1/"
+            ),
+            "openai_api_key": str(config.get("api_key") or config.get("openai_api_key") or "ollama"),
+            "temperature": 0,
+            "use_responses_api": True,
+            "streaming": True,
+        }
+    )
     delegated_agent = create_deep_agent(model=llm, tools=mcp_tools, system_prompt=instructions)
 
     @tool(tool_name, description=tool_description)
@@ -136,7 +150,11 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
 
 
 async def initialize_mcp_servers(
-    config_path: Path | None = None, *, default_model: str | None = None
+    config_path: Path | None = None,
+    *,
+    default_model: str | None = None,
+    base_url: str | None = None,
+    api_key: str | None = None,
 ) -> list[RunningMCPServer]:
     path = config_path or DEFAULT_MCP_CONFIG_PATH
     if not path.exists():
@@ -154,6 +172,11 @@ async def initialize_mcp_servers(
 
     servers: list[RunningMCPServer] = []
     for name, cfg in servers_cfg.items():
+        if isinstance(cfg, dict):
+            if base_url and "base_url" not in cfg and "openai_api_base" not in cfg:
+                cfg = {**cfg, "base_url": base_url}
+            if api_key and "api_key" not in cfg and "openai_api_key" not in cfg:
+                cfg = {**cfg, "api_key": api_key}
         if s := await _init_server(str(name), cfg, default_model):
             servers.append(s)
     return servers

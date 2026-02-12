@@ -11,10 +11,11 @@ requires-python = ">=3.10"
 dependencies = [
     "deepagents",
     "langchain",
+    "langchain-openai",
     "langgraph",
-    "langchain-ollama",
     "langchain-mcp-adapters",
     "PyYAML",
+    "openai",
     "ollama",
     "mem0ai",
     "mss",
