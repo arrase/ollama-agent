@@ -1,10 +1,11 @@
 """RAG settings configuration."""
 
 from dataclasses import dataclass, field
-from pathlib import Path
+
+from ..settings.paths import RAG_DIR
 
 
-DEFAULT_RAG_DIR = Path.home() / ".ollama-agent" / "rag"
+DEFAULT_RAG_DIR = RAG_DIR
 
 
 @dataclass(frozen=True, slots=True)

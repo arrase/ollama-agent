@@ -10,6 +10,7 @@ from pathlib import Path
 import yaml
 
 from ..core import DEFAULT_REASONING_EFFORT, ReasoningEffortValue, validate_reasoning_effort
+from ..settings.paths import TASKS_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ class Task:
 class TaskManager:
     """Manages task persistence using YAML files."""
 
-    DEFAULT_DIR = Path.home() / ".ollama-agent" / "tasks"
+    DEFAULT_DIR = TASKS_DIR
 
     def __init__(self, tasks_dir: Path | None = None) -> None:
         self.tasks_dir = tasks_dir or self.DEFAULT_DIR

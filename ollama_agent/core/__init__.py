@@ -7,7 +7,10 @@ from .common import (
     Mem0ToolResult,
     RAGToolResult,
     ReasoningEffortValue,
+    assistant_text_from_messages,
     extract_text,
+    final_text_from_state,
+    resolve_unique_prefix,
 )
 from .models import (
     ModelCapabilityError,
@@ -32,5 +35,8 @@ __all__ = [
     "model_supports_tools",
     "validate_reasoning_effort",
     # Utils
+    "assistant_text_from_messages",
     "extract_text",
+    "final_text_from_state",
+    "resolve_unique_prefix",
 ]

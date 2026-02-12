@@ -9,7 +9,7 @@ from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 from ..agent import OllamaAgent
-from ..core import ModelCapabilityError, model_supports_tools
+from ..core import ModelCapabilityError, model_supports_tools, resolve_unique_prefix
 from ..rag import (
     RAGContext,
     add_rag_directory,
@@ -220,19 +220,21 @@ class OllamaREPL:
         self.console.print(f"[dim]{hint}Load: /session-load <id>[/dim]")
 
     def _find_session(self, prefix: str, sessions: list) -> dict | None:
-        matches = [s for s in sessions if s["session_id"].startswith(prefix)]
+        ids = [s.get("session_id", "") for s in sessions if isinstance(s, dict)]
+        resolved = resolve_unique_prefix(prefix, ids)
+        if resolved:
+            return next((s for s in sessions if s.get("session_id") == resolved), None)
+
+        matches = [s for s in sessions if str(s.get("session_id", "")).startswith(prefix)]
         if not matches:
-            self.console.print(
-                f"[red]No session found matching '{prefix}'[/red]")
+            self.console.print(f"[red]No session found matching '{prefix}'[/red]")
             return None
-        if len(matches) > 1:
-            self.console.print(
-                f"[yellow]Multiple sessions match '{prefix}':[/yellow]")
-            for m in matches[:5]:
-                self.console.print(
-                    f"  [cyan]{m['session_id'][:8]}[/cyan] - {m['preview'][:40]}")
-            return None
-        return matches[0]
+        self.console.print(f"[yellow]Multiple sessions match '{prefix}':[/yellow]")
+        for m in matches[:5]:
+            sid = str(m.get("session_id", ""))
+            preview = str(m.get("preview", ""))
+            self.console.print(f"  [cyan]{sid[:8]}[/cyan] - {preview[:40]}")
+        return None
 
     async def _load_session(self, session_id_prefix: str) -> None:
         agent = self._ensure_agent()

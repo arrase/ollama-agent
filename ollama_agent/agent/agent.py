@@ -15,7 +15,8 @@ from langchain.agents.middleware import HostExecutionPolicy
 from langchain.agents.middleware import wrap_tool_call
 from langchain_openai import ChatOpenAI
 
-from ..core import ReasoningEffortValue, extract_text, validate_reasoning_effort
+from ..core import ReasoningEffortValue, assistant_text_from_messages, final_text_from_state
+from ..core import validate_reasoning_effort
 from ..core import ensure_model_supports_tools
 from ..memory import Mem0Settings, MemoryManager
 from ..rag import RAGManager, RAGSettings
@@ -25,22 +26,6 @@ from .session_manager import SessionManager
 from ..vision import build_multimodal_responses_input, capture_display_as_base64, extract_display_tokens
 
 logger = logging.getLogger(__name__)
-
-
-def _assistant_text_from_messages(messages: list[Any]) -> str:
-    """Best-effort: return the latest assistant/AI textual content.
-
-    With Responses API, intermediate AI messages can contain only function_call
-    blocks; those must be ignored (no fallback to raw str()).
-    """
-    for msg in reversed(messages):
-        msg_type = str(getattr(msg, "type", "") or "").lower()
-        cls_name = getattr(msg, "__class__", type(msg)).__name__.lower()
-        if msg_type == "ai" or "aimessage" in cls_name or cls_name == "ai":
-            text = extract_text(getattr(msg, "content", None))
-            if text:
-                return text
-    return ""
 
 
 def _text_from_content_blocks(content: Any) -> str:
@@ -64,23 +49,6 @@ def _deepagents_backend_factory(_: Any) -> FilesystemBackend:
     # tools like `ls/read_file/...` operate on an empty virtual filesystem.
     # Use the real workspace on disk instead, and restrict paths to that root.
     return FilesystemBackend(root_dir=Path.cwd(), virtual_mode=True)
-
-
-def _final_text_from_state(state: Any) -> str:
-    try:
-        messages = state.get("messages") if isinstance(state, dict) else None
-        if isinstance(messages, list) and messages:
-            text = _assistant_text_from_messages(messages)
-            if text:
-                return text
-
-            # Fallback: keep prior behavior if we couldn't find assistant text.
-            last = messages[-1]
-            content = getattr(last, "content", last)
-            return extract_text(content) or str(content or "")
-    except Exception:
-        pass
-    return str(state)
 
 
 def _maybe_attach_screen_context(prompt: object) -> dict[str, Any]:
@@ -253,11 +221,6 @@ class OllamaAgent:
             middleware=[cast(Any, shell_mw), _stream_tool_events_mw],
         )
 
-    def _build_messages(self, prompt: object) -> list[dict[str, Any]]:
-        history = self._session_manager.get_message_dicts()
-        user_msg = _maybe_attach_screen_context(prompt)
-        return [*history, user_msg]
-
     def _build_messages_with_history(self, history: list[dict[str, Any]], prompt: object) -> list[dict[str, Any]]:
         return [*history, _maybe_attach_screen_context(prompt)]
 
@@ -270,7 +233,7 @@ class OllamaAgent:
         self._session_manager.append_message("user", user_text_for_history)
         try:
             state = await agent.ainvoke({"messages": self._build_messages_with_history(history, prompt)})
-            out = _final_text_from_state(state)
+            out = final_text_from_state(state)
             self._session_manager.append_message("assistant", out)
             return out
         except Exception as exc:
@@ -304,7 +267,7 @@ class OllamaAgent:
                 if mode == "values" and isinstance(event, dict):
                     last_state = event
                     messages = event.get("messages")
-                    current = _assistant_text_from_messages(messages) if isinstance(messages, list) else ""
+                    current = assistant_text_from_messages(messages) if isinstance(messages, list) else ""
                     # Only use values-streaming if we are not already streaming via messages.
                     if not emitted_from_messages and current and current != emitted_text:
                         if current.startswith(emitted_text):
@@ -338,7 +301,7 @@ class OllamaAgent:
                 # without whitespace (e.g. 'Est' 'os' 'son'...), so we ignore them and
                 # stream via the aggregated "values" state above.
 
-            final = _final_text_from_state(last_state) if last_state is not None else emitted_text
+            final = final_text_from_state(last_state) if last_state is not None else emitted_text
             if final:
                 self._session_manager.append_message("assistant", final)
         except Exception as exc:

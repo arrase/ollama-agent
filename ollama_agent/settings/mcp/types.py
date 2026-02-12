@@ -10,9 +10,11 @@ from typing import Awaitable, Callable
 
 from langchain.tools import BaseTool
 
+from ..paths import MCP_SERVERS_PATH
+
 logger = logging.getLogger(__name__)
 
-DEFAULT_MCP_CONFIG_PATH = Path.home() / ".ollama-agent" / "mcp_servers.json"
+DEFAULT_MCP_CONFIG_PATH = MCP_SERVERS_PATH
 
 DEFAULT_AGENT_INSTRUCTIONS = (
     "You operate the '{name}' MCP server. Always fulfill the user's request "

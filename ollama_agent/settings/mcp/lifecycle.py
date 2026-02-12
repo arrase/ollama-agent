@@ -18,7 +18,7 @@ from langchain.tools import tool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
 
-from ...core import ModelCapabilityError, ensure_model_supports_tools, extract_text
+from ...core import ModelCapabilityError, ensure_model_supports_tools, final_text_from_state
 from .types import DEFAULT_AGENT_INSTRUCTIONS, DEFAULT_MCP_CONFIG_PATH, RunningMCPServer
 
 logger = logging.getLogger(__name__)
@@ -64,18 +64,6 @@ def _build_connection(cfg: dict[str, Any]) -> dict[str, Any] | None:
         return out
 
     return None
-
-
-def _final_text_from_state(state: Any) -> str:
-    try:
-        messages = state.get("messages") if isinstance(state, dict) else None
-        if messages:
-            last = messages[-1]
-            content = getattr(last, "content", last)
-            return extract_text(content) or str(content)
-    except Exception:
-        pass
-    return str(state)
 
 
 async def _init_server(name: str, config: Any, default_model: str | None) -> RunningMCPServer | None:
@@ -137,7 +125,7 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
     @tool(tool_name, description=tool_description)
     async def delegate(prompt: str) -> str:
         state = await delegated_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
-        return _final_text_from_state(state)
+        return final_text_from_state(state)
 
     logger.info("Initialized MCP server: %s", name)
     return RunningMCPServer(
