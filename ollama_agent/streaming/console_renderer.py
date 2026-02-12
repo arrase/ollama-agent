@@ -60,7 +60,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         # and can interleave with streamed assistant output.
         out_len = event.get("output_len")
         suffix = f" ({out_len} chars)" if isinstance(out_len, int) else ""
-        self.console.print(f"[dim cyan]📤 Tool output recibido (oculto){suffix}[/dim cyan]\n")
+        self.console.print(f"[dim cyan]📤 Tool output received (hidden){suffix}[/dim cyan]\n")
 
     def on_error(self, event: dict[str, Any]) -> None:
         self._toggle_live(False)
