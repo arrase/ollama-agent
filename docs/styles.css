@@ -154,6 +154,14 @@ section {
     background-color: #1a1e22;
 }
 
+#architecture {
+    background-color: var(--bg-color);
+}
+
+#architecture .feature-item {
+    border-left: 3px solid var(--accent-color);
+}
+
 h2 {
     text-align: center;
     font-size: 2.5rem;
@@ -387,9 +395,18 @@ footer {
     border-top: 1px solid #333;
 }
 
+footer p {
+    margin-bottom: 8px;
+}
+
 footer a {
     color: var(--primary-color);
     text-decoration: none;
+    transition: color 0.3s;
+}
+
+footer a:hover {
+    color: var(--secondary-color);
 }
 
 /* Modal converted to Hero Gallery */
