@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ollama Agent - Local AI Assistant</title>
+    <meta name="description" content="A powerful CLI and REPL for interacting with local AI models via Ollama. Built on DeepAgents and LangChain with tool execution, screen vision, memory, and RAG.">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -15,6 +16,7 @@
                 <a href="#" class="logo">Ollama<span>Agent</span></a>
                 <ul class="nav-links">
                     <li><a href="#features">Features</a></li>
+                    <li><a href="#architecture">Architecture</a></li>
                     <li><a href="#usage">Usage</a></li>
                     <li><a href="https://github.com/arrase/ollama-agent" target="_blank"><i class="fab fa-github"></i> GitHub</a></li>
                 </ul>
@@ -25,7 +27,8 @@
     <section class="hero">
         <div class="container">
             <h1>Your Local AI Assistant</h1>
-            <p>A powerful command-line interface and REPL for interacting with local Ollama models. <br>Featuring tool execution, screen vision, memory management, and RAG capabilities.</p>
+            <p>A powerful command-line interface and REPL for interacting with local Ollama models. <br>
+            Built on <a href="https://docs.langchain.com/oss/python/deepagents/overview" target="_blank" style="color:var(--accent-color)">DeepAgents</a> and <a href="https://github.com/langchain-ai/langchain" target="_blank" style="color:var(--accent-color)">LangChain</a>, featuring integrated shell execution, screen vision, memory management, and RAG capabilities.</p>
             
             <div class="hero-buttons">
                 <a href="#usage" class="cta-button">Get Started</a>
@@ -199,11 +202,11 @@ prompt: |
                         <div class="feature-icon"><i class="fas fa-server"></i></div>
                         <div>
                             <h3>MCP Support</h3>
-                            <p class="feature-description">Extend capabilities with Model Context Protocol servers.</p>
+                            <p class="feature-description">Extend capabilities with <a href="https://modelcontextprotocol.io/" target="_blank" style="color:var(--accent-color)">Model Context Protocol</a> servers.</p>
                         </div>
                     </div>
                     <div class="feature-body">
-                        <p style="color:#b2bec3; margin-bottom:10px">Edit <code>~/.ollama-agent/mcp_servers.json</code> to add servers.</p>
+                        <p style="color:#b2bec3; margin-bottom:10px">Each configured MCP server is exposed as a delegation tool (<code>use_&lt;name&gt;</code>) backed by its own <strong>DeepAgents sub-agent</strong> using <code>langchain-mcp-adapters</code>. Edit <code>~/.ollama-agent/mcp_servers.json</code> to add servers.</p>
                          <div class="feature-code">
 {
   "mcpServers": {
@@ -223,20 +226,80 @@ prompt: |
                     <div class="feature-header">
                         <div class="feature-icon"><i class="fas fa-tools"></i></div>
                         <div>
-                            <h3>Tool Execution</h3>
-                            <p class="feature-description">The agent can interact with your system to perform real-world actions.</p>
+                            <h3>Integrated Shell Execution</h3>
+                            <p class="feature-description">The agent interacts with your system through a built-in shell middleware.</p>
                         </div>
                     </div>
                     <div class="feature-body">
+                        <p style="color:#b2bec3; margin-bottom:10px">Shell commands are handled transparently via <code>ShellToolMiddleware</code>, removing the need for an explicit <code>execute_command</code> tool. The middleware integrates directly with the DeepAgents graph for seamless tool execution.</p>
                         <div class="usage-box">
-                            <p class="usage-title">Built-in Capabilities</p>
+                            <p class="usage-title">Built-in Tools</p>
                             <table class="cmd-table">
-                                <tr><td>execute_command</td><td>Run shell commands securely</td></tr>
+                                <tr><td>Shell Middleware</td><td>Transparent command execution with configurable timeout</td></tr>
+                                <tr><td>rag_search</td><td>Search loaded RAG knowledge bases</td></tr>
+                                <tr><td>mem0_add_memory</td><td>Persist facts for the active user</td></tr>
+                                <tr><td>mem0_search_memory</td><td>Recall stored information</td></tr>
                             </table>
                         </div>
                         <div class="feature-code">
 # Example prompt
 "Find all Python files in src/ modified in the last 24h"</div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <section id="architecture">
+        <div class="container">
+            <h2>Architecture</h2>
+            <div class="feature-list">
+
+                <div class="feature-item">
+                    <div class="feature-header">
+                        <div class="feature-icon"><i class="fas fa-layer-group"></i></div>
+                        <div>
+                            <h3>DeepAgents Runtime</h3>
+                            <p class="feature-description">The core agent is built as a DeepAgents graph backed by <code>langchain-openai</code> (<code>ChatOpenAI</code>) pointed at Ollama's OpenAI-compatible endpoint.</p>
+                        </div>
+                    </div>
+                    <div class="feature-body">
+                        <div class="usage-box">
+                            <p class="usage-title">Key Components</p>
+                            <table class="cmd-table">
+                                <tr><td>deepagents</td><td>Agent graph framework (<code>create_deep_agent</code>)</td></tr>
+                                <tr><td>langchain-openai</td><td>LLM interface via Ollama's /v1 API</td></tr>
+                                <tr><td>langchain-mcp-adapters</td><td>MCP server integration for sub-agents</td></tr>
+                                <tr><td>ShellToolMiddleware</td><td>Transparent shell command execution</td></tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="feature-item">
+                    <div class="feature-header">
+                        <div class="feature-icon"><i class="fas fa-folder-tree"></i></div>
+                        <div>
+                            <h3>Project Structure</h3>
+                            <p class="feature-description">Clean modular layout with centralized paths and clear separation of concerns.</p>
+                        </div>
+                    </div>
+                    <div class="feature-body">
+                        <div class="usage-box">
+                            <p class="usage-title">Module Map</p>
+                            <table class="cmd-table">
+                                <tr><td>ollama_agent/agent/</td><td>Core agent logic (DeepAgents graph), session management, and built-in tools</td></tr>
+                                <tr><td>ollama_agent/core/</td><td>Shared types, model capability checks, and common utilities</td></tr>
+                                <tr><td>ollama_agent/interfaces/</td><td>CLI and REPL interface implementations</td></tr>
+                                <tr><td>ollama_agent/streaming/</td><td>Console output streaming, rendering, and non-interactive runner</td></tr>
+                                <tr><td>ollama_agent/settings/</td><td>Configuration, centralized filesystem paths, and MCP server lifecycle</td></tr>
+                                <tr><td>ollama_agent/tasks/</td><td>Task management system (YAML-based)</td></tr>
+                                <tr><td>ollama_agent/rag/</td><td>RAG implementation for context retrieval</td></tr>
+                                <tr><td>ollama_agent/memory/</td><td>Mem0 integration for long-term memory</td></tr>
+                                <tr><td>ollama_agent/vision/</td><td>Screen vision and screenshot analysis</td></tr>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
@@ -277,6 +340,7 @@ ollama pull nomic-embed-text</code></pre>
     <footer>
         <div class="container">
             <p>Developed with ❤️ for local AI enthusiasts.</p>
+            <p>Powered by <a href="https://github.com/deep-agents/deepagents">DeepAgents</a> · <a href="https://github.com/langchain-ai/langchain">LangChain</a> · <a href="https://ollama.com">Ollama</a></p>
             <p><a href="https://github.com/arrase/ollama-agent">View Source on GitHub</a></p>
         </div>
     </footer>

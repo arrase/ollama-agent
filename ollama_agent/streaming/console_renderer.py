@@ -56,9 +56,11 @@ class ConsoleStreamingRenderer(StreamingRenderer):
 
     def on_tool_output(self, event: dict[str, Any]) -> None:
         self._toggle_live(False)
-        out = event.get("output", "")
-        self.console.print(
-            f"[cyan]📤 Tool output: {out[:100]}{'...' if len(out) > 100 else ''}[/cyan]\n")
+        # Tool outputs are meant for the model; printing them makes the CLI noisy
+        # and can interleave with streamed assistant output.
+        out_len = event.get("output_len")
+        suffix = f" ({out_len} chars)" if isinstance(out_len, int) else ""
+        self.console.print(f"[dim cyan]📤 Tool output received (hidden){suffix}[/dim cyan]\n")
 
     def on_error(self, event: dict[str, Any]) -> None:
         self._toggle_live(False)

@@ -2,12 +2,11 @@
 
 from .base import StreamingRenderer
 from .console_renderer import ConsoleStreamingRenderer
-from .events import event_payloads, stream_agent_events, stream_agent_events_with_renderer
+from .events import run_non_interactive, stream_agent_events
 
 __all__ = [
     "ConsoleStreamingRenderer",
     "StreamingRenderer",
-    "event_payloads",
+    "run_non_interactive",
     "stream_agent_events",
-    "stream_agent_events_with_renderer",
 ]

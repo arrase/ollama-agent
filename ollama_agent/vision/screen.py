@@ -83,11 +83,19 @@ def build_multimodal_responses_input(
     text: str,
     images: Iterable[CapturedImage],
 ) -> list[dict[str, Any]]:
-    """Build OpenAI Responses-style multimodal input list."""
-    content: list[dict[str, Any]] = []
+    """Build a standard multimodal user message for LangChain/Ollama.
+
+    Returns a DeepAgents/LangChain-compatible messages list:
+    [{"role": "user", "content": [ ...content blocks... ]}]
+    where blocks are standard content blocks ("image_url" + "text").
+    """
+
+    blocks: list[dict[str, Any]] = []
+    for img in images:
+        blocks.append({"type": "image_url", "image_url": {"url": img.data_url}})
     if text:
-        content.append({"type": "input_text", "text": text})
-    content.extend(
-        {"type": "input_image", "image_url": img.data_url} for img in images
-    )
-    return [{"role": "user", "content": content}]
+        blocks.append({"type": "text", "text": text})
+    return [{"role": "user", "content": blocks}]
+
+
+

@@ -7,16 +7,15 @@ import logging
 from dataclasses import asdict, dataclass, field
 from importlib import resources
 from pathlib import Path
-from typing import Any
-from ..memory.settings import Mem0Settings
-from ..rag.settings import RAGSettings
+from typing import TYPE_CHECKING, Any
+
+from .paths import APP_DIR, DATABASE_PATH, INSTRUCTIONS_PATH, MCP_SERVERS_PATH
+
+if TYPE_CHECKING:
+    from ..memory.settings import Mem0Settings
+    from ..rag.settings import RAGSettings
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_CONFIG_DIR = Path.home() / ".ollama-agent"
-DEFAULT_DATABASE_PATH = DEFAULT_CONFIG_DIR / "sessions.db"
-DEFAULT_MCP_CONFIG_PATH = DEFAULT_CONFIG_DIR / "mcp_servers.json"
-DEFAULT_INSTRUCTIONS_PATH = DEFAULT_CONFIG_DIR / "instructions.md"
 
 
 def _default_instructions() -> str:
@@ -26,9 +25,6 @@ def _default_instructions() -> str:
         return "You are an AI Assistant."
 
 
-DEFAULT_INSTRUCTIONS = _default_instructions()
-
-
 @dataclass
 class Config:
     """Application configuration."""
@@ -36,12 +32,21 @@ class Config:
     base_url: str = "http://localhost:11434/v1/"
     api_key: str = "ollama"
     reasoning_effort: str = "medium"
-    database_path: Path = field(default_factory=lambda: DEFAULT_DATABASE_PATH)
+    database_path: Path = field(default_factory=lambda: DATABASE_PATH)
     builtin_tool_timeout: int = 30
-    mcp_config_path: Path = field(
-        default_factory=lambda: DEFAULT_MCP_CONFIG_PATH)
-    mem0: Mem0Settings = field(default_factory=Mem0Settings)
-    rag: RAGSettings = field(default_factory=RAGSettings)
+    mcp_config_path: Path = field(default_factory=lambda: MCP_SERVERS_PATH)
+    mem0: Mem0Settings = field(default_factory=lambda: _lazy_mem0_settings())
+    rag: RAGSettings = field(default_factory=lambda: _lazy_rag_settings())
+
+
+def _lazy_mem0_settings():
+    from ..memory.settings import Mem0Settings as _M
+    return _M()
+
+
+def _lazy_rag_settings():
+    from ..rag.settings import RAGSettings as _R
+    return _R()
 
 
 def _safe_cast(value: Any, caster: type, default: Any) -> Any:
@@ -54,19 +59,26 @@ def _safe_cast(value: Any, caster: type, default: Any) -> Any:
 
 
 def _load_mem0(section: dict[str, str]) -> Mem0Settings:
-    d, g, c = Mem0Settings(), section.get, _safe_cast
+    from ..memory.settings import Mem0Settings
+    d = Mem0Settings()
+    g = section.get
+    c = _safe_cast
     return Mem0Settings(
         collection_name=g("collection_name", d.collection_name),
         qdrant_path=g("qdrant_path", d.qdrant_path),
-        embedding_model_dims=c(g("embedding_model_dims"),
-                               int, d.embedding_model_dims),
-        llm_model=g("llm_model", d.llm_model), llm_temperature=c(g("llm_temperature"), float, d.llm_temperature),
-        llm_max_tokens=c(g("llm_max_tokens"), int, d.llm_max_tokens), ollama_base_url=g("ollama_base_url", d.ollama_base_url),
-        embedder_model=g("embedder_model", d.embedder_model), embedder_base_url=g("embedder_base_url", d.embedder_base_url),
-        user_id=g("user_id", d.user_id))
+        embedding_model_dims=c(g("embedding_model_dims"), int, d.embedding_model_dims),
+        llm_model=g("llm_model", d.llm_model),
+        llm_temperature=c(g("llm_temperature"), float, d.llm_temperature),
+        llm_max_tokens=c(g("llm_max_tokens"), int, d.llm_max_tokens),
+        ollama_base_url=g("ollama_base_url", d.ollama_base_url),
+        embedder_model=g("embedder_model", d.embedder_model),
+        embedder_base_url=g("embedder_base_url", d.embedder_base_url),
+        user_id=g("user_id", d.user_id),
+    )
 
 
 def _load_rag(section: dict[str, str]) -> RAGSettings:
+    from ..rag.settings import RAGSettings
     d, g, c = RAGSettings(), section.get, _safe_cast
     return RAGSettings(
         rag_dir=g("rag_dir", d.rag_dir),
@@ -81,7 +93,7 @@ def _load_rag(section: dict[str, str]) -> RAGSettings:
 
 def get_config(config_dir: Path | None = None) -> Config:
     """Load configuration from file or create defaults."""
-    config_dir = config_dir or DEFAULT_CONFIG_DIR
+    config_dir = config_dir or APP_DIR
     config_path = config_dir / "config.ini"
     config_dir.mkdir(parents=True, exist_ok=True)
     defaults = Config()
@@ -89,9 +101,13 @@ def get_config(config_dir: Path | None = None) -> Config:
     if not config_path.exists():
         parser = configparser.ConfigParser()
         parser["default"] = {
-            "model": defaults.model, "base_url": defaults.base_url, "api_key": defaults.api_key,
-            "reasoning_effort": defaults.reasoning_effort, "database_path": str(defaults.database_path),
-            "builtin_tool_timeout": str(defaults.builtin_tool_timeout), "mcp_config_path": str(defaults.mcp_config_path),
+            "model": defaults.model,
+            "base_url": defaults.base_url,
+            "api_key": defaults.api_key,
+            "reasoning_effort": defaults.reasoning_effort,
+            "database_path": str(defaults.database_path),
+            "builtin_tool_timeout": str(defaults.builtin_tool_timeout),
+            "mcp_config_path": str(defaults.mcp_config_path),
         }
         parser["mem0"] = {k: str(v) for k, v in asdict(
             defaults.mem0).items() if not k.startswith("_")}
@@ -110,20 +126,16 @@ def get_config(config_dir: Path | None = None) -> Config:
         model=section.get("model", defaults.model),
         base_url=section.get("base_url", defaults.base_url),
         api_key=section.get("api_key", defaults.api_key),
-        reasoning_effort=section.get(
-            "reasoning_effort", defaults.reasoning_effort),
-        database_path=Path(section.get(
-            "database_path", str(defaults.database_path))),
-        builtin_tool_timeout=_safe_cast(section.get(
-            "builtin_tool_timeout"), int, defaults.builtin_tool_timeout),
-        mcp_config_path=Path(section.get(
-            "mcp_config_path", str(defaults.mcp_config_path))),
+        reasoning_effort=section.get("reasoning_effort", defaults.reasoning_effort),
+        database_path=Path(section.get("database_path", str(defaults.database_path))),
+        builtin_tool_timeout=_safe_cast(section.get("builtin_tool_timeout"), int, defaults.builtin_tool_timeout),
+        mcp_config_path=Path(section.get("mcp_config_path", str(defaults.mcp_config_path))),
         mem0=_load_mem0(mem0_section),
         rag=_load_rag(rag_section),
     )
 
 
-def load_instructions(instructions_path: Path = DEFAULT_INSTRUCTIONS_PATH) -> str:
+def load_instructions(instructions_path: Path = INSTRUCTIONS_PATH) -> str:
     """Load agent instructions from file or return defaults."""
     if not instructions_path.exists():
         instructions_path.parent.mkdir(parents=True, exist_ok=True)
@@ -134,3 +146,22 @@ def load_instructions(instructions_path: Path = DEFAULT_INSTRUCTIONS_PATH) -> st
         return instructions_path.read_text(encoding="utf-8").strip() or _default_instructions()
     except Exception:
         return _default_instructions()
+
+
+def reset_config(option: str) -> None:
+    """Reset configuration or system prompt to defaults."""
+    if option in ("all", "config-file"):
+        config_path = APP_DIR / "config.ini"
+        if config_path.exists():
+            config_path.unlink()
+        
+        get_config()
+        print(f"Reset: Restored default configuration at {config_path}")
+
+    if option in ("all", "system-prompt"):
+        if INSTRUCTIONS_PATH.exists():
+            INSTRUCTIONS_PATH.unlink()
+        
+        load_instructions()
+        print(f"Reset: Restored default system prompt at {INSTRUCTIONS_PATH}")
+

@@ -11,10 +11,6 @@ from .settings import Mem0Settings
 logger = logging.getLogger(__name__)
 
 
-class Mem0NotConfiguredError(RuntimeError):
-    """Raised when Mem0 is not configured."""
-
-
 class Mem0InitializationError(RuntimeError):
     """Raised when Mem0 cannot be initialized."""
 

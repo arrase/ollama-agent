@@ -46,32 +46,6 @@ def ensure_model_supports_tools(model: str) -> None:
         raise ModelCapabilityError(f"Model '{model}' does not support tools.")
 
 
-def get_tool_compatible_models(preferred: str | None = None) -> list[str]:
-    """Get a list of models that support tool calls."""
-    try:
-        models = getattr(ollama.list(), "models", [])
-    except Exception as exc:
-        raise ModelCapabilityError(f"Failed to list models: {exc}") from exc
-
-    names: list[str] = []
-    seen: set[str] = set()
-    for item in models:
-        name = getattr(item, "model", None)
-        if not name or name in seen:
-            continue
-        seen.add(name)
-        try:
-            if model_supports_tools(name):
-                names.append(name)
-        except ModelCapabilityError:
-            continue
-
-    if preferred:
-        ensure_model_supports_tools(preferred)
-        if preferred not in names:
-            names.insert(0, preferred)
-
-    return names
 
 
 def validate_reasoning_effort(effort: str) -> ReasoningEffortValue:

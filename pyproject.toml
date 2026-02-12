@@ -9,9 +9,13 @@ description = "Agente de IA para interactuar con modelos de lenguaje locales a t
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "openai",
-    "openai-agents",
+    "deepagents",
+    "langchain",
+    "langchain-openai",
+    "langgraph",
+    "langchain-mcp-adapters",
     "PyYAML",
+    "openai",
     "ollama",
     "mem0ai",
     "mss",

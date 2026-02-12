@@ -1,6 +1,6 @@
 # Ollama Agent
 
-Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to interact with local AI models. It provides a persistent chat experience, session management, and the ability to execute local shell commands, turning your local models into helpful assistants for your daily tasks.
+Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to interact with local AI models. Built on [DeepAgents](https://github.com/deep-agents/deepagents) and [LangChain](https://github.com/langchain-ai/langchain), it provides a persistent chat experience, session management, and the ability to execute local shell commands, turning your local models into helpful assistants for your daily tasks.
 
 ## Features
 
@@ -9,8 +9,8 @@ Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to i
 - **Ollama Integration**: Connects to any Ollama-compatible API endpoint.
 - **Per-session Model Switching**: Change the model mid-conversation and continue from that point with the new model (context preserved). The change is not permanent and only affects the current session.
 - **Screen Vision (Screenshots)**: Attach monitor screenshots in prompts using `@dpN` for visual context.
-- **Tool-Powered**: The agent can execute shell commands, allowing it to interact with your local environment to perform tasks.
-- **Delegated MCP Agents**: Each configured MCP server can run through its own lightweight agent with custom model and instructions.
+- **Tool-Powered**: The agent can execute shell commands via an integrated shell middleware, allowing it to interact with your local environment to perform tasks.
+- **Delegated MCP Agents**: Each configured MCP server can run through its own lightweight DeepAgents sub-agent (via `langchain-mcp-adapters`) with custom model and instructions.
 - **Session Management**: Conversations are automatically saved and can be reloaded, deleted, or switched between.
 - **Task Management**: Save frequently used prompts as "tasks" and execute them with a simple command.
 - **Configurable**: Easily configure the model, API endpoint, and agent reasoning effort.
@@ -205,6 +205,24 @@ ollama-agent task-delete <task_id>
 
 On the first run, the application will create a default configuration file at `~/.ollama-agent/config.ini`. You can edit this file to permanently change the default model, API URL, and other settings.
 
+### Configuration Reset
+
+If you need to reset the configuration or system prompt to their default values, you can use the `--config-reset` flag:
+
+```bash
+# Reset all configuration files
+ollama-agent --config-reset all
+
+# Reset only the system prompt (instructions.md)
+ollama-agent --config-reset system-prompt
+
+# Reset only the settings (config.ini)
+ollama-agent --config-reset config-file
+```
+
+> **Note**: When upgrading from v0.1 to v0.2, it is recommended to reset the system prompt to ensure compatibility with new features:
+> `ollama-agent --config-reset system-prompt`
+
 ## Persistent Memory with Mem0
 
 The agent can remember long-term facts by delegating storage and retrieval to [Mem0](https://github.com/mem0ai/mem0) running locally, backed by embedded/local Qdrant storage.
@@ -334,7 +352,7 @@ You can customize the agent's behavior by editing the instructions file at `~/.o
 
 ## MCP Servers (Optional)
 
-Ollama Agent supports the Model Context Protocol (MCP) to extend the agent's capabilities with additional tools and context. MCP servers are **optional** and can provide features like filesystem access, Git operations, and custom APIs.
+Ollama Agent supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) to extend the agent's capabilities with additional tools and context. Each configured MCP server is exposed as a delegation tool (`use_<name>`) backed by its own `DeepAgents` sub-agent using `langchain-mcp-adapters`. MCP servers are **optional** and can provide features like filesystem access, Git operations, and custom APIs.
 
 ## For Developers
 
@@ -368,11 +386,11 @@ Interested in contributing? Great! Here’s how to get started.
 
 - `ollama_agent/main.py`: Main application entry point.
 - `ollama_agent/interfaces/`: CLI and REPL interface implementations.
-- `ollama_agent/agent/`: Core agent logic, session management, and tools.
+- `ollama_agent/agent/`: Core agent logic (DeepAgents graph), session management, and built-in tools.
+- `ollama_agent/core/`: Shared types, model capability checks, and common utilities.
 - `ollama_agent/tasks/`: Task management system.
 - `ollama_agent/rag/`: RAG implementation for context retrieval.
 - `ollama_agent/memory/`: Mem0 integration for long-term memory.
 - `ollama_agent/vision/`: Screen vision and screenshot analysis.
-- `ollama_agent/execution/`: execution helpers.
-- `ollama_agent/streaming/`: Console output streaming and rendering.
-- `ollama_agent/settings/`: Application configuration handling.
+- `ollama_agent/streaming/`: Console output streaming, rendering, and non-interactive runner.
+- `ollama_agent/settings/`: Application configuration, centralized filesystem paths, and MCP server lifecycle.
