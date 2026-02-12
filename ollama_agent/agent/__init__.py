@@ -3,7 +3,6 @@
 from .agent import OllamaAgent
 from .builtin_tools import (
     BUILTIN_TOOLS,
-    execute_command,
     get_rag_manager,
     get_tool_timeout,
     mem0_add_memory,
@@ -20,7 +19,6 @@ __all__ = [
     "OllamaAgent",
     "SessionManager",
     "create_agent",
-    "execute_command",
     "get_rag_manager",
     "get_tool_timeout",
     "mem0_add_memory",

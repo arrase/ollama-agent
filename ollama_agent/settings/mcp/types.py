@@ -8,8 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable
 
-from agents import Agent
-from agents.mcp import MCPServer
+from langchain.tools import BaseTool
 
 logger = logging.getLogger(__name__)
 
@@ -23,18 +22,16 @@ DEFAULT_AGENT_INSTRUCTIONS = (
 
 @dataclass(slots=True)
 class RunningMCPServer:
-    """Active MCP server with cleanup capability."""
+    """Active MCP server bundle with cleanup capability."""
 
     name: str
-    server: MCPServer
+    delegate_tool: BaseTool
     _closer: Callable[[], Awaitable[None]]
-    agent: Agent | None = None
     tool_name: str | None = None
     tool_description: str | None = None
 
     async def shutdown(self) -> None:
-        """Tear down the server without raising on failure."""
         try:
             await self._closer()
-        except (asyncio.CancelledError, Exception) as e:
-            logger.debug("Error cleaning up MCP server '%s': %s", self.name, e)
+        except (asyncio.CancelledError, Exception) as exc:
+            logger.debug("Error cleaning up MCP server '%s': %s", self.name, exc)
