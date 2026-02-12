@@ -146,3 +146,22 @@ def load_instructions(instructions_path: Path = INSTRUCTIONS_PATH) -> str:
         return instructions_path.read_text(encoding="utf-8").strip() or _default_instructions()
     except Exception:
         return _default_instructions()
+
+
+def reset_config(option: str) -> None:
+    """Reset configuration or system prompt to defaults."""
+    if option in ("all", "config-file"):
+        config_path = APP_DIR / "config.ini"
+        if config_path.exists():
+            config_path.unlink()
+        
+        get_config()
+        print(f"Reset: Restored default configuration at {config_path}")
+
+    if option in ("all", "system-prompt"):
+        if INSTRUCTIONS_PATH.exists():
+            INSTRUCTIONS_PATH.unlink()
+        
+        load_instructions()
+        print(f"Reset: Restored default system prompt at {INSTRUCTIONS_PATH}")
+

@@ -10,6 +10,11 @@ def main() -> None:
     parser = create_argument_parser()
     args = parser.parse_args()
 
+    if args.config_reset:
+        from .settings import reset_config
+        reset_config(args.config_reset)
+        return
+
     cfg = get_config()
     set_tool_timeout(
         cfg.builtin_tool_timeout if args.builtin_tool_timeout is None else args.builtin_tool_timeout)

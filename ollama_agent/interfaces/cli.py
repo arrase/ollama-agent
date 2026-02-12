@@ -49,6 +49,11 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         metavar="DATABASE",
         help="Load a RAG database for the session",
     )
+    parser.add_argument(
+        "--config-reset",
+        choices=["all", "system-prompt", "config-file"],
+        help="Reset configuration or system prompt to defaults",
+    )
 
 
 def _add_task_subcommands(parser: argparse.ArgumentParser) -> None:

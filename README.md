@@ -205,6 +205,24 @@ ollama-agent task-delete <task_id>
 
 On the first run, the application will create a default configuration file at `~/.ollama-agent/config.ini`. You can edit this file to permanently change the default model, API URL, and other settings.
 
+### Configuration Reset
+
+If you need to reset the configuration or system prompt to their default values, you can use the `--config-reset` flag:
+
+```bash
+# Reset all configuration files
+ollama-agent --config-reset all
+
+# Reset only the system prompt (instructions.md)
+ollama-agent --config-reset system-prompt
+
+# Reset only the settings (config.ini)
+ollama-agent --config-reset config-file
+```
+
+> **Note**: When upgrading from v0.1 to v0.2, it is recommended to reset the system prompt to ensure compatibility with new features:
+> `ollama-agent --config-reset system-prompt`
+
 ## Persistent Memory with Mem0
 
 The agent can remember long-term facts by delegating storage and retrieval to [Mem0](https://github.com/mem0ai/mem0) running locally, backed by embedded/local Qdrant storage.
