@@ -232,7 +232,7 @@ class OllamaAgent:
         return [*BUILTIN_TOOLS]
 
     def _get_subagents(self) -> list[dict[str, Any]]:
-        return [srv.subagent for srv in self._mcp_servers if isinstance(getattr(srv, "subagent", None), dict)]
+        return [srv.subagent for srv in self._mcp_servers]
 
     def _build_deep_agent(self, model: str, effort: ReasoningEffortValue):
         ensure_model_supports_tools(model)

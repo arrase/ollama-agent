@@ -10,7 +10,7 @@ import json
 import logging
 from contextlib import AsyncExitStack
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from langchain_openai import ChatOpenAI
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -73,7 +73,8 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
         logger.warning("Skipping MCP server '%s': could not determine transport", name)
         return None
 
-    agent_cfg = cast(dict[str, Any], config.get("agent", {}) or {})
+    raw_agent_cfg = config.get("agent", {})
+    agent_cfg = raw_agent_cfg if isinstance(raw_agent_cfg, dict) else {}
     model = agent_cfg.get("model") or default_model
     if not model:
         logger.error("Skipping MCP server '%s': missing model", name)
