@@ -67,17 +67,51 @@ def _maybe_attach_screen_context(prompt: object) -> dict[str, Any]:
 async def _stream_tool_events(request, handler):
     """Emit tool_call/tool_output events so the existing renderers keep working."""
     runtime = getattr(request, "runtime", None)
+    agent_name: str | None = None
     tool_name = next(
         (n for attr in ("name", "tool_name")
          if (n := getattr(request, attr, None)))
         or (n for obj in (getattr(request, "tool", None),)
             if obj for attr in ("name", "__name__")
             if (n := getattr(obj, attr, None))),
-        "unknown",
+        "",
     )
+
+    tool_call = getattr(request, "tool_call", None)
+    tool_args: dict[str, Any] | None = None
+    if isinstance(tool_call, dict):
+        if not tool_name:
+            tool_name = str(tool_call.get("name") or "")
+        maybe_args = tool_call.get("args")
+        if isinstance(maybe_args, dict):
+            tool_args = maybe_args
+        maybe_meta = tool_call.get("metadata")
+        if isinstance(maybe_meta, dict):
+            maybe_agent = maybe_meta.get("lc_agent_name")
+            if isinstance(maybe_agent, str) and maybe_agent:
+                agent_name = maybe_agent
+    elif tool_call is not None:
+        maybe_name = getattr(tool_call, "name", None)
+        if not tool_name and isinstance(maybe_name, str) and maybe_name:
+            tool_name = maybe_name
+        maybe_args = getattr(tool_call, "args", None)
+        if isinstance(maybe_args, dict):
+            tool_args = maybe_args
+
+    if not tool_name:
+        tool_name = "unknown"
+
+    if (not agent_name) and tool_name == "task" and isinstance(tool_args, dict):
+        maybe_task_agent = tool_args.get("name")
+        if isinstance(maybe_task_agent, str) and maybe_task_agent:
+            agent_name = maybe_task_agent
+
     if runtime is not None:
         try:
-            runtime.stream_writer({"type": "tool_call", "name": tool_name})
+            event: dict[str, Any] = {"type": "tool_call", "name": tool_name}
+            if isinstance(agent_name, str) and agent_name:
+                event["agent_name"] = agent_name
+            runtime.stream_writer(event)
         except Exception:
             pass
 
@@ -87,14 +121,25 @@ async def _stream_tool_events(request, handler):
         try:
             content = getattr(result, "content", result)
             content_str = str(content)
+            if not agent_name:
+                for attr in ("response_metadata", "additional_kwargs", "metadata"):
+                    maybe_meta = getattr(result, attr, None)
+                    if isinstance(maybe_meta, dict):
+                        maybe_agent_name = maybe_meta.get("lc_agent_name")
+                        if isinstance(maybe_agent_name, str) and maybe_agent_name:
+                            agent_name = maybe_agent_name
+                            break
             # Tool outputs can be large; they are intended for the model, not the UI.
             # Emit only small metadata so CLI/REPL can show progress without dumping
             # the full payload.
-            runtime.stream_writer({
+            event = {
                 "type": "tool_output",
                 "output": "",
                 "output_len": len(content_str),
-            })
+            }
+            if isinstance(agent_name, str) and agent_name:
+                event["agent_name"] = agent_name
+            runtime.stream_writer(event)
         except Exception:
             pass
     return result
@@ -184,13 +229,14 @@ class OllamaAgent:
         )
 
     def _get_tools(self) -> list[Any]:
-        return [
-            *BUILTIN_TOOLS,
-            *(srv.delegate_tool for srv in self._mcp_servers if getattr(srv, "delegate_tool", None)),
-        ]
+        return [*BUILTIN_TOOLS]
+
+    def _get_subagents(self) -> list[dict[str, Any]]:
+        return [srv.subagent for srv in self._mcp_servers if isinstance(getattr(srv, "subagent", None), dict)]
 
     def _build_deep_agent(self, model: str, effort: ReasoningEffortValue):
         ensure_model_supports_tools(model)
+        subagents = self._get_subagents()
 
         # `reasoning_effort` must work for gpt-oss models as in the main branch,
         # but the system prompt must remain exclusively user-defined.
@@ -199,8 +245,10 @@ class OllamaAgent:
             "openai_api_base": self.base_url,
             "openai_api_key": self.api_key,
             "temperature": 0,
-            # Use the OpenAI Responses API (Ollama supports /v1/responses).
-            "use_responses_api": True,
+            # Deep Agents subagent task() currently produces tool outputs that
+            # Ollama's /v1/responses endpoint rejects when they are non-string.
+            # Use chat completions for compatibility when subagents are enabled.
+            "use_responses_api": False if subagents else True,
             "streaming": True,
         }
         if _is_gpt_oss(model) and effort != "disabled":
@@ -216,6 +264,7 @@ class OllamaAgent:
             model=llm,
             tools=self._get_tools(),
             system_prompt=self._instructions,
+            subagents=subagents,
             backend=_deepagents_backend_factory,
             middleware=[cast(Any, shell_mw), _stream_tool_events_mw],
         )

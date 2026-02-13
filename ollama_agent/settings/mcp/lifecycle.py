@@ -1,7 +1,7 @@
 """MCP server initialization and cleanup routines.
 
-Loads MCP servers from a JSON config and exposes each server as a single
-delegation tool (use_<name> by default), preserving the prior UX.
+Loads MCP servers from a JSON config and exposes each server as a Deep Agents
+subagent descriptor.
 """
 
 from __future__ import annotations
@@ -12,13 +12,11 @@ from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import Any, cast
 
-from deepagents import create_deep_agent
 from langchain_openai import ChatOpenAI
-from langchain.tools import tool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
 
-from ...core import ModelCapabilityError, ensure_model_supports_tools, final_text_from_state
+from ...core import ModelCapabilityError, ensure_model_supports_tools
 from .types import DEFAULT_AGENT_INSTRUCTIONS, DEFAULT_MCP_CONFIG_PATH, RunningMCPServer
 
 logger = logging.getLogger(__name__)
@@ -87,13 +85,18 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
         logger.error("Skipping MCP server '%s': %s", name, exc)
         return None
 
-    tool_name = str(agent_cfg.get("tool_name") or f"use_{name}")
-    tool_description = str(
-        agent_cfg.get("tool_description")
-        or agent_cfg.get("handoff_description")
-        or f"Delegate requests to the '{name}' MCP server"
-    )
-    instructions = str(agent_cfg.get("instructions") or DEFAULT_AGENT_INSTRUCTIONS.format(name=name))
+    subagent_name = str(agent_cfg.get("name") or "").strip()
+    subagent_description = str(agent_cfg.get("description") or "").strip()
+    instructions = str(agent_cfg.get("system_prompt") or "").strip()
+
+    if not subagent_name:
+        logger.error("Skipping MCP server '%s': missing required field agent.name", name)
+        return None
+    if not subagent_description:
+        logger.error("Skipping MCP server '%s': missing required field agent.description", name)
+        return None
+    if not instructions:
+        instructions = DEFAULT_AGENT_INSTRUCTIONS.format(name=name)
 
     client = MultiServerMCPClient({name: connection})
     stack = AsyncExitStack()
@@ -105,7 +108,7 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
         logger.error("Failed to initialize MCP server '%s': %s", name, exc)
         return None
 
-    # Use the same OpenAI-compatible transport as the main agent (Ollama /v1).
+    logger.info("Initialized MCP server: %s", name)
     llm = ChatOpenAI(
         **{
             "model_name": str(model),
@@ -116,24 +119,20 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
             ),
             "openai_api_key": str(config.get("api_key") or config.get("openai_api_key") or "ollama"),
             "temperature": 0,
-            "use_responses_api": True,
+            "use_responses_api": False,
             "streaming": True,
         }
     )
-    delegated_agent = create_deep_agent(model=llm, tools=mcp_tools, system_prompt=instructions)
-
-    @tool(tool_name, description=tool_description)
-    async def delegate(prompt: str) -> str:
-        state = await delegated_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
-        return final_text_from_state(state)
-
-    logger.info("Initialized MCP server: %s", name)
     return RunningMCPServer(
         name=name,
-        delegate_tool=delegate,
+        subagent={
+            "name": subagent_name,
+            "description": subagent_description,
+            "system_prompt": instructions,
+            "tools": mcp_tools,
+            "model": llm,
+        },
         _closer=stack.aclose,
-        tool_name=tool_name,
-        tool_description=tool_description,
     )
 
 

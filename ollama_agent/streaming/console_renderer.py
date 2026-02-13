@@ -51,16 +51,20 @@ class ConsoleStreamingRenderer(StreamingRenderer):
     def on_tool_call(self, event: dict[str, Any]) -> None:
         self._end_reasoning()
         self._toggle_live(False)
+        agent = event.get("agent_name")
+        prefix = f"[{agent}] " if isinstance(agent, str) and agent else ""
         self.console.print(
-            f"\n[yellow]🔧 Calling tool: {event.get('name', 'unknown')}[/yellow]")
+            f"\n[yellow]🔧 {prefix}Calling tool: {event.get('name', 'unknown')}[/yellow]")
 
     def on_tool_output(self, event: dict[str, Any]) -> None:
         self._toggle_live(False)
         # Tool outputs are meant for the model; printing them makes the CLI noisy
         # and can interleave with streamed assistant output.
         out_len = event.get("output_len")
+        agent = event.get("agent_name")
+        prefix = f"[{agent}] " if isinstance(agent, str) and agent else ""
         suffix = f" ({out_len} chars)" if isinstance(out_len, int) else ""
-        self.console.print(f"[dim cyan]📤 Tool output received (hidden){suffix}[/dim cyan]\n")
+        self.console.print(f"[dim cyan]📤 {prefix}Tool output received (hidden){suffix}[/dim cyan]\n")
 
     def on_error(self, event: dict[str, Any]) -> None:
         self._toggle_live(False)

@@ -352,7 +352,30 @@ You can customize the agent's behavior by editing the instructions file at `~/.o
 
 ## MCP Servers (Optional)
 
-Ollama Agent supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) to extend the agent's capabilities with additional tools and context. Each configured MCP server is exposed as a delegation tool (`use_<name>`) backed by its own `DeepAgents` sub-agent using `langchain-mcp-adapters`. MCP servers are **optional** and can provide features like filesystem access, Git operations, and custom APIs.
+Ollama Agent supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) to extend the agent's capabilities with additional tools and context. Each configured MCP server is registered as a native Deep Agents subagent (not as a wrapper tool), using `langchain-mcp-adapters` to load server tools. MCP servers are **optional** and can provide features like filesystem access, Git operations, and custom APIs.
+
+### MCP Configuration
+
+MCP servers are loaded from `~/.ollama-agent/mcp_servers.json` with this shape:
+
+```json
+{
+    "mcpServers": {
+        "tavily": {
+            "type": "http",
+            "url": "http://localhost:8000/mcp",
+            "agent": {
+                "name": "web-research",
+                "description": "Researches web topics using Tavily MCP tools.",
+                "system_prompt": "You are a web research specialist. Use Tavily tools and return concise findings with links.",
+                "model": "gpt-oss:20b"
+            }
+        }
+    }
+}
+```
+
+`agent.name` and `agent.description` are required. `agent.system_prompt` is recommended (falls back to a default MCP prompt if omitted). `agent.model` is optional and overrides the main model for that subagent.
 
 ## For Developers
 

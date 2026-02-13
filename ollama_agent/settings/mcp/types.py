@@ -6,9 +6,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Awaitable, Callable
-
-from langchain.tools import BaseTool
+from typing import Any, Awaitable, Callable
 
 from ..paths import MCP_SERVERS_PATH
 
@@ -27,10 +25,8 @@ class RunningMCPServer:
     """Active MCP server bundle with cleanup capability."""
 
     name: str
-    delegate_tool: BaseTool
+    subagent: dict[str, Any]
     _closer: Callable[[], Awaitable[None]]
-    tool_name: str | None = None
-    tool_description: str | None = None
 
     async def shutdown(self) -> None:
         try:
