@@ -26,43 +26,60 @@ async def _noop_shutdown() -> None:
     return
 
 
-def _normalize_mcp_tools_for_compat(tools: list[BaseTool]) -> list[BaseTool]:
-    normalized: list[BaseTool] = []
+def _relax_const_fields(tools: list[BaseTool]) -> list[BaseTool]:
+    """Auto-fill ``const``-constrained parameters in MCP tool schemas.
+
+    Some MCP servers declare JSON Schema parameters with ``"const": "value"``
+    allowing only one value.  LLMs may guess a different value, causing
+    Pydantic validation errors.  This removes the ``const`` constraint from the
+    schema (so the LLM can omit the field) and forces the correct value at call
+    time.  Fully generic — no server-specific knowledge is needed.
+    """
+    result: list[BaseTool] = []
     for tool in tools:
-        if tool.name != "tavily_search":
-            normalized.append(tool)
+        schema = getattr(tool, "args_schema", None)
+        if not isinstance(schema, dict):
+            result.append(tool)
             continue
 
-        args_schema = getattr(tool, "args_schema", None)
-        tool_coro = getattr(tool, "coroutine", None)
-        if not isinstance(args_schema, dict) or not callable(tool_coro):
-            normalized.append(tool)
+        props = schema.get("properties", {})
+        if not isinstance(props, dict):
+            result.append(tool)
             continue
 
-        patched_schema = deepcopy(args_schema)
-        topic_schema = patched_schema.get("properties", {}).get("topic")
-        if isinstance(topic_schema, dict) and topic_schema.get("const") == "general":
-            topic_schema.pop("const", None)
-            topic_schema["enum"] = ["general", "news"]
+        consts: dict[str, Any] = {}
+        for fname, fschema in props.items():
+            if isinstance(fschema, dict) and "const" in fschema:
+                consts[fname] = fschema["const"]
 
-        async def _tavily_search_compat(_tool_coro=tool_coro, runtime: Any = None, **arguments: Any) -> Any:
-            topic = arguments.get("topic")
-            if isinstance(topic, str) and topic != "general":
-                arguments = {**arguments, "topic": "general"}
-            return await _tool_coro(runtime=runtime, **arguments)
+        if not consts:
+            result.append(tool)
+            continue
 
-        normalized.append(
-            StructuredTool(
+        patched = deepcopy(schema)
+        for fname, const_val in consts.items():
+            field = patched["properties"][fname]
+            field.pop("const", None)
+            field.setdefault("default", const_val)
+
+        orig_coro = getattr(tool, "coroutine", None)
+        if callable(orig_coro):
+            async def _wrapped(*a, _fn=orig_coro, _c=consts, **kw):
+                kw.update(_c)
+                return await _fn(*a, **kw)
+
+            result.append(StructuredTool(
                 name=tool.name,
                 description=tool.description,
-                args_schema=patched_schema,
-                coroutine=_tavily_search_compat,
+                args_schema=patched,
+                coroutine=_wrapped,
                 response_format=getattr(tool, "response_format", "content"),
                 metadata=getattr(tool, "metadata", None),
-            )
-        )
+            ))
+        else:
+            result.append(tool)
 
-    return normalized
+    return result
 
 
 def _get(cfg: dict[str, Any], *keys: str) -> Any:
@@ -152,7 +169,7 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
             server_name=name,
             tool_name_prefix=False,
         )
-        mcp_tools = _normalize_mcp_tools_for_compat(mcp_tools)
+        mcp_tools = _relax_const_fields(mcp_tools)
     except Exception as exc:
         logger.error("Failed to initialize MCP server '%s': %s", name, exc)
         return None
