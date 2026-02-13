@@ -8,18 +8,61 @@ from __future__ import annotations
 
 import json
 import logging
-from contextlib import AsyncExitStack
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 from langchain_openai import ChatOpenAI
-from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_core.tools import BaseTool, StructuredTool
 from langchain_mcp_adapters.tools import load_mcp_tools
 
 from ...core import ModelCapabilityError, ensure_model_supports_tools
 from .types import DEFAULT_AGENT_INSTRUCTIONS, DEFAULT_MCP_CONFIG_PATH, RunningMCPServer
 
 logger = logging.getLogger(__name__)
+
+
+async def _noop_shutdown() -> None:
+    return
+
+
+def _normalize_mcp_tools_for_compat(tools: list[BaseTool]) -> list[BaseTool]:
+    normalized: list[BaseTool] = []
+    for tool in tools:
+        if tool.name != "tavily_search":
+            normalized.append(tool)
+            continue
+
+        args_schema = getattr(tool, "args_schema", None)
+        tool_coro = getattr(tool, "coroutine", None)
+        if not isinstance(args_schema, dict) or not callable(tool_coro):
+            normalized.append(tool)
+            continue
+
+        patched_schema = deepcopy(args_schema)
+        topic_schema = patched_schema.get("properties", {}).get("topic")
+        if isinstance(topic_schema, dict) and topic_schema.get("const") == "general":
+            topic_schema.pop("const", None)
+            topic_schema["enum"] = ["general", "news"]
+
+        async def _tavily_search_compat(_tool_coro=tool_coro, runtime: Any = None, **arguments: Any) -> Any:
+            topic = arguments.get("topic")
+            if isinstance(topic, str) and topic != "general":
+                arguments = {**arguments, "topic": "general"}
+            return await _tool_coro(runtime=runtime, **arguments)
+
+        normalized.append(
+            StructuredTool(
+                name=tool.name,
+                description=tool.description,
+                args_schema=patched_schema,
+                coroutine=_tavily_search_compat,
+                response_format=getattr(tool, "response_format", "content"),
+                metadata=getattr(tool, "metadata", None),
+            )
+        )
+
+    return normalized
 
 
 def _get(cfg: dict[str, Any], *keys: str) -> Any:
@@ -99,13 +142,18 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
     if not instructions:
         instructions = DEFAULT_AGENT_INSTRUCTIONS.format(name=name)
 
-    client = MultiServerMCPClient({name: connection})
-    stack = AsyncExitStack()
     try:
-        session = await stack.enter_async_context(client.session(name))
-        mcp_tools = await load_mcp_tools(session, server_name=name, tool_name_prefix=False)
+        # Use per-call MCP sessions instead of a shared long-lived session.
+        # This avoids task-affinity/cancellation issues (AnyIO cancel scope
+        # errors) when tools are invoked from nested subagents.
+        mcp_tools = await load_mcp_tools(
+            None,
+            connection=connection,
+            server_name=name,
+            tool_name_prefix=False,
+        )
+        mcp_tools = _normalize_mcp_tools_for_compat(mcp_tools)
     except Exception as exc:
-        await stack.aclose()
         logger.error("Failed to initialize MCP server '%s': %s", name, exc)
         return None
 
@@ -121,7 +169,7 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
             "openai_api_key": str(config.get("api_key") or config.get("openai_api_key") or "ollama"),
             "temperature": 0,
             "use_responses_api": False,
-            "streaming": True,
+            "streaming": False,
         }
     )
     return RunningMCPServer(
@@ -133,7 +181,7 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
             "tools": mcp_tools,
             "model": llm,
         },
-        _closer=stack.aclose,
+        _closer=_noop_shutdown,
     )
 
 

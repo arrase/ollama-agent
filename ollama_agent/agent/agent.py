@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -115,7 +116,14 @@ async def _stream_tool_events(request, handler):
         except Exception:
             pass
 
-    result = await handler(request)
+    timeout_s = int(get_tool_timeout())
+    try:
+        if timeout_s > 0:
+            result = await asyncio.wait_for(handler(request), timeout=float(timeout_s))
+        else:
+            result = await handler(request)
+    except asyncio.TimeoutError as exc:
+        raise TimeoutError(f"Tool '{tool_name}' timed out after {timeout_s}s") from exc
 
     if runtime is not None:
         try:
