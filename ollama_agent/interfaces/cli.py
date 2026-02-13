@@ -41,7 +41,7 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         "-t",
         "--builtin-tool-timeout",
         type=int,
-        help="Set built-in tool execution timeout in seconds",
+        help="Set tool-call timeout in seconds (includes shell middleware and built-in tools)",
     )
     parser.add_argument(
         "--rag",

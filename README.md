@@ -111,7 +111,7 @@ If you include multiple tokens (e.g. `@dp0 @dp1`), the agent will capture and at
 
 ### Common Options
 
-You can override the configured model, reasoning effort, or built-in tool execution timeout:
+You can override the configured model, reasoning effort, or tool execution timeout:
 
 ```bash
 ollama-agent --model "gpt-oss:20b" --effort "high" --prompt "What is the current date?"
@@ -132,7 +132,7 @@ ollama-agent -t 60 -p "Run a long-running task"
 - `-m`, `--model`: Specify the AI model to use
 - `-p`, `--prompt`: Provide a prompt for non-interactive mode
 - `-e`, `--effort`: Set reasoning effort level (low, medium, high, disabled)
-- `-t`, `--builtin-tool-timeout`: Set built-in tool execution timeout in seconds
+- `-t`, `--builtin-tool-timeout`: Set tool-call timeout in seconds (applies to tool executions, including shell middleware and built-in tools). Overrides `builtin_tool_timeout` from `config.ini` for the current run.
 - `--rag <database>`: Load a RAG database for the session
 
 ## Tasks
