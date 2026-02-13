@@ -43,6 +43,25 @@ def _streaming_text(content: Any) -> str:
     return ""
 
 
+def _streaming_reasoning(content: Any) -> str:
+    """Extract reasoning/thinking text from a streaming chunk.
+
+    With ``use_responses_api=True`` reasoning tokens arrive as content blocks of
+    ``type='reasoning'`` whose text lives inside ``summary`` entries of
+    ``type='summary_text'``.
+    """
+    if not isinstance(content, list):
+        return ""
+    return "".join(
+        entry["text"]
+        for block in content
+        if isinstance(block, dict) and block.get("type") == "reasoning"
+        for entry in (block.get("summary") or ())
+        if isinstance(entry, dict) and entry.get("type") == "summary_text"
+        and isinstance(entry.get("text"), str)
+    )
+
+
 def _deepagents_backend_factory(_: Any) -> FilesystemBackend:
     # DeepAgents uses StateBackend by default (ephemeral, starts empty), which makes
     # tools like `ls/read_file/...` operate on an empty virtual filesystem.
@@ -253,10 +272,10 @@ class OllamaAgent:
             "openai_api_base": self.base_url,
             "openai_api_key": self.api_key,
             "temperature": 0,
-            # Deep Agents subagent task() currently produces tool outputs that
-            # Ollama's /v1/responses endpoint rejects when they are non-string.
-            # Use chat completions for compatibility when subagents are enabled.
-            "use_responses_api": False if subagents else True,
+            # Always use the Responses API so reasoning/thinking tokens are
+            # streamed as structured content blocks (type='reasoning').
+            # The chat completions API drops Ollama's ``reasoning`` field.
+            "use_responses_api": True,
             "streaming": True,
         }
         if _is_gpt_oss(model) and effort != "disabled":
@@ -344,9 +363,16 @@ class OllamaAgent:
                     if chunk_type == "tool" or "tool" in chunk_name:
                         continue
 
+                    content = getattr(chunk, "content", None)
+
+                    # Check for reasoning/thinking tokens first (chain-of-thought).
+                    reasoning = _streaming_reasoning(content)
+                    if reasoning:
+                        yield {"type": "reasoning_delta", "content": reasoning}
+                        continue
+
                     # Extract text from streaming chunk without stripping whitespace
                     # (each token may carry leading/trailing spaces that are significant).
-                    content = getattr(chunk, "content", None)
                     text = _streaming_text(content)
                     if text:
                         emitted_from_messages = True
