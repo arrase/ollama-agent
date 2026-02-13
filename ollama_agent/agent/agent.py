@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -42,6 +43,25 @@ def _streaming_text(content: Any) -> str:
     return ""
 
 
+def _streaming_reasoning(content: Any) -> str:
+    """Extract reasoning/thinking text from a streaming chunk.
+
+    With ``use_responses_api=True`` reasoning tokens arrive as content blocks of
+    ``type='reasoning'`` whose text lives inside ``summary`` entries of
+    ``type='summary_text'``.
+    """
+    if not isinstance(content, list):
+        return ""
+    return "".join(
+        entry["text"]
+        for block in content
+        if isinstance(block, dict) and block.get("type") == "reasoning"
+        for entry in (block.get("summary") or ())
+        if isinstance(entry, dict) and entry.get("type") == "summary_text"
+        and isinstance(entry.get("text"), str)
+    )
+
+
 def _deepagents_backend_factory(_: Any) -> FilesystemBackend:
     # DeepAgents uses StateBackend by default (ephemeral, starts empty), which makes
     # tools like `ls/read_file/...` operate on an empty virtual filesystem.
@@ -67,34 +87,86 @@ def _maybe_attach_screen_context(prompt: object) -> dict[str, Any]:
 async def _stream_tool_events(request, handler):
     """Emit tool_call/tool_output events so the existing renderers keep working."""
     runtime = getattr(request, "runtime", None)
+    agent_name: str | None = None
     tool_name = next(
         (n for attr in ("name", "tool_name")
          if (n := getattr(request, attr, None)))
         or (n for obj in (getattr(request, "tool", None),)
             if obj for attr in ("name", "__name__")
             if (n := getattr(obj, attr, None))),
-        "unknown",
+        "",
     )
+
+    tool_call = getattr(request, "tool_call", None)
+    tool_args: dict[str, Any] | None = None
+    if isinstance(tool_call, dict):
+        if not tool_name:
+            tool_name = str(tool_call.get("name") or "")
+        maybe_args = tool_call.get("args")
+        if isinstance(maybe_args, dict):
+            tool_args = maybe_args
+        maybe_meta = tool_call.get("metadata")
+        if isinstance(maybe_meta, dict):
+            maybe_agent = maybe_meta.get("lc_agent_name")
+            if isinstance(maybe_agent, str) and maybe_agent:
+                agent_name = maybe_agent
+    elif tool_call is not None:
+        maybe_name = getattr(tool_call, "name", None)
+        if not tool_name and isinstance(maybe_name, str) and maybe_name:
+            tool_name = maybe_name
+        maybe_args = getattr(tool_call, "args", None)
+        if isinstance(maybe_args, dict):
+            tool_args = maybe_args
+
+    if not tool_name:
+        tool_name = "unknown"
+
+    if (not agent_name) and tool_name == "task" and isinstance(tool_args, dict):
+        maybe_task_agent = tool_args.get("name")
+        if isinstance(maybe_task_agent, str) and maybe_task_agent:
+            agent_name = maybe_task_agent
+
     if runtime is not None:
         try:
-            runtime.stream_writer({"type": "tool_call", "name": tool_name})
+            event: dict[str, Any] = {"type": "tool_call", "name": tool_name}
+            if isinstance(agent_name, str) and agent_name:
+                event["agent_name"] = agent_name
+            runtime.stream_writer(event)
         except Exception:
             pass
 
-    result = await handler(request)
+    timeout_s = int(get_tool_timeout())
+    try:
+        if timeout_s > 0:
+            result = await asyncio.wait_for(handler(request), timeout=float(timeout_s))
+        else:
+            result = await handler(request)
+    except asyncio.TimeoutError as exc:
+        raise TimeoutError(f"Tool '{tool_name}' timed out after {timeout_s}s") from exc
 
     if runtime is not None:
         try:
             content = getattr(result, "content", result)
             content_str = str(content)
+            if not agent_name:
+                for attr in ("response_metadata", "additional_kwargs", "metadata"):
+                    maybe_meta = getattr(result, attr, None)
+                    if isinstance(maybe_meta, dict):
+                        maybe_agent_name = maybe_meta.get("lc_agent_name")
+                        if isinstance(maybe_agent_name, str) and maybe_agent_name:
+                            agent_name = maybe_agent_name
+                            break
             # Tool outputs can be large; they are intended for the model, not the UI.
             # Emit only small metadata so CLI/REPL can show progress without dumping
             # the full payload.
-            runtime.stream_writer({
+            event = {
                 "type": "tool_output",
                 "output": "",
                 "output_len": len(content_str),
-            })
+            }
+            if isinstance(agent_name, str) and agent_name:
+                event["agent_name"] = agent_name
+            runtime.stream_writer(event)
         except Exception:
             pass
     return result
@@ -184,13 +256,14 @@ class OllamaAgent:
         )
 
     def _get_tools(self) -> list[Any]:
-        return [
-            *BUILTIN_TOOLS,
-            *(srv.delegate_tool for srv in self._mcp_servers if getattr(srv, "delegate_tool", None)),
-        ]
+        return [*BUILTIN_TOOLS]
+
+    def _get_subagents(self) -> list[dict[str, Any]]:
+        return [srv.subagent for srv in self._mcp_servers]
 
     def _build_deep_agent(self, model: str, effort: ReasoningEffortValue):
         ensure_model_supports_tools(model)
+        subagents = self._get_subagents()
 
         # `reasoning_effort` must work for gpt-oss models as in the main branch,
         # but the system prompt must remain exclusively user-defined.
@@ -199,7 +272,9 @@ class OllamaAgent:
             "openai_api_base": self.base_url,
             "openai_api_key": self.api_key,
             "temperature": 0,
-            # Use the OpenAI Responses API (Ollama supports /v1/responses).
+            # Always use the Responses API so reasoning/thinking tokens are
+            # streamed as structured content blocks (type='reasoning').
+            # The chat completions API drops Ollama's ``reasoning`` field.
             "use_responses_api": True,
             "streaming": True,
         }
@@ -216,6 +291,7 @@ class OllamaAgent:
             model=llm,
             tools=self._get_tools(),
             system_prompt=self._instructions,
+            subagents=subagents,
             backend=_deepagents_backend_factory,
             middleware=[cast(Any, shell_mw), _stream_tool_events_mw],
         )
@@ -287,9 +363,16 @@ class OllamaAgent:
                     if chunk_type == "tool" or "tool" in chunk_name:
                         continue
 
+                    content = getattr(chunk, "content", None)
+
+                    # Check for reasoning/thinking tokens first (chain-of-thought).
+                    reasoning = _streaming_reasoning(content)
+                    if reasoning:
+                        yield {"type": "reasoning_delta", "content": reasoning}
+                        continue
+
                     # Extract text from streaming chunk without stripping whitespace
                     # (each token may carry leading/trailing spaces that are significant).
-                    content = getattr(chunk, "content", None)
                     text = _streaming_text(content)
                     if text:
                         emitted_from_messages = True

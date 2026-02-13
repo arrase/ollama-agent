@@ -1,27 +1,85 @@
 """MCP server initialization and cleanup routines.
 
-Loads MCP servers from a JSON config and exposes each server as a single
-delegation tool (use_<name> by default), preserving the prior UX.
+Loads MCP servers from a JSON config and exposes each server as a Deep Agents
+subagent descriptor.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from contextlib import AsyncExitStack
+from copy import deepcopy
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
-from deepagents import create_deep_agent
 from langchain_openai import ChatOpenAI
-from langchain.tools import tool
-from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_core.tools import BaseTool, StructuredTool
 from langchain_mcp_adapters.tools import load_mcp_tools
 
-from ...core import ModelCapabilityError, ensure_model_supports_tools, final_text_from_state
+from ...core import ModelCapabilityError, ensure_model_supports_tools
 from .types import DEFAULT_AGENT_INSTRUCTIONS, DEFAULT_MCP_CONFIG_PATH, RunningMCPServer
 
 logger = logging.getLogger(__name__)
+
+
+async def _noop_shutdown() -> None:
+    return
+
+
+def _relax_const_fields(tools: list[BaseTool]) -> list[BaseTool]:
+    """Auto-fill ``const``-constrained parameters in MCP tool schemas.
+
+    Some MCP servers declare JSON Schema parameters with ``"const": "value"``
+    allowing only one value.  LLMs may guess a different value, causing
+    Pydantic validation errors.  This removes the ``const`` constraint from the
+    schema (so the LLM can omit the field) and forces the correct value at call
+    time.  Fully generic — no server-specific knowledge is needed.
+    """
+    result: list[BaseTool] = []
+    for tool in tools:
+        schema = getattr(tool, "args_schema", None)
+        if not isinstance(schema, dict):
+            result.append(tool)
+            continue
+
+        props = schema.get("properties", {})
+        if not isinstance(props, dict):
+            result.append(tool)
+            continue
+
+        consts: dict[str, Any] = {}
+        for fname, fschema in props.items():
+            if isinstance(fschema, dict) and "const" in fschema:
+                consts[fname] = fschema["const"]
+
+        if not consts:
+            result.append(tool)
+            continue
+
+        patched = deepcopy(schema)
+        for fname, const_val in consts.items():
+            field = patched["properties"][fname]
+            field.pop("const", None)
+            field.setdefault("default", const_val)
+
+        orig_coro = getattr(tool, "coroutine", None)
+        if callable(orig_coro):
+            async def _wrapped(*a, _fn=orig_coro, _c=consts, **kw):
+                kw.update(_c)
+                return await _fn(*a, **kw)
+
+            result.append(StructuredTool(
+                name=tool.name,
+                description=tool.description,
+                args_schema=patched,
+                coroutine=_wrapped,
+                response_format=getattr(tool, "response_format", "content"),
+                metadata=getattr(tool, "metadata", None),
+            ))
+        else:
+            result.append(tool)
+
+    return result
 
 
 def _get(cfg: dict[str, Any], *keys: str) -> Any:
@@ -75,7 +133,8 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
         logger.warning("Skipping MCP server '%s': could not determine transport", name)
         return None
 
-    agent_cfg = cast(dict[str, Any], config.get("agent", {}) or {})
+    raw_agent_cfg = config.get("agent", {})
+    agent_cfg = raw_agent_cfg if isinstance(raw_agent_cfg, dict) else {}
     model = agent_cfg.get("model") or default_model
     if not model:
         logger.error("Skipping MCP server '%s': missing model", name)
@@ -87,25 +146,35 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
         logger.error("Skipping MCP server '%s': %s", name, exc)
         return None
 
-    tool_name = str(agent_cfg.get("tool_name") or f"use_{name}")
-    tool_description = str(
-        agent_cfg.get("tool_description")
-        or agent_cfg.get("handoff_description")
-        or f"Delegate requests to the '{name}' MCP server"
-    )
-    instructions = str(agent_cfg.get("instructions") or DEFAULT_AGENT_INSTRUCTIONS.format(name=name))
+    subagent_name = str(agent_cfg.get("name") or "").strip()
+    subagent_description = str(agent_cfg.get("description") or "").strip()
+    instructions = str(agent_cfg.get("system_prompt") or "").strip()
 
-    client = MultiServerMCPClient({name: connection})
-    stack = AsyncExitStack()
+    if not subagent_name:
+        logger.error("Skipping MCP server '%s': missing required field agent.name", name)
+        return None
+    if not subagent_description:
+        logger.error("Skipping MCP server '%s': missing required field agent.description", name)
+        return None
+    if not instructions:
+        instructions = DEFAULT_AGENT_INSTRUCTIONS.format(name=name)
+
     try:
-        session = await stack.enter_async_context(client.session(name))
-        mcp_tools = await load_mcp_tools(session, server_name=name, tool_name_prefix=False)
+        # Use per-call MCP sessions instead of a shared long-lived session.
+        # This avoids task-affinity/cancellation issues (AnyIO cancel scope
+        # errors) when tools are invoked from nested subagents.
+        mcp_tools = await load_mcp_tools(
+            None,
+            connection=connection,
+            server_name=name,
+            tool_name_prefix=False,
+        )
+        mcp_tools = _relax_const_fields(mcp_tools)
     except Exception as exc:
-        await stack.aclose()
         logger.error("Failed to initialize MCP server '%s': %s", name, exc)
         return None
 
-    # Use the same OpenAI-compatible transport as the main agent (Ollama /v1).
+    logger.info("Initialized MCP server: %s", name)
     llm = ChatOpenAI(
         **{
             "model_name": str(model),
@@ -116,24 +185,20 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
             ),
             "openai_api_key": str(config.get("api_key") or config.get("openai_api_key") or "ollama"),
             "temperature": 0,
-            "use_responses_api": True,
-            "streaming": True,
+            "use_responses_api": False,
+            "streaming": False,
         }
     )
-    delegated_agent = create_deep_agent(model=llm, tools=mcp_tools, system_prompt=instructions)
-
-    @tool(tool_name, description=tool_description)
-    async def delegate(prompt: str) -> str:
-        state = await delegated_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
-        return final_text_from_state(state)
-
-    logger.info("Initialized MCP server: %s", name)
     return RunningMCPServer(
         name=name,
-        delegate_tool=delegate,
-        _closer=stack.aclose,
-        tool_name=tool_name,
-        tool_description=tool_description,
+        subagent={
+            "name": subagent_name,
+            "description": subagent_description,
+            "system_prompt": instructions,
+            "tools": mcp_tools,
+            "model": llm,
+        },
+        _closer=_noop_shutdown,
     )
 
 
