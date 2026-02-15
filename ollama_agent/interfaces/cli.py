@@ -18,6 +18,7 @@ from ..rag import (
     load_rag_database,
 )
 from ..settings import get_config
+from ..skills import SkillsContext, SkillManager, create_skill, delete_skill, list_skills, show_skill
 from ..tasks.commands import CLIContext, create_task, delete_task, list_tasks, run_task
 
 
@@ -48,6 +49,13 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         type=str,
         metavar="DATABASE",
         help="Load a RAG database for the session",
+    )
+    parser.add_argument(
+        "--skills-dir",
+        action="append",
+        default=[],
+        metavar="DIR",
+        help="Additional skills directory (repeatable)",
     )
     parser.add_argument(
         "--config-reset",
@@ -133,6 +141,25 @@ def _add_task_subcommands(parser: argparse.ArgumentParser) -> None:
         "--dir", action="store_true",
         help="Treat path as directory and add all files recursively")
 
+    # Skill subcommands
+    subparsers.add_parser("skill-list", help="List all skills").set_defaults(_handler="skill-list")
+
+    skill_show_parser = subparsers.add_parser("skill-show", help="Show skill details")
+    skill_show_parser.set_defaults(_handler="skill-show")
+    skill_show_parser.add_argument("skill_id", type=str, help="Skill ID or prefix")
+
+    skill_create_parser = subparsers.add_parser("skill-create", help="Create a new skill")
+    skill_create_parser.set_defaults(_handler="skill-create")
+    skill_create_parser.add_argument("skill_id", type=str, help="Skill ID (directory name)")
+    skill_create_parser.add_argument("--name", type=str, required=True, help="Skill name")
+    skill_create_parser.add_argument("--description", type=str, required=True, help="Skill description")
+    skill_create_parser.add_argument("--instructions", type=str, required=True, help="Skill instructions (markdown body)")
+    skill_create_parser.add_argument("--force", action="store_true", help="Overwrite skill if it already exists")
+
+    skill_delete_parser = subparsers.add_parser("skill-delete", help="Delete a skill")
+    skill_delete_parser.set_defaults(_handler="skill-delete")
+    skill_delete_parser.add_argument("skill_id", type=str, help="Skill ID or prefix to delete")
+
     # NOTE: Manual RAG query subcommand intentionally removed.
 
 
@@ -153,6 +180,7 @@ def handle_cli_commands(args: argparse.Namespace, agent_factory: Callable[..., O
     ctx = CLIContext(agent_factory)
     cfg = get_config()
     rag_ctx = RAGContext(rag_manager=RAGManager(cfg.rag))
+    skills_ctx = SkillsContext(skill_manager=SkillManager())
 
     def _rag_add() -> None:
         load_rag_database(rag_ctx, args.database)
@@ -174,6 +202,12 @@ def handle_cli_commands(args: argparse.Namespace, agent_factory: Callable[..., O
         "rag-create": lambda: create_rag_database(rag_ctx, args.name),
         "rag-delete": lambda: delete_rag_database(rag_ctx, args.name),
         "rag-add": _rag_add,
+        "skill-list": lambda: list_skills(skills_ctx),
+        "skill-show": lambda: show_skill(skills_ctx, args.skill_id),
+        "skill-delete": lambda: delete_skill(skills_ctx, args.skill_id),
+        "skill-create": lambda: create_skill(
+            skills_ctx, args.skill_id, name=args.name, description=args.description,
+            instructions=args.instructions, force=bool(args.force)),
     }
     if cmd in handlers:
         handlers[cmd]()

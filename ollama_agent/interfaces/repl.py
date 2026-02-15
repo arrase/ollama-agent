@@ -21,6 +21,7 @@ from ..rag import (
     show_rag_status,
     unload_rag_database,
 )
+from ..skills import SkillsContext, SkillManager, create_skill, delete_skill, list_skills, show_skill
 from ..tasks.commands import CLIContext, create_task, delete_task, list_tasks, run_task
 
 
@@ -34,6 +35,7 @@ class OllamaREPL:
         self.session = PromptSession(
             style=Style.from_dict({"prompt": "#ansiwhite bold"}))
         self.ctx = CLIContext(agent_factory, console=self.console)
+        self._skills_ctx = SkillsContext(console=self.console)
         self.active_agent: OllamaAgent | None = None
         self._initial_rag_database = rag_database
         # RAGContext will be created with agent's RAGManager once agent is initialized
@@ -181,6 +183,29 @@ class OllamaREPL:
                     return
                 path, is_dir = args[0], "--dir" in args[1:]
                 await self._safe(add_rag_directory if is_dir else add_rag_file, self._get_rag_ctx(), path)
+            # Skill commands
+            case "/skills": list_skills(self._skills_ctx)
+            case "/skill-show":
+                if sid := await _require_arg("/skill-show <skill_id>"):
+                    await self._safe(show_skill, self._skills_ctx, sid)
+            case "/skill-delete":
+                if sid := await _require_arg("/skill-delete <skill_id>"):
+                    await self._safe(delete_skill, self._skills_ctx, sid)
+            case "/skill-create":
+                if not args:
+                    self.console.print("[red]Usage: /skill-create <skill_id> [--force][/red]")
+                    return
+                skill_id, force = args[0], "--force" in args[1:]
+                name = (await self.session.prompt_async(HTML("<b>name> </b>"))).strip()
+                description = (await self.session.prompt_async(HTML("<b>description> </b>"))).strip()
+                self.console.print("[dim]Enter skill instructions (multiline markdown). Finish with Esc+Enter.[/dim]")
+                buf, old_multiline = self.session.default_buffer, self.session.default_buffer.multiline
+                try:
+                    instructions = await self.session.prompt_async(HTML("<b>instructions> </b>"), multiline=True)
+                finally:
+                    buf.multiline = old_multiline
+                await self._safe(create_skill, self._skills_ctx, skill_id, name=name,
+                                 description=description, instructions=instructions, force=force)
             case _: self.console.print(f"[red]Unknown command:[/red] {cmd}")
 
     async def _list_sessions(self, page: int = 1, per_page: int = 10) -> None:
@@ -371,4 +396,10 @@ class OllamaREPL:
         [green]/rag-delete[/green]      Delete a RAG database (Usage: /rag-delete <name>)
         [green]/rag-load[/green]        Load a RAG database (Usage: /rag-load <name>)
         [green]/rag-unload[/green]      Unload the current RAG database
-        [green]/rag-add[/green]         Add file(s) to RAG (Usage: /rag-add <path> [--dir])""", title="Help"))
+        [green]/rag-add[/green]         Add file(s) to RAG (Usage: /rag-add <path> [--dir])
+
+        [bold]Skills Management:[/bold]
+        [green]/skills[/green]          List all skills
+        [green]/skill-show[/green]      Show skill details (Usage: /skill-show <id>)
+        [green]/skill-create[/green]    Create a skill (Usage: /skill-create <id> [--force])
+        [green]/skill-delete[/green]    Delete a skill (Usage: /skill-delete <id>)""", title="Help"))

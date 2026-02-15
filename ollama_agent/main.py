@@ -1,4 +1,6 @@
 import asyncio
+from functools import partial
+
 from .agent import create_agent, set_tool_timeout
 from .interfaces.cli import create_argument_parser, handle_cli_commands
 from .settings import get_config, reset_config
@@ -18,10 +20,13 @@ def main() -> None:
     set_tool_timeout(
         cfg.builtin_tool_timeout if args.builtin_tool_timeout is None else args.builtin_tool_timeout)
 
-    if handle_cli_commands(args, create_agent):
+    extra_skills: tuple[str, ...] = tuple(getattr(args, "skills_dir", None) or [])
+    agent_factory = partial(create_agent, extra_skills_dirs=extra_skills)
+
+    if handle_cli_commands(args, agent_factory):
         return
 
-    repl = OllamaREPL(agent_factory=create_agent, model=args.model or cfg.model,
+    repl = OllamaREPL(agent_factory=agent_factory, model=args.model or cfg.model,
                       effort=args.effort or cfg.reasoning_effort,
                       rag_database=getattr(args, 'rag', None))
     asyncio.run(repl.run())

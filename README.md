@@ -16,6 +16,7 @@ Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to i
 - **Configurable**: Easily configure the model, API endpoint, and agent reasoning effort.
 - **Mem0 Memory Layer**: Persistent memory backed by Mem0 + Qdrant, exposed through function-calling tools.
 - **RAG (Retrieval Augmented Generation)**: Create and manage document databases for context-aware responses using local embeddings and Qdrant.
+- **Skills**: Extend the agent with reusable, on-demand capabilities via the [Agent Skills specification](https://agentskills.io/specification). Skills provide task-specific instructions and context through progressive disclosure.
 
 ## Prerequisites (Important)
 
@@ -85,6 +86,10 @@ The REPL provides a persistent chat session. You can use slash commands to manag
 - `/rag-add <path>`: Add a file to the loaded RAG database.
 - `/rag-add <path> --dir`: Add all files from a directory.
 - `/rag-delete <name>`: Delete a RAG database.
+- `/skills`: List all skills.
+- `/skill-show <id>`: Show skill details.
+- `/skill-create <id>`: Create a skill interactively.
+- `/skill-delete <id>`: Delete a skill.
 - `/exit`: Quit the application.
 
 ### Non-Interactive Mode
@@ -134,6 +139,7 @@ ollama-agent -t 60 -p "Run a long-running task"
 - `-e`, `--effort`: Set reasoning effort level (low, medium, high, disabled)
 - `-t`, `--builtin-tool-timeout`: Set tool-call timeout in seconds (applies to tool executions, including shell middleware and built-in tools). Overrides `builtin_tool_timeout` from `config.ini` for the current run.
 - `--rag <database>`: Load a RAG database for the session
+- `--skills-dir <dir>`: Additional skills directory (can be repeated to add multiple sources)
 
 ## Tasks
 
@@ -346,6 +352,133 @@ chunk_overlap = 50
 - `chunk_size`: Maximum size of text chunks (in characters)
 - `chunk_overlap`: Overlap between consecutive chunks
 
+## Skills
+
+Skills are reusable agent capabilities that provide specialized workflows and domain knowledge. They follow the [Agent Skills specification](https://agentskills.io/specification) and are powered by [DeepAgents skills](https://docs.langchain.com/oss/python/deepagents/skills).
+
+When a prompt arrives, the agent checks skill descriptions to find relevant ones. Only when a skill matches does the agent read the full instructions — this pattern is called *progressive disclosure* and keeps the system prompt lean.
+
+### Skill Structure
+
+Each skill is a directory containing at least a `SKILL.md` file with YAML frontmatter:
+
+```
+~/.ollama-agent/skills/
+├── langgraph-docs/
+│   └── SKILL.md
+└── arxiv-search/
+    ├── SKILL.md
+    └── arxiv_search.py
+```
+
+Example `SKILL.md`:
+
+```markdown
+---
+name: langgraph-docs
+description: Use this skill for requests related to LangGraph in order to fetch relevant documentation to provide accurate, up-to-date guidance.
+---
+
+# langgraph-docs
+
+## Overview
+
+This skill explains how to access LangGraph Python documentation.
+
+## Instructions
+
+1. Fetch the documentation index using the fetch_url tool.
+2. Select 2-4 most relevant documentation URLs.
+3. Fetch selected documentation.
+4. Provide accurate guidance based on the docs.
+```
+
+Additional files (scripts, templates, docs) can be placed alongside `SKILL.md` — just reference them in the instructions so the agent knows when and how to use them.
+
+### Skill Sources and Precedence
+
+Skills are loaded from multiple directories in order (last wins for same-name skills):
+
+1. **Global**: `~/.ollama-agent/skills/` — user-level skills available in every session.
+2. **Project**: `./skills/` — project-specific skills in the current working directory.
+3. **CLI extra**: directories passed via `--skills-dir`.
+
+```bash
+# Load additional skill sources
+ollama-agent --skills-dir /path/to/team-skills --skills-dir /path/to/project-skills -p "Help me with LangGraph"
+```
+
+### Managing Skills (CLI)
+
+**Create a Skill:**
+
+```bash
+ollama-agent skill-create langgraph-docs \
+    --name "LangGraph Docs" \
+    --description "Fetch relevant LangGraph documentation" \
+    --instructions "Use fetch_url to read https://docs.langchain.com/llms.txt and select relevant pages."
+```
+
+Use `--force` to overwrite an existing skill.
+
+**List Skills:**
+
+```bash
+ollama-agent skill-list
+# or inside REPL: /skills
+```
+
+**Show Skill Details:**
+
+```bash
+ollama-agent skill-show langgraph-docs
+# or inside REPL: /skill-show langgraph-docs
+```
+
+**Delete a Skill:**
+
+```bash
+ollama-agent skill-delete langgraph-docs
+# or inside REPL: /skill-delete langgraph-docs
+```
+
+### Managing Skills (REPL)
+
+Inside the REPL you can create skills interactively:
+
+```text
+/skill-create my-skill
+```
+
+The REPL will prompt for name, description, and then open a multiline editor for instructions (finish with Esc+Enter).
+
+### Creating Skills Manually
+
+You can also create skills by hand — just create a directory under `~/.ollama-agent/skills/` with a `SKILL.md` file:
+
+```bash
+mkdir -p ~/.ollama-agent/skills/my-skill
+cat > ~/.ollama-agent/skills/my-skill/SKILL.md << 'EOF'
+---
+name: my-skill
+description: A custom skill that does something useful.
+---
+
+# my-skill
+
+## Instructions
+
+Your instructions here.
+EOF
+```
+
+### Tips
+
+- Write clear, specific descriptions — the agent decides whether to use a skill based on the description alone.
+- `SKILL.md` files must be under 10 MB; larger files are skipped.
+- Descriptions longer than 1024 characters are truncated.
+- Skills directories that don't exist are silently ignored.
+
 ## Agent Instructions
 
 You can customize the agent's behavior by editing the instructions file at `~/.ollama-agent/instructions.md`. This file is automatically created on first use with default instructions.
@@ -412,6 +545,7 @@ Interested in contributing? Great! Here’s how to get started.
 - `ollama_agent/agent/`: Core agent logic (DeepAgents graph), session management, and built-in tools.
 - `ollama_agent/core/`: Shared types, model capability checks, and common utilities.
 - `ollama_agent/tasks/`: Task management system.
+- `ollama_agent/skills/`: Skills management and DeepAgents skills integration.
 - `ollama_agent/rag/`: RAG implementation for context retrieval.
 - `ollama_agent/memory/`: Mem0 integration for long-term memory.
 - `ollama_agent/vision/`: Screen vision and screenshot analysis.
