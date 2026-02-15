@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ollama Agent - Local AI Assistant</title>
-    <meta name="description" content="A powerful CLI and REPL for interacting with local AI models via Ollama. Built on DeepAgents and LangChain with tool execution, screen vision, memory, and RAG.">
+    <meta name="description" content="A powerful CLI and REPL for interacting with local AI models via Ollama. Built on DeepAgents and LangChain with tool execution, screen vision, memory, RAG, and skills.">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -28,7 +28,7 @@
         <div class="container">
             <h1>Your Local AI Assistant</h1>
             <p>A powerful command-line interface and REPL for interacting with local Ollama models. <br>
-            Built on <a href="https://docs.langchain.com/oss/python/deepagents/overview" target="_blank" style="color:var(--accent-color)">DeepAgents</a> and <a href="https://github.com/langchain-ai/langchain" target="_blank" style="color:var(--accent-color)">LangChain</a>, featuring integrated shell execution, screen vision, memory management, and RAG capabilities.</p>
+            Built on <a href="https://docs.langchain.com/oss/python/deepagents/overview" target="_blank" style="color:var(--accent-color)">DeepAgents</a> and <a href="https://github.com/langchain-ai/langchain" target="_blank" style="color:var(--accent-color)">LangChain</a>, featuring integrated shell execution, screen vision, memory management, RAG, and skills.</p>
             
             <div class="hero-buttons">
                 <a href="#usage" class="cta-button">Get Started</a>
@@ -92,6 +92,7 @@
                             <table class="cmd-table">
                                 <tr><td>-p "..."</td><td>Prompt to execute immediately</td></tr>
                                 <tr><td>--rag &lt;db&gt;</td><td>Use specific RAG database</td></tr>
+                                <tr><td>--skills-dir &lt;dir&gt;</td><td>Add extra skills directory</td></tr>
                             </table>
                         </div>
                          <div class="feature-code">
@@ -219,6 +220,42 @@ prompt: |
                     </div>
                 </div>
 
+                <!-- Skills -->
+                <div class="feature-item">
+                    <div class="feature-header">
+                        <div class="feature-icon"><i class="fas fa-wand-magic-sparkles"></i></div>
+                        <div>
+                            <h3>Skills</h3>
+                            <p class="feature-description">Reusable, on-demand agent capabilities following the <a href="https://agentskills.io/specification" target="_blank" style="color:var(--accent-color)">Agent Skills</a> specification.</p>
+                        </div>
+                    </div>
+                    <div class="feature-body">
+                        <p style="color:#b2bec3; margin-bottom:10px">Skills provide task-specific instructions via <em>progressive disclosure</em> &mdash; the agent only reads full instructions when a skill&rsquo;s description matches the prompt, keeping the system prompt lean.</p>
+                        <div class="usage-box">
+                            <p class="usage-title">Skill Commands</p>
+                            <table class="cmd-table">
+                                <tr><td>/skills</td><td>List all available skills</td></tr>
+                                <tr><td>/skill-show &lt;id&gt;</td><td>View full skill details</td></tr>
+                                <tr><td>/skill-create &lt;id&gt;</td><td>Interactive skill builder</td></tr>
+                                <tr><td>/skill-delete &lt;id&gt;</td><td>Remove a skill</td></tr>
+                            </table>
+                        </div>
+                        <div class="feature-code">
+# ~/.ollama-agent/skills/langgraph-docs/SKILL.md
+---
+name: langgraph-docs
+description: Fetch relevant LangGraph documentation.
+---
+
+# langgraph-docs
+
+## Instructions
+1. Fetch the documentation index.
+2. Select relevant pages.
+3. Provide accurate guidance.</div>
+                    </div>
+                </div>
+
 
 
                 <!-- Tools -->
@@ -295,6 +332,7 @@ prompt: |
                                 <tr><td>ollama_agent/streaming/</td><td>Console output streaming, rendering, and non-interactive runner</td></tr>
                                 <tr><td>ollama_agent/settings/</td><td>Configuration, centralized filesystem paths, and MCP server lifecycle</td></tr>
                                 <tr><td>ollama_agent/tasks/</td><td>Task management system (YAML-based)</td></tr>
+                                <tr><td>ollama_agent/skills/</td><td>Skills management and DeepAgents skills integration</td></tr>
                                 <tr><td>ollama_agent/rag/</td><td>RAG implementation for context retrieval</td></tr>
                                 <tr><td>ollama_agent/memory/</td><td>Mem0 integration for long-term memory</td></tr>
                                 <tr><td>ollama_agent/vision/</td><td>Screen vision and screenshot analysis</td></tr>
