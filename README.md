@@ -1,6 +1,6 @@
 # Ollama Agent
 
-Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to interact with local AI models. Built on [DeepAgents](https://github.com/deep-agents/deepagents) and [LangChain](https://github.com/langchain-ai/langchain), it provides a persistent chat experience, session management, and the ability to execute local shell commands, turning your local models into helpful assistants for your daily tasks.
+Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to interact with local AI models. Built on [DeepAgents](https://docs.langchain.com/oss/python/deepagents/overview) and [LangChain](https://github.com/langchain-ai/langchain), it provides a persistent chat experience, session management, and the ability to execute local shell commands, turning your local models into helpful assistants for your daily tasks.
 
 ## Features
 
