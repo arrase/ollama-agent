@@ -198,6 +198,7 @@ class OllamaAgent:
     mcp_config_path: Path | None = None
     mem0_settings: Mem0Settings = field(default_factory=Mem0Settings)
     rag_settings: RAGSettings = field(default_factory=RAGSettings)
+    skills_dirs: tuple[str, ...] = ()
 
     _mcp_servers: list[RunningMCPServer] = field(default_factory=list, init=False)
     _instructions: str = field(init=False, default="")
@@ -287,14 +288,17 @@ class OllamaAgent:
             execution_policy=_shell_policy_from_timeout(get_tool_timeout()),
         )
 
-        return create_deep_agent(
-            model=llm,
-            tools=self._get_tools(),
-            system_prompt=self._instructions,
-            subagents=subagents,
-            backend=_deepagents_backend_factory,
-            middleware=[cast(Any, shell_mw), _stream_tool_events_mw],
-        )
+        kwargs: dict[str, Any] = {
+            "model": llm,
+            "tools": self._get_tools(),
+            "system_prompt": self._instructions,
+            "subagents": subagents,
+            "backend": _deepagents_backend_factory,
+            "middleware": [cast(Any, shell_mw), _stream_tool_events_mw],
+        }
+        if self.skills_dirs:
+            kwargs["skills"] = list(self.skills_dirs)
+        return create_deep_agent(**kwargs)
 
     def _build_messages_with_history(self, history: list[dict[str, Any]], prompt: object) -> list[dict[str, Any]]:
         return [*history, _maybe_attach_screen_context(prompt)]
