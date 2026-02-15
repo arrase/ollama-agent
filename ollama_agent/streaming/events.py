@@ -7,7 +7,11 @@ Renderers consume those payloads.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Iterable
+
+from rich.console import Console
+
+from .console_renderer import ConsoleStreamingRenderer
 
 if TYPE_CHECKING:
     from ..agent import OllamaAgent
@@ -42,9 +46,6 @@ async def stream_agent_events(
 
 async def run_non_interactive(agent: "OllamaAgent", prompt: object) -> None:
     """Stream agent output to the console."""
-    from rich.console import Console
-    from .console_renderer import ConsoleStreamingRenderer
-
     async with agent.lifespan():
         await stream_agent_events(
             agent, prompt, ConsoleStreamingRenderer(Console()), ignore={"agent_update"},

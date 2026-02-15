@@ -1,7 +1,7 @@
 import asyncio
 from .agent import create_agent, set_tool_timeout
 from .interfaces.cli import create_argument_parser, handle_cli_commands
-from .settings import get_config
+from .settings import get_config, reset_config
 from .interfaces.repl import OllamaREPL
 
 
@@ -11,7 +11,6 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.config_reset:
-        from .settings import reset_config
         reset_config(args.config_reset)
         return
 
