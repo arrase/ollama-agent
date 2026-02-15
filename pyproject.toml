@@ -15,7 +15,7 @@ dependencies = [
     "langgraph==1.0.8",
     "langchain-mcp-adapters==0.2.1",
     "PyYAML==6.0.3",
-    "openai==2.20.0",
+    "openai==2.21.0",
     "ollama==0.6.1",
     "mem0ai==1.0.1",
     "mcp==1.21.2",
