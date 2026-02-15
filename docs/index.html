@@ -16,7 +16,6 @@
                 <a href="#" class="logo">Ollama<span>Agent</span></a>
                 <ul class="nav-links">
                     <li><a href="#features">Features</a></li>
-                    <li><a href="#architecture">Architecture</a></li>
                     <li><a href="#usage">Usage</a></li>
                     <li><a href="https://github.com/arrase/ollama-agent" target="_blank"><i class="fab fa-github"></i> GitHub</a></li>
                 </ul>
@@ -281,63 +280,6 @@ description: Fetch relevant LangGraph documentation.
                         <div class="feature-code">
 # Example prompt
 "Find all Python files in src/ modified in the last 24h"</div>
-                    </div>
-                </div>
-
-            </div>
-        </div>
-    </section>
-
-    <section id="architecture">
-        <div class="container">
-            <h2>Architecture</h2>
-            <div class="feature-list">
-
-                <div class="feature-item">
-                    <div class="feature-header">
-                        <div class="feature-icon"><i class="fas fa-layer-group"></i></div>
-                        <div>
-                            <h3>DeepAgents Runtime</h3>
-                            <p class="feature-description">The core agent is built as a DeepAgents graph backed by <code>langchain-openai</code> (<code>ChatOpenAI</code>) pointed at Ollama's OpenAI-compatible endpoint.</p>
-                        </div>
-                    </div>
-                    <div class="feature-body">
-                        <div class="usage-box">
-                            <p class="usage-title">Key Components</p>
-                            <table class="cmd-table">
-                                <tr><td>deepagents</td><td>Agent graph framework (<code>create_deep_agent</code>)</td></tr>
-                                <tr><td>langchain-openai</td><td>LLM interface via Ollama's /v1 API</td></tr>
-                                <tr><td>langchain-mcp-adapters</td><td>MCP server integration for sub-agents</td></tr>
-                                <tr><td>ShellToolMiddleware</td><td>Transparent shell command execution</td></tr>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="feature-item">
-                    <div class="feature-header">
-                        <div class="feature-icon"><i class="fas fa-folder-tree"></i></div>
-                        <div>
-                            <h3>Project Structure</h3>
-                            <p class="feature-description">Clean modular layout with centralized paths and clear separation of concerns.</p>
-                        </div>
-                    </div>
-                    <div class="feature-body">
-                        <div class="usage-box">
-                            <p class="usage-title">Module Map</p>
-                            <table class="cmd-table">
-                                <tr><td>ollama_agent/agent/</td><td>Core agent logic (DeepAgents graph), session management, and built-in tools</td></tr>
-                                <tr><td>ollama_agent/core/</td><td>Shared types, model capability checks, and common utilities</td></tr>
-                                <tr><td>ollama_agent/interfaces/</td><td>CLI and REPL interface implementations</td></tr>
-                                <tr><td>ollama_agent/streaming/</td><td>Console output streaming, rendering, and non-interactive runner</td></tr>
-                                <tr><td>ollama_agent/settings/</td><td>Configuration, centralized filesystem paths, and MCP server lifecycle</td></tr>
-                                <tr><td>ollama_agent/tasks/</td><td>Task management system (YAML-based)</td></tr>
-                                <tr><td>ollama_agent/skills/</td><td>Skills management and DeepAgents skills integration</td></tr>
-                                <tr><td>ollama_agent/rag/</td><td>RAG implementation for context retrieval</td></tr>
-                                <tr><td>ollama_agent/memory/</td><td>Mem0 integration for long-term memory</td></tr>
-                                <tr><td>ollama_agent/vision/</td><td>Screen vision and screenshot analysis</td></tr>
-                            </table>
-                        </div>
                     </div>
                 </div>
 
