@@ -9,20 +9,20 @@ description = "Agente de IA para interactuar con modelos de lenguaje locales a t
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "deepagents",
-    "langchain",
-    "langchain-openai",
-    "langgraph",
-    "langchain-mcp-adapters",
-    "PyYAML",
-    "openai",
-    "ollama",
-    "mem0ai",
-    "mss",
-    "Pillow",
-    "prompt_toolkit",
-    "qdrant-client",
-    "rich",
+    "deepagents==0.4.1",
+    "langchain==1.2.10",
+    "langchain-openai==1.1.9",
+    "langgraph==1.0.8",
+    "langchain-mcp-adapters==0.2.1",
+    "PyYAML==6.0.3",
+    "openai==2.20.0",
+    "ollama==0.6.1",
+    "mem0ai==1.0.1",
+    "mss==10.1.0",
+    "Pillow==12.0.0",
+    "prompt_toolkit==3.0.52",
+    "qdrant-client==1.16.0",
+    "rich==14.2.0",
 ]
 
 [project.scripts]
