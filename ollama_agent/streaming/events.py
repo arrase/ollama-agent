@@ -7,7 +7,7 @@ Renderers consume those payloads.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Iterable
 
 from rich.console import Console
 
