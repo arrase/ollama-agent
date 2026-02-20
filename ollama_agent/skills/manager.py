@@ -9,7 +9,7 @@ from pathlib import Path
 
 import yaml
 
-from ..core import validate_identifier
+from ..core import BaseFileStoreManager, validate_identifier
 from ..settings.paths import SKILLS_DIR
 
 logger = logging.getLogger(__name__)
@@ -65,22 +65,26 @@ def _read_skill(skill_dir: Path) -> SkillInfo | None:
     )
 
 
-class SkillManager:
+class SkillManager(BaseFileStoreManager["SkillInfo"]):
     """Manages skills persisted as subdirectories with SKILL.md files."""
 
     DEFAULT_DIR = SKILLS_DIR
 
+    _ext: str = ""          # skills are directories, no file extension
+    _id_label: str = "skill_id"
+
     def __init__(self, skills_dir: Path | None = None) -> None:
-        self.skills_dir = skills_dir or self.DEFAULT_DIR
-        self.skills_dir.mkdir(parents=True, exist_ok=True)
+        super().__init__(skills_dir or self.DEFAULT_DIR)
+
+    @property
+    def skills_dir(self) -> Path:
+        """Alias for :attr:`base_dir` for backward compatibility."""
+        return self.base_dir
 
     @staticmethod
     def validate_skill_id(skill_id: str) -> str:
         """Validate skill_id: letters, numbers, underscore, dash only."""
         return validate_identifier(skill_id, "skill_id")
-
-    def _path(self, skill_id: str) -> Path:
-        return self.skills_dir / skill_id
 
     def get(self, skill_id: str) -> SkillInfo | None:
         """Load a single skill by ID."""

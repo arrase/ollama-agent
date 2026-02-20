@@ -10,7 +10,6 @@ from .common import (
     assistant_text_from_messages,
     extract_text,
     final_text_from_state,
-    find_or_exit,
     resolve_unique_prefix,
     validate_identifier,
 )
@@ -20,10 +19,12 @@ from .models import (
     model_supports_tools,
     validate_reasoning_effort,
 )
+from .resource_manager import BaseFileStoreManager
 
 __all__ = [
     # Types
     "ALLOWED_REASONING_EFFORTS",
+    "BaseFileStoreManager",
     "CommandResult",
     "DEFAULT_REASONING_EFFORT",
     "Mem0ToolResult",
@@ -38,7 +39,6 @@ __all__ = [
     "assistant_text_from_messages",
     "extract_text",
     "final_text_from_state",
-    "find_or_exit",
     "resolve_unique_prefix",
     "validate_identifier",
 ]

@@ -8,7 +8,7 @@ from rich.table import Table
 
 from ..agent import OllamaAgent
 from ..streaming import run_non_interactive
-from ..core import find_or_exit, resolve_unique_prefix
+from ..core import resolve_unique_prefix
 from .manager import Task, TaskManager
 
 

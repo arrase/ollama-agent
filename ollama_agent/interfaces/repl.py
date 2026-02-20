@@ -4,11 +4,9 @@ from typing import Callable
 from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.styles import Style
-import ollama
 from rich.console import Console
 from rich.panel import Panel
 from ..agent import OllamaAgent
-from ..core import ModelCapabilityError, model_supports_tools, resolve_unique_prefix
 from ..streaming import ConsoleStreamingRenderer, stream_agent_events
 from ..rag import (
     RAGContext,
@@ -21,8 +19,16 @@ from ..rag import (
     show_rag_status,
     unload_rag_database,
 )
-from ..skills import SkillsContext, SkillManager, create_skill, delete_skill, list_skills, show_skill
+from ..skills import SkillsContext, create_skill, delete_skill, list_skills, show_skill
 from ..tasks.commands import CLIContext, create_task, delete_task, list_tasks, run_task
+from .agent_commands import (
+    delete_session,
+    find_session,
+    list_models,
+    list_sessions,
+    load_session,
+    set_model,
+)
 
 
 class OllamaREPL:
@@ -209,158 +215,29 @@ class OllamaREPL:
             case _: self.console.print(f"[red]Unknown command:[/red] {cmd}")
 
     async def _list_sessions(self, page: int = 1, per_page: int = 10) -> None:
-        agent = self._ensure_agent()
-        sessions = agent.session_manager.list_sessions(
-            limit=per_page, offset=(page - 1) * per_page)
-        if not sessions:
-            self.console.print(
-                f"[yellow]{'No saved sessions found.' if page == 1 else f'No more sessions (page {page} is empty).'}[/yellow]")
-            return
-        current_id = agent.session_manager.get_session_id()
-        self.console.print(
-            f"[bold]Sessions (page {page}):[/bold]\n[dim]─" + "─" * 59 + "[/dim]")
-        for s in sessions:
-            marker = " [green]◀ current[/green]" if s["session_id"] == current_id else ""
-            preview = s["preview"][:40] + \
-                "..." if len(s["preview"]) > 40 else s["preview"]
-            self.console.print(
-                f"[cyan]{s['session_id'][:8]}[/cyan] │ {s['message_count']:>3} msgs │ {s['last_message'][:16]} │ [dim]{preview}[/dim]{marker}")
-        self.console.print("[dim]─" * 60 + "[/dim]")
-        hint = f"Next page: /sessions {page + 1} | " if len(
-            sessions) == per_page else ""
-        self.console.print(f"[dim]{hint}Load: /session-load <id>[/dim]")
+        list_sessions(self._ensure_agent(), self.console, page=page, per_page=per_page)
 
     def _find_session(self, prefix: str, sessions: list) -> dict | None:
-        ids = [s.get("session_id", "") for s in sessions if isinstance(s, dict)]
-        resolved = resolve_unique_prefix(prefix, ids)
-        if resolved:
-            return next((s for s in sessions if s.get("session_id") == resolved), None)
-
-        matches = [s for s in sessions if str(s.get("session_id", "")).startswith(prefix)]
-        if not matches:
-            self.console.print(f"[red]No session found matching '{prefix}'[/red]")
-            return None
-        self.console.print(f"[yellow]Multiple sessions match '{prefix}':[/yellow]")
-        for m in matches[:5]:
-            sid = str(m.get("session_id", ""))
-            preview = str(m.get("preview", ""))
-            self.console.print(f"  [cyan]{sid[:8]}[/cyan] - {preview[:40]}")
-        return None
+        return find_session(prefix, sessions, self.console)
 
     async def _load_session(self, session_id_prefix: str) -> None:
-        agent = self._ensure_agent()
-        if not (target := self._find_session(session_id_prefix, agent.session_manager.list_sessions(limit=100))):
-            return
-        history = agent.session_manager.get_readable_history(
-            target["session_id"])
-        agent.session_manager.load_session(target["session_id"])
-        self.console.print(
-            f"\n[bold green]━━━ Session Loaded: {target['session_id'][:8]}... ━━━[/bold green]")
-        self.console.print(
-            f"[dim]Messages: {target['message_count']} | Last active: {target['last_message']}[/dim]\n")
-        if history:
-            self.console.print(
-                "[bold]Conversation History:[/bold]\n[dim]─" + "─" * 49 + "[/dim]")
-            for msg in history[-10:]:
-                limit = 200 if msg["role"] == "user" else 300
-                content = msg["content"][:limit] + \
-                    "..." if len(msg["content"]) > limit else msg["content"]
-                prefix = "[bold blue]>>>[/bold blue] " if msg["role"] == "user" else ""
-                self.console.print(f"{prefix}{content}\n")
-            if len(history) > 10:
-                self.console.print(
-                    f"[dim]... and {len(history) - 10} earlier messages[/dim]\n")
-            self.console.print("[dim]─" * 50 + "[/dim]")
-        self.console.print(
-            "[green]✓ Session loaded. Continue typing to resume the conversation.[/green]\n")
+        load_session(self._ensure_agent(), self.console, session_id_prefix)
 
     async def _delete_session(self, session_id_prefix: str) -> None:
-        agent = self._ensure_agent()
-        if not (target := self._find_session(session_id_prefix, agent.session_manager.list_sessions(limit=100))):
-            return
-        msg = f"[green]✓ Deleted session:[/green] [cyan]{target['session_id'][:8]}[/cyan]" \
-            if agent.session_manager.delete_session(target["session_id"]) else "[red]Failed to delete session[/red]"
-        self.console.print(msg)
+        delete_session(self._ensure_agent(), self.console, session_id_prefix)
 
     def _list_models(self) -> None:
-        try:
-            models = getattr(ollama.list(), "models", [])
-            if not models:
-                self.console.print(
-                    "[yellow]No models found in Ollama.[/yellow]")
-                return
-            self.console.print(
-                "[bold]Available Models:[/bold]\n[dim]─" + "─" * 59 + "[/dim]")
-            for item in models:
-                if not (name := getattr(item, "model", None)):
-                    continue
-                marker = " [green]◀ current[/green]" if name == self.model else ""
-                size_gb = getattr(item, "size", 0) / (1024 ** 3)
-                size_str = f"{size_gb:.1f}GB" if size_gb else ""
-                try:
-                    tool_icon = "[green]✓[/green]" if model_supports_tools(
-                        name) else "[red]✗[/red]"
-                except ModelCapabilityError:
-                    tool_icon = "[yellow]?[/yellow]"
-                self.console.print(
-                    f"  {tool_icon} [cyan]{name}[/cyan] {size_str}{marker}")
-            self.console.print(
-                "[dim]─" * 60 + "[/dim]\n[dim]✓ = supports tools | Use /model-set <model> to switch[/dim]")
-        except Exception as e:
-            self.console.print(f"[red]Error listing models: {e}[/red]")
+        list_models(self.console, self.model)
 
     async def _set_model(self, model_name: str) -> None:
-        try:
-            available = {getattr(m, "model", "")
-                         for m in getattr(ollama.list(), "models", [])}
-            if model_name not in available:
-                self.console.print(
-                    f"[red]Model '{model_name}' not found.[/red]\n[dim]Use /models to see available models.[/dim]")
-                return
-        except Exception as e:
-            self.console.print(f"[red]Error checking model: {e}[/red]")
-            return
-        if model_name == self.model:
-            self.console.print(
-                f"[yellow]Already using model '{model_name}'.[/yellow]")
-            return
-        try:
-            if not model_supports_tools(model_name):
-                self.console.print(
-                    f"[red]Model '{model_name}' does not support tools.[/red]\n[dim]The agent requires tool support.[/dim]")
-                return
-        except ModelCapabilityError as e:
-            self.console.print(
-                f"[red]Cannot verify model capabilities: {e}[/red]")
-            return
-
-        old_model = self.model
-        old_session_id = self.active_agent.session_manager.get_session_id(
-        ) if self.active_agent else None
-
-        if self.active_agent:
-            await self.active_agent.cleanup()
-            self.active_agent = None
-
-        self.model = model_name
-        try:
-            self.active_agent = self.agent_factory(
-                model=self.model, reasoning_effort=self.effort)
-            await self.active_agent.initialize()
-        except (ModelCapabilityError, SystemExit) as e:
-            self.console.print(
-                f"[red]Failed to create agent with model '{model_name}': {e}[/red]")
-            self.model = old_model
-            self.active_agent = self.agent_factory(
-                model=self.model, reasoning_effort=self.effort)
-            if old_session_id:
-                self.active_agent.session_manager.load_session(old_session_id)
-            return
-
-        if old_session_id:
-            self.active_agent.session_manager.load_session(old_session_id)
-        self.console.print(
-            f"[green]✓ Switched from [cyan]{old_model}[/cyan] to [cyan]{model_name}[/cyan][/green]\n[dim]Conversation preserved. Continue chatting.[/dim]")
+        self.model, self.active_agent = await set_model(
+            self.console,
+            model_name,
+            current_model=self.model,
+            current_effort=self.effort,
+            active_agent=self.active_agent,
+            agent_factory=self.agent_factory,
+        )
 
     async def handle_chat(self, prompt: str) -> None:
         agent = self._ensure_agent()

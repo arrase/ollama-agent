@@ -3,8 +3,6 @@
 import re
 from typing import Any, Literal, TypedDict
 
-from rich.console import Console
-
 # Reasoning effort types
 ReasoningEffortValue = Literal["low", "medium", "high", "disabled"]
 ALLOWED_REASONING_EFFORTS: tuple[ReasoningEffortValue, ...] = (
@@ -106,17 +104,4 @@ def validate_identifier(name: str, label: str = "identifier") -> str:
     return name
 
 
-def find_or_exit(
-    prefix: str,
-    candidates: list[str],
-    console: Console,
-    *,
-    label: str = "item",
-) -> str:
-    """Resolve a unique prefix match from *candidates* or exit with an error message."""
-    if resolved := resolve_unique_prefix(prefix, candidates):
-        return resolved
-    matches = [c for c in candidates if c.startswith((prefix or "").strip())]
-    msg = f"{label} not found: {prefix}" if not matches else f"Ambiguous prefix: {prefix} -> {', '.join(matches)}"
-    console.print(f"[red]{msg}[/red]")
-    raise SystemExit(1)
+

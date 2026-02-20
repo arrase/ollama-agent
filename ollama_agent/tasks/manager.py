@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from ..core import DEFAULT_REASONING_EFFORT, ReasoningEffortValue, validate_reasoning_effort, validate_identifier
+from ..core import BaseFileStoreManager, DEFAULT_REASONING_EFFORT, ReasoningEffortValue, validate_reasoning_effort, validate_identifier
 from ..settings.paths import TASKS_DIR
 
 logger = logging.getLogger(__name__)
@@ -34,17 +34,21 @@ class Task:
                    str(d.get("reasoning_effort", DEFAULT_REASONING_EFFORT)))
 
 
-class TaskManager:
+class TaskManager(BaseFileStoreManager["Task"]):
     """Manages task persistence using YAML files."""
 
     DEFAULT_DIR = TASKS_DIR
 
-    def __init__(self, tasks_dir: Path | None = None) -> None:
-        self.tasks_dir = tasks_dir or self.DEFAULT_DIR
-        self.tasks_dir.mkdir(parents=True, exist_ok=True)
+    _ext: str = ".yaml"     # tasks are stored as <id>.yaml files
+    _id_label: str = "task_id"
 
-    def _path(self, task_id: str) -> Path:
-        return self.tasks_dir / f"{task_id}.yaml"
+    def __init__(self, tasks_dir: Path | None = None) -> None:
+        super().__init__(tasks_dir or self.DEFAULT_DIR)
+
+    @property
+    def tasks_dir(self) -> Path:
+        """Alias for :attr:`base_dir` for backward compatibility."""
+        return self.base_dir
 
     @staticmethod
     def validate_task_id(task_id: str) -> str:
