@@ -29,7 +29,10 @@ def main() -> None:
     repl = OllamaREPL(agent_factory=agent_factory, model=args.model or cfg.model,
                       effort=args.effort or cfg.reasoning_effort,
                       rag_database=getattr(args, 'rag', None))
-    asyncio.run(repl.run())
+    try:
+        asyncio.run(repl.run())
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":

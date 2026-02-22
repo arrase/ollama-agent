@@ -6,7 +6,7 @@ import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, cast
 
 from deepagents import create_deep_agent
 from deepagents.backends import LocalShellBackend

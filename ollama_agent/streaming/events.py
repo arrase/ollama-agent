@@ -6,6 +6,7 @@ Renderers consume those payloads.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Iterable
 
@@ -36,6 +37,8 @@ async def stream_agent_events(
             etype = event.get("type")
             if etype and etype not in ignored:
                 renderer.on_event(event)
+    except asyncio.CancelledError:
+        pass
     except Exception as exc:
         logger.exception("Error streaming agent events: %s", exc)
         renderer.on_error({"type": "error", "content": str(exc)})
