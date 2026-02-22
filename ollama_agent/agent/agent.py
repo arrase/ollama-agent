@@ -6,12 +6,10 @@ import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, AsyncGenerator, cast
+from typing import Any, AsyncGenerator
 
 from deepagents import create_deep_agent
-from deepagents.backends import FilesystemBackend
-from langchain.agents.middleware import ShellToolMiddleware
-from langchain.agents.middleware import HostExecutionPolicy
+from deepagents.backends import LocalShellBackend
 from langchain_openai import ChatOpenAI
 
 from ..core import ReasoningEffortValue, assistant_text_from_messages, final_text_from_state
@@ -29,13 +27,6 @@ from ..vision import build_multimodal_responses_input, capture_display_as_base64
 logger = logging.getLogger(__name__)
 
 
-def _deepagents_backend_factory(_: Any) -> FilesystemBackend:
-    # DeepAgents uses StateBackend by default (ephemeral, starts empty), which makes
-    # tools like `ls/read_file/...` operate on an empty virtual filesystem.
-    # Use the real workspace on disk instead, and restrict paths to that root.
-    return FilesystemBackend(root_dir=Path.cwd(), virtual_mode=True)
-
-
 def _maybe_attach_screen_context(prompt: object) -> dict[str, Any]:
     """Convert @dpN tokens to a multimodal user message (LangChain content blocks)."""
     text = prompt if isinstance(prompt, str) else str(prompt)
@@ -50,17 +41,6 @@ def _maybe_attach_screen_context(prompt: object) -> dict[str, Any]:
     # Returns a messages list; take the single user message.
     return build_multimodal_responses_input(cleaned, images)[0]
 
-
-
-def _shell_policy_from_timeout(timeout_s: int):
-    try:
-        return HostExecutionPolicy(command_timeout=float(timeout_s))
-    except TypeError:
-        return HostExecutionPolicy()
-
-
-def _is_gpt_oss(model: str) -> bool:
-    return "gpt-oss" in (model or "").lower()
 
 
 @dataclass(slots=True)
@@ -133,15 +113,8 @@ class OllamaAgent:
             validate_reasoning_effort(effort) if effort else self.reasoning_effort,
         )
 
-    def _get_tools(self) -> list[Any]:
-        return [*BUILTIN_TOOLS]
-
-    def _get_subagents(self) -> list[dict[str, Any]]:
-        return [srv.subagent for srv in self._mcp_servers]
-
     def _build_deep_agent(self, model: str, effort: ReasoningEffortValue):
         ensure_model_supports_tools(model)
-        subagents = self._get_subagents()
 
         # `reasoning_effort` must work for gpt-oss models as in the main branch,
         # but the system prompt must remain exclusively user-defined.
@@ -156,29 +129,22 @@ class OllamaAgent:
             "use_responses_api": True,
             "streaming": True,
         }
-        if _is_gpt_oss(model) and effort != "disabled":
+        if "gpt-oss" in model.lower() and effort != "disabled":
             openai_kwargs["reasoning_effort"] = effort
 
-        llm = ChatOpenAI(**openai_kwargs)
-        shell_mw = ShellToolMiddleware(
-            workspace_root=Path.cwd(),
-            execution_policy=_shell_policy_from_timeout(get_tool_timeout()),
-        )
-
         kwargs: dict[str, Any] = {
-            "model": llm,
-            "tools": self._get_tools(),
+            "model": ChatOpenAI(**openai_kwargs),
+            "tools": list(BUILTIN_TOOLS),
             "system_prompt": self._instructions,
-            "subagents": subagents,
-            "backend": _deepagents_backend_factory,
-            "middleware": [cast(Any, shell_mw), stream_tool_events_mw],
+            "subagents": [srv.subagent for srv in self._mcp_servers],
+            # LocalShellBackend extends FilesystemBackend with an `execute` tool
+            # that runs shell commands directly on the host.
+            "backend": LocalShellBackend(root_dir=Path.cwd(), timeout=int(get_tool_timeout()), virtual_mode=False),
+            "middleware": [stream_tool_events_mw],
         }
         if self.skills_dirs:
             kwargs["skills"] = list(self.skills_dirs)
         return create_deep_agent(**kwargs)
-
-    def _build_messages_with_history(self, history: list[dict[str, Any]], prompt: object) -> list[dict[str, Any]]:
-        return [*history, _maybe_attach_screen_context(prompt)]
 
     async def run_async(self, prompt: object, model: str | None = None, reasoning_effort: str | None = None) -> str:
         await self.initialize()
@@ -188,7 +154,7 @@ class OllamaAgent:
         user_text_for_history = prompt if isinstance(prompt, str) else str(prompt)
         self._session_manager.append_message("user", user_text_for_history)
         try:
-            state = await agent.ainvoke({"messages": self._build_messages_with_history(history, prompt)})
+            state = await agent.ainvoke({"messages": [*history, _maybe_attach_screen_context(prompt)]})
             out = final_text_from_state(state)
             self._session_manager.append_message("assistant", out)
             return out
@@ -212,7 +178,8 @@ class OllamaAgent:
         emitted_from_messages = False
         try:
             async for mode, event in agent.astream(
-                {"messages": self._build_messages_with_history(history, prompt)},
+                {"messages": [*history, _maybe_attach_screen_context(prompt)]},
+
                 stream_mode=["messages", "custom", "values"],
             ):
                 if mode == "custom" and isinstance(event, dict) and event.get("type"):
