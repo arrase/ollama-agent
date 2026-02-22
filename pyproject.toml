@@ -23,7 +23,7 @@ dependencies = [
     "Pillow==12.1.1",
     "prompt_toolkit==3.0.52",
     "qdrant-client==1.16.2",
-    "rich==14.3.2",
+    "rich==14.3.3",
 ]
 
 [project.scripts]
