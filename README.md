@@ -9,7 +9,7 @@ Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to i
 - **Ollama Integration**: Connects to any Ollama-compatible API endpoint.
 - **Per-session Model Switching**: Change the model mid-conversation and continue from that point with the new model (context preserved). The change is not permanent and only affects the current session.
 - **Screen Vision (Screenshots)**: Attach monitor screenshots in prompts using `@dpN` for visual context.
-- **Tool-Powered**: The agent can execute shell commands via an integrated shell middleware, allowing it to interact with your local environment to perform tasks.
+- **Tool-Powered**: The agent can execute shell commands via an integrated shell backend, allowing it to interact with your local environment to perform tasks.
 - **Delegated MCP Agents**: Each configured MCP server can run through its own lightweight DeepAgents sub-agent (via `langchain-mcp-adapters`) with custom model and instructions.
 - **Session Management**: Conversations are automatically saved and can be reloaded, deleted, or switched between.
 - **Task Management**: Save frequently used prompts as "tasks" and execute them with a simple command.
@@ -137,7 +137,7 @@ ollama-agent -t 60 -p "Run a long-running task"
 - `-m`, `--model`: Specify the AI model to use
 - `-p`, `--prompt`: Provide a prompt for non-interactive mode
 - `-e`, `--effort`: Set reasoning effort level (low, medium, high, disabled)
-- `-t`, `--builtin-tool-timeout`: Set tool-call timeout in seconds (applies to tool executions, including shell middleware and built-in tools). Overrides `builtin_tool_timeout` from `config.ini` for the current run.
+- `-t`, `--builtin-tool-timeout`: Set tool-call timeout in seconds (applies to tool executions, including shell backend and built-in tools). Overrides `builtin_tool_timeout` from `config.ini` for the current run.
 - `--rag <database>`: Load a RAG database for the session
 - `--skills-dir <dir>`: Additional skills directory (can be repeated to add multiple sources)
 
