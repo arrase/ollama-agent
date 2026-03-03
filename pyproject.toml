@@ -11,7 +11,7 @@ requires-python = ">=3.12"
 dependencies = [
     "deepagents==0.4.4",
     "langchain==1.2.10",
-    "langchain-openai==1.1.9",
+    "langchain-openai==1.1.10",
     "langgraph==1.0.10",
     "langchain-mcp-adapters==0.2.1",
     "PyYAML==6.0.3",
