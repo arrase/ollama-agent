@@ -99,6 +99,7 @@ class OllamaREPL:
         """Handle slash commands."""
         parts = command.split()
         cmd, args = parts[0].lower(), parts[1:]
+        inline_commands = {"/exit", "/quit", "/clear", "/new", "/task-create", "/skill-create"}
 
         async def _require_arg(usage: str) -> str | None:
             if not args:
@@ -119,7 +120,9 @@ class OllamaREPL:
             render_repl_help(self.console, commands)
             return
 
-        if cmd in commands:
+        if cmd in inline_commands:
+            pass
+        elif cmd in commands:
             if cmd in {"/task-run", "/task-delete", "/session-load", "/session-delete", "/model-set", "/rag-create", "/rag-delete", "/rag-load", "/skill-show", "/skill-delete"}:
                 if await _require_arg(f"{cmd} <value>") is None:
                     return
