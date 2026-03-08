@@ -6,29 +6,14 @@ from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.styles import Style
 from rich.console import Console
 from rich.panel import Panel
+
 from ..agent import OllamaAgent
 from ..streaming import ConsoleStreamingRenderer, stream_agent_events
-from ..rag import (
-    RAGContext,
-    add_rag_directory,
-    add_rag_file,
-    create_rag_database,
-    delete_rag_database,
-    list_rag_databases,
-    load_rag_database,
-    show_rag_status,
-    unload_rag_database,
-)
-from ..skills import SkillsContext, create_skill, delete_skill, list_skills, show_skill
-from ..tasks.commands import CLIContext, create_task, delete_task, list_tasks, run_task
-from .agent_commands import (
-    delete_session,
-    find_session,
-    list_models,
-    list_sessions,
-    load_session,
-    set_model,
-)
+from ..rag import RAGContext, load_rag_database
+from ..skills import SkillsContext, create_skill
+from ..tasks.commands import CLIContext, create_task
+from .dispatch import build_repl_handlers, render_repl_help
+from .model_commands import set_model
 
 
 class OllamaREPL:
@@ -112,25 +97,41 @@ class OllamaREPL:
 
     async def handle_command(self, command: str) -> None:
         """Handle slash commands."""
-        parts, cmd, args = command.split(), command.split()[
-            0].lower(), command.split()[1:]
+        parts = command.split()
+        cmd, args = parts[0].lower(), parts[1:]
 
         async def _require_arg(usage: str) -> str | None:
             if not args:
                 self.console.print(f"[red]Usage: {usage}[/red]")
             return args[0] if args else None
 
+        commands = build_repl_handlers(
+            task_ctx=self.ctx,
+            skills_ctx=self._skills_ctx,
+            get_rag_ctx=self._get_rag_ctx,
+            ensure_agent=self._ensure_agent,
+            console=self.console,
+            current_model=lambda: self.model,
+            switch_model=self._switch_model,
+        )
+
+        if cmd == "/help":
+            render_repl_help(self.console, commands)
+            return
+
+        if cmd in commands:
+            if cmd in {"/task-run", "/task-delete", "/session-load", "/session-delete", "/model-set", "/rag-create", "/rag-delete", "/rag-load", "/skill-show", "/skill-delete"}:
+                if await _require_arg(f"{cmd} <value>") is None:
+                    return
+            if cmd == "/rag-add" and not args:
+                self.console.print("[red]Usage: /rag-add <file_or_dir> [--dir][/red]")
+                return
+            await self._safe(commands[cmd].handler, args)
+            return
+
         match cmd:
             case "/exit" | "/quit": raise EOFError
-            case "/help": self.show_help()
             case "/clear": self.console.clear()
-            case "/tasks": list_tasks(self.ctx)
-            case "/task-run":
-                if tid := await _require_arg("/task-run <task_id>"):
-                    await self._safe(run_task, self.ctx, tid)
-            case "/task-delete":
-                if tid := await _require_arg("/task-delete <task_id>"):
-                    await self._safe(delete_task, self.ctx, tid)
             case "/task-create":
                 if not args:
                     self.console.print(
@@ -158,45 +159,6 @@ class OllamaREPL:
                     f"Model: [cyan]{self.model}[/cyan] | Effort: [cyan]{self.effort}[/cyan]\n"
                     "Type [bold]/help[/bold] for commands or just start typing to chat.",
                     title="New Session", border_style="green"))
-            case "/sessions": await self._list_sessions(page=int(args[0]) if args and args[0].isdigit() else 1)
-            case "/session-load":
-                if sid := await _require_arg("/session-load <session_id>"):
-                    await self._load_session(sid)
-            case "/session-delete":
-                if sid := await _require_arg("/session-delete <session_id>"):
-                    await self._delete_session(sid)
-            case "/models": self._list_models()
-            case "/model-set":
-                if mid := await _require_arg("/model-set <model_name>"):
-                    await self._set_model(mid)
-            # RAG commands
-            case "/rag": show_rag_status(self._get_rag_ctx())
-            case "/rag-list": list_rag_databases(self._get_rag_ctx())
-            case "/rag-create":
-                if name := await _require_arg("/rag-create <name>"):
-                    await self._safe(create_rag_database, self._get_rag_ctx(), name)
-            case "/rag-delete":
-                if name := await _require_arg("/rag-delete <name>"):
-                    await self._safe(delete_rag_database, self._get_rag_ctx(), name)
-            case "/rag-load":
-                if name := await _require_arg("/rag-load <name>"):
-                    await self._safe(load_rag_database, self._get_rag_ctx(), name)
-            case "/rag-unload":
-                unload_rag_database(self._get_rag_ctx())
-            case "/rag-add":
-                if not args:
-                    self.console.print("[red]Usage: /rag-add <file_or_dir> [--dir][/red]")
-                    return
-                path, is_dir = args[0], "--dir" in args[1:]
-                await self._safe(add_rag_directory if is_dir else add_rag_file, self._get_rag_ctx(), path)
-            # Skill commands
-            case "/skills": list_skills(self._skills_ctx)
-            case "/skill-show":
-                if sid := await _require_arg("/skill-show <skill_id>"):
-                    await self._safe(show_skill, self._skills_ctx, sid)
-            case "/skill-delete":
-                if sid := await _require_arg("/skill-delete <skill_id>"):
-                    await self._safe(delete_skill, self._skills_ctx, sid)
             case "/skill-create":
                 if not args:
                     self.console.print("[red]Usage: /skill-create <skill_id> [--force][/red]")
@@ -214,22 +176,7 @@ class OllamaREPL:
                                  description=description, instructions=instructions, force=force)
             case _: self.console.print(f"[red]Unknown command:[/red] {cmd}")
 
-    async def _list_sessions(self, page: int = 1, per_page: int = 10) -> None:
-        list_sessions(self._ensure_agent(), self.console, page=page, per_page=per_page)
-
-    def _find_session(self, prefix: str, sessions: list) -> dict | None:
-        return find_session(prefix, sessions, self.console)
-
-    async def _load_session(self, session_id_prefix: str) -> None:
-        load_session(self._ensure_agent(), self.console, session_id_prefix)
-
-    async def _delete_session(self, session_id_prefix: str) -> None:
-        delete_session(self._ensure_agent(), self.console, session_id_prefix)
-
-    def _list_models(self) -> None:
-        list_models(self.console, self.model)
-
-    async def _set_model(self, model_name: str) -> None:
+    async def _switch_model(self, model_name: str) -> None:
         self.model, self.active_agent = await set_model(
             self.console,
             model_name,
@@ -244,39 +191,3 @@ class OllamaREPL:
         renderer = ConsoleStreamingRenderer(self.console)
         await stream_agent_events(agent, prompt, renderer, auto_close=True)
 
-    def show_help(self) -> None:
-        self.console.print(Panel("""[bold]Available Commands:[/bold]
-        [green]/help[/green]            Show this help message
-        [green]/exit[/green], [green]/quit[/green]    Exit the REPL
-        [green]/clear[/green]           Clear the screen
-
-        [bold]Model Management:[/bold]
-        [green]/models[/green]          List available Ollama models
-        [green]/model-set[/green]       Switch to a different model (Usage: /model-set <model>)
-
-        [bold]Session Management:[/bold]
-        [green]/new[/green]             Start a new chat session (clears context)
-        [green]/sessions[/green]        List saved sessions (Usage: /sessions [page])
-        [green]/session-load[/green]    Load a saved session (Usage: /session-load <id>)
-        [green]/session-delete[/green]  Delete a saved session (Usage: /session-delete <id>)
-
-        [bold]Task Management:[/bold]
-        [green]/tasks[/green]           List saved tasks
-        [green]/task-create[/green]     Create a task (Usage: /task-create <id> [--force])
-        [green]/task-run[/green]        Run a saved task (Usage: /task-run <id>)
-        [green]/task-delete[/green]     Delete a saved task (Usage: /task-delete <id>)
-
-        [bold]RAG (Document Retrieval):[/bold]
-        [green]/rag[/green]             Show current RAG status
-        [green]/rag-list[/green]        List all RAG databases
-        [green]/rag-create[/green]      Create a new RAG database (Usage: /rag-create <name>)
-        [green]/rag-delete[/green]      Delete a RAG database (Usage: /rag-delete <name>)
-        [green]/rag-load[/green]        Load a RAG database (Usage: /rag-load <name>)
-        [green]/rag-unload[/green]      Unload the current RAG database
-        [green]/rag-add[/green]         Add file(s) to RAG (Usage: /rag-add <path> [--dir])
-
-        [bold]Skills Management:[/bold]
-        [green]/skills[/green]          List all skills
-        [green]/skill-show[/green]      Show skill details (Usage: /skill-show <id>)
-        [green]/skill-create[/green]    Create a skill (Usage: /skill-create <id> [--force])
-        [green]/skill-delete[/green]    Delete a skill (Usage: /skill-delete <id>)""", title="Help"))

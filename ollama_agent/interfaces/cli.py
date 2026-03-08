@@ -2,24 +2,17 @@
 
 import argparse
 import asyncio
+import inspect
 from typing import Callable
 
 from ..agent import OllamaAgent
 from ..core import ALLOWED_REASONING_EFFORTS
 from ..streaming import run_non_interactive
-from ..rag import (
-    RAGContext,
-    RAGManager,
-    add_rag_directory,
-    add_rag_file,
-    create_rag_database,
-    delete_rag_database,
-    list_rag_databases,
-    load_rag_database,
-)
+from ..rag import RAGContext, RAGManager
 from ..settings import get_config
-from ..skills import SkillsContext, SkillManager, create_skill, delete_skill, list_skills, show_skill
-from ..tasks.commands import CLIContext, create_task, delete_task, list_tasks, run_task
+from ..skills import SkillManager, SkillsContext
+from ..tasks.commands import CLIContext
+from .dispatch import build_cli_handlers
 
 
 def _add_common_args(parser: argparse.ArgumentParser) -> None:
@@ -182,35 +175,12 @@ def handle_cli_commands(args: argparse.Namespace, agent_factory: Callable[..., O
     rag_ctx = RAGContext(rag_manager=RAGManager(cfg.rag))
     skills_ctx = SkillsContext(skill_manager=SkillManager())
 
-    def _rag_add() -> None:
-        load_rag_database(rag_ctx, args.database)
-        if args.dir:
-            add_rag_directory(rag_ctx, args.path)
-        else:
-            add_rag_file(rag_ctx, args.path)
-
     cmd = getattr(args, "_handler", None) or args.command
-    handlers = {
-        "task-list": lambda: list_tasks(ctx),
-        "task-delete": lambda: delete_task(ctx, args.task_id),
-        "task-run": lambda: asyncio.run(run_task(ctx, args.task_id)),
-        "task-create": lambda: create_task(
-            ctx, args.task_id, title=args.title, prompt=args.task_prompt,
-            model=(args.task_model or args.model or ""),
-            reasoning_effort=(args.task_effort or args.effort), force=bool(args.force)),
-        "rag-list": lambda: list_rag_databases(rag_ctx),
-        "rag-create": lambda: create_rag_database(rag_ctx, args.name),
-        "rag-delete": lambda: delete_rag_database(rag_ctx, args.name),
-        "rag-add": _rag_add,
-        "skill-list": lambda: list_skills(skills_ctx),
-        "skill-show": lambda: show_skill(skills_ctx, args.skill_id),
-        "skill-delete": lambda: delete_skill(skills_ctx, args.skill_id),
-        "skill-create": lambda: create_skill(
-            skills_ctx, args.skill_id, name=args.name, description=args.description,
-            instructions=args.instructions, force=bool(args.force)),
-    }
+    handlers = build_cli_handlers(args, task_ctx=ctx, rag_ctx=rag_ctx, skills_ctx=skills_ctx)
     if cmd in handlers:
-        handlers[cmd]()
+        result = handlers[cmd]()
+        if inspect.isawaitable(result):
+            asyncio.run(result)
         return True
 
     if args.prompt:

@@ -10,6 +10,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from ..core import resolve_unique_prefix
+from ..interfaces.utils import require_or_exit
 from .manager import SkillInfo, SkillManager
 
 
@@ -41,10 +42,7 @@ class SkillsContext:
         raise SystemExit(1)
 
     def _require(self, value: str, name: str) -> str:
-        if not (v := (value or "").strip().strip("\n")):
-            self.console.print(f"[red]{name} cannot be empty.[/red]")
-            raise SystemExit(1)
-        return v
+        return require_or_exit(value, name, self.console)
 
 
 def list_skills(ctx: SkillsContext) -> None:

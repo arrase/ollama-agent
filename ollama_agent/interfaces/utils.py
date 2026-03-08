@@ -1,10 +1,10 @@
 """Interface-layer utilities.
 
 Functions here are allowed to depend on presentation libraries such as
-``rich``, and may raise :exc:`SystemExit`.  They must **not** be imported by
-pure-core modules (``core/``, ``rag/``, ``skills/``, ``tasks/``) to avoid
-circular dependencies — those modules own their own error-display logic via
-their context objects.
+``rich``, and may raise :exc:`SystemExit`. They are intended for command-layer
+code, including the CLI/REPL adapters and the command helpers in
+``tasks/``, ``rag/`` and ``skills/``. Pure core/runtime modules should keep
+avoiding this layer to prevent presentation concerns from leaking inward.
 """
 
 from __future__ import annotations
@@ -37,3 +37,11 @@ def find_or_exit(
     )
     console.print(f"[red]{msg}[/red]")
     raise SystemExit(1)
+
+
+def require_or_exit(value: str, name: str, console: Console) -> str:
+    """Return a non-empty, stripped value or exit with an error."""
+    if not (cleaned := (value or "").strip().strip("\n")):
+        console.print(f"[red]{name} cannot be empty.[/red]")
+        raise SystemExit(1)
+    return cleaned

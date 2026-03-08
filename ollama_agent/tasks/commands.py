@@ -8,7 +8,8 @@ from rich.table import Table
 
 from ..agent import OllamaAgent
 from ..streaming import run_non_interactive
-from ..core import resolve_unique_prefix
+from ..core import resolve_unique_prefix, validate_reasoning_effort
+from ..interfaces.utils import require_or_exit
 from .manager import Task, TaskManager
 
 
@@ -36,10 +37,7 @@ class CLIContext:
         raise SystemExit(1)
 
     def _require(self, value: str, name: str) -> str:
-        if not (v := (value or "").strip().strip("\n")):
-            self.console.print(f"[red]{name} cannot be empty.[/red]")
-            raise SystemExit(1)
-        return v
+        return require_or_exit(value, name, self.console)
 
 
 def list_tasks(ctx: CLIContext) -> None:
@@ -73,7 +71,7 @@ def delete_task(ctx: CLIContext, task_id: str) -> None:
 def create_task(ctx: CLIContext, task_id: str, *, title: str, prompt: str, model: str,
                 reasoning_effort: str | None = None, force: bool = False) -> None:
     task = Task(ctx._require(title, "Title"), ctx._require(prompt, "Prompt"),
-                ctx._require(model, "Model"), reasoning_effort or "medium")
+                ctx._require(model, "Model"), validate_reasoning_effort(reasoning_effort or "medium"))
     try:
         ctx.console.print(
             f"[green]Task created:[/green] {task.title} ({ctx.task_manager.save(task_id, task, overwrite=force)})")
