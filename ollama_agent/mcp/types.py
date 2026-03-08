@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from ..paths import MCP_SERVERS_PATH
+from ..settings.paths import MCP_SERVERS_PATH
 
 logger = logging.getLogger(__name__)
 

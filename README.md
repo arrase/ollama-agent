@@ -548,6 +548,7 @@ Interested in contributing? Great! Here’s how to get started.
 - `ollama_agent/skills/`: Skills management and DeepAgents skills integration.
 - `ollama_agent/rag/`: RAG implementation for context retrieval.
 - `ollama_agent/memory/`: Mem0 integration for long-term memory.
+- `ollama_agent/mcp/`: MCP server lifecycle and integration helpers.
 - `ollama_agent/vision/`: Screen vision and screenshot analysis.
 - `ollama_agent/streaming/`: Console output streaming, rendering, and non-interactive runner.
-- `ollama_agent/settings/`: Application configuration, centralized filesystem paths, and MCP server lifecycle.
+- `ollama_agent/settings/`: Application configuration and centralized filesystem paths.

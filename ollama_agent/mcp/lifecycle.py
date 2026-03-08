@@ -16,7 +16,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.tools import BaseTool, StructuredTool
 from langchain_mcp_adapters.tools import load_mcp_tools
 
-from ...core import ModelCapabilityError, ensure_model_supports_tools
+from ..core import ModelCapabilityError, ensure_model_supports_tools
 from .types import DEFAULT_AGENT_INSTRUCTIONS, DEFAULT_MCP_CONFIG_PATH, RunningMCPServer
 
 logger = logging.getLogger(__name__)

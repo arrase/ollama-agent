@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .config import Config
-    from .mcp import RunningMCPServer
+    from ..mcp import RunningMCPServer
 
 
 _EXPORTS = {
@@ -15,9 +15,9 @@ _EXPORTS = {
     "get_config": (".config", "get_config"),
     "load_instructions": (".config", "load_instructions"),
     "reset_config": (".config", "reset_config"),
-    "RunningMCPServer": (".mcp", "RunningMCPServer"),
-    "cleanup_mcp_servers": (".mcp", "cleanup_mcp_servers"),
-    "initialize_mcp_servers": (".mcp", "initialize_mcp_servers"),
+    "RunningMCPServer": ("..mcp", "RunningMCPServer"),
+    "cleanup_mcp_servers": ("..mcp", "cleanup_mcp_servers"),
+    "initialize_mcp_servers": ("..mcp", "initialize_mcp_servers"),
 }
 
 
