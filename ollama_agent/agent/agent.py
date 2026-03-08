@@ -170,6 +170,7 @@ class OllamaAgent:
         agent = self._build_deep_agent(m, e)
 
         history = self._session_manager.get_message_dicts()
+        history_len = len(history)
         user_text_for_history = prompt if isinstance(prompt, str) else str(prompt)
         self._session_manager.append_message("user", user_text_for_history)
 
@@ -191,7 +192,8 @@ class OllamaAgent:
                     last_state = event
                     if not emitted_from_messages:
                         messages = event.get("messages")
-                        current = assistant_text_from_messages(messages) if isinstance(messages, list) else ""
+                        current_messages = messages[history_len:] if isinstance(messages, list) else None
+                        current = assistant_text_from_messages(current_messages) if isinstance(current_messages, list) else ""
                         if current and current != emitted_text:
                             if current.startswith(emitted_text):
                                 delta = current[len(emitted_text) :]
@@ -227,7 +229,14 @@ class OllamaAgent:
                         yield {"type": "text_delta", "content": text}
                     continue
 
-            final = final_text_from_state(last_state) if last_state is not None else emitted_text
+            final = emitted_text
+            if last_state is not None and isinstance(last_state, dict):
+                messages = last_state.get("messages")
+                current_messages = messages[history_len:] if isinstance(messages, list) else None
+                if isinstance(current_messages, list) and current_messages:
+                    final = assistant_text_from_messages(current_messages) or final
+                if not final:
+                    final = final_text_from_state(last_state)
             if final:
                 self._session_manager.append_message("assistant", final)
         except Exception as exc:
