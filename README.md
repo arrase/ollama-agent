@@ -6,14 +6,16 @@ Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to i
 
 - **Interactive REPL**: A modern, terminal-based chat interface with Markdown rendering and slash commands.
 - **Non-Interactive CLI**: Execute single prompts directly from your command line for quick queries.
-- **Ollama Integration**: Connects to any Ollama-compatible API endpoint.
+- **Native Ollama Integration**: Connects directly to Ollama's native API (via `langchain-ollama`), no OpenAI compatibility layer needed.
+- **Thinking / Reasoning**: Leverages Ollama's native [thinking capability](https://docs.ollama.com/capabilities/thinking) to expose model reasoning traces. Configurable per model via `--effort`.
+- **Automatic Context Window**: Resolves the model's effective context window (`num_ctx`) automatically from Ollama metadata, or allows manual override in config.
 - **Per-session Model Switching**: Change the model mid-conversation and continue from that point with the new model (context preserved). The change is not permanent and only affects the current session.
 - **Screen Vision (Screenshots)**: Attach monitor screenshots in prompts using `@dpN` for visual context.
 - **Tool-Powered**: The agent can execute shell commands via an integrated shell backend, allowing it to interact with your local environment to perform tasks.
 - **Delegated MCP Agents**: Each configured MCP server can run through its own lightweight DeepAgents sub-agent (via `langchain-mcp-adapters`) with custom model and instructions.
 - **Session Management**: Conversations are automatically saved and can be reloaded, deleted, or switched between.
 - **Task Management**: Save frequently used prompts as "tasks" and execute them with a simple command.
-- **Configurable**: Easily configure the model, API endpoint, and agent reasoning effort.
+- **Configurable**: Easily configure the model, Ollama host, context window, and reasoning effort.
 - **Mem0 Memory Layer**: Persistent memory backed by Mem0 + Qdrant, exposed through function-calling tools.
 - **RAG (Retrieval Augmented Generation)**: Create and manage document databases for context-aware responses using local embeddings and Qdrant.
 - **Skills**: Extend the agent with reusable, on-demand capabilities via the [Agent Skills specification](https://agentskills.io/specification). Skills provide task-specific instructions and context through progressive disclosure.
@@ -124,7 +126,17 @@ ollama-agent --model "gpt-oss:20b" --effort "high" --prompt "What is the current
 ollama-agent -m "gpt-oss:20b" -e "high" -p "What is the current date?"
 ```
 
-**Note**: reasoning effort (`--effort`) currently **only has an effect with `gpt-oss` models**. For other models, set `--effort disabled` (or `reasoning_effort=disabled` in config/tasks) to avoid unexpected behavior.
+**Thinking / Reasoning effort** — the `--effort` flag maps to Ollama's native [`think` parameter](https://docs.ollama.com/capabilities/thinking). Thinking-capable models emit a `thinking` field that separates their reasoning trace from the final answer.
+
+| Model family | `--effort` value | Ollama `think` value | Behaviour |
+|---|---|---|---|
+| **GPT-OSS** | `low` / `medium` / `high` | `"low"` / `"medium"` / `"high"` | Sets the thinking trace length. GPT-OSS only accepts these levels; `true`/`false` is ignored. |
+| **GPT-OSS** | `disabled` | *(not sent)* | GPT-OSS cannot fully disable thinking — a warning is emitted and the model uses its default behaviour. |
+| **Other thinking models** (Qwen 3, DeepSeek R1, DeepSeek-v3.1, …) | any except `disabled` | `true` | Enables thinking. |
+| **Other thinking models** | `disabled` | `false` | Disables thinking. |
+| **Non-thinking models** | *(any)* | *(not sent)* | Setting is ignored. |
+
+Thinking is enabled by default in Ollama for supported models. See the [Ollama thinking docs](https://docs.ollama.com/capabilities/thinking) for the full list of supported models and API details.
 
 ```bash
 ollama-agent --builtin-tool-timeout 60 --prompt "Run a long-running task"
@@ -209,7 +221,34 @@ ollama-agent task-delete <task_id>
 
 ## Configuration
 
-On the first run, the application will create a default configuration file at `~/.ollama-agent/config.ini`. You can edit this file to permanently change the default model, API URL, and other settings.
+On the first run, the application will create a default configuration file at `~/.ollama-agent/config.ini`. You can edit this file to permanently change the default model, Ollama host, and other settings.
+
+Example default section:
+
+```ini
+[default]
+model = qwen3.5:9b
+base_url = http://localhost:11434
+reasoning_effort = medium
+context_window =
+```
+
+| Key | Description |
+|---|---|
+| `model` | Default Ollama model. Must support tool calling. |
+| `base_url` | Native Ollama host (e.g. `http://localhost:11434`). Must **not** contain an `/v1` path — if detected, the app will exit with an error asking you to update the value. |
+| `reasoning_effort` | Default thinking level: `low`, `medium`, `high`, or `disabled`. See [Thinking / Reasoning](#common-options) above. |
+| `context_window` | If set, forces the runtime `num_ctx` for the selected model. Leave empty to let the app resolve it automatically (see below). |
+
+### Context Window Resolution
+
+Ollama Agent needs to know the effective context window (`num_ctx`) for every model. The runtime resolves it in this order:
+
+1. `context_window` from `config.ini`, if defined.
+2. `PARAMETER num_ctx` from `ollama show <model>` (the model's Modelfile).
+3. The model's reported `*.context_length` metadata from `ollama show <model>`.
+
+If none of those sources provides a value, the app exits with a clear error asking you to set `context_window` in `config.ini`.
 
 ### Configuration Reset
 
@@ -362,7 +401,7 @@ When a prompt arrives, the agent checks skill descriptions to find relevant ones
 
 Each skill is a directory containing at least a `SKILL.md` file with YAML frontmatter:
 
-```
+```text
 ~/.ollama-agent/skills/
 ├── langgraph-docs/
 │   └── SKILL.md

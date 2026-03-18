@@ -15,8 +15,13 @@ from .common import (
 )
 from .models import (
     ModelCapabilityError,
+    ModelContextWindowError,
+    create_ollama_chat_model,
     ensure_model_supports_tools,
     model_supports_tools,
+    model_supports_thinking,
+    resolve_context_window,
+    resolve_ollama_reasoning,
     validate_reasoning_effort,
 )
 from .resource_manager import BaseFileStoreManager
@@ -32,8 +37,13 @@ __all__ = [
     "ReasoningEffortValue",
     # Models
     "ModelCapabilityError",
+    "ModelContextWindowError",
+    "create_ollama_chat_model",
     "ensure_model_supports_tools",
     "model_supports_tools",
+    "model_supports_thinking",
+    "resolve_context_window",
+    "resolve_ollama_reasoning",
     "validate_reasoning_effort",
     # Utils
     "assistant_text_from_messages",

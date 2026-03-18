@@ -12,11 +12,16 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from langchain_openai import ChatOpenAI
 from langchain_core.tools import BaseTool, StructuredTool
 from langchain_mcp_adapters.tools import load_mcp_tools
 
-from ..core import ModelCapabilityError, ensure_model_supports_tools
+from ..core import (
+    ModelCapabilityError,
+    ReasoningEffortValue,
+    create_ollama_chat_model,
+    ensure_model_supports_tools,
+    validate_reasoning_effort,
+)
 from .types import DEFAULT_AGENT_INSTRUCTIONS, DEFAULT_MCP_CONFIG_PATH, RunningMCPServer
 
 logger = logging.getLogger(__name__)
@@ -141,7 +146,7 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
         return None
 
     try:
-        ensure_model_supports_tools(str(model))
+        ensure_model_supports_tools(str(model), config.get("base_url") or config.get("openai_api_base"))
     except ModelCapabilityError as exc:
         logger.error("Skipping MCP server '%s': %s", name, exc)
         return None
@@ -159,6 +164,13 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
     if not instructions:
         instructions = DEFAULT_AGENT_INSTRUCTIONS.format(name=name)
 
+    reasoning_effort = validate_reasoning_effort(
+        str(agent_cfg.get("reasoning_effort") or config.get("reasoning_effort") or "medium")
+    )
+
+    raw_context_window = agent_cfg.get("context_window", config.get("context_window"))
+    context_window = int(raw_context_window) if raw_context_window not in (None, "") else None
+
     try:
         # Use per-call MCP sessions instead of a shared long-lived session.
         # This avoids task-affinity/cancellation issues (AnyIO cancel scope
@@ -175,20 +187,22 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
         return None
 
     logger.info("Initialized MCP server: %s", name)
-    llm = ChatOpenAI(
-        **{
-            "model_name": str(model),
-            "openai_api_base": str(
-                config.get("base_url")
-                or config.get("openai_api_base")
-                or "http://localhost:11434/v1/"
-            ),
-            "openai_api_key": str(config.get("api_key") or config.get("openai_api_key") or "ollama"),
-            "temperature": 0,
-            "use_responses_api": False,
-            "streaming": False,
-        }
+    warnings: list[str] = []
+    llm = create_ollama_chat_model(
+        model=str(model),
+        base_url=str(
+            config.get("base_url")
+            or config.get("openai_api_base")
+            or "http://localhost:11434"
+        ),
+        api_key=str(config.get("api_key") or config.get("openai_api_key") or "ollama"),
+        context_window=context_window,
+        reasoning_effort=reasoning_effort,
+        temperature=0,
+        warn_callback=warnings.append,
     )
+    for warning in warnings:
+        logger.warning("MCP server '%s': %s", name, warning)
     return RunningMCPServer(
         name=name,
         subagent={
@@ -208,6 +222,8 @@ async def initialize_mcp_servers(
     default_model: str | None = None,
     base_url: str | None = None,
     api_key: str | None = None,
+    context_window: int | None = None,
+    reasoning_effort: ReasoningEffortValue = "medium",
 ) -> list[RunningMCPServer]:
     path = config_path or DEFAULT_MCP_CONFIG_PATH
     if not path.exists():
@@ -230,6 +246,10 @@ async def initialize_mcp_servers(
                 cfg = {**cfg, "base_url": base_url}
             if api_key and "api_key" not in cfg and "openai_api_key" not in cfg:
                 cfg = {**cfg, "api_key": api_key}
+            if context_window is not None and "context_window" not in cfg:
+                cfg = {**cfg, "context_window": context_window}
+            if reasoning_effort and "reasoning_effort" not in cfg:
+                cfg = {**cfg, "reasoning_effort": reasoning_effort}
         if s := await _init_server(str(name), cfg, default_model):
             servers.append(s)
     return servers

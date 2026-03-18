@@ -71,6 +71,11 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         self.console.print(
             f"\n[red]❌ Error: {event.get('content', 'Unknown error')}[/red]")
 
+    def on_warning(self, event: dict[str, Any]) -> None:
+        self._toggle_live(False)
+        self.console.print(
+            f"\n[yellow]⚠ Warning: {event.get('content', 'Unknown warning')}[/yellow]")
+
     def close(self) -> None:
         self._toggle_live(False)
         self.console.print()

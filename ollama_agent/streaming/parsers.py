@@ -1,7 +1,7 @@
 """Streaming chunk parsers for LangChain / DeepAgents events.
 
 These functions extract structured text from the raw streaming payloads
-produced by :class:`~langchain_openai.ChatOpenAI` and DeepAgents, keeping
+produced by LangChain chat models and DeepAgents, keeping
 :mod:`~ollama_agent.agent.agent` focused solely on agent initialisation and
 workflow orchestration.
 """
@@ -33,13 +33,17 @@ def streaming_text(content: Any) -> str:
     return ""
 
 
-def streaming_reasoning(content: Any) -> str:
+def streaming_reasoning(content: Any, additional_kwargs: Any = None) -> str:
     """Extract reasoning/thinking text from a streaming chunk.
 
-    With ``use_responses_api=True`` reasoning tokens arrive as content blocks
-    of ``type='reasoning'`` whose text lives inside ``summary`` entries of
-    ``type='summary_text'``.
+    Supports both OpenAI-style reasoning blocks and ChatOllama's
+    ``additional_kwargs['reasoning_content']``.
     """
+    if isinstance(additional_kwargs, dict):
+        reasoning_content = additional_kwargs.get("reasoning_content")
+        if isinstance(reasoning_content, str):
+            return reasoning_content
+
     if not isinstance(content, list):
         return ""
     return "".join(
