@@ -18,6 +18,10 @@ class StreamingRenderer(ABC):
         """Handle an error event."""
         print(f"Error: {event.get('content', 'Unknown error')}")
 
+    def on_warning(self, event: dict[str, Any]) -> None:
+        """Handle a warning event."""
+        print(f"Warning: {event.get('content', 'Unknown warning')}")
+
     @abstractmethod
     def close(self) -> None:
         """Clean up renderer resources."""

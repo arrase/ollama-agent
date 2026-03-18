@@ -8,15 +8,21 @@ import ollama
 from rich.console import Console
 
 from ..core import ModelCapabilityError, model_supports_tools
+from ..settings import get_config
 
 if TYPE_CHECKING:
     from ..agent import OllamaAgent
 
 
+def _model_client(base_url: str) -> ollama.Client:
+    return ollama.Client(host=base_url)
+
+
 def list_models(console: Console, current_model: str) -> None:
     """Print available Ollama models with tool-support indicators."""
     try:
-        models = getattr(ollama.list(), "models", [])
+        cfg = get_config()
+        models = getattr(_model_client(cfg.base_url).list(), "models", [])
         if not models:
             console.print("[yellow]No models found in Ollama.[/yellow]")
             return
@@ -29,7 +35,7 @@ def list_models(console: Console, current_model: str) -> None:
             size_str = f"{size_gb:.1f}GB" if size_gb else ""
             try:
                 tool_icon = (
-                    "[green]✓[/green]" if model_supports_tools(name) else "[red]✗[/red]"
+                    "[green]✓[/green]" if model_supports_tools(name, cfg.base_url) else "[red]✗[/red]"
                 )
             except ModelCapabilityError:
                 tool_icon = "[yellow]?[/yellow]"
@@ -52,8 +58,10 @@ async def set_model(
 ) -> tuple[str, "OllamaAgent | None"]:
     """Switch to model_name, returning (new_model, new_agent)."""
     try:
+        cfg = get_config()
         available = {
-            getattr(model, "model", "") for model in getattr(ollama.list(), "models", [])
+            getattr(model, "model", "")
+            for model in getattr(_model_client(cfg.base_url).list(), "models", [])
         }
         if model_name not in available:
             console.print(
@@ -70,7 +78,7 @@ async def set_model(
         return current_model, active_agent
 
     try:
-        if not model_supports_tools(model_name):
+        if not model_supports_tools(model_name, cfg.base_url):
             console.print(
                 f"[red]Model '{model_name}' does not support tools.[/red]\n"
                 "[dim]The agent requires tool support.[/dim]"

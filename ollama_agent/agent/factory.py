@@ -34,6 +34,7 @@ def create_agent(
             base_url=cfg.base_url,
             api_key=cfg.api_key,
             reasoning_effort=effort,
+            context_window=cfg.context_window,
             database_path=cfg.database_path,
             mcp_config_path=cfg.mcp_config_path,
             mem0_settings=mem0,

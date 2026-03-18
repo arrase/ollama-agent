@@ -10,11 +10,15 @@ from typing import Any, AsyncGenerator, cast
 
 from deepagents import create_deep_agent
 from deepagents.backends import LocalShellBackend
-from langchain_openai import ChatOpenAI
 
-from ..core import ReasoningEffortValue, assistant_text_from_messages, final_text_from_state
-from ..core import validate_reasoning_effort
-from ..core import ensure_model_supports_tools
+from ..core import (
+    ReasoningEffortValue,
+    assistant_text_from_messages,
+    create_ollama_chat_model,
+    ensure_model_supports_tools,
+    final_text_from_state,
+    validate_reasoning_effort,
+)
 from ..memory import Mem0Settings, MemoryManager
 from ..rag import RAGManager, RAGSettings
 from ..settings import RunningMCPServer, cleanup_mcp_servers, initialize_mcp_servers, load_instructions
@@ -48,9 +52,10 @@ class OllamaAgent:
     """AI agent backed by Ollama with tool support."""
 
     model: str
-    base_url: str = "http://localhost:11434/v1/"  # OpenAI-compatible Ollama endpoint
+    base_url: str = "http://localhost:11434"  # Kept configurable for local or remote Ollama hosts.
     api_key: str = "ollama"  # kept for config compatibility
     reasoning_effort: ReasoningEffortValue = "medium"
+    context_window: int | None = None
     database_path: Path | None = None
     mcp_config_path: Path | None = None
     mem0_settings: Mem0Settings = field(default_factory=Mem0Settings)
@@ -90,6 +95,8 @@ class OllamaAgent:
                 default_model=self.model,
                 base_url=self.base_url,
                 api_key=self.api_key,
+                context_window=self.context_window,
+                reasoning_effort=self.reasoning_effort,
             )
         self._initialized = True
 
@@ -113,27 +120,21 @@ class OllamaAgent:
             validate_reasoning_effort(effort) if effort else self.reasoning_effort,
         )
 
-    def _build_deep_agent(self, model: str, effort: ReasoningEffortValue):
-        ensure_model_supports_tools(model)
+    def _build_deep_agent(self, model: str, effort: ReasoningEffortValue) -> tuple[Any, list[str]]:
+        ensure_model_supports_tools(model, self.base_url)
 
-        # `reasoning_effort` must work for gpt-oss models as in the main branch,
-        # but the system prompt must remain exclusively user-defined.
-        openai_kwargs: dict[str, Any] = {
-            "model_name": model,
-            "openai_api_base": self.base_url,
-            "openai_api_key": self.api_key,
-            "temperature": 0,
-            # Always use the Responses API so reasoning/thinking tokens are
-            # streamed as structured content blocks (type='reasoning').
-            # The chat completions API drops Ollama's ``reasoning`` field.
-            "use_responses_api": True,
-            "streaming": True,
-        }
-        if "gpt-oss" in model.lower() and effort != "disabled":
-            openai_kwargs["reasoning_effort"] = effort
+        warnings: list[str] = []
 
         kwargs: dict[str, Any] = {
-            "model": ChatOpenAI(**openai_kwargs),
+            "model": create_ollama_chat_model(
+                model=model,
+                base_url=self.base_url,
+                api_key=self.api_key,
+                context_window=self.context_window,
+                reasoning_effort=effort,
+                temperature=0,
+                warn_callback=warnings.append,
+            ),
             "tools": list(BUILTIN_TOOLS),
             "system_prompt": self._instructions,
             "subagents": [srv.subagent for srv in self._mcp_servers],
@@ -144,16 +145,18 @@ class OllamaAgent:
         }
         if self.skills_dirs:
             kwargs["skills"] = list(self.skills_dirs)
-        return create_deep_agent(**kwargs)
+        return create_deep_agent(**kwargs), warnings
 
     async def run_async(self, prompt: object, model: str | None = None, reasoning_effort: str | None = None) -> str:
         await self.initialize()
         m, e = self._resolve(model, reasoning_effort)
-        agent = self._build_deep_agent(m, e)
+        agent, warnings = self._build_deep_agent(m, e)
         history = self._session_manager.get_message_dicts()
         user_text_for_history = prompt if isinstance(prompt, str) else str(prompt)
         self._session_manager.append_message("user", user_text_for_history)
         try:
+            for warning in warnings:
+                logger.warning(warning)
             state = await agent.ainvoke({"messages": [*history, _maybe_attach_screen_context(prompt)]})
             out = final_text_from_state(state)
             self._session_manager.append_message("assistant", out)
@@ -167,7 +170,7 @@ class OllamaAgent:
     ) -> AsyncGenerator[dict[str, Any], None]:
         await self.initialize()
         m, e = self._resolve(model, reasoning_effort)
-        agent = self._build_deep_agent(m, e)
+        agent, warnings = self._build_deep_agent(m, e)
 
         history = self._session_manager.get_message_dicts()
         history_len = len(history)
@@ -178,6 +181,9 @@ class OllamaAgent:
         emitted_text = ""
         emitted_from_messages = False
         try:
+            for warning in warnings:
+                yield {"type": "warning", "content": warning}
+
             async for mode, event in agent.astream(
                 {"messages": [*history, _maybe_attach_screen_context(prompt)]},
 
@@ -214,9 +220,10 @@ class OllamaAgent:
                         continue
 
                     content = getattr(chunk, "content", None)
+                    additional_kwargs = getattr(chunk, "additional_kwargs", None)
 
                     # Check for reasoning/thinking tokens first (chain-of-thought).
-                    reasoning = streaming_reasoning(content)
+                    reasoning = streaming_reasoning(content, additional_kwargs)
                     if reasoning:
                         yield {"type": "reasoning_delta", "content": reasoning}
                         continue

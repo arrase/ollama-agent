@@ -28,9 +28,10 @@ def _default_instructions() -> str:
 class Config:
     """Application configuration."""
     model: str = "gpt-oss:20b"
-    base_url: str = "http://localhost:11434/v1/"
+    base_url: str = "http://localhost:11434"
     api_key: str = "ollama"
     reasoning_effort: str = "medium"
+    context_window: int | None = None
     database_path: Path = field(default_factory=lambda: DATABASE_PATH)
     builtin_tool_timeout: int = 30
     mcp_config_path: Path = field(default_factory=lambda: MCP_SERVERS_PATH)
@@ -92,6 +93,7 @@ def get_config(config_dir: Path | None = None) -> Config:
             "base_url": defaults.base_url,
             "api_key": defaults.api_key,
             "reasoning_effort": defaults.reasoning_effort,
+            "context_window": "" if defaults.context_window is None else str(defaults.context_window),
             "database_path": str(defaults.database_path),
             "builtin_tool_timeout": str(defaults.builtin_tool_timeout),
             "mcp_config_path": str(defaults.mcp_config_path),
@@ -109,11 +111,20 @@ def get_config(config_dir: Path | None = None) -> Config:
     mem0_section = dict(parser["mem0"]) if parser.has_section("mem0") else {}
     rag_section = dict(parser["rag"]) if parser.has_section("rag") else {}
 
+    base_url = section.get("base_url", defaults.base_url).rstrip("/")
+    if base_url.endswith("/v1"):
+        raise ValueError(
+            f"base_url '{base_url}' contains an '/v1' path from the old OpenAI-compatible "
+            "configuration. Update base_url to the native Ollama host "
+            f"(e.g. 'http://localhost:11434') in {config_path}."
+        )
+
     return Config(
         model=section.get("model", defaults.model),
-        base_url=section.get("base_url", defaults.base_url),
+        base_url=base_url,
         api_key=section.get("api_key", defaults.api_key),
         reasoning_effort=section.get("reasoning_effort", defaults.reasoning_effort),
+        context_window=_safe_cast(section.get("context_window"), int, defaults.context_window),
         database_path=Path(section.get("database_path", str(defaults.database_path))),
         builtin_tool_timeout=_safe_cast(section.get("builtin_tool_timeout"), int, defaults.builtin_tool_timeout),
         mcp_config_path=Path(section.get("mcp_config_path", str(defaults.mcp_config_path))),
