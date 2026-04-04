@@ -20,7 +20,7 @@ dependencies = [
     "mem0ai==1.0.5",
     "mcp==1.21.2",
     "mss==10.1.0",
-    "Pillow==12.1.1",
+    "Pillow==12.2.0",
     "prompt_toolkit==3.0.52",
     "qdrant-client==1.17.1",
     "rich==14.3.3",
