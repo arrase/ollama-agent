@@ -19,7 +19,7 @@ dependencies = [
     "ollama==0.6.1",
     "mem0ai==1.0.5",
     "mss==10.1.0",
-    "Pillow==12.1.1",
+    "Pillow==12.2.0",
     "prompt_toolkit==3.0.52",
     "qdrant-client==1.17.1",
     "rich==14.3.3",
