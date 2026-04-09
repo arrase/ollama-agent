@@ -11,6 +11,7 @@ from rich.markup import escape
 from rich.panel import Panel
 
 from ..agent import OllamaAgent
+from ..mcp import list_mcp_servers, show_mcp_server
 from ..rag import (
     RAGContext,
     add_rag_directory,
@@ -47,6 +48,7 @@ REPL_SECTIONS: tuple[str, ...] = (
     "Task Management",
     "RAG (Document Retrieval)",
     "Skills Management",
+    "MCP Servers",
 )
 
 
@@ -146,6 +148,12 @@ def build_repl_handlers(
         "/skill-delete": REPLCommand("Delete a skill", "Skills Management", "/skill-delete <id>", lambda args: delete_skill(skills_ctx, args[0])),
         "/task-create": REPLCommand("Create a task", "Task Management", "/task-create <id> [--force]", lambda _: None),
         "/skill-create": REPLCommand("Create a skill", "Skills Management", "/skill-create <id> [--force]", lambda _: None),
+        "/mcps": REPLCommand(
+            "List MCP server connection status",
+            "MCP Servers",
+            "/mcps [name]",
+            lambda args: show_mcp_server(console, ensure_agent(), args[0]) if args else list_mcp_servers(console, ensure_agent()),
+        ),
     }
 
 
