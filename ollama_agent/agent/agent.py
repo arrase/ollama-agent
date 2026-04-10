@@ -83,6 +83,10 @@ class OllamaAgent:
         return self._session_manager
 
     @property
+    def mcp_servers(self) -> list[RunningMCPServer]:
+        return self._mcp_servers
+
+    @property
     def rag_manager(self) -> RAGManager:
         return self._rag_manager
 

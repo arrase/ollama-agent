@@ -203,11 +203,16 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
     )
     for warning in warnings:
         logger.warning("MCP server '%s': %s", name, warning)
+    tool_names = ", ".join(t.name for t in mcp_tools)
+    enhanced_description = (
+        f"{subagent_description} (Tools: {tool_names})"
+        if mcp_tools else subagent_description
+    )
     return RunningMCPServer(
         name=name,
         subagent={
             "name": subagent_name,
-            "description": subagent_description,
+            "description": enhanced_description,
             "system_prompt": instructions,
             "tools": mcp_tools,
             "model": llm,
