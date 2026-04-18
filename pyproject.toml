@@ -12,7 +12,7 @@ dependencies = [
     "deepagents==0.4.12",
     "langchain==1.2.15",
     "langchain-ollama==1.1.0",
-    "langgraph==1.1.6",
+    "langgraph==1.1.8",
     "langchain-mcp-adapters==0.2.2",
     "PyYAML==6.0.3",
     "openai==2.31.0",
