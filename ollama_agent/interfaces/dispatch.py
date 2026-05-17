@@ -116,43 +116,146 @@ def build_repl_handlers(
         "/exit": REPLCommand("Exit the REPL", "General", None, lambda _: None),
         "/quit": REPLCommand("Exit the REPL", "General", None, lambda _: None),
         "/clear": REPLCommand("Clear the screen", "General", None, lambda _: None),
-        "/new": REPLCommand("Start a new chat session (clears context)", "Session Management", None, lambda _: None),
-        "/models": REPLCommand("List available Ollama models", "Model Management", None, lambda _: list_models(console, current_model())),
-        "/model-set": REPLCommand("Switch to a different model", "Model Management", "/model-set <model>", lambda args: switch_model(args[0])),
+        "/new": REPLCommand(
+            "Start a new chat session (clears context)",
+            "Session Management",
+            None,
+            lambda _: None,
+        ),
+        "/models": REPLCommand(
+            "List available Ollama models",
+            "Model Management",
+            None,
+            lambda _: list_models(console, current_model()),
+        ),
+        "/model-set": REPLCommand(
+            "Switch to a different model",
+            "Model Management",
+            "/model-set <model>",
+            lambda args: switch_model(args[0]),
+        ),
         "/sessions": REPLCommand(
             "List saved sessions",
             "Session Management",
             "/sessions [page]",
             lambda args: list_sessions(
-            ensure_agent(),
-            console,
-            page=int(args[0]) if args and args[0].isdigit() else 1,
+                ensure_agent(),
+                console,
+                page=int(args[0]) if args and args[0].isdigit() else 1,
+            ),
         ),
+        "/session-load": REPLCommand(
+            "Load a saved session",
+            "Session Management",
+            "/session-load <id>",
+            lambda args: load_session(ensure_agent(), console, args[0]),
         ),
-        "/session-load": REPLCommand("Load a saved session", "Session Management", "/session-load <id>", lambda args: load_session(ensure_agent(), console, args[0])),
-        "/session-delete": REPLCommand("Delete a saved session", "Session Management", "/session-delete <id>", lambda args: delete_session(ensure_agent(), console, args[0])),
-        "/tasks": REPLCommand("List saved tasks", "Task Management", None, lambda _: list_tasks(task_ctx)),
-        "/task-run": REPLCommand("Run a saved task", "Task Management", "/task-run <id>", lambda args: run_task(task_ctx, args[0])),
-        "/task-delete": REPLCommand("Delete a saved task", "Task Management", "/task-delete <id>", lambda args: delete_task(task_ctx, args[0])),
-        "/rag": REPLCommand("Show current RAG status", "RAG (Document Retrieval)", None, lambda _: show_rag_status(get_rag_ctx())),
-        "/rag-list": REPLCommand("List all RAG databases", "RAG (Document Retrieval)", None, lambda _: list_rag_databases(get_rag_ctx())),
-        "/rag-create": REPLCommand("Create a new RAG database", "RAG (Document Retrieval)", "/rag-create <name>", lambda args: create_rag_database(get_rag_ctx(), args[0])),
-        "/rag-delete": REPLCommand("Delete a RAG database", "RAG (Document Retrieval)", "/rag-delete <name>", lambda args: delete_rag_database(get_rag_ctx(), args[0])),
-        "/rag-load": REPLCommand("Load a RAG database", "RAG (Document Retrieval)", "/rag-load <name>", lambda args: load_rag_database(get_rag_ctx(), args[0])),
-        "/rag-unload": REPLCommand("Unload the current RAG database", "RAG (Document Retrieval)", None, lambda _: unload_rag_database(get_rag_ctx())),
-        "/rag-add": REPLCommand("Add file(s) to RAG", "RAG (Document Retrieval)", "/rag-add <path> [--dir]", lambda args: (
-            add_rag_directory(get_rag_ctx(), args[0]) if "--dir" in args[1:] else add_rag_file(get_rag_ctx(), args[0])
-        )),
-        "/skills": REPLCommand("List all skills", "Skills Management", None, lambda _: list_skills(skills_ctx)),
-        "/skill-show": REPLCommand("Show skill details", "Skills Management", "/skill-show <id>", lambda args: show_skill(skills_ctx, args[0])),
-        "/skill-delete": REPLCommand("Delete a skill", "Skills Management", "/skill-delete <id>", lambda args: delete_skill(skills_ctx, args[0])),
-        "/task-create": REPLCommand("Create a task", "Task Management", "/task-create <id> [--force]", lambda _: None),
-        "/skill-create": REPLCommand("Create a skill", "Skills Management", "/skill-create <id> [--force]", lambda _: None),
+        "/session-delete": REPLCommand(
+            "Delete a saved session",
+            "Session Management",
+            "/session-delete <id>",
+            lambda args: delete_session(ensure_agent(), console, args[0]),
+        ),
+        "/tasks": REPLCommand(
+            "List saved tasks", "Task Management", None, lambda _: list_tasks(task_ctx)
+        ),
+        "/task-run": REPLCommand(
+            "Run a saved task",
+            "Task Management",
+            "/task-run <id>",
+            lambda args: run_task(task_ctx, args[0]),
+        ),
+        "/task-delete": REPLCommand(
+            "Delete a saved task",
+            "Task Management",
+            "/task-delete <id>",
+            lambda args: delete_task(task_ctx, args[0]),
+        ),
+        "/rag": REPLCommand(
+            "Show current RAG status",
+            "RAG (Document Retrieval)",
+            None,
+            lambda _: show_rag_status(get_rag_ctx()),
+        ),
+        "/rag-list": REPLCommand(
+            "List all RAG databases",
+            "RAG (Document Retrieval)",
+            None,
+            lambda _: list_rag_databases(get_rag_ctx()),
+        ),
+        "/rag-create": REPLCommand(
+            "Create a new RAG database",
+            "RAG (Document Retrieval)",
+            "/rag-create <name>",
+            lambda args: create_rag_database(get_rag_ctx(), args[0]),
+        ),
+        "/rag-delete": REPLCommand(
+            "Delete a RAG database",
+            "RAG (Document Retrieval)",
+            "/rag-delete <name>",
+            lambda args: delete_rag_database(get_rag_ctx(), args[0]),
+        ),
+        "/rag-load": REPLCommand(
+            "Load a RAG database",
+            "RAG (Document Retrieval)",
+            "/rag-load <name>",
+            lambda args: load_rag_database(get_rag_ctx(), args[0]),
+        ),
+        "/rag-unload": REPLCommand(
+            "Unload the current RAG database",
+            "RAG (Document Retrieval)",
+            None,
+            lambda _: unload_rag_database(get_rag_ctx()),
+        ),
+        "/rag-add": REPLCommand(
+            "Add file(s) to RAG",
+            "RAG (Document Retrieval)",
+            "/rag-add <path> [--dir]",
+            lambda args: (
+                add_rag_directory(get_rag_ctx(), args[0])
+                if "--dir" in args[1:]
+                else add_rag_file(get_rag_ctx(), args[0])
+            ),
+        ),
+        "/skills": REPLCommand(
+            "List all skills",
+            "Skills Management",
+            None,
+            lambda _: list_skills(skills_ctx),
+        ),
+        "/skill-show": REPLCommand(
+            "Show skill details",
+            "Skills Management",
+            "/skill-show <id>",
+            lambda args: show_skill(skills_ctx, args[0]),
+        ),
+        "/skill-delete": REPLCommand(
+            "Delete a skill",
+            "Skills Management",
+            "/skill-delete <id>",
+            lambda args: delete_skill(skills_ctx, args[0]),
+        ),
+        "/task-create": REPLCommand(
+            "Create a task",
+            "Task Management",
+            "/task-create <id> [--force]",
+            lambda _: None,
+        ),
+        "/skill-create": REPLCommand(
+            "Create a skill",
+            "Skills Management",
+            "/skill-create <id> [--force]",
+            lambda _: None,
+        ),
         "/mcps": REPLCommand(
             "List MCP server connection status",
             "MCP Servers",
             "/mcps [name]",
-            lambda args: show_mcp_server(console, ensure_agent(), args[0]) if args else list_mcp_servers(console, ensure_agent()),
+            lambda args: (
+                show_mcp_server(console, ensure_agent(), args[0])
+                if args
+                else list_mcp_servers(console, ensure_agent())
+            ),
         ),
     }
 

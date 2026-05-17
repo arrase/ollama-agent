@@ -69,18 +69,21 @@ def _relax_const_fields(tools: list[BaseTool]) -> list[BaseTool]:
 
         orig_coro = getattr(tool, "coroutine", None)
         if callable(orig_coro):
+
             async def _wrapped(*a, _fn=orig_coro, _c=consts, **kw):
                 kw.update(_c)
                 return await _fn(*a, **kw)
 
-            result.append(StructuredTool(
-                name=tool.name,
-                description=tool.description,
-                args_schema=patched,
-                coroutine=_wrapped,
-                response_format=getattr(tool, "response_format", "content"),
-                metadata=getattr(tool, "metadata", None),
-            ))
+            result.append(
+                StructuredTool(
+                    name=tool.name,
+                    description=tool.description,
+                    args_schema=patched,
+                    coroutine=_wrapped,
+                    response_format=getattr(tool, "response_format", "content"),
+                    metadata=getattr(tool, "metadata", None),
+                )
+            )
         else:
             result.append(tool)
 
@@ -92,7 +95,7 @@ def _get(cfg: dict[str, Any], *keys: str) -> Any:
 
 
 def _infer_transport(cfg: dict[str, Any]) -> str:
-    t = (_get(cfg, "type", "transport") or "")
+    t = _get(cfg, "type", "transport") or ""
     if isinstance(t, str) and t:
         return t.lower()
     if cfg.get("command"):
@@ -121,7 +124,14 @@ def _build_connection(cfg: dict[str, Any]) -> dict[str, Any] | None:
         if not url:
             return None
         out = {"transport": "http", "url": url}
-        for k in ("headers", "timeout", "sse_read_timeout", "terminate_on_close", "session_kwargs", "auth"):
+        for k in (
+            "headers",
+            "timeout",
+            "sse_read_timeout",
+            "terminate_on_close",
+            "session_kwargs",
+            "auth",
+        ):
             if k in cfg:
                 out[k] = cfg[k]
         return out
@@ -129,7 +139,9 @@ def _build_connection(cfg: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-async def _init_server(name: str, config: Any, default_model: str | None) -> RunningMCPServer | None:
+async def _init_server(
+    name: str, config: Any, default_model: str | None
+) -> RunningMCPServer | None:
     if not isinstance(config, dict):
         logger.warning("Skipping MCP server '%s': invalid config type", name)
         return None
@@ -146,7 +158,9 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
         return None
 
     try:
-        ensure_model_supports_tools(str(model), config.get("base_url") or config.get("openai_api_base"))
+        ensure_model_supports_tools(
+            str(model), config.get("base_url") or config.get("openai_api_base")
+        )
     except ModelCapabilityError as exc:
         logger.error("Skipping MCP server '%s': %s", name, exc)
         return None
@@ -156,20 +170,30 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
     instructions = str(agent_cfg.get("system_prompt") or "").strip()
 
     if not subagent_name:
-        logger.error("Skipping MCP server '%s': missing required field agent.name", name)
+        logger.error(
+            "Skipping MCP server '%s': missing required field agent.name", name
+        )
         return None
     if not subagent_description:
-        logger.error("Skipping MCP server '%s': missing required field agent.description", name)
+        logger.error(
+            "Skipping MCP server '%s': missing required field agent.description", name
+        )
         return None
     if not instructions:
         instructions = DEFAULT_AGENT_INSTRUCTIONS.format(name=name)
 
     reasoning_effort = validate_reasoning_effort(
-        str(agent_cfg.get("reasoning_effort") or config.get("reasoning_effort") or "medium")
+        str(
+            agent_cfg.get("reasoning_effort")
+            or config.get("reasoning_effort")
+            or "medium"
+        )
     )
 
     raw_context_window = agent_cfg.get("context_window", config.get("context_window"))
-    context_window = int(raw_context_window) if raw_context_window not in (None, "") else None
+    context_window = (
+        int(raw_context_window) if raw_context_window not in (None, "") else None
+    )
 
     try:
         # Use per-call MCP sessions instead of a shared long-lived session.
@@ -206,7 +230,8 @@ async def _init_server(name: str, config: Any, default_model: str | None) -> Run
     tool_names = ", ".join(t.name for t in mcp_tools)
     enhanced_description = (
         f"{subagent_description} (Tools: {tool_names})"
-        if mcp_tools else subagent_description
+        if mcp_tools
+        else subagent_description
     )
     return RunningMCPServer(
         name=name,

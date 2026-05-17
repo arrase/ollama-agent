@@ -31,17 +31,20 @@ def list_models(console: Console, current_model: str) -> None:
             if not (name := getattr(item, "model", None)):
                 continue
             marker = " [green]◀ current[/green]" if name == current_model else ""
-            size_gb = getattr(item, "size", 0) / (1024 ** 3)
+            size_gb = getattr(item, "size", 0) / (1024**3)
             size_str = f"{size_gb:.1f}GB" if size_gb else ""
             try:
                 tool_icon = (
-                    "[green]✓[/green]" if model_supports_tools(name, cfg.base_url) else "[red]✗[/red]"
+                    "[green]✓[/green]"
+                    if model_supports_tools(name, cfg.base_url)
+                    else "[red]✗[/red]"
                 )
             except ModelCapabilityError:
                 tool_icon = "[yellow]?[/yellow]"
             console.print(f"  {tool_icon} [cyan]{name}[/cyan] {size_str}{marker}")
         console.print(
-            "[dim]─" * 60 + "[/dim]\n[dim]✓ = supports tools | Use /model-set <model> to switch[/dim]"
+            "[dim]─" * 60
+            + "[/dim]\n[dim]✓ = supports tools | Use /model-set <model> to switch[/dim]"
         )
     except Exception as exc:
         console.print(f"[red]Error listing models: {exc}[/red]")
@@ -89,7 +92,9 @@ async def set_model(
         return current_model, active_agent
 
     old_model = current_model
-    old_session_id = active_agent.session_manager.get_session_id() if active_agent else None
+    old_session_id = (
+        active_agent.session_manager.get_session_id() if active_agent else None
+    )
 
     if active_agent:
         await active_agent.cleanup()

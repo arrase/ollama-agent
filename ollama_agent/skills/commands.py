@@ -61,7 +61,9 @@ def list_skills(ctx: SkillsContext) -> None:
 def show_skill(ctx: SkillsContext, skill_id: str) -> None:
     """Display the full contents of a skill's SKILL.md."""
     sid, info = ctx._find_or_exit(skill_id)
-    ctx.console.print(Panel(Markdown(info.content), title=f"Skill: {sid}", border_style="cyan"))
+    ctx.console.print(
+        Panel(Markdown(info.content), title=f"Skill: {sid}", border_style="cyan")
+    )
 
 
 def create_skill(
@@ -84,7 +86,9 @@ def create_skill(
         )
         ctx.console.print(f"[green]Skill created:[/green] {name} ({created})")
     except FileExistsError:
-        ctx.console.print(f"[red]Skill already exists:[/red] {skill_id} (use --force to overwrite)")
+        ctx.console.print(
+            f"[red]Skill already exists:[/red] {skill_id} (use --force to overwrite)"
+        )
         raise SystemExit(1)
     except ValueError as exc:
         ctx.console.print(f"[red]{exc}[/red]")

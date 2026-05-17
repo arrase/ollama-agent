@@ -28,8 +28,14 @@ def list_sessions(
     current_id = agent.session_manager.get_session_id()
     console.print(f"[bold]Sessions (page {page}):[/bold]\n[dim]─" + "─" * 59 + "[/dim]")
     for session in sessions:
-        marker = " [green]◀ current[/green]" if session["session_id"] == current_id else ""
-        preview = session["preview"][:40] + "..." if len(session["preview"]) > 40 else session["preview"]
+        marker = (
+            " [green]◀ current[/green]" if session["session_id"] == current_id else ""
+        )
+        preview = (
+            session["preview"][:40] + "..."
+            if len(session["preview"]) > 40
+            else session["preview"]
+        )
         console.print(
             f"[cyan]{session['session_id'][:8]}[/cyan] │ {session['message_count']:>3} msgs │"
             f" {session['last_message'][:16]} │ [dim]{preview}[/dim]{marker}"
@@ -45,12 +51,23 @@ def find_session(
     console: Console,
 ) -> dict[str, Any] | None:
     """Resolve a session by id prefix."""
-    ids = [session.get("session_id", "") for session in sessions if isinstance(session, dict)]
+    ids = [
+        session.get("session_id", "")
+        for session in sessions
+        if isinstance(session, dict)
+    ]
     resolved = resolve_unique_prefix(prefix, ids)
     if resolved:
-        return next((session for session in sessions if session.get("session_id") == resolved), None)
+        return next(
+            (session for session in sessions if session.get("session_id") == resolved),
+            None,
+        )
 
-    matches = [session for session in sessions if str(session.get("session_id", "")).startswith(prefix)]
+    matches = [
+        session
+        for session in sessions
+        if str(session.get("session_id", "")).startswith(prefix)
+    ]
     if not matches:
         console.print(f"[red]No session found matching '{prefix}'[/red]")
         return None
@@ -62,7 +79,9 @@ def find_session(
     return None
 
 
-def load_session(agent: "OllamaAgent", console: Console, session_id_prefix: str) -> None:
+def load_session(
+    agent: "OllamaAgent", console: Console, session_id_prefix: str
+) -> None:
     """Load a session matching session_id_prefix and print a summary."""
     target = find_session(
         session_id_prefix, agent.session_manager.list_sessions(limit=100), console
@@ -78,7 +97,9 @@ def load_session(agent: "OllamaAgent", console: Console, session_id_prefix: str)
         f"[dim]Messages: {target['message_count']} | Last active: {target['last_message']}[/dim]\n"
     )
     if history:
-        console.print("[bold]Conversation History:[/bold]\n[dim]─" + "─" * 49 + "[/dim]")
+        console.print(
+            "[bold]Conversation History:[/bold]\n[dim]─" + "─" * 49 + "[/dim]"
+        )
         for message in history[-10:]:
             limit = 200 if message["role"] == "user" else 300
             content = (
@@ -86,7 +107,9 @@ def load_session(agent: "OllamaAgent", console: Console, session_id_prefix: str)
                 if len(message["content"]) > limit
                 else message["content"]
             )
-            prefix_str = "[bold blue]>>>[/bold blue] " if message["role"] == "user" else ""
+            prefix_str = (
+                "[bold blue]>>>[/bold blue] " if message["role"] == "user" else ""
+            )
             console.print(f"{prefix_str}{content}\n")
         if len(history) > 10:
             console.print(f"[dim]... and {len(history) - 10} earlier messages[/dim]\n")
@@ -96,7 +119,9 @@ def load_session(agent: "OllamaAgent", console: Console, session_id_prefix: str)
     )
 
 
-def delete_session(agent: "OllamaAgent", console: Console, session_id_prefix: str) -> None:
+def delete_session(
+    agent: "OllamaAgent", console: Console, session_id_prefix: str
+) -> None:
     """Delete a session matching session_id_prefix."""
     target = find_session(
         session_id_prefix, agent.session_manager.list_sessions(limit=100), console

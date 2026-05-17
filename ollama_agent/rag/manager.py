@@ -64,7 +64,9 @@ class RAGManager:
     def _ensure_loaded(self) -> QdrantClient:
         """Ensure a database is loaded and return the client."""
         if self._client is None or self._current_db is None:
-            raise RAGNotLoadedError("No RAG database loaded. Use /rag-load <name> first.")
+            raise RAGNotLoadedError(
+                "No RAG database loaded. Use /rag-load <name> first."
+            )
         return self._client
 
     def list_databases(self) -> list[dict[str, Any]]:
@@ -81,12 +83,14 @@ class RAGManager:
             except Exception:
                 # Not a valid RAG database (or unreadable)
                 continue
-            dbs.append({
-                "name": path.name,
-                "path": str(path),
-                "chunks": count,
-                "active": path.name == self._current_db,
-            })
+            dbs.append(
+                {
+                    "name": path.name,
+                    "path": str(path),
+                    "chunks": count,
+                    "active": path.name == self._current_db,
+                }
+            )
         return sorted(dbs, key=lambda x: x["name"])
 
     def create_database(self, name: str) -> str:
@@ -205,7 +209,9 @@ class RAGManager:
             "database": self._current_db,
         }
 
-    def add_directory(self, dir_path: str, extensions: list[str] | None = None) -> dict[str, Any]:
+    def add_directory(
+        self, dir_path: str, extensions: list[str] | None = None
+    ) -> dict[str, Any]:
         """Add all files from a directory to the current RAG database."""
         path = Path(dir_path).expanduser().resolve()
 
@@ -217,8 +223,24 @@ class RAGManager:
 
         # Default extensions for text files
         if extensions is None:
-            extensions = [".txt", ".md", ".py", ".js", ".ts", ".json", ".yaml", ".yml",
-                          ".html", ".css", ".xml", ".csv", ".rst", ".ini", ".cfg", ".sh"]
+            extensions = [
+                ".txt",
+                ".md",
+                ".py",
+                ".js",
+                ".ts",
+                ".json",
+                ".yaml",
+                ".yml",
+                ".html",
+                ".css",
+                ".xml",
+                ".csv",
+                ".rst",
+                ".ini",
+                ".cfg",
+                ".sh",
+            ]
 
         results = {"added": 0, "failed": 0, "skipped": 0, "files": []}
 
@@ -305,14 +327,20 @@ class RAGManager:
 
     def _delete_source_points(self, client: QdrantClient, source: str) -> None:
         """Delete all points previously indexed for a given source path."""
-        filt = Filter(must=[FieldCondition(key="source", match=MatchValue(value=source))])
+        filt = Filter(
+            must=[FieldCondition(key="source", match=MatchValue(value=source))]
+        )
         try:
-            client.delete(collection_name=self.COLLECTION_NAME, points_selector=filt, wait=True)
+            client.delete(
+                collection_name=self.COLLECTION_NAME, points_selector=filt, wait=True
+            )
         except TypeError:
             # Older qdrant-client versions may not support wait=.
             client.delete(collection_name=self.COLLECTION_NAME, points_selector=filt)
         except Exception as e:
-            raise RAGError(f"Failed to delete existing points for source '{source}': {e}") from e
+            raise RAGError(
+                f"Failed to delete existing points for source '{source}': {e}"
+            ) from e
 
     def _chunk_text(self, text: str) -> list[str]:
         """Split text into overlapping chunks."""
@@ -335,7 +363,7 @@ class RAGManager:
                 for sep in ["\n\n", "\n", ". ", "! ", "? "]:
                     last_sep = chunk.rfind(sep)
                     if last_sep > chunk_size // 2:
-                        chunk = chunk[:last_sep + len(sep)]
+                        chunk = chunk[: last_sep + len(sep)]
                         end = start + len(chunk)
                         break
 
@@ -348,7 +376,9 @@ class RAGManager:
         """Read file content, handling different encodings."""
         # Check if it's a text file
         mime_type, _ = mimetypes.guess_type(str(path))
-        if mime_type and not mime_type.startswith(("text/", "application/json", "application/xml")):
+        if mime_type and not mime_type.startswith(
+            ("text/", "application/json", "application/xml")
+        ):
             raise RAGError(f"Unsupported file type: {mime_type}")
 
         for encoding in ["utf-8", "latin-1", "cp1252"]:

@@ -39,7 +39,7 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
         meta = yaml.safe_load(text[3:end]) or {}
     except yaml.YAMLError:
         meta = {}
-    body = text[end + 3:].lstrip("\n")
+    body = text[end + 3 :].lstrip("\n")
     return (meta if isinstance(meta, dict) else {}), body
 
 
@@ -70,7 +70,7 @@ class SkillManager(BaseFileStoreManager["SkillInfo"]):
 
     DEFAULT_DIR = SKILLS_DIR
 
-    _ext: str = ""          # skills are directories, no file extension
+    _ext: str = ""  # skills are directories, no file extension
     _id_label: str = "skill_id"
 
     def __init__(self, skills_dir: Path | None = None) -> None:

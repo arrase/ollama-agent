@@ -73,7 +73,9 @@ async def show_mcp_server(console: Console, agent: OllamaAgent, name: str) -> No
         console.print(f"[yellow]No tools available for MCP server:[/yellow] {name}")
         return
 
-    table = Table(title=f"MCP Server: {name}", show_header=True, header_style="bold magenta")
+    table = Table(
+        title=f"MCP Server: {name}", show_header=True, header_style="bold magenta"
+    )
     table.add_column("Tool", style="cyan")
     table.add_column("Description")
 

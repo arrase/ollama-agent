@@ -33,7 +33,9 @@ async def stream_agent_events(
 ) -> None:
     ignored = set(ignore or ())
     try:
-        async for event in agent.run_async_streamed(prompt, model=model, reasoning_effort=reasoning_effort):
+        async for event in agent.run_async_streamed(
+            prompt, model=model, reasoning_effort=reasoning_effort
+        ):
             etype = event.get("type")
             if etype and etype not in ignored:
                 renderer.on_event(event)
@@ -51,5 +53,8 @@ async def run_non_interactive(agent: "OllamaAgent", prompt: object) -> None:
     """Stream agent output to the console."""
     async with agent.lifespan():
         await stream_agent_events(
-            agent, prompt, ConsoleStreamingRenderer(Console()), ignore={"agent_update"},
+            agent,
+            prompt,
+            ConsoleStreamingRenderer(Console()),
+            ignore={"agent_update"},
         )

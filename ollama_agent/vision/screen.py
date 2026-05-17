@@ -96,6 +96,3 @@ def build_multimodal_responses_input(
     if text:
         blocks.append({"type": "text", "text": text})
     return [{"role": "user", "content": blocks}]
-
-
-

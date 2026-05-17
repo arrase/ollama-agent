@@ -17,8 +17,7 @@ def create_agent(
     """Create OllamaAgent from config with optional overrides."""
     cfg = get_config()
     target_model = model or cfg.model
-    effort = validate_reasoning_effort(
-        reasoning_effort or cfg.reasoning_effort)
+    effort = validate_reasoning_effort(reasoning_effort or cfg.reasoning_effort)
 
     # Sync Mem0 LLM model with agent model if using defaults
     mem0 = cfg.mem0

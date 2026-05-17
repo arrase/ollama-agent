@@ -23,7 +23,9 @@ class SessionManager:
     """Handles database operations for agent sessions."""
 
     def __init__(self, database_path: Path | None = None) -> None:
-        self.storage_path = database_path or Path.home() / ".ollama-agent" / "sessions.db"
+        self.storage_path = (
+            database_path or Path.home() / ".ollama-agent" / "sessions.db"
+        )
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
         self._db_path = str(self.storage_path)
         self.session_id: str | None = None
@@ -84,7 +86,10 @@ class SessionManager:
             return "No messages"
         try:
             data = json.loads(blob)
-            return (extract_text(data.get("content") if isinstance(data, dict) else data) or str(data))[:50]
+            return (
+                extract_text(data.get("content") if isinstance(data, dict) else data)
+                or str(data)
+            )[:50]
         except (json.JSONDecodeError, TypeError):
             return "No content"
 
@@ -113,7 +118,9 @@ class SessionManager:
     def get_session_id(self) -> str | None:
         return self.session_id
 
-    def append_message(self, role: str, content: Any, *, session_id: str | None = None) -> None:
+    def append_message(
+        self, role: str, content: Any, *, session_id: str | None = None
+    ) -> None:
         sid = session_id or self.session_id
         if not sid:
             return
@@ -147,8 +154,13 @@ class SessionManager:
                     continue
                 try:
                     data = json.loads(blob)
-                    if isinstance(data, dict) and data.get("role") in ("user", "assistant"):
-                        out.append({"role": data["role"], "content": data.get("content", "")})
+                    if isinstance(data, dict) and data.get("role") in (
+                        "user",
+                        "assistant",
+                    ):
+                        out.append(
+                            {"role": data["role"], "content": data.get("content", "")}
+                        )
                 except (json.JSONDecodeError, TypeError):
                     continue
             return out
@@ -156,7 +168,9 @@ class SessionManager:
             logger.error("Error getting message dicts: %s", exc)
             return []
 
-    def get_readable_history(self, session_id: str | None = None) -> list[dict[str, str]]:
+    def get_readable_history(
+        self, session_id: str | None = None
+    ) -> list[dict[str, str]]:
         sid = session_id or self.session_id
         messages = self.get_message_dicts(sid)
         readable: list[dict[str, str]] = []
@@ -212,8 +226,12 @@ class SessionManager:
             return False
         try:
             with self._connect() as conn:
-                conn.execute("DELETE FROM agent_messages WHERE session_id = ?", (session_id,))
-                conn.execute("DELETE FROM agent_sessions WHERE session_id = ?", (session_id,))
+                conn.execute(
+                    "DELETE FROM agent_messages WHERE session_id = ?", (session_id,)
+                )
+                conn.execute(
+                    "DELETE FROM agent_sessions WHERE session_id = ?", (session_id,)
+                )
             if session_id == self.session_id:
                 self.reset_session()
             return True

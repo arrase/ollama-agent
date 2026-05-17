@@ -10,7 +10,11 @@ from typing import Any, Callable, Iterable, cast
 import ollama
 from langchain_ollama import ChatOllama
 
-from .common import ALLOWED_REASONING_EFFORTS, DEFAULT_REASONING_EFFORT, ReasoningEffortValue
+from .common import (
+    ALLOWED_REASONING_EFFORTS,
+    DEFAULT_REASONING_EFFORT,
+    ReasoningEffortValue,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +60,9 @@ def _response_field(payload: Any, field: str, default: Any = None) -> Any:
 def _parse_num_ctx(text: Any) -> int | None:
     if not isinstance(text, str):
         return None
-    match = re.search(r"^\s*(?:PARAMETER\s+)?num_ctx\s+(\d+)\s*$", text, re.IGNORECASE | re.MULTILINE)
+    match = re.search(
+        r"^\s*(?:PARAMETER\s+)?num_ctx\s+(\d+)\s*$", text, re.IGNORECASE | re.MULTILINE
+    )
     return int(match.group(1)) if match else None
 
 
@@ -128,7 +134,9 @@ def resolve_context_window(
         if resolved := _parse_num_ctx(_response_field(response, field_name)):
             return resolved
 
-    model_info = _response_field(response, "model_info", _response_field(response, "modelinfo", {}))
+    model_info = _response_field(
+        response, "model_info", _response_field(response, "modelinfo", {})
+    )
     if resolved := _model_context_length(model_info):
         return resolved
 
@@ -198,6 +206,7 @@ def validate_reasoning_effort(effort: str) -> ReasoningEffortValue:
     """Validate and normalize reasoning effort value."""
     if effort in ALLOWED_REASONING_EFFORTS:
         return cast(ReasoningEffortValue, effort)
-    logger.warning("Invalid reasoning effort '%s', using '%s'",
-                   effort, DEFAULT_REASONING_EFFORT)
+    logger.warning(
+        "Invalid reasoning effort '%s', using '%s'", effort, DEFAULT_REASONING_EFFORT
+    )
     return DEFAULT_REASONING_EFFORT

@@ -19,7 +19,12 @@ logger = logging.getLogger(__name__)
 
 def _default_instructions() -> str:
     try:
-        return resources.files(__package__).joinpath("default_instructions.md").read_text(encoding="utf-8").strip()
+        return (
+            resources.files(__package__)
+            .joinpath("default_instructions.md")
+            .read_text(encoding="utf-8")
+            .strip()
+        )
     except Exception:
         return "You are an AI Assistant."
 
@@ -27,6 +32,7 @@ def _default_instructions() -> str:
 @dataclass
 class Config:
     """Application configuration."""
+
     model: str = "gpt-oss:20b"
     base_url: str = "http://localhost:11434"
     api_key: str = "ollama"
@@ -93,13 +99,16 @@ def get_config(config_dir: Path | None = None) -> Config:
             "base_url": defaults.base_url,
             "api_key": defaults.api_key,
             "reasoning_effort": defaults.reasoning_effort,
-            "context_window": "" if defaults.context_window is None else str(defaults.context_window),
+            "context_window": ""
+            if defaults.context_window is None
+            else str(defaults.context_window),
             "database_path": str(defaults.database_path),
             "builtin_tool_timeout": str(defaults.builtin_tool_timeout),
             "mcp_config_path": str(defaults.mcp_config_path),
         }
-        parser["mem0"] = {k: str(v) for k, v in asdict(
-            defaults.mem0).items() if not k.startswith("_")}
+        parser["mem0"] = {
+            k: str(v) for k, v in asdict(defaults.mem0).items() if not k.startswith("_")
+        }
         parser["rag"] = {k: str(v) for k, v in asdict(defaults.rag).items()}
         with config_path.open("w", encoding="utf-8") as f:
             parser.write(f)
@@ -124,10 +133,16 @@ def get_config(config_dir: Path | None = None) -> Config:
         base_url=base_url,
         api_key=section.get("api_key", defaults.api_key),
         reasoning_effort=section.get("reasoning_effort", defaults.reasoning_effort),
-        context_window=_safe_cast(section.get("context_window"), int, defaults.context_window),
+        context_window=_safe_cast(
+            section.get("context_window"), int, defaults.context_window
+        ),
         database_path=Path(section.get("database_path", str(defaults.database_path))),
-        builtin_tool_timeout=_safe_cast(section.get("builtin_tool_timeout"), int, defaults.builtin_tool_timeout),
-        mcp_config_path=Path(section.get("mcp_config_path", str(defaults.mcp_config_path))),
+        builtin_tool_timeout=_safe_cast(
+            section.get("builtin_tool_timeout"), int, defaults.builtin_tool_timeout
+        ),
+        mcp_config_path=Path(
+            section.get("mcp_config_path", str(defaults.mcp_config_path))
+        ),
         mem0=_load_mem0(mem0_section),
         rag=_load_rag(rag_section),
     )
@@ -137,11 +152,13 @@ def load_instructions(instructions_path: Path = INSTRUCTIONS_PATH) -> str:
     """Load agent instructions from file or return defaults."""
     if not instructions_path.exists():
         instructions_path.parent.mkdir(parents=True, exist_ok=True)
-        instructions_path.write_text(
-            _default_instructions() + "\n", encoding="utf-8")
+        instructions_path.write_text(_default_instructions() + "\n", encoding="utf-8")
         return _default_instructions()
     try:
-        return instructions_path.read_text(encoding="utf-8").strip() or _default_instructions()
+        return (
+            instructions_path.read_text(encoding="utf-8").strip()
+            or _default_instructions()
+        )
     except Exception:
         return _default_instructions()
 
@@ -152,14 +169,13 @@ def reset_config(option: str) -> None:
         config_path = APP_DIR / "config.ini"
         if config_path.exists():
             config_path.unlink()
-        
+
         get_config()
         print(f"Reset: Restored default configuration at {config_path}")
 
     if option in ("all", "system-prompt"):
         if INSTRUCTIONS_PATH.exists():
             INSTRUCTIONS_PATH.unlink()
-        
+
         load_instructions()
         print(f"Reset: Restored default system prompt at {INSTRUCTIONS_PATH}")
-

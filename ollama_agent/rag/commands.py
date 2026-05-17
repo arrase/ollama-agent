@@ -12,12 +12,17 @@ from ..interfaces.utils import find_or_exit
 @dataclass
 class RAGContext:
     """Holds shared resources for RAG commands."""
+
     console: Console = field(default_factory=Console)
     rag_manager: RAGManager = field(default_factory=RAGManager)
 
     def _find_or_exit(self, name: str) -> str:
         """Find a database by name/prefix or exit."""
-        names = [d.get("name", "") for d in self.rag_manager.list_databases() if isinstance(d, dict)]
+        names = [
+            d.get("name", "")
+            for d in self.rag_manager.list_databases()
+            if isinstance(d, dict)
+        ]
         return find_or_exit(name, names, self.console, label="Database")
 
 
@@ -44,7 +49,9 @@ def create_rag_database(ctx: RAGContext, name: str) -> None:
     """Create a new RAG database."""
     try:
         created = ctx.rag_manager.create_database(name)
-        ctx.console.print(f"[green]RAG database created:[/green] [cyan]{created}[/cyan]")
+        ctx.console.print(
+            f"[green]RAG database created:[/green] [cyan]{created}[/cyan]"
+        )
         ctx.console.print(f"[dim]Load it with /rag-load {created}[/dim]")
     except RAGDatabaseExistsError:
         ctx.console.print(f"[red]Database already exists:[/red] {name}")
@@ -58,7 +65,9 @@ def delete_rag_database(ctx: RAGContext, name: str) -> None:
     """Delete a RAG database."""
     full_name = ctx._find_or_exit(name)
     if ctx.rag_manager.delete_database(full_name):
-        ctx.console.print(f"[green]Deleted RAG database:[/green] [cyan]{full_name}[/cyan]")
+        ctx.console.print(
+            f"[green]Deleted RAG database:[/green] [cyan]{full_name}[/cyan]"
+        )
     else:
         ctx.console.print(f"[red]Failed to delete database: {full_name}[/red]")
         raise SystemExit(1)
@@ -69,7 +78,9 @@ def load_rag_database(ctx: RAGContext, name: str) -> None:
     full_name = ctx._find_or_exit(name)
     try:
         ctx.rag_manager.load_database(full_name)
-        ctx.console.print(f"[green]Loaded RAG database:[/green] [cyan]{full_name}[/cyan]")
+        ctx.console.print(
+            f"[green]Loaded RAG database:[/green] [cyan]{full_name}[/cyan]"
+        )
     except RAGError as e:
         ctx.console.print(f"[red]{e}[/red]")
         raise SystemExit(1)
@@ -94,7 +105,9 @@ def add_rag_file(ctx: RAGContext, file_path: str) -> None:
             f"([dim]{result['chunks']} chunks[/dim])"
         )
     except RAGNotLoadedError:
-        ctx.console.print("[red]No RAG database loaded.[/red] Use /rag-load <name> first.")
+        ctx.console.print(
+            "[red]No RAG database loaded.[/red] Use /rag-load <name> first."
+        )
         raise SystemExit(1)
     except RAGError as e:
         ctx.console.print(f"[red]{e}[/red]")
@@ -110,7 +123,9 @@ def add_rag_directory(ctx: RAGContext, dir_path: str) -> None:
             f"([dim]skipped: {result['skipped']}, failed: {result['failed']}[/dim])"
         )
     except RAGNotLoadedError:
-        ctx.console.print("[red]No RAG database loaded.[/red] Use /rag-load <name> first.")
+        ctx.console.print(
+            "[red]No RAG database loaded.[/red] Use /rag-load <name> first."
+        )
         raise SystemExit(1)
     except RAGError as e:
         ctx.console.print(f"[red]{e}[/red]")

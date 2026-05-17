@@ -17,7 +17,9 @@ if TYPE_CHECKING:
 
 
 _tool_timeout: ContextVar[int] = ContextVar("tool_timeout", default=30)
-_memory_manager: ContextVar["MemoryManager | None"] = ContextVar("memory_manager", default=None)
+_memory_manager: ContextVar["MemoryManager | None"] = ContextVar(
+    "memory_manager", default=None
+)
 _rag_manager: ContextVar["RAGManager | None"] = ContextVar("rag_manager", default=None)
 
 set_tool_timeout, get_tool_timeout = _tool_timeout.set, _tool_timeout.get

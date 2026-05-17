@@ -16,6 +16,7 @@ from .manager import Task, TaskManager
 @dataclass
 class CLIContext:
     """Holds shared resources for task-related commands."""
+
     agent_factory: Callable[..., OllamaAgent]
     console: Console = field(default_factory=Console)
     task_manager: TaskManager = field(default_factory=TaskManager)
@@ -44,9 +45,13 @@ def list_tasks(ctx: CLIContext) -> None:
     if not (tasks := ctx.task_manager.list_all()):
         ctx.console.print("[yellow]No tasks found.[/yellow]")
         return
-    table = Table(title="Saved Tasks", show_header=True,
-                  header_style="bold magenta")
-    for col, style in [("ID", "cyan"), ("Title", "green"), ("Model", "blue"), ("Effort", "yellow")]:
+    table = Table(title="Saved Tasks", show_header=True, header_style="bold magenta")
+    for col, style in [
+        ("ID", "cyan"),
+        ("Title", "green"),
+        ("Model", "blue"),
+        ("Effort", "yellow"),
+    ]:
         table.add_column(col, style=style)
     for tid, t in tasks:
         table.add_row(tid, t.title, t.model, t.reasoning_effort)
@@ -55,29 +60,50 @@ def list_tasks(ctx: CLIContext) -> None:
 
 async def run_task(ctx: CLIContext, task_id: str) -> None:
     tid, t = ctx._find_or_exit(task_id)
-    ctx.console.print(f"[bold cyan]Executing:[/bold cyan] {t.title} ({tid})\n"
-                      f"[bold blue]Prompt:[/bold blue] {t.prompt}\n"
-                      f"[bold]Model:[/bold] {t.model} | [bold]Effort:[/bold] {t.reasoning_effort}\n")
-    await run_non_interactive(ctx.agent_factory(model=t.model, reasoning_effort=t.reasoning_effort), t.prompt)
+    ctx.console.print(
+        f"[bold cyan]Executing:[/bold cyan] {t.title} ({tid})\n"
+        f"[bold blue]Prompt:[/bold blue] {t.prompt}\n"
+        f"[bold]Model:[/bold] {t.model} | [bold]Effort:[/bold] {t.reasoning_effort}\n"
+    )
+    await run_non_interactive(
+        ctx.agent_factory(model=t.model, reasoning_effort=t.reasoning_effort), t.prompt
+    )
 
 
 def delete_task(ctx: CLIContext, task_id: str) -> None:
     tid, t = ctx._find_or_exit(task_id)
-    msg = f"[green]Task deleted:[/green] {t.title} ({tid})" if ctx.task_manager.delete(tid) \
+    msg = (
+        f"[green]Task deleted:[/green] {t.title} ({tid})"
+        if ctx.task_manager.delete(tid)
         else f"[red]Error deleting task: {tid}[/red]"
+    )
     ctx.console.print(msg)
 
 
-def create_task(ctx: CLIContext, task_id: str, *, title: str, prompt: str, model: str,
-                reasoning_effort: str | None = None, force: bool = False) -> None:
-    task = Task(ctx._require(title, "Title"), ctx._require(prompt, "Prompt"),
-                ctx._require(model, "Model"), validate_reasoning_effort(reasoning_effort or "medium"))
+def create_task(
+    ctx: CLIContext,
+    task_id: str,
+    *,
+    title: str,
+    prompt: str,
+    model: str,
+    reasoning_effort: str | None = None,
+    force: bool = False,
+) -> None:
+    task = Task(
+        ctx._require(title, "Title"),
+        ctx._require(prompt, "Prompt"),
+        ctx._require(model, "Model"),
+        validate_reasoning_effort(reasoning_effort or "medium"),
+    )
     try:
         ctx.console.print(
-            f"[green]Task created:[/green] {task.title} ({ctx.task_manager.save(task_id, task, overwrite=force)})")
+            f"[green]Task created:[/green] {task.title} ({ctx.task_manager.save(task_id, task, overwrite=force)})"
+        )
     except FileExistsError:
         ctx.console.print(
-            f"[red]Task already exists:[/red] {task_id} (use --force to overwrite)")
+            f"[red]Task already exists:[/red] {task_id} (use --force to overwrite)"
+        )
         raise SystemExit(1)
     except ValueError as e:
         ctx.console.print(f"[red]{e}[/red]")

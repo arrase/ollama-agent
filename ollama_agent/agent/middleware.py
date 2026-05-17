@@ -28,11 +28,7 @@ async def _stream_tool_events(request: Any, handler: Any) -> Any:
     runtime = getattr(request, "runtime", None)
     agent_name: str | None = None
     tool_name = next(
-        (
-            n
-            for attr in ("name", "tool_name")
-            if (n := getattr(request, attr, None))
-        )
+        (n for attr in ("name", "tool_name") if (n := getattr(request, attr, None)))
         or (
             n
             for obj in (getattr(request, "tool", None),)
