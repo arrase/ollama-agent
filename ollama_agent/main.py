@@ -1,4 +1,5 @@
 import asyncio
+import warnings
 from functools import partial
 
 from .agent import create_agent, set_tool_timeout
@@ -9,6 +10,7 @@ from .interfaces.repl import OllamaREPL
 
 def main() -> None:
     """Main entry point."""
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
     parser = create_argument_parser()
     args = parser.parse_args()
 
