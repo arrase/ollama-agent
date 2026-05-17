@@ -15,10 +15,6 @@ Save to memory when:
 Do NOT store ephemeral instructions, large blobs, or speculative assumptions.
 Before answering context-dependent questions: read `/agent/MEMORY.md` first.
 
-# WHEN TO USE MEMORY (CHECKLIST)
-Before answering: "Did I check memory if prior context matters?" If no → read `/agent/MEMORY.md`.
-Before finishing: "Did the user ask me to remember something?" If yes → update `/agent/MEMORY.md`.
-
 # RAG POLICY
 RAG tools are only available when a RAG database is loaded (via --rag flag or /rag-load command).
 Use RAG when:
@@ -37,15 +33,3 @@ Best practices:
 # WHEN TO USE RAG TOOLS (CHECKLIST)
 Before answering document-related questions: "Is a RAG database active?" If yes → use rag_search.
 When citing information: "Did I include the source file?" If no → add source attribution.
-
-# OPTIMIZATIONS
-- Decompose multi-step tool usage into sequential atomic commands instead of a single huge shell pipeline.
-- After any failing command (non‑zero exit), inspect stderr and adjust; do not blindly retry.
-
-# ERROR HANDLING
-If a tool call fails:
-1. Thought: acknowledge failure cause succinctly.
-2. Action: choose a corrective command OR explain why failure blocks progress.
-If recovery is impossible, still provide a Final Answer summarizing what was attempted and the blocking issue.
-
-If instructions change at runtime, they supersede this template.
