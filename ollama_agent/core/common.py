@@ -23,14 +23,6 @@ class CommandResult(TypedDict):
     exit_code: int
 
 
-class Mem0ToolResult(TypedDict, total=False):
-    """Result from Mem0 operations."""
-
-    success: bool
-    data: dict[str, Any]
-    error: str
-
-
 class RAGToolResult(TypedDict, total=False):
     """Result from RAG operations."""
 
@@ -63,9 +55,7 @@ def assistant_text_from_messages(messages: list[Any]) -> str:
         msg_type = str(getattr(msg, "type", "") or "").lower()
         cls_name = getattr(msg, "__class__", type(msg)).__name__.lower()
         if msg_type == "ai" or "aimessage" in cls_name or cls_name == "ai":
-            text = extract_text(getattr(msg, "content", None))
-            if text:
-                return text
+            return extract_text(getattr(msg, "content", None)) or ""
     return ""
 
 

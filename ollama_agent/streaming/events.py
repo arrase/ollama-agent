@@ -15,27 +15,24 @@ from rich.console import Console
 from .console_renderer import ConsoleStreamingRenderer
 
 if TYPE_CHECKING:
-    from ..agent import OllamaAgent
+    from ..agent import AgentRuntime
     from .base import StreamingRenderer
 
 logger = logging.getLogger(__name__)
 
 
 async def stream_agent_events(
-    agent: "OllamaAgent",
+    runtime: "AgentRuntime",
     prompt: object,
     renderer: "StreamingRenderer",
     *,
-    model: str | None = None,
-    reasoning_effort: str | None = None,
+    thread_id: str | None = None,
     ignore: Iterable[str] | None = None,
     auto_close: bool = True,
 ) -> None:
     ignored = set(ignore or ())
     try:
-        async for event in agent.run_async_streamed(
-            prompt, model=model, reasoning_effort=reasoning_effort
-        ):
+        async for event in runtime.run_streamed(prompt, thread_id=thread_id):
             etype = event.get("type")
             if etype and etype not in ignored:
                 renderer.on_event(event)
@@ -49,12 +46,14 @@ async def stream_agent_events(
             renderer.close()
 
 
-async def run_non_interactive(agent: "OllamaAgent", prompt: object) -> None:
-    """Stream agent output to the console."""
-    async with agent.lifespan():
-        await stream_agent_events(
-            agent,
-            prompt,
-            ConsoleStreamingRenderer(Console()),
-            ignore={"agent_update"},
-        )
+async def run_non_interactive(
+    runtime: "AgentRuntime", prompt: object, *, thread_id: str | None = None
+) -> None:
+    """Stream agent output to the console (non-interactive mode)."""
+    await stream_agent_events(
+        runtime,
+        prompt,
+        ConsoleStreamingRenderer(Console()),
+        thread_id=thread_id,
+        ignore={"agent_update"},
+    )

@@ -70,16 +70,21 @@ def _relax_const_fields(tools: list[BaseTool]) -> list[BaseTool]:
         orig_coro = getattr(tool, "coroutine", None)
         if callable(orig_coro):
 
-            async def _wrapped(*a, _fn=orig_coro, _c=consts, **kw):
-                kw.update(_c)
-                return await _fn(*a, **kw)
+            def _make_wrapped(coro: Any, const_args: dict[str, Any]) -> Any:
+                async def _wrapped(*args: Any, **kwargs: Any) -> Any:
+                    kwargs.update(const_args)
+                    return await coro(*args, **kwargs)
+
+                return _wrapped
+
+            _wrapped_coro = _make_wrapped(orig_coro, consts)
 
             result.append(
                 StructuredTool(
                     name=tool.name,
                     description=tool.description,
                     args_schema=patched,
-                    coroutine=_wrapped,
+                    coroutine=_wrapped_coro,
                     response_format=getattr(tool, "response_format", "content"),
                     metadata=getattr(tool, "metadata", None),
                 )
@@ -192,7 +197,7 @@ async def _init_server(
 
     raw_context_window = agent_cfg.get("context_window", config.get("context_window"))
     context_window = (
-        int(raw_context_window) if raw_context_window not in (None, "") else None
+        int(str(raw_context_window)) if raw_context_window not in (None, "") else None
     )
 
     try:
@@ -201,7 +206,7 @@ async def _init_server(
         # errors) when tools are invoked from nested subagents.
         mcp_tools = await load_mcp_tools(
             None,
-            connection=connection,
+            connection=connection,  # type: ignore[arg-type]
             server_name=name,
             tool_name_prefix=False,
         )
@@ -251,7 +256,6 @@ async def initialize_mcp_servers(
     *,
     default_model: str | None = None,
     base_url: str | None = None,
-    api_key: str | None = None,
     context_window: int | None = None,
     reasoning_effort: ReasoningEffortValue = "medium",
 ) -> list[RunningMCPServer]:
@@ -274,8 +278,6 @@ async def initialize_mcp_servers(
         if isinstance(cfg, dict):
             if base_url and "base_url" not in cfg and "openai_api_base" not in cfg:
                 cfg = {**cfg, "base_url": base_url}
-            if api_key and "api_key" not in cfg and "openai_api_key" not in cfg:
-                cfg = {**cfg, "api_key": api_key}
             if context_window is not None and "context_window" not in cfg:
                 cfg = {**cfg, "context_window": context_window}
             if reasoning_effort and "reasoning_effort" not in cfg:

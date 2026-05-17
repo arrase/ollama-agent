@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from ..core import (
     BaseFileStoreManager,
@@ -38,7 +38,7 @@ class Task:
             str(d.get("title", "")),
             str(d.get("prompt", "")),
             str(d.get("model", "")),
-            str(d.get("reasoning_effort", DEFAULT_REASONING_EFFORT)),
+            d.get("reasoning_effort", DEFAULT_REASONING_EFFORT),  # type: ignore[arg-type]
         )
 
 

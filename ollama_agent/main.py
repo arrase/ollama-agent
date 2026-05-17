@@ -1,16 +1,28 @@
 import asyncio
 import warnings
-from functools import partial
 
-from .agent import create_agent, set_tool_timeout
+from .agent import AgentRuntime
+from .agent.builtin_tools import set_tool_timeout
 from .interfaces.cli import create_argument_parser, handle_cli_commands
-from .settings import get_config, reset_config
 from .interfaces.repl import OllamaREPL
+from .settings import load_settings, reset_config
 
 
 def main() -> None:
     """Main entry point."""
     warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+    try:
+        from langchain_core._api.deprecation import LangChainPendingDeprecationWarning
+
+        warnings.filterwarnings(
+            "ignore",
+            category=LangChainPendingDeprecationWarning,
+            message=".*allowed_objects.*",
+        )
+    except ImportError:
+        pass
+
     parser = create_argument_parser()
     args = parser.parse_args()
 
@@ -18,23 +30,26 @@ def main() -> None:
         reset_config(args.config_reset)
         return
 
-    cfg = get_config()
-    set_tool_timeout(
-        cfg.builtin_tool_timeout
-        if args.builtin_tool_timeout is None
-        else args.builtin_tool_timeout
-    )
+    settings = load_settings()
 
-    extra_skills: tuple[str, ...] = tuple(getattr(args, "skills_dir", None) or [])
-    agent_factory = partial(create_agent, extra_skills_dirs=extra_skills)
+    # Apply CLI overrides
+    if args.model:
+        settings.model.name = args.model
+    if args.effort:
+        settings.model.reasoning_effort = args.effort
+    if args.builtin_tool_timeout is not None:
+        settings.runtime.builtin_tool_timeout = args.builtin_tool_timeout
 
-    if handle_cli_commands(args, agent_factory):
+    set_tool_timeout(settings.runtime.builtin_tool_timeout)
+
+    if handle_cli_commands(args):
         return
 
+    extra_skills: tuple[str, ...] = tuple(getattr(args, "skills_dir", None) or [])
+    runtime = AgentRuntime(settings=settings, extra_skills_dirs=extra_skills)
+
     repl = OllamaREPL(
-        agent_factory=agent_factory,
-        model=args.model or cfg.model,
-        effort=args.effort or cfg.reasoning_effort,
+        runtime=runtime,
         rag_database=getattr(args, "rag", None),
     )
     try:

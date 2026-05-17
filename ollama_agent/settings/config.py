@@ -1,20 +1,23 @@
-"""Application configuration management."""
+"""Application configuration management using YAML-based settings."""
 
 from __future__ import annotations
 
-import configparser
 import logging
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from importlib import resources
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
-from ..memory.settings import Mem0Settings
-from ..rag.settings import RAGSettings
+import yaml  # type: ignore[import-untyped]
 
-from .paths import APP_DIR, DATABASE_PATH, INSTRUCTIONS_PATH, MCP_SERVERS_PATH
+from .paths import APP_DIR, INSTRUCTIONS_PATH, MEMORY_PATH, SETTINGS_PATH
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Default instructions loader
+# ---------------------------------------------------------------------------
 
 
 def _default_instructions() -> str:
@@ -29,123 +32,147 @@ def _default_instructions() -> str:
         return "You are an AI Assistant."
 
 
-@dataclass
-class Config:
-    """Application configuration."""
+# ---------------------------------------------------------------------------
+# Settings dataclasses (CUD-inspired)
+# ---------------------------------------------------------------------------
 
-    model: str = "gpt-oss:20b"
+
+@dataclass(slots=True)
+class ModelSettings:
+    name: str = "gemma4:26b"
     base_url: str = "http://localhost:11434"
-    api_key: str = "ollama"
-    reasoning_effort: str = "medium"
+    temperature: float = 0.0
     context_window: int | None = None
-    database_path: Path = field(default_factory=lambda: DATABASE_PATH)
+    reasoning_effort: str = "medium"
+
+
+@dataclass(slots=True)
+class RuntimeSettings:
+    allow_traversal: bool = True
     builtin_tool_timeout: int = 30
-    mcp_config_path: Path = field(default_factory=lambda: MCP_SERVERS_PATH)
-    mem0: Mem0Settings = field(default_factory=Mem0Settings)
+
+
+@dataclass(slots=True)
+class RAGSettings:
+    rag_dir: str = ""
+    embedder_model: str = "nomic-embed-text:latest"
+    embedder_base_url: str = "http://localhost:11434"
+    embedding_dims: int = 768
+    default_top_k: int = 5
+    chunk_size: int = 500
+    chunk_overlap: int = 50
+
+    def __post_init__(self) -> None:
+        if not self.rag_dir:
+            from .paths import RAG_DIR
+
+            self.rag_dir = str(RAG_DIR)
+
+
+@dataclass(slots=True)
+class SubAgentMCPServer:
+    """An MCP server attached to a subagent."""
+
+    name: str = ""
+    command: str = ""
+    args: list[str] = field(default_factory=list)
+    env: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class SubAgentSettings:
+    """A custom subagent with its own model, skills, and MCP servers."""
+
+    name: str = ""
+    description: str = ""
+    system_prompt: str = ""
+    model: str = ""
+    context_window: int = 0
+    skills_paths: list[str] = field(default_factory=list)
+    mcp_servers: list[SubAgentMCPServer] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class Settings:
+    model: ModelSettings = field(default_factory=ModelSettings)
+    runtime: RuntimeSettings = field(default_factory=RuntimeSettings)
     rag: RAGSettings = field(default_factory=RAGSettings)
+    subagents: list[SubAgentSettings] = field(default_factory=list)
 
-
-def _safe_cast(value: Any, caster: type, default: Any) -> Any:
-    if value is None:
-        return default
-    try:
-        return caster(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _load_mem0(section: dict[str, str]) -> Mem0Settings:
-    d = Mem0Settings()
-    g = section.get
-    c = _safe_cast
-    return Mem0Settings(
-        collection_name=g("collection_name", d.collection_name),
-        qdrant_path=g("qdrant_path", d.qdrant_path),
-        embedding_model_dims=c(g("embedding_model_dims"), int, d.embedding_model_dims),
-        llm_model=g("llm_model", d.llm_model),
-        llm_temperature=c(g("llm_temperature"), float, d.llm_temperature),
-        llm_max_tokens=c(g("llm_max_tokens"), int, d.llm_max_tokens),
-        ollama_base_url=g("ollama_base_url", d.ollama_base_url),
-        embedder_model=g("embedder_model", d.embedder_model),
-        embedder_base_url=g("embedder_base_url", d.embedder_base_url),
-        user_id=g("user_id", d.user_id),
-    )
-
-
-def _load_rag(section: dict[str, str]) -> RAGSettings:
-    d, g, c = RAGSettings(), section.get, _safe_cast
-    return RAGSettings(
-        rag_dir=g("rag_dir", d.rag_dir),
-        embedder_model=g("embedder_model", d.embedder_model),
-        embedder_base_url=g("embedder_base_url", d.embedder_base_url),
-        embedding_dims=c(g("embedding_dims"), int, d.embedding_dims),
-        default_top_k=c(g("default_top_k"), int, d.default_top_k),
-        chunk_size=c(g("chunk_size"), int, d.chunk_size),
-        chunk_overlap=c(g("chunk_overlap"), int, d.chunk_overlap),
-    )
-
-
-def get_config(config_dir: Path | None = None) -> Config:
-    """Load configuration from file or create defaults."""
-    config_dir = config_dir or APP_DIR
-    config_path = config_dir / "config.ini"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    defaults = Config()
-
-    if not config_path.exists():
-        parser = configparser.ConfigParser()
-        parser["default"] = {
-            "model": defaults.model,
-            "base_url": defaults.base_url,
-            "api_key": defaults.api_key,
-            "reasoning_effort": defaults.reasoning_effort,
-            "context_window": ""
-            if defaults.context_window is None
-            else str(defaults.context_window),
-            "database_path": str(defaults.database_path),
-            "builtin_tool_timeout": str(defaults.builtin_tool_timeout),
-            "mcp_config_path": str(defaults.mcp_config_path),
-        }
-        parser["mem0"] = {
-            k: str(v) for k, v in asdict(defaults.mem0).items() if not k.startswith("_")
-        }
-        parser["rag"] = {k: str(v) for k, v in asdict(defaults.rag).items()}
-        with config_path.open("w", encoding="utf-8") as f:
-            parser.write(f)
-        return defaults
-
-    parser = configparser.ConfigParser()
-    parser.read(config_path)
-    section = dict(parser["default"]) if parser.has_section("default") else {}
-    mem0_section = dict(parser["mem0"]) if parser.has_section("mem0") else {}
-    rag_section = dict(parser["rag"]) if parser.has_section("rag") else {}
-
-    base_url = section.get("base_url", defaults.base_url).rstrip("/")
-    if base_url.endswith("/v1"):
-        raise ValueError(
-            f"base_url '{base_url}' contains an '/v1' path from the old OpenAI-compatible "
-            "configuration. Update base_url to the native Ollama host "
-            f"(e.g. 'http://localhost:11434') in {config_path}."
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any] | None) -> Self:
+        raw = raw or {}
+        return cls(
+            model=_dataclass_from_dict(ModelSettings, raw.get("model")),
+            runtime=_dataclass_from_dict(RuntimeSettings, raw.get("runtime")),
+            rag=_dataclass_from_dict(RAGSettings, raw.get("rag")),
+            subagents=_subagents_from_list(raw.get("subagents")),
         )
 
-    return Config(
-        model=section.get("model", defaults.model),
-        base_url=base_url,
-        api_key=section.get("api_key", defaults.api_key),
-        reasoning_effort=section.get("reasoning_effort", defaults.reasoning_effort),
-        context_window=_safe_cast(
-            section.get("context_window"), int, defaults.context_window
-        ),
-        database_path=Path(section.get("database_path", str(defaults.database_path))),
-        builtin_tool_timeout=_safe_cast(
-            section.get("builtin_tool_timeout"), int, defaults.builtin_tool_timeout
-        ),
-        mcp_config_path=Path(
-            section.get("mcp_config_path", str(defaults.mcp_config_path))
-        ),
-        mem0=_load_mem0(mem0_section),
-        rag=_load_rag(rag_section),
-    )
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _dataclass_from_dict(cls: type[Any], raw: dict[str, Any] | None) -> Any:
+    if raw is None:
+        return cls()
+    valid = {f.name for f in fields(cls)}
+    return cls(**{k: v for k, v in raw.items() if k in valid})
+
+
+def _subagents_from_list(
+    raw: list[dict[str, Any]] | None,
+) -> list[SubAgentSettings]:
+    """Parse subagent list from YAML, handling nested mcp_servers."""
+    if not raw:
+        return []
+    subagents: list[SubAgentSettings] = []
+    for item in raw:
+        mcp_servers = [
+            _dataclass_from_dict(SubAgentMCPServer, m)
+            for m in (item.get("mcp_servers") or [])
+        ]
+        sa = _dataclass_from_dict(
+            SubAgentSettings,
+            {k: v for k, v in item.items() if k != "mcp_servers"},
+        )
+        sa.mcp_servers = mcp_servers
+        subagents.append(sa)
+    return subagents
+
+
+# ---------------------------------------------------------------------------
+# Load / Save
+# ---------------------------------------------------------------------------
+
+
+def load_settings(settings_path: Path | None = None) -> Settings:
+    """Load settings from YAML file or create defaults."""
+    path = settings_path or SETTINGS_PATH
+    if not path.exists():
+        settings = Settings()
+        save_settings(settings, path)
+        return settings
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return Settings.from_dict(raw)
+
+
+def save_settings(settings: Settings, settings_path: Path | None = None) -> None:
+    """Save settings to YAML file."""
+    path = settings_path or SETTINGS_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = yaml.safe_dump(settings.to_dict(), sort_keys=False, allow_unicode=True)
+    path.write_text(text, encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Instructions
+# ---------------------------------------------------------------------------
 
 
 def load_instructions(instructions_path: Path = INSTRUCTIONS_PATH) -> str:
@@ -163,19 +190,37 @@ def load_instructions(instructions_path: Path = INSTRUCTIONS_PATH) -> str:
         return _default_instructions()
 
 
+# ---------------------------------------------------------------------------
+# Memory scaffold
+# ---------------------------------------------------------------------------
+
+
+def ensure_memory_file(memory_path: Path = MEMORY_PATH) -> Path:
+    """Ensure the MEMORY.md file exists, creating it with defaults if needed."""
+    if not memory_path.exists():
+        memory_path.parent.mkdir(parents=True, exist_ok=True)
+        memory_path.write_text(
+            "# Long-Term Memory\n\nNo persistent memories yet.\n",
+            encoding="utf-8",
+        )
+    return memory_path
+
+
+# ---------------------------------------------------------------------------
+# Reset
+# ---------------------------------------------------------------------------
+
+
 def reset_config(option: str) -> None:
     """Reset configuration or system prompt to defaults."""
     if option in ("all", "config-file"):
-        config_path = APP_DIR / "config.ini"
-        if config_path.exists():
-            config_path.unlink()
-
-        get_config()
-        print(f"Reset: Restored default configuration at {config_path}")
+        if SETTINGS_PATH.exists():
+            SETTINGS_PATH.unlink()
+        save_settings(Settings())
+        print(f"Reset: Restored default configuration at {SETTINGS_PATH}")
 
     if option in ("all", "system-prompt"):
         if INSTRUCTIONS_PATH.exists():
             INSTRUCTIONS_PATH.unlink()
-
         load_instructions()
         print(f"Reset: Restored default system prompt at {INSTRUCTIONS_PATH}")

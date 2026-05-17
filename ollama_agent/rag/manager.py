@@ -242,7 +242,7 @@ class RAGManager:
                 ".sh",
             ]
 
-        results = {"added": 0, "failed": 0, "skipped": 0, "files": []}
+        results: dict[str, Any] = {"added": 0, "failed": 0, "skipped": 0, "files": []}
 
         for file_path in path.rglob("*"):
             if not file_path.is_file():

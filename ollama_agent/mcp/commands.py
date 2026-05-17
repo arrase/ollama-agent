@@ -4,25 +4,24 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from rich.console import Console
 from rich.table import Table
 
 from .lifecycle import _infer_transport
-from .types import DEFAULT_MCP_CONFIG_PATH
-
-if TYPE_CHECKING:
-    from ..agent import OllamaAgent
+from .types import DEFAULT_MCP_CONFIG_PATH, RunningMCPServer
 
 logger = logging.getLogger(__name__)
 
 
-async def list_mcp_servers(console: Console, agent: OllamaAgent) -> None:
+def list_mcp_servers(
+    console: Console,
+    mcp_servers: list[RunningMCPServer],
+    mcp_config_path: Any = None,
+) -> None:
     """Display connection status and tool counts for configured MCP servers."""
-    await agent.initialize()
-
-    config_path = agent.mcp_config_path or DEFAULT_MCP_CONFIG_PATH
+    config_path = mcp_config_path or DEFAULT_MCP_CONFIG_PATH
     if not config_path.exists():
         console.print("[yellow]No MCP servers configured.[/yellow]")
         return
@@ -38,7 +37,7 @@ async def list_mcp_servers(console: Console, agent: OllamaAgent) -> None:
         console.print("[yellow]No MCP servers configured.[/yellow]")
         return
 
-    running = {srv.name: srv for srv in agent.mcp_servers}
+    running = {srv.name: srv for srv in mcp_servers}
 
     table = Table(title="MCP Servers", show_header=True, header_style="bold magenta")
     table.add_column("Name", style="cyan")
@@ -59,11 +58,13 @@ async def list_mcp_servers(console: Console, agent: OllamaAgent) -> None:
     console.print(table)
 
 
-async def show_mcp_server(console: Console, agent: OllamaAgent, name: str) -> None:
+def show_mcp_server(
+    console: Console,
+    mcp_servers: list[RunningMCPServer],
+    name: str,
+) -> None:
     """Display the tools available for a specific MCP server."""
-    await agent.initialize()
-
-    running = {srv.name: srv for srv in agent.mcp_servers}
+    running = {srv.name: srv for srv in mcp_servers}
     if name not in running:
         console.print(f"[red]MCP server not found or not connected:[/red] {name}")
         return

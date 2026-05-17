@@ -12,11 +12,12 @@ Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to i
 - **Per-session Model Switching**: Change the model mid-conversation and continue from that point with the new model (context preserved). The change is not permanent and only affects the current session.
 - **Screen Vision (Screenshots)**: Attach monitor screenshots in prompts using `@dpN` for visual context.
 - **Tool-Powered**: The agent can execute shell commands via an integrated shell backend, allowing it to interact with your local environment to perform tasks.
-- **Delegated MCP Agents**: Each configured MCP server can run through its own lightweight DeepAgents sub-agent (via `langchain-mcp-adapters`) with custom model and instructions.
+- **MCP Integration**: Extend the main agent with [Model Context Protocol](https://modelcontextprotocol.io/) servers (`mcp_servers.json`) that provide additional tools as isolated subagents.
+- **Custom Subagents**: Define specialized subagents in `settings.yaml` with their own model, skills, and MCP servers — each with isolated context for clean delegation.
 - **Session Management**: Conversations are automatically saved and can be reloaded, deleted, or switched between.
 - **Task Management**: Save frequently used prompts as "tasks" and execute them with a simple command.
 - **Configurable**: Easily configure the model, Ollama host, context window, and reasoning effort.
-- **Mem0 Memory Layer**: Persistent memory backed by Mem0 + Qdrant, exposed through function-calling tools.
+- **Persistent Memory**: Native memory layer backed by `MEMORY.md`, allowing the agent to persist long-term context across sessions.
 - **RAG (Retrieval Augmented Generation)**: Create and manage document databases for context-aware responses using local embeddings and Qdrant.
 - **Skills**: Extend the agent with reusable, on-demand capabilities via the [Agent Skills specification](https://agentskills.io/specification). Skills provide task-specific instructions and context through progressive disclosure.
 
@@ -30,7 +31,7 @@ Before installing/running the app, make sure you have:
 - **Vision-capable model (optional)**: only required if you want to use Screen Vision (`@dpN`). If your model does not support vision, the app will still work but it won't be able to "see" screenshots.
 
 ```bash
-# Required embeddings model (default for Mem0 and RAG)
+# Required embeddings model (default for RAG)
 ollama pull nomic-embed-text:latest
 ```
 
@@ -221,24 +222,37 @@ ollama-agent task-delete <task_id>
 
 ## Configuration
 
-On the first run, the application will create a default configuration file at `~/.ollama-agent/config.ini`. You can edit this file to permanently change the default model, Ollama host, and other settings.
+On the first run, the application will create a default configuration file at `~/.ollama-agent/settings.yaml`. You can edit this file to permanently change the default model, Ollama host, and other settings.
 
-Example default section:
+Example default `settings.yaml`:
 
-```ini
-[default]
-model = qwen3.5:9b
-base_url = http://localhost:11434
-reasoning_effort = medium
-context_window =
+```yaml
+model:
+  name: qwen3.5:9b
+  base_url: http://localhost:11434
+  temperature: 0.0
+  context_window: null
+  reasoning_effort: medium
+runtime:
+  allow_traversal: true
+  builtin_tool_timeout: 30
+rag:
+  rag_dir: /home/arrase/.ollama-agent/rag
+  embedder_model: nomic-embed-text:latest
+  embedder_base_url: http://localhost:11434
+  embedding_dims: 768
+  default_top_k: 5
+  chunk_size: 500
+  chunk_overlap: 50
 ```
 
 | Key | Description |
 |---|---|
-| `model` | Default Ollama model. Must support tool calling. |
-| `base_url` | Native Ollama host (e.g. `http://localhost:11434`). Must **not** contain an `/v1` path — if detected, the app will exit with an error asking you to update the value. |
-| `reasoning_effort` | Default thinking level: `low`, `medium`, `high`, or `disabled`. See [Thinking / Reasoning](#common-options) above. |
-| `context_window` | If set, forces the runtime `num_ctx` for the selected model. Leave empty to let the app resolve it automatically (see below). |
+| `model.name` | Default Ollama model. Must support tool calling. |
+| `model.base_url` | Native Ollama host (e.g. `http://localhost:11434`). Must **not** contain an `/v1` path. |
+| `model.reasoning_effort` | Default thinking level: `low`, `medium`, `high`, or `disabled`. See [Thinking / Reasoning](#common-options) above. |
+| `model.context_window` | If set, forces the runtime `num_ctx` for the selected model. Leave `null` to let the app resolve it automatically. |
+| `runtime.builtin_tool_timeout` | Timeout in seconds for tool executions. |
 
 ### Context Window Resolution
 
@@ -248,7 +262,7 @@ Ollama Agent needs to know the effective context window (`num_ctx`) for every mo
 2. `PARAMETER num_ctx` from `ollama show <model>` (the model's Modelfile).
 3. The model's reported `*.context_length` metadata from `ollama show <model>`.
 
-If none of those sources provides a value, the app exits with a clear error asking you to set `context_window` in `config.ini`.
+If none of those sources provides a value, the app exits with a clear error asking you to set `model.context_window` in `settings.yaml`.
 
 ### Configuration Reset
 
@@ -261,25 +275,16 @@ ollama-agent --config-reset all
 # Reset only the system prompt (instructions.md)
 ollama-agent --config-reset system-prompt
 
-# Reset only the settings (config.ini)
+# Reset only the settings (settings.yaml)
 ollama-agent --config-reset config-file
 ```
 
 > **Note**: When upgrading from v0.1 to v0.2, it is recommended to reset the system prompt to ensure compatibility with new features:
 > `ollama-agent --config-reset system-prompt`
 
-## Persistent Memory with Mem0
+## Persistent Memory
 
-The agent can remember long-term facts by delegating storage and retrieval to [Mem0](https://github.com/mem0ai/mem0) running locally, backed by embedded/local Qdrant storage.
-
-### Configure Mem0 storage path
-
-In `~/.ollama-agent/config.ini` under `[mem0]`:
-
-```ini
-[mem0]
-qdrant_path= ~/.ollama-agent/memory
-```
+The agent manages its own long-term memory via a file located at `~/.ollama-agent/MEMORY.md`. The agent uses built-in tools to read, update, and persist facts, preferences, and context across sessions automatically.
 
 ## RAG (Retrieval Augmented Generation)
 
@@ -371,17 +376,17 @@ ollama-agent --rag my-docs -p "What does the documentation say about configurati
 
 ### Configure RAG
 
-In `~/.ollama-agent/config.ini` under `[rag]`:
+RAG settings are located in `~/.ollama-agent/settings.yaml` under the `rag` section:
 
-```ini
-[rag]
-rag_dir = ~/.ollama-agent/rag
-embedder_model = nomic-embed-text:latest
-embedder_base_url = http://localhost:11434
-embedding_dims = 768
-default_top_k = 5
-chunk_size = 500
-chunk_overlap = 50
+```yaml
+rag:
+  rag_dir: /home/user/.ollama-agent/rag
+  embedder_model: nomic-embed-text:latest
+  embedder_base_url: http://localhost:11434
+  embedding_dims: 768
+  default_top_k: 5
+  chunk_size: 500
+  chunk_overlap: 50
 ```
 
 - `rag_dir`: Directory where RAG databases are stored
@@ -522,32 +527,78 @@ EOF
 
 You can customize the agent's behavior by editing the instructions file at `~/.ollama-agent/instructions.md`. This file is automatically created on first use with default instructions.
 
-## MCP Servers (Optional)
+## MCP Servers (Main Agent)
 
-Ollama Agent supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) to extend the agent's capabilities with additional tools and context. Each configured MCP server is registered as a native Deep Agents subagent (not as a wrapper tool), using `langchain-mcp-adapters` to load server tools. MCP servers are **optional** and can provide features like filesystem access, Git operations, and custom APIs.
+The main agent supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) to extend its capabilities with additional tools. MCP servers configured in `~/.ollama-agent/mcp_servers.json` provide their tools **directly to the main agent** — no subagent wrapping.
 
 ### MCP Configuration
 
-MCP servers are loaded from `~/.ollama-agent/mcp_servers.json` with this shape:
+Create `~/.ollama-agent/mcp_servers.json`:
 
 ```json
 {
     "mcpServers": {
-        "tavily": {
-            "type": "http",
-            "url": "http://localhost:8000/mcp",
-            "agent": {
-                "name": "web-research",
-                "description": "Researches web topics using Tavily MCP tools.",
-                "system_prompt": "You are a web research specialist. Use Tavily tools and return concise findings with links.",
-                "model": "gpt-oss:20b"
+        "filesystem": {
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/documents"]
+        },
+        "brave-search": {
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+            "env": {
+                "BRAVE_API_KEY": "your-key-here"
             }
+        },
+        "remote-api": {
+            "url": "http://localhost:8000/mcp"
         }
     }
 }
 ```
 
-`agent.name` and `agent.description` are required. `agent.system_prompt` is recommended (falls back to a default MCP prompt if omitted). `agent.model` is optional and overrides the main model for that subagent.
+Supported transports:
+- **stdio**: Set `command` (and optionally `args`, `env`) to launch a subprocess.
+- **http**: Set `url` to connect to a remote MCP server.
+
+All tools from all configured servers are loaded and made directly available to the main agent. If a server fails to connect, it is skipped and the agent continues normally.
+
+## 🤖 Custom Subagents
+
+Define specialized subagents that your main agent can delegate tasks to. Each subagent has its own isolated context, model, skills, and MCP servers — keeping the orchestrator's context clean and focused.
+
+Configure them in `~/.ollama-agent/settings.yaml`:
+
+```yaml
+subagents:
+  - name: "research-agent"
+    description: "Delegate here for complex research or web searches."
+    system_prompt: "You are a research specialist. Search thoroughly and return concise summaries."
+    model: "gemma4:26b"          # Optional, inherits from main agent
+    context_window: 65536        # Optional, inherits from main agent
+    skills_paths:
+      - "./skills/research"
+    mcp_servers:
+      - name: "brave-search"
+        command: "npx"
+        args: ["-y", "@modelcontextprotocol/server-brave-search"]
+        env:
+          BRAVE_API_KEY: "${BRAVE_API_KEY}"
+
+  - name: "database-agent"
+    description: "Delegate here when the user asks about customer or sales data."
+    system_prompt: "You are a database analyst. Query the database and summarize results."
+    skills_paths:
+      - "./skills/database"
+    mcp_servers:
+      - name: "sqlite-server"
+        command: "uvx"
+        args: ["mcp-server-sqlite", "--db-path", "./data/ventas.db"]
+```
+
+- **Context isolation**: Subagent tool calls don't bloat the main agent's context — only the final result is returned.
+- **Environment injection**: Use `${VAR_NAME}` in MCP `env` fields to inject secrets from the host environment.
+- **Skills & MCP per subagent**: Each subagent can have its own skills directories and MCP server connections, completely independent from the main agent.
+- **Graceful failures**: If a subagent's MCP server fails to load (e.g., missing env vars), it is skipped and the agent continues normally.
 
 ## For Developers
 

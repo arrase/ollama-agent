@@ -1,30 +1,25 @@
 """Ollama Agent - AI agent to interact with local models."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
-from .agent import OllamaAgent, create_agent
+from .agent import AgentRuntime, RuntimeResponse
 from .core import (
     ALLOWED_REASONING_EFFORTS,
     DEFAULT_REASONING_EFFORT,
     CommandResult,
-    Mem0ToolResult,
     ModelCapabilityError,
     ReasoningEffortValue,
 )
-from .memory import Mem0Settings, MemoryManager
-from .settings import Config, get_config
+from .settings import Settings, load_settings
 
 __all__ = [
     "ALLOWED_REASONING_EFFORTS",
+    "AgentRuntime",
     "CommandResult",
-    "Config",
     "DEFAULT_REASONING_EFFORT",
-    "Mem0Settings",
-    "Mem0ToolResult",
-    "MemoryManager",
     "ModelCapabilityError",
-    "OllamaAgent",
     "ReasoningEffortValue",
-    "create_agent",
-    "get_config",
+    "RuntimeResponse",
+    "Settings",
+    "load_settings",
 ]

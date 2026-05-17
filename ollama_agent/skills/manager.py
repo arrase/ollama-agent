@@ -7,7 +7,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from ..core import BaseFileStoreManager, validate_identifier
 from ..settings.paths import SKILLS_DIR

@@ -174,7 +174,7 @@ def create_ollama_chat_model(
     *,
     model: str,
     base_url: str | None,
-    api_key: str | None,
+    api_key: str | None = None,
     context_window: int | None,
     reasoning_effort: ReasoningEffortValue,
     temperature: float = 0,
@@ -185,18 +185,13 @@ def create_ollama_chat_model(
     reasoning = resolve_ollama_reasoning(model, reasoning_effort, host, warn_callback)
     num_ctx = resolve_context_window(model, context_window, host)
 
-    client_kwargs: dict[str, Any] = {}
-    if api_key and api_key != "ollama":
-        client_kwargs["headers"] = {"Authorization": f"Bearer {api_key}"}
-
     kwargs: dict[str, Any] = {
         "base_url": host,
         "model": model,
         "num_ctx": num_ctx,
         "temperature": temperature,
+        "profile": {"max_input_tokens": num_ctx},
     }
-    if client_kwargs:
-        kwargs["client_kwargs"] = client_kwargs
     if reasoning is not None:
         kwargs["reasoning"] = reasoning
     return ChatOllama(**kwargs)

@@ -10,8 +10,6 @@ from rich.console import Console
 from rich.markup import escape
 from rich.panel import Panel
 
-from ..agent import OllamaAgent
-from ..mcp import list_mcp_servers, show_mcp_server
 from ..rag import (
     RAGContext,
     add_rag_directory,
@@ -26,7 +24,6 @@ from ..rag import (
 from ..skills import SkillsContext, create_skill, delete_skill, list_skills, show_skill
 from ..tasks.commands import CLIContext, create_task, delete_task, list_tasks, run_task
 from .model_commands import list_models
-from .session_commands import delete_session, list_sessions, load_session
 
 CLIHandler = Callable[[], object]
 
@@ -48,7 +45,6 @@ REPL_SECTIONS: tuple[str, ...] = (
     "Task Management",
     "RAG (Document Retrieval)",
     "Skills Management",
-    "MCP Servers",
 )
 
 
@@ -104,7 +100,6 @@ def build_repl_handlers(
     task_ctx: CLIContext,
     skills_ctx: SkillsContext,
     get_rag_ctx: Callable[[], RAGContext],
-    ensure_agent: Callable[[], OllamaAgent],
     console: Console,
     current_model: Callable[[], str],
     switch_model: Callable[[str], Awaitable[None]],
@@ -133,28 +128,6 @@ def build_repl_handlers(
             "Model Management",
             "/model-set <model>",
             lambda args: switch_model(args[0]),
-        ),
-        "/sessions": REPLCommand(
-            "List saved sessions",
-            "Session Management",
-            "/sessions [page]",
-            lambda args: list_sessions(
-                ensure_agent(),
-                console,
-                page=int(args[0]) if args and args[0].isdigit() else 1,
-            ),
-        ),
-        "/session-load": REPLCommand(
-            "Load a saved session",
-            "Session Management",
-            "/session-load <id>",
-            lambda args: load_session(ensure_agent(), console, args[0]),
-        ),
-        "/session-delete": REPLCommand(
-            "Delete a saved session",
-            "Session Management",
-            "/session-delete <id>",
-            lambda args: delete_session(ensure_agent(), console, args[0]),
         ),
         "/tasks": REPLCommand(
             "List saved tasks", "Task Management", None, lambda _: list_tasks(task_ctx)
@@ -246,16 +219,6 @@ def build_repl_handlers(
             "Skills Management",
             "/skill-create <id> [--force]",
             lambda _: None,
-        ),
-        "/mcps": REPLCommand(
-            "List MCP server connection status",
-            "MCP Servers",
-            "/mcps [name]",
-            lambda args: (
-                show_mcp_server(console, ensure_agent(), args[0])
-                if args
-                else list_mcp_servers(console, ensure_agent())
-            ),
         ),
     }
 

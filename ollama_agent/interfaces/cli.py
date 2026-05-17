@@ -3,16 +3,18 @@
 import argparse
 import asyncio
 import inspect
-from typing import Callable
 
-from ..agent import OllamaAgent
 from ..core import ALLOWED_REASONING_EFFORTS
-from ..streaming import run_non_interactive
-from ..rag import RAGContext, RAGManager
-from ..settings import get_config
+from ..rag import RAGContext, RAGManager, RAGSettings
+from ..settings import load_settings
 from ..skills import SkillManager, SkillsContext
+from ..streaming import run_non_interactive
 from ..tasks.commands import CLIContext
 from .dispatch import build_cli_handlers
+
+
+def _noop_factory(**kwargs):
+    raise NotImplementedError("Direct agent factory is no longer supported.")
 
 
 def _add_common_args(parser: argparse.ArgumentParser) -> None:
@@ -163,13 +165,20 @@ def create_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def handle_cli_commands(
-    args: argparse.Namespace, agent_factory: Callable[..., OllamaAgent]
-) -> bool:
+def handle_cli_commands(args: argparse.Namespace) -> bool:
     """Handle CLI commands and return True if a command was handled."""
-    ctx = CLIContext(agent_factory)
-    cfg = get_config()
-    rag_ctx = RAGContext(rag_manager=RAGManager(cfg.rag))
+    settings = load_settings()
+    rag_settings = RAGSettings(
+        rag_dir=settings.rag.rag_dir,
+        embedder_model=settings.rag.embedder_model,
+        embedder_base_url=settings.rag.embedder_base_url,
+        embedding_dims=settings.rag.embedding_dims,
+        default_top_k=settings.rag.default_top_k,
+        chunk_size=settings.rag.chunk_size,
+        chunk_overlap=settings.rag.chunk_overlap,
+    )
+    ctx = CLIContext(_noop_factory)
+    rag_ctx = RAGContext(rag_manager=RAGManager(rag_settings))
     skills_ctx = SkillsContext(skill_manager=SkillManager())
 
     cmd = getattr(args, "_handler", None) or args.command
@@ -179,21 +188,36 @@ def handle_cli_commands(
     if cmd in handlers:
         result = handlers[cmd]()
         if inspect.isawaitable(result):
-            asyncio.run(result)
+            asyncio.run(result)  # type: ignore[arg-type]
         return True
 
     if args.prompt:
-        agent = ctx.agent_factory(model=args.model, reasoning_effort=args.effort)
-        # Load RAG database if specified
-        if getattr(args, "rag", None):
-            try:
-                agent.rag_manager.load_database(args.rag)
-            except Exception as e:
-                rag_ctx.console.print(
-                    f"[red]Failed to load RAG database '{args.rag}': {e}[/red]"
-                )
-                raise SystemExit(1)
-        asyncio.run(run_non_interactive(agent, args.prompt))
+        from ..agent import AgentRuntime
+
+        # Apply CLI overrides
+        if args.model:
+            settings.model.name = args.model
+        if args.effort:
+            settings.model.reasoning_effort = args.effort
+        if args.builtin_tool_timeout:
+            settings.runtime.builtin_tool_timeout = args.builtin_tool_timeout
+
+        runtime = AgentRuntime(settings=settings)
+
+        async def _run():
+            async with runtime:
+                await runtime.reload()
+                if getattr(args, "rag", None):
+                    try:
+                        rag_ctx.rag_manager.load_database(args.rag)
+                    except Exception as e:
+                        rag_ctx.console.print(
+                            f"[red]Failed to load RAG database '{args.rag}': {e}[/red]"
+                        )
+                        raise SystemExit(1)
+                await run_non_interactive(runtime, args.prompt)
+
+        asyncio.run(_run())
         return True
 
     return False
