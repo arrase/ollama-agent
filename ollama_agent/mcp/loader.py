@@ -1,5 +1,6 @@
 """MCP server initialization and loading routines."""
 
+import asyncio
 import json
 import logging
 import os
@@ -60,7 +61,11 @@ async def load_main_mcp_tools(exit_stack: AsyncExitStack) -> list[Any]:
         return []
 
     try:
-        data = json.loads(MCP_SERVERS_PATH.read_text(encoding="utf-8"))
+
+        def _read_and_parse():
+            return json.loads(MCP_SERVERS_PATH.read_text(encoding="utf-8"))
+
+        data = await asyncio.to_thread(_read_and_parse)
     except (json.JSONDecodeError, OSError) as exc:
         _log.error("Failed to load MCP config %s: %s", MCP_SERVERS_PATH, exc)
         return []
@@ -78,7 +83,9 @@ async def load_main_mcp_tools(exit_stack: AsyncExitStack) -> list[Any]:
         if conn:
             connections[name] = conn
         else:
-            _log.warning("Skipping MCP server '%s': could not determine transport", name)
+            _log.warning(
+                "Skipping MCP server '%s': could not determine transport", name
+            )
 
     if not connections:
         return []
@@ -148,7 +155,5 @@ async def load_subagent_mcp_tools(
         exit_stack.push_async_callback(lambda: _cleanup())
         return tools
     except Exception as exc:
-        _log.warning(
-            "Subagent '%s': MCP tools failed to load: %s", subagent_name, exc
-        )
+        _log.warning("Subagent '%s': MCP tools failed to load: %s", subagent_name, exc)
         return []
