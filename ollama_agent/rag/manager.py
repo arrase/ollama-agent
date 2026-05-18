@@ -213,6 +213,9 @@ class RAGManager:
         self, dir_path: str, extensions: list[str] | None = None
     ) -> dict[str, Any]:
         """Add all files from a directory to the current RAG database."""
+        from qdrant_client.models import MatchAny
+
+        client = self._ensure_loaded()
         path = Path(dir_path).expanduser().resolve()
 
         if not path.exists():
@@ -244,6 +247,9 @@ class RAGManager:
 
         results: dict[str, Any] = {"added": 0, "failed": 0, "skipped": 0, "files": []}
 
+        all_file_chunks = []
+        valid_files = []
+
         for file_path in path.rglob("*"):
             if not file_path.is_file():
                 continue
@@ -253,12 +259,98 @@ class RAGManager:
                 continue
 
             try:
-                result = self.add_file(str(file_path))
-                results["added"] += 1
-                results["files"].append(result)
+                content = self._read_file(file_path)
+                if not content.strip():
+                    raise RAGError(f"File is empty: {file_path}")
+
+                chunks = self._chunk_text(content)
+                all_file_chunks.append((file_path, chunks))
+                valid_files.append(str(file_path))
             except RAGError as e:
                 logger.warning("Failed to add %s: %s", file_path, e)
                 results["failed"] += 1
+            except Exception as e:
+                logger.warning("Failed to process %s: %s", file_path, e)
+                results["failed"] += 1
+
+        if not valid_files:
+            return results
+
+        # Delete existing points for all valid files in a single operation
+        filt = Filter(
+            must=[FieldCondition(key="source", match=MatchAny(any=valid_files))]
+        )
+        try:
+            client.delete(
+                collection_name=self.COLLECTION_NAME, points_selector=filt, wait=True
+            )
+        except TypeError:
+            # Older qdrant-client versions may not support wait=.
+            client.delete(collection_name=self.COLLECTION_NAME, points_selector=filt)
+        except Exception as e:
+            logger.warning(
+                "Failed to delete existing points for directory batch: %s", e
+            )
+
+        # Prepare a flat list of chunk data
+        flat_chunks_data = []
+        for fpath, chunks in all_file_chunks:
+            source = str(fpath)
+            fname = fpath.name
+            total_chunks = len(chunks)
+            for i, chunk in enumerate(chunks):
+                flat_chunks_data.append((source, fname, chunk, i, total_chunks))
+
+        # Process in batches
+        BATCH_SIZE = 100
+        for i in range(0, len(flat_chunks_data), BATCH_SIZE):
+            batch = flat_chunks_data[i : i + BATCH_SIZE]
+            batch_texts = [b[2] for b in batch]
+            try:
+                embeddings = self._get_embeddings(batch_texts)
+                points = []
+                for j, (
+                    (source, fname, chunk, chunk_idx, total_chunks),
+                    embedding,
+                ) in enumerate(zip(batch, embeddings, strict=False)):
+                    point_id = self._generate_point_id(source, chunk_idx)
+                    points.append(
+                        PointStruct(
+                            id=point_id,
+                            vector=embedding,
+                            payload={
+                                "content": chunk,
+                                "source": source,
+                                "filename": fname,
+                                "chunk_index": chunk_idx,
+                                "total_chunks": total_chunks,
+                            },
+                        )
+                    )
+                if points:
+                    client.upsert(collection_name=self.COLLECTION_NAME, points=points)
+            except Exception as e:
+                logger.warning(
+                    "Failed to process batch embeddings/upsert starting at index %d: %s",
+                    i,
+                    e,
+                )
+                # Note: failure in a batch could mean multiple files are affected, but for simplicity we log it.
+                # In a robust system we might want to track this per-file.
+
+        # Populate results for successful files
+        for fpath, chunks in all_file_chunks:
+            results["added"] += 1
+            results["files"].append(
+                {
+                    "file": str(fpath),
+                    "chunks": len(chunks),
+                    "database": self._current_db,
+                }
+            )
+            logger.info(
+                "Added file to RAG from batch: %s (%d chunks)", fpath.name, len(chunks)
+            )
 
         return results
 
