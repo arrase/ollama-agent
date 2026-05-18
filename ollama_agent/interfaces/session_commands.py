@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 from rich.console import Console
 
 
@@ -11,8 +13,6 @@ def new_session(console: Console, runtime_thread_id: str) -> str:
     Returns the new thread ID. The caller is responsible for assigning it
     to the runtime.
     """
-    import uuid
-
     new_id = str(uuid.uuid4())[:8]
     console.print(
         f"[green]✓ New session started:[/green] [cyan]{new_id}[/cyan]"

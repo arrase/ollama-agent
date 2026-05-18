@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import inspect
 
+from ..agent import AgentRuntime
 from ..core import ALLOWED_REASONING_EFFORTS
 from ..rag import RAGContext, RAGManager, RAGSettings
 from ..settings import load_settings
@@ -12,9 +13,6 @@ from ..streaming import run_non_interactive
 from ..tasks.commands import CLIContext
 from .dispatch import build_cli_handlers
 
-
-def _noop_factory(**kwargs):
-    raise NotImplementedError("Direct agent factory is no longer supported.")
 
 
 def _add_common_args(parser: argparse.ArgumentParser) -> None:
@@ -171,7 +169,7 @@ def handle_cli_commands(args: argparse.Namespace) -> bool:
         chunk_size=settings.rag.chunk_size,
         chunk_overlap=settings.rag.chunk_overlap,
     )
-    ctx = CLIContext(_noop_factory)
+    ctx = CLIContext()
     rag_ctx = RAGContext(rag_manager=RAGManager(rag_settings))
     skills_ctx = SkillsContext(skill_manager=SkillManager())
 
@@ -186,8 +184,6 @@ def handle_cli_commands(args: argparse.Namespace) -> bool:
         return True
 
     if args.prompt:
-        from ..agent import AgentRuntime
-
         # Apply CLI overrides
         if args.model:
             settings.model.name = args.model

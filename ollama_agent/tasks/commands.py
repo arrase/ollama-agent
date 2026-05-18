@@ -6,8 +6,10 @@ from typing import Any, Callable
 from rich.console import Console
 from rich.table import Table
 
+from ..agent import AgentRuntime
 from ..core import resolve_unique_prefix, validate_reasoning_effort
 from ..interfaces.utils import require_or_exit
+from ..settings import load_settings
 from ..streaming import run_non_interactive
 from .manager import Task, TaskManager
 
@@ -16,7 +18,6 @@ from .manager import Task, TaskManager
 class CLIContext:
     """Holds shared resources for task-related commands."""
 
-    agent_factory: Callable[..., Any]
     console: Console = field(default_factory=Console)
     task_manager: TaskManager = field(default_factory=TaskManager)
 
@@ -58,9 +59,6 @@ def list_tasks(ctx: CLIContext) -> None:
 
 
 async def run_task(ctx: CLIContext, task_id: str) -> None:
-    from ..agent import AgentRuntime
-    from ..settings import load_settings
-
     tid, t = ctx._find_or_exit(task_id)
     ctx.console.print(
         f"[bold cyan]Executing:[/bold cyan] {t.title} ({tid})\n"

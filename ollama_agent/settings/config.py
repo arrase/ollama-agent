@@ -10,7 +10,7 @@ from typing import Any, Self
 
 import yaml  # type: ignore[import-untyped]
 
-from .paths import APP_DIR, INSTRUCTIONS_PATH, MEMORY_PATH, SETTINGS_PATH
+from .paths import APP_DIR, INSTRUCTIONS_PATH, MEMORY_PATH, SETTINGS_PATH, RAG_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +64,6 @@ class RAGSettings:
 
     def __post_init__(self) -> None:
         if not self.rag_dir:
-            from .paths import RAG_DIR
-
             self.rag_dir = str(RAG_DIR)
 
 

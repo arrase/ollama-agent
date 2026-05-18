@@ -10,11 +10,12 @@ from rich.panel import Panel
 
 from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager, set_tool_timeout
+from ..core import validate_reasoning_effort
 from ..rag import RAGContext, RAGManager, load_rag_database
 from ..settings import RAGSettings, load_settings
-from ..skills import SkillsContext
+from ..skills import SkillsContext, create_skill
 from ..streaming import ConsoleStreamingRenderer, stream_agent_events
-from ..tasks.commands import CLIContext
+from ..tasks.commands import CLIContext, create_task
 from .dispatch import build_repl_handlers, render_repl_help
 from .model_commands import set_model
 from .session_commands import new_session
@@ -33,19 +34,10 @@ class OllamaREPL:
         self.session: PromptSession = PromptSession(
             style=Style.from_dict({"prompt": "#ansiwhite bold"})
         )
-        self._task_ctx = CLIContext(
-            agent_factory=self._noop_factory, console=self.console
-        )
+        self._task_ctx = CLIContext(console=self.console)
         self._skills_ctx = SkillsContext(console=self.console)
         self._initial_rag_database = rag_database
         self._rag_ctx: RAGContext | None = None
-
-    @staticmethod
-    def _noop_factory(**kwargs):
-        """Placeholder factory for task context (tasks use run_non_interactive)."""
-        raise NotImplementedError(
-            "Direct agent factory is no longer supported. Use AgentRuntime."
-        )
 
     def _get_rag_ctx(self) -> RAGContext:
         if self._rag_ctx is None:
@@ -203,9 +195,6 @@ class OllamaREPL:
             buf.multiline = old_multiline
 
     async def _handle_task_create(self, args: list[str]) -> None:
-        from ..core import validate_reasoning_effort
-        from ..tasks.commands import create_task
-
         if not args:
             self.console.print("[red]Usage: /task-create <task_id> [--force][/red]")
             return
@@ -238,8 +227,6 @@ class OllamaREPL:
         )
 
     async def _handle_skill_create(self, args: list[str]) -> None:
-        from ..skills import create_skill
-
         if not args:
             self.console.print("[red]Usage: /skill-create <skill_id> [--force][/red]")
             return

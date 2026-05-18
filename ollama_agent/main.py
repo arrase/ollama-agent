@@ -7,21 +7,22 @@ from .interfaces.cli import create_argument_parser, handle_cli_commands
 from .interfaces.repl import OllamaREPL
 from .settings import load_settings, reset_config
 
+try:
+    from langchain_core._api.deprecation import LangChainPendingDeprecationWarning
+
+    warnings.filterwarnings(
+        "ignore",
+        category=LangChainPendingDeprecationWarning,
+        message=".*allowed_objects.*",
+    )
+except ImportError:
+    pass
+
 
 def main() -> None:
     """Main entry point."""
     warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-    try:
-        from langchain_core._api.deprecation import LangChainPendingDeprecationWarning
-
-        warnings.filterwarnings(
-            "ignore",
-            category=LangChainPendingDeprecationWarning,
-            message=".*allowed_objects.*",
-        )
-    except ImportError:
-        pass
 
     parser = create_argument_parser()
     args = parser.parse_args()
