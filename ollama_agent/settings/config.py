@@ -10,7 +10,7 @@ from typing import Any, Self
 
 import yaml  # type: ignore[import-untyped]
 
-from .paths import APP_DIR, INSTRUCTIONS_PATH, MEMORY_PATH, SETTINGS_PATH, RAG_DIR
+from .paths import INSTRUCTIONS_PATH, MEMORY_PATH, SETTINGS_PATH, RAG_DIR
 
 logger = logging.getLogger(__name__)
 

@@ -92,14 +92,12 @@ async def set_model(
         return current
 
     try:
-        msg = await runtime.set_model(model_name)
+        await runtime.set_model(model_name)
         console.print(
             f"[green]✓ Switched from [cyan]{current}[/cyan] to [cyan]{model_name}[/cyan][/green]\n"
             "[dim]Conversation preserved. Continue chatting.[/dim]"
         )
         return model_name
     except Exception as exc:
-        console.print(
-            f"[red]Failed to switch to model '{model_name}': {exc}[/red]"
-        )
+        console.print(f"[red]Failed to switch to model '{model_name}': {exc}[/red]")
         return current

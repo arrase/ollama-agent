@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import os
 import re
 from contextlib import AsyncExitStack
 from typing import Any
@@ -12,7 +10,7 @@ from typing import Any
 from langchain_ollama import ChatOllama
 
 from ..mcp import load_subagent_mcp_tools
-from ..settings import ModelSettings, SubAgentMCPServer, SubAgentSettings
+from ..settings import ModelSettings, SubAgentSettings
 
 _log = logging.getLogger(__name__)
 _ENV_RE = re.compile(r"\$\{(\w+)\}")
@@ -73,5 +71,3 @@ async def _build_spec(
             spec["tools"] = tools
 
     return spec
-
-

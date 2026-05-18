@@ -1,7 +1,5 @@
 """REPL interface for Ollama Agent."""
 
-import uuid
-
 from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.styles import Style
@@ -10,9 +8,8 @@ from rich.panel import Panel
 
 from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager, set_tool_timeout
-from ..core import validate_reasoning_effort
 from ..rag import RAGContext, RAGManager, load_rag_database
-from ..settings import RAGSettings, load_settings
+from ..settings import RAGSettings
 from ..skills import SkillsContext, create_skill
 from ..streaming import ConsoleStreamingRenderer, stream_agent_events
 from ..tasks.commands import CLIContext, create_task
@@ -264,7 +261,7 @@ class OllamaREPL:
         )
 
     async def _switch_model(self, model_name: str) -> None:
-        new_model = await set_model(
+        await set_model(
             self.console,
             model_name,
             runtime=self.runtime,

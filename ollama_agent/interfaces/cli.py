@@ -14,7 +14,6 @@ from ..tasks.commands import CLIContext
 from .dispatch import build_cli_handlers
 
 
-
 def _add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("-m", "--model", type=str, help="Specify the AI model to use")
     parser.add_argument(
