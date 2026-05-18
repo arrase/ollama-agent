@@ -128,17 +128,16 @@ ollama-agent -p "Summarize README.md" --rag docs_db</div>
                     <div class="feature-header">
                         <div class="feature-icon"><i class="fas fa-brain"></i></div>
                         <div>
-                            <h3>Mem0 Memory</h3>
-                            <p class="feature-description">Long-term persistence powered by Mem0 and Qdrant.</p>
+                            <h3>DeepAgents Memory</h3>
+                            <p class="feature-description">Long-term persistence powered by DeepAgents' native memory layer.</p>
                         </div>
                     </div>
                     <div class="feature-body">
                         <p style="color:#b2bec3; margin-bottom:10px">The agent automatically stores and retrieves user preferences and context across sessions.</p>
                          <div class="usage-box">
-                            <p class="usage-title">Actions</p>
+                            <p class="usage-title">Storage</p>
                             <table class="cmd-table">
-                                <tr><td>mem0_add_memory</td><td>Tool to explicitly save facts</td></tr>
-                                <tr><td>mem0_search</td><td>Tool to recall information</td></tr>
+                                <tr><td>MEMORY.md</td><td>Markdown file where facts are persisted</td></tr>
                             </table>
                         </div>
                     </div>
@@ -273,8 +272,6 @@ description: Fetch relevant LangGraph documentation.
                             <table class="cmd-table">
                                 <tr><td>Shell Middleware</td><td>Transparent command execution with configurable timeout</td></tr>
                                 <tr><td>rag_search</td><td>Search loaded RAG knowledge bases</td></tr>
-                                <tr><td>mem0_add_memory</td><td>Persist facts for the active user</td></tr>
-                                <tr><td>mem0_search_memory</td><td>Recall stored information</td></tr>
                             </table>
                         </div>
                         <div class="feature-code">

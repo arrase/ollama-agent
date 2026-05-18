@@ -27,7 +27,7 @@ Before installing/running the app, make sure you have:
 
 - **Ollama (or compatible API) running**.
 - **A model that supports tool calling** (required). If the selected model does not support tools/function-calling, the app will exit.
-- **The embeddings model downloaded in Ollama**. By default, Mem0 and RAG use `nomic-embed-text:latest`.
+- **The embeddings model downloaded in Ollama**. By default, RAG uses `nomic-embed-text:latest`.
 - **Vision-capable model (optional)**: only required if you want to use Screen Vision (`@dpN`). If your model does not support vision, the app will still work but it won't be able to "see" screenshots.
 
 ```bash
@@ -637,7 +637,6 @@ Interested in contributing? Great! Here’s how to get started.
 - `ollama_agent/tasks/`: Task management system.
 - `ollama_agent/skills/`: Skills management and DeepAgents skills integration.
 - `ollama_agent/rag/`: RAG implementation for context retrieval.
-- `ollama_agent/memory/`: Mem0 integration for long-term memory.
 - `ollama_agent/mcp/`: MCP server lifecycle and integration helpers.
 - `ollama_agent/vision/`: Screen vision and screenshot analysis.
 - `ollama_agent/streaming/`: Console output streaming, rendering, and non-interactive runner.
