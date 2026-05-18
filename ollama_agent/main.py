@@ -45,8 +45,7 @@ def main() -> None:
     if handle_cli_commands(args):
         return
 
-    extra_skills: tuple[str, ...] = tuple(getattr(args, "skills_dir", None) or [])
-    runtime = AgentRuntime(settings=settings, extra_skills_dirs=extra_skills)
+    runtime = AgentRuntime(settings=settings)
 
     repl = OllamaREPL(
         runtime=runtime,

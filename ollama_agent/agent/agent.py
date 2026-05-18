@@ -12,7 +12,6 @@ from typing import Any, AsyncGenerator, Self, cast
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
 from deepagents.middleware.summarization import create_summarization_tool_middleware
-from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_ollama import ChatOllama
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
@@ -25,7 +24,7 @@ from ..core import (
     resolve_ollama_reasoning,
     validate_reasoning_effort,
 )
-from ..mcp import RunningMCPServer
+from ..mcp import load_main_mcp_tools
 from ..rag import RAGManager
 from ..settings import (
     HISTORY_DB_PATH,
@@ -165,7 +164,7 @@ class AgentRuntime:
         )
 
         # MCP flat tools (for main agent, from mcp_servers.json)
-        mcp_tools = await self._load_mcp_tools()
+        mcp_tools = await load_main_mcp_tools(self._exit_stack)
 
         # Custom subagents (from settings.yaml)
         subagents = await build_subagents(
@@ -196,57 +195,6 @@ class AgentRuntime:
     async def _sqlite_checkpointer(self) -> Any:
         saver = AsyncSqliteSaver.from_conn_string(str(HISTORY_DB_PATH))
         return await self._exit_stack.enter_async_context(saver)
-
-    async def _load_mcp_tools(self) -> list[Any]:
-        """Load flat MCP tools for the main agent from mcp_servers.json."""
-        if not MCP_SERVERS_PATH.exists():
-            return []
-
-        try:
-            data = json.loads(MCP_SERVERS_PATH.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError) as exc:
-            _log.error("Failed to load MCP config %s: %s", MCP_SERVERS_PATH, exc)
-            return []
-
-        servers_cfg = data.get("mcpServers", data.get("servers", {}))
-        if not isinstance(servers_cfg, dict) or not servers_cfg:
-            return []
-
-        # Build MultiServerMCPClient connection dict
-        connections: dict[str, dict[str, Any]] = {}
-        for name, cfg in servers_cfg.items():
-            if not isinstance(cfg, dict):
-                continue
-            conn = _build_mcp_connection(cfg)
-            if conn:
-                connections[name] = conn
-            else:
-                _log.warning("Skipping MCP server '%s': could not determine transport", name)
-
-        if not connections:
-            return []
-
-        try:
-            client = MultiServerMCPClient(connections)  # type: ignore[arg-type]
-            tools = await client.get_tools()
-
-            async def _cleanup() -> None:
-                try:
-                    if hasattr(client, "close"):
-                        await client.close()
-                except Exception:
-                    _log.warning("MCP client cleanup failed", exc_info=True)
-
-            self._exit_stack.push_async_callback(_cleanup)
-            _log.info(
-                "Loaded %d MCP tools from %d servers",
-                len(tools),
-                len(connections),
-            )
-            return tools
-        except Exception as exc:
-            _log.error("Failed to initialize MCP tools: %s", exc)
-            return []
 
     # -------------------------------------------------------------------
     # Public API
@@ -365,38 +313,8 @@ class AgentRuntime:
 
 
 # ---------------------------------------------------------------------------
-# MCP connection helpers
-# ---------------------------------------------------------------------------
-
-
-def _build_mcp_connection(cfg: dict[str, Any]) -> dict[str, Any] | None:
-    """Build a MultiServerMCPClient connection dict from a server config."""
-    if cfg.get("command"):
-        out: dict[str, Any] = {
-            "transport": "stdio",
-            "command": cfg["command"],
-        }
-        if "args" in cfg:
-            out["args"] = cfg["args"]
-        if "env" in cfg:
-            out["env"] = cfg["env"]
-        return out
-
-    url = cfg.get("url") or cfg.get("httpUrl")
-    if url:
-        out = {"transport": "http", "url": url}
-        for k in ("headers", "timeout", "sse_read_timeout"):
-            if k in cfg:
-                out[k] = cfg[k]
-        return out
-
-    return None
-
-
-# ---------------------------------------------------------------------------
 # Pure helpers (no state)
 # ---------------------------------------------------------------------------
-
 
 def _extract_content(raw: Any) -> str:
     if isinstance(raw, dict):

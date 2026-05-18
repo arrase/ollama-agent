@@ -1,13 +1,8 @@
 """MCP servers configuration and lifecycle management."""
 
-from .commands import list_mcp_servers, show_mcp_server
-from .lifecycle import cleanup_mcp_servers, initialize_mcp_servers
-from .types import RunningMCPServer
+from .loader import load_main_mcp_tools, load_subagent_mcp_tools
 
 __all__ = [
-    "RunningMCPServer",
-    "cleanup_mcp_servers",
-    "initialize_mcp_servers",
-    "list_mcp_servers",
-    "show_mcp_server",
+    "load_main_mcp_tools",
+    "load_subagent_mcp_tools",
 ]
