@@ -152,25 +152,4 @@ class SkillManager(BaseFileStoreManager["SkillInfo"]):
             logger.error("Error deleting skill %s: %s", skill_id, exc)
             return False
 
-    # ------------------------------------------------------------------
-    # Helpers for resolving skill directories to pass to create_deep_agent
-    # ------------------------------------------------------------------
 
-    @staticmethod
-    def collect_skills_dirs(
-        *,
-        extra: tuple[str, ...] = (),
-        project_dir: str = "skills",
-    ) -> list[str]:
-        """Return existing skill directory paths in precedence order.
-
-        Order: global (~/.ollama-agent/skills/) → project (CWD/skills/) → extra.
-        DeepAgents uses *last wins* for skills with the same name, so later
-        entries override earlier ones.
-        """
-        candidates: list[Path] = [
-            SKILLS_DIR,
-            Path.cwd() / project_dir,
-            *(Path(p) for p in extra),
-        ]
-        return [str(p.resolve()) for p in candidates if p.is_dir()]

@@ -44,13 +44,7 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         metavar="DATABASE",
         help="Load a RAG database for the session",
     )
-    parser.add_argument(
-        "--skills-dir",
-        action="append",
-        default=[],
-        metavar="DIR",
-        help="Additional skills directory (repeatable)",
-    )
+
     parser.add_argument(
         "--config-reset",
         choices=["all", "system-prompt", "config-file"],

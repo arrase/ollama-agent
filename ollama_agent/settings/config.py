@@ -88,7 +88,6 @@ class SubAgentSettings:
     system_prompt: str = ""
     model: str = ""
     context_window: int = 0
-    skills_paths: list[str] = field(default_factory=list)
     mcp_servers: list[SubAgentMCPServer] = field(default_factory=list)
 
 

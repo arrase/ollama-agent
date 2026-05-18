@@ -65,8 +65,7 @@ async def _build_spec(
             profile={"max_input_tokens": num_ctx} if num_ctx else {},
         )
 
-    if sa.skills_paths:
-        spec["skills"] = [f"/agent/{p.removeprefix('./')}" for p in sa.skills_paths]
+    spec["skills"] = ["/skills/"]
 
     if sa.mcp_servers:
         tools = await _load_mcp_tools(sa.name, sa.mcp_servers, exit_stack)

@@ -31,6 +31,7 @@ from ..settings import (
     HISTORY_DB_PATH,
     MEMORY_PATH,
     MCP_SERVERS_PATH,
+    SKILLS_DIR,
     Settings,
     ensure_memory_file,
     load_instructions,
@@ -98,7 +99,6 @@ class AgentRuntime:
 
     settings: Settings = field(default_factory=Settings)
     thread_id: str = "default"
-    extra_skills_dirs: tuple[str, ...] = ()
     graph: Any = field(default=None, init=False, repr=False)
     _instructions: str = field(default="", init=False)
     _rag_manager: RAGManager | None = field(default=None, init=False)
@@ -152,9 +152,16 @@ class AgentRuntime:
             root_dir=MEMORY_PATH.parent,
             virtual_mode=True,
         )
+        skills_backend = FilesystemBackend(
+            root_dir=SKILLS_DIR,
+            virtual_mode=True,
+        )
         backend = CompositeBackend(
             default=default_backend,
-            routes={"/agent/": agent_backend},
+            routes={
+                "/agent/": agent_backend,
+                "/skills/": skills_backend,
+            },
         )
 
         # MCP flat tools (for main agent, from mcp_servers.json)
@@ -167,15 +174,13 @@ class AgentRuntime:
             exit_stack=self._exit_stack,
         )
 
-        # Skills directories
-        skills_dirs = SkillManager.collect_skills_dirs(extra=self.extra_skills_dirs)
-
         kwargs: dict[str, Any] = dict(
             model=model,
             tools=[*BUILTIN_TOOLS, *mcp_tools],
             system_prompt=self._instructions,
             backend=backend,
             memory=["/agent/MEMORY.md"],
+            skills=["/skills/"],
             checkpointer=await self._sqlite_checkpointer(),
             middleware=[
                 create_summarization_tool_middleware(model, backend),
@@ -183,8 +188,6 @@ class AgentRuntime:
             ],
             name="ollama-agent",
         )
-        if skills_dirs:
-            kwargs["skills"] = skills_dirs
         if subagents:
             kwargs["subagents"] = subagents
 
