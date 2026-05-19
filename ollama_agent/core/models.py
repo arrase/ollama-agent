@@ -70,17 +70,12 @@ def _model_context_length(model_info: Any) -> int | None:
     if not isinstance(model_info, dict):
         return None
 
-    values: list[int] = []
-    for key, value in model_info.items():
-        if not str(key).endswith(".context_length"):
-            continue
-        if isinstance(value, int):
-            values.append(value)
-            continue
-        if isinstance(value, str) and value.isdigit():
-            values.append(int(value))
-
-    return max(values) if values else None
+    values = [
+        int(v)
+        for k, v in model_info.items()
+        if str(k).endswith(".context_length") and str(v).isdigit()
+    ]
+    return max(values, default=None)
 
 
 def _get_capabilities(model: str, base_url: str | None = None) -> set[str]:
@@ -130,19 +125,22 @@ def resolve_context_window(
         return context_window
 
     response = _show_model(model, base_url)
-    for field_name in ("modelfile", "parameters"):
-        if resolved := _parse_num_ctx(_response_field(response, field_name)):
-            return resolved
 
+    # 1. Structured info is the most reliable (modern Ollama)
     model_info = _response_field(
         response, "model_info", _response_field(response, "modelinfo", {})
     )
     if resolved := _model_context_length(model_info):
         return resolved
 
+    # 2. Fallback to parameters or modelfile regex
+    for field_name in ("parameters", "modelfile"):
+        if resolved := _parse_num_ctx(_response_field(response, field_name)):
+            return resolved
+
     raise ModelContextWindowError(
         f"Failed to determine the context window for '{model}'. "
-        "Define context_window in ~/.ollama-agent/config.ini."
+        "Define context_window in the settings or config file."
     )
 
 

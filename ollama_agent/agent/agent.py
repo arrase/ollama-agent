@@ -234,36 +234,20 @@ class AgentRuntime:
         except Exception:
             pass
 
-        emitted_text = ""
-        emitted_from_messages = False
         try:
             async for mode, event in self.graph.astream(
                 {"messages": [user_msg]},
                 config,
-                stream_mode=["messages", "custom", "values"],
+                stream_mode=["messages", "custom"],
             ):
                 if mode == "custom" and isinstance(event, dict) and event.get("type"):
                     yield cast(dict[str, Any], event)
-                    continue
-
-                if mode == "values" and isinstance(event, dict):
-                    if not emitted_from_messages:
-                        messages = event.get("messages", [])
-                        # Only emit if a new message beyond the user input was added
-                        if len(messages) > initial_messages_len + 1:
-                            emitted_text, delta = _process_value_event(
-                                event, emitted_text
-                            )
-                            if delta:
-                                yield {"type": "text_delta", "content": delta}
                     continue
 
                 if mode == "messages":
                     chunk = event[0] if isinstance(event, tuple) and event else event
                     result = _process_message_chunk(chunk)
                     if result:
-                        if result["type"] == "text_delta":
-                            emitted_from_messages = True
                         yield result
         except Exception as exc:
             _log.error("Streamed agent error: %s", exc)
@@ -271,10 +255,12 @@ class AgentRuntime:
 
     async def clear_history(self) -> str:
         """Clear conversation history by deleting the history database."""
+        await self.aclose()
         if HISTORY_DB_PATH.exists():
             try:
                 HISTORY_DB_PATH.unlink()
             except OSError as exc:
+                await self.reload()
                 return f"Failed to clear history: {exc}"
         await self.reload()
         return "History cleared."
@@ -325,22 +311,6 @@ def _response_from_raw(raw: Any) -> RuntimeResponse:
     return RuntimeResponse(
         content=content or "The agent finished without text output.", raw=raw
     )
-
-
-def _process_value_event(
-    event: dict[str, Any], emitted_text: str
-) -> tuple[str, str | None]:
-    """Process 'values' event to extract text deltas."""
-    messages = event.get("messages")
-    if not isinstance(messages, list) or not messages:
-        return emitted_text, None
-    current = assistant_text_from_messages(messages) or ""
-    if current and current != emitted_text:
-        if current.startswith(emitted_text):
-            delta = current[len(emitted_text) :]
-            return current, delta if delta else None
-        return current, current
-    return emitted_text, None
 
 
 def _process_message_chunk(chunk: Any) -> dict[str, Any] | None:

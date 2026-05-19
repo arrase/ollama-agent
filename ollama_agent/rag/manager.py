@@ -302,6 +302,7 @@ class RAGManager:
 
         # Process in batches
         BATCH_SIZE = 100
+        failed_sources: set[str] = set()
         for i in range(0, len(flat_chunks_data), BATCH_SIZE):
             batch = flat_chunks_data[i : i + BATCH_SIZE]
             batch_texts = [b[2] for b in batch]
@@ -334,15 +335,20 @@ class RAGManager:
                     i,
                     e,
                 )
-                # Note: failure in a batch could mean multiple files are affected, but for simplicity we log it.
-                # In a robust system we might want to track this per-file.
+                for source, *_ in batch:
+                    failed_sources.add(source)
 
         # Populate results for successful files
         for fpath, chunks in all_file_chunks:
+            source_str = str(fpath)
+            if source_str in failed_sources:
+                results["failed"] += 1
+                continue
+
             results["added"] += 1
             results["files"].append(
                 {
-                    "file": str(fpath),
+                    "file": source_str,
                     "chunks": len(chunks),
                     "database": self._current_db,
                 }
@@ -492,4 +498,4 @@ class RAGManager:
     def _generate_point_id(source: str, chunk_index: int) -> int:
         """Generate a unique point ID from source and chunk index."""
         combined = f"{source}:{chunk_index}"
-        return int(hashlib.md5(combined.encode()).hexdigest()[:15], 16)
+        return int(hashlib.md5(combined.encode()).hexdigest()[:16], 16)

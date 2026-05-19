@@ -191,23 +191,24 @@ class OllamaREPL:
         finally:
             buf.multiline = old_multiline
 
+    async def _prompt_line(self, label: str, default: str = "") -> str:
+        prompt_html = f"<b>{label}</b>"
+        if default:
+            prompt_html += f" (default: {default})"
+        prompt_html += "> "
+        val = (await self.session.prompt_async(HTML(prompt_html))).strip()
+        return val or default
+
     async def _handle_task_create(self, args: list[str]) -> None:
         if not args:
             self.console.print("[red]Usage: /task-create <task_id> [--force][/red]")
             return
         task_id, force = args[0], "--force" in args[1:]
         ms = self.runtime.settings.model
-        title = (await self.session.prompt_async(HTML("<b>title> </b>"))).strip()
-        model = (
-            await self.session.prompt_async(
-                HTML(f"<b>model</b> (default: {ms.name})> ")
-            )
-        ).strip() or ms.name
-        effort = (
-            await self.session.prompt_async(
-                HTML(f"<b>effort</b> (default: {ms.reasoning_effort})> ")
-            )
-        ).strip() or ms.reasoning_effort
+
+        title = await self._prompt_line("title")
+        model = await self._prompt_line("model", ms.name)
+        effort = await self._prompt_line("effort", ms.reasoning_effort)
         task_prompt = await self._prompt_multiline(
             "<b>prompt> </b>",
             "Enter the task prompt (multiline). Finish with Esc+Enter.",
@@ -228,10 +229,9 @@ class OllamaREPL:
             self.console.print("[red]Usage: /skill-create <skill_id> [--force][/red]")
             return
         skill_id, force = args[0], "--force" in args[1:]
-        name = (await self.session.prompt_async(HTML("<b>name> </b>"))).strip()
-        description = (
-            await self.session.prompt_async(HTML("<b>description> </b>"))
-        ).strip()
+
+        name = await self._prompt_line("name")
+        description = await self._prompt_line("description")
         instructions = await self._prompt_multiline(
             "<b>instructions> </b>",
             "Enter skill instructions (multiline markdown). Finish with Esc+Enter.",
