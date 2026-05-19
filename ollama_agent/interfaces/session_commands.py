@@ -14,7 +14,5 @@ def new_session(console: Console, runtime_thread_id: str) -> str:
     to the runtime.
     """
     new_id = str(uuid.uuid4())[:8]
-    console.print(
-        f"[green]✓ New session started:[/green] [cyan]{new_id}[/cyan]"
-    )
+    console.print(f"[green]✓ New session started:[/green] [cyan]{new_id}[/cyan]")
     return new_id

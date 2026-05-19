@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextlib
-import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -12,16 +11,12 @@ from typing import Any, AsyncGenerator, Self, cast
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
 from deepagents.middleware.summarization import create_summarization_tool_middleware
-from langchain_ollama import ChatOllama
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from ..core import (
-    ReasoningEffortValue,
     assistant_text_from_messages,
     create_ollama_chat_model,
     ensure_model_supports_tools,
-    final_text_from_state,
-    resolve_ollama_reasoning,
     validate_reasoning_effort,
 )
 from ..mcp import load_main_mcp_tools
@@ -29,22 +24,19 @@ from ..rag import RAGManager
 from ..settings import (
     HISTORY_DB_PATH,
     MEMORY_PATH,
-    MCP_SERVERS_PATH,
     SKILLS_DIR,
     Settings,
     ensure_memory_file,
     load_instructions,
-    load_settings,
     save_settings,
 )
-from ..skills import SkillManager
 from ..streaming.parsers import streaming_reasoning, streaming_text
 from ..vision import (
     build_multimodal_responses_input,
     capture_display_as_base64,
     extract_display_tokens,
 )
-from .builtin_tools import BUILTIN_TOOLS, get_tool_timeout, set_rag_manager
+from .builtin_tools import BUILTIN_TOOLS, get_tool_timeout
 from .middleware import stream_tool_events_mw
 from .subagents import build_subagents
 
@@ -241,7 +233,6 @@ class AgentRuntime:
         except Exception:
             pass
 
-        last_state: Any | None = None
         emitted_text = ""
         emitted_from_messages = False
         try:
@@ -255,7 +246,6 @@ class AgentRuntime:
                     continue
 
                 if mode == "values" and isinstance(event, dict):
-                    last_state = event
                     if not emitted_from_messages:
                         messages = event.get("messages", [])
                         # Only emit if a new message beyond the user input was added
@@ -315,6 +305,7 @@ class AgentRuntime:
 # ---------------------------------------------------------------------------
 # Pure helpers (no state)
 # ---------------------------------------------------------------------------
+
 
 def _extract_content(raw: Any) -> str:
     if isinstance(raw, dict):

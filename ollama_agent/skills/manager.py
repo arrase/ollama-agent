@@ -151,5 +151,3 @@ class SkillManager(BaseFileStoreManager["SkillInfo"]):
         except OSError as exc:
             logger.error("Error deleting skill %s: %s", skill_id, exc)
             return False
-
-

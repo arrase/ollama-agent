@@ -78,7 +78,9 @@ async def load_main_mcp_tools(exit_stack: AsyncExitStack) -> list[Any]:
         if conn:
             connections[name] = conn
         else:
-            _log.warning("Skipping MCP server '%s': could not determine transport", name)
+            _log.warning(
+                "Skipping MCP server '%s': could not determine transport", name
+            )
 
     if not connections:
         return []
@@ -148,7 +150,5 @@ async def load_subagent_mcp_tools(
         exit_stack.push_async_callback(lambda: _cleanup())
         return tools
     except Exception as exc:
-        _log.warning(
-            "Subagent '%s': MCP tools failed to load: %s", subagent_name, exc
-        )
+        _log.warning("Subagent '%s': MCP tools failed to load: %s", subagent_name, exc)
         return []
