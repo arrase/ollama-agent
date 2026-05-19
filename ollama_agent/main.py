@@ -23,7 +23,6 @@ def main() -> None:
     """Main entry point."""
     warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-
     parser = create_argument_parser()
     args = parser.parse_args()
 

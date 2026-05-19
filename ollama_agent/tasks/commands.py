@@ -1,7 +1,6 @@
 """Shared task management commands used by CLI and REPL."""
 
 from dataclasses import dataclass, field
-from typing import Any, Callable
 
 from rich.console import Console
 from rich.table import Table

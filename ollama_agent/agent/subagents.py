@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import re
 from contextlib import AsyncExitStack
 from typing import Any
@@ -12,7 +11,7 @@ from typing import Any
 from langchain_ollama import ChatOllama
 
 from ..mcp import load_subagent_mcp_tools
-from ..settings import ModelSettings, SubAgentMCPServer, SubAgentSettings
+from ..settings import ModelSettings, SubAgentSettings
 
 _log = logging.getLogger(__name__)
 _ENV_RE = re.compile(r"\$\{(\w+)\}")
@@ -25,14 +24,12 @@ async def build_subagents(
     exit_stack: AsyncExitStack,
 ) -> list[dict[str, Any]]:
     """Convert ``SubAgentSettings`` into dicts for ``create_deep_agent(subagents=...)``."""
-    specs: list[dict[str, Any]] = []
-    for sa in subagent_settings:
-        spec = await _build_spec(
-            sa, model_settings=model_settings, exit_stack=exit_stack
-        )
-        if spec is not None:
-            specs.append(spec)
-    return specs
+    tasks = [
+        _build_spec(sa, model_settings=model_settings, exit_stack=exit_stack)
+        for sa in subagent_settings
+    ]
+    results = await asyncio.gather(*tasks)
+    return [spec for spec in results if spec is not None]
 
 
 async def _build_spec(
@@ -73,5 +70,3 @@ async def _build_spec(
             spec["tools"] = tools
 
     return spec
-
-
