@@ -1,5 +1,7 @@
 """REPL interface for Ollama Agent."""
 
+import inspect
+
 from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.styles import Style
@@ -9,7 +11,6 @@ from rich.panel import Panel
 from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager, set_tool_timeout
 from ..rag import RAGContext, RAGManager, load_rag_database
-from ..settings import RAGSettings
 from ..skills import SkillsContext, create_skill
 from ..streaming import ConsoleStreamingRenderer, stream_agent_events
 from ..tasks.commands import CLIContext, create_task
@@ -35,29 +36,34 @@ class OllamaREPL:
         self._skills_ctx = SkillsContext(console=self.console)
         self._initial_rag_database = rag_database
         self._rag_ctx: RAGContext | None = None
+        self._commands: dict | None = None
 
     def _get_rag_ctx(self) -> RAGContext:
         if self._rag_ctx is None:
-            rag_settings = RAGSettings(
-                rag_dir=self.runtime.settings.rag.rag_dir,
-                embedder_model=self.runtime.settings.rag.embedder_model,
-                embedder_base_url=self.runtime.settings.rag.embedder_base_url,
-                embedding_dims=self.runtime.settings.rag.embedding_dims,
-                default_top_k=self.runtime.settings.rag.default_top_k,
-                chunk_size=self.runtime.settings.rag.chunk_size,
-                chunk_overlap=self.runtime.settings.rag.chunk_overlap,
-            )
-            mgr = RAGManager(rag_settings)  # type: ignore[arg-type]
+            mgr = RAGManager(self.runtime.settings.rag)
             self._rag_ctx = RAGContext(console=self.console, rag_manager=mgr)
             set_rag_manager(mgr)
         return self._rag_ctx
+
+    def _get_commands(self) -> dict:
+        """Lazily build and cache REPL command handlers."""
+        if self._commands is None:
+            self._commands = build_repl_handlers(
+                task_ctx=self._task_ctx,
+                skills_ctx=self._skills_ctx,
+                get_rag_ctx=self._get_rag_ctx,
+                console=self.console,
+                current_model=lambda: self.runtime.settings.model.name,
+                switch_model=self._switch_model,
+            )
+        return self._commands
 
     @staticmethod
     async def _safe(fn, *args, **kwargs):
         """Call fn(*args, **kwargs), silencing SystemExit (already printed)."""
         try:
             result = fn(*args, **kwargs)
-            if hasattr(result, "__await__"):
+            if inspect.isawaitable(result):
                 await result
         except SystemExit:
             pass
@@ -120,36 +126,15 @@ class OllamaREPL:
         """Handle slash commands."""
         parts = command.split()
         cmd, args = parts[0].lower(), parts[1:]
-        inline_commands = {
-            "/exit",
-            "/quit",
-            "/clear",
-            "/new",
-            "/task-create",
-            "/skill-create",
-        }
-
-        async def _require_arg(usage: str) -> str | None:
-            if not args:
-                self.console.print(f"[red]Usage: {usage}[/red]")
-            return args[0] if args else None
-
-        commands = build_repl_handlers(
-            task_ctx=self._task_ctx,
-            skills_ctx=self._skills_ctx,
-            get_rag_ctx=self._get_rag_ctx,
-            console=self.console,
-            current_model=lambda: self.runtime.settings.model.name,
-            switch_model=self._switch_model,
-        )
+        commands = self._get_commands()
 
         if cmd == "/help":
             render_repl_help(self.console, commands)
             return
 
-        if cmd in inline_commands:
-            pass
-        elif cmd in commands:
+        # Dispatch to registered handlers (excludes inline-handled commands)
+        _INLINE = {"/exit", "/quit", "/clear", "/new", "/task-create", "/skill-create"}
+        if cmd in commands and cmd not in _INLINE:
             if cmd in {
                 "/task-run",
                 "/task-delete",
@@ -159,9 +144,9 @@ class OllamaREPL:
                 "/rag-load",
                 "/skill-show",
                 "/skill-delete",
-            }:
-                if await _require_arg(f"{cmd} <value>") is None:
-                    return
+            } and not args:
+                self.console.print(f"[red]Usage: {cmd} <value>[/red]")
+                return
             if cmd == "/rag-add" and not args:
                 self.console.print("[red]Usage: /rag-add <file_or_dir> [--dir][/red]")
                 return
@@ -173,10 +158,10 @@ class OllamaREPL:
                 raise EOFError
             case "/clear":
                 self.console.clear()
-            case "/task-create":
-                await self._handle_task_create(args)
             case "/new":
                 await self._handle_new_session()
+            case "/task-create":
+                await self._handle_task_create(args)
             case "/skill-create":
                 await self._handle_skill_create(args)
             case _:
@@ -247,7 +232,7 @@ class OllamaREPL:
         )
 
     async def _handle_new_session(self) -> None:
-        self.runtime.thread_id = new_session(self.console, self.runtime.thread_id)
+        self.runtime.thread_id = new_session(self.console)
         self.console.clear()
         ms = self.runtime.settings.model
         self.console.print(

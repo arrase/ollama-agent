@@ -42,7 +42,7 @@ def main() -> None:
 
     set_tool_timeout(settings.runtime.builtin_tool_timeout)
 
-    if handle_cli_commands(args):
+    if handle_cli_commands(args, settings):
         return
 
     runtime = AgentRuntime(settings=settings)

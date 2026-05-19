@@ -6,8 +6,8 @@ import inspect
 
 from ..agent import AgentRuntime
 from ..core import ALLOWED_REASONING_EFFORTS
-from ..rag import RAGContext, RAGManager, RAGSettings
-from ..settings import load_settings
+from ..rag import RAGContext, RAGManager
+from ..settings import Settings, load_settings
 from ..skills import SkillManager, SkillsContext
 from ..streaming import run_non_interactive
 from ..tasks.commands import CLIContext
@@ -156,20 +156,12 @@ def create_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def handle_cli_commands(args: argparse.Namespace) -> bool:
+def handle_cli_commands(args: argparse.Namespace, settings: Settings | None = None) -> bool:
     """Handle CLI commands and return True if a command was handled."""
-    settings = load_settings()
-    rag_settings = RAGSettings(
-        rag_dir=settings.rag.rag_dir,
-        embedder_model=settings.rag.embedder_model,
-        embedder_base_url=settings.rag.embedder_base_url,
-        embedding_dims=settings.rag.embedding_dims,
-        default_top_k=settings.rag.default_top_k,
-        chunk_size=settings.rag.chunk_size,
-        chunk_overlap=settings.rag.chunk_overlap,
-    )
+    if settings is None:
+        settings = load_settings()
     ctx = CLIContext()
-    rag_ctx = RAGContext(rag_manager=RAGManager(rag_settings))
+    rag_ctx = RAGContext(rag_manager=RAGManager(settings.rag))
     skills_ctx = SkillsContext(skill_manager=SkillManager())
 
     cmd = getattr(args, "_handler", None) or args.command
@@ -188,7 +180,7 @@ def handle_cli_commands(args: argparse.Namespace) -> bool:
             settings.model.name = args.model
         if args.effort:
             settings.model.reasoning_effort = args.effort
-        if args.builtin_tool_timeout:
+        if args.builtin_tool_timeout is not None:
             settings.runtime.builtin_tool_timeout = args.builtin_tool_timeout
 
         runtime = AgentRuntime(settings=settings)

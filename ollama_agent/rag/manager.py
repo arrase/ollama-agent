@@ -309,10 +309,10 @@ class RAGManager:
             try:
                 embeddings = self._get_embeddings(batch_texts)
                 points = []
-                for j, (
+                for (
                     (source, fname, chunk, chunk_idx, total_chunks),
                     embedding,
-                ) in enumerate(zip(batch, embeddings, strict=False)):
+                ) in zip(batch, embeddings, strict=False):
                     point_id = self._generate_point_id(source, chunk_idx)
                     points.append(
                         PointStruct(

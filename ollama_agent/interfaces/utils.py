@@ -1,5 +1,13 @@
 """Interface-layer utilities.
 
+.. deprecated::
+    As of the latest refactor, no modules outside ``interfaces/`` import from
+    this file.  The helper functions ``find_or_exit`` and ``require_or_exit``
+    have been inlined into their respective domain command modules
+    (``rag/commands``, ``skills/commands``, ``tasks/commands``) to eliminate
+    cross-layer (domain → presentation) dependencies.  This module is kept for
+    backward compatibility but may be removed in a future release.
+
 Functions here are allowed to depend on presentation libraries such as
 ``rich``, and may raise :exc:`SystemExit`. They are intended for command-layer
 code, including the CLI/REPL adapters and the command helpers in

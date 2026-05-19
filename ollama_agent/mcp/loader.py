@@ -17,7 +17,11 @@ _ENV_RE = re.compile(r"\$\{(\w+)\}")
 
 
 def _resolve_env(env: dict[str, str]) -> dict[str, str] | None:
-    """Resolve ``${VAR}`` patterns against ``os.environ``."""
+    """Resolve ``${VAR}`` patterns against ``os.environ``.
+
+    Returns the resolved dict (possibly empty) on success, or ``None``
+    when required environment variables are missing.
+    """
     if not env:
         return {}
     resolved: dict[str, str] = {}
@@ -41,7 +45,11 @@ def _build_mcp_connection(cfg: dict[str, Any]) -> dict[str, Any] | None:
         if "args" in cfg:
             out["args"] = cfg["args"]
         if "env" in cfg:
-            out["env"] = cfg["env"]
+            resolved = _resolve_env(cfg["env"])
+            if resolved is None:
+                return None
+            if resolved:
+                out["env"] = resolved
         return out
 
     url = cfg.get("url") or cfg.get("httpUrl")
@@ -152,7 +160,7 @@ async def load_subagent_mcp_tools(
             except Exception:
                 _log.warning("MCP cleanup failed for subagent '%s'", subagent_name)
 
-        exit_stack.push_async_callback(lambda: _cleanup())
+        exit_stack.push_async_callback(_cleanup)
         return tools
     except Exception as exc:
         _log.warning("Subagent '%s': MCP tools failed to load: %s", subagent_name, exc)

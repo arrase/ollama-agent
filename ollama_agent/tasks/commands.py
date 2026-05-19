@@ -7,7 +7,6 @@ from rich.table import Table
 
 from ..agent import AgentRuntime
 from ..core import resolve_unique_prefix, validate_reasoning_effort
-from ..interfaces.utils import require_or_exit
 from ..settings import load_settings
 from ..streaming import run_non_interactive
 from .manager import Task, TaskManager
@@ -37,7 +36,10 @@ class CLIContext:
         raise SystemExit(1)
 
     def _require(self, value: str, name: str) -> str:
-        return require_or_exit(value, name, self.console)
+        if not (cleaned := (value or "").strip().strip("\n")):
+            self.console.print(f"[red]{name} cannot be empty.[/red]")
+            raise SystemExit(1)
+        return cleaned
 
 
 def list_tasks(ctx: CLIContext) -> None:

@@ -6,7 +6,7 @@ from rich.console import Console
 from rich.table import Table
 
 from .manager import RAGManager, RAGError, RAGDatabaseExistsError, RAGNotLoadedError
-from ..interfaces.utils import find_or_exit
+from ..core.common import resolve_unique_prefix
 
 
 @dataclass
@@ -23,7 +23,13 @@ class RAGContext:
             for d in self.rag_manager.list_databases()
             if isinstance(d, dict)
         ]
-        return find_or_exit(name, names, self.console, label="Database")
+        if resolved := resolve_unique_prefix(name, names):
+            return resolved
+        matches = [c for c in names if c.startswith((name or "").strip())]
+        msg = (f"Database not found: {name}" if not matches
+               else f"Ambiguous prefix: {name} -> {', '.join(matches)}")
+        self.console.print(f"[red]{msg}[/red]")
+        raise SystemExit(1)
 
 
 def list_rag_databases(ctx: RAGContext) -> None:

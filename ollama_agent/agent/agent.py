@@ -51,13 +51,14 @@ _log = logging.getLogger(__name__)
 
 def _maybe_attach_screen_context(prompt: object) -> dict[str, Any]:
     """Convert @dpN tokens to a multimodal user message (LangChain content blocks)."""
-    text = prompt if isinstance(prompt, str) else str(prompt)
-    if "@dp" not in text:
-        return {"role": "user", "content": text}
+    if not isinstance(prompt, str):
+        return {"role": "user", "content": str(prompt)}
+    if "@dp" not in prompt:
+        return {"role": "user", "content": prompt}
 
-    cleaned, displays = extract_display_tokens(text)
+    cleaned, displays = extract_display_tokens(prompt)
     if not displays:
-        return {"role": "user", "content": text}
+        return {"role": "user", "content": prompt}
 
     images = [capture_display_as_base64(i) for i in displays]
     return build_multimodal_responses_input(cleaned, images)[0]

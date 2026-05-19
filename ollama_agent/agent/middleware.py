@@ -20,6 +20,19 @@ from .builtin_tools import get_tool_timeout
 logger = logging.getLogger(__name__)
 
 
+def _extract_tool_name(request: Any) -> str:
+    """Best-effort extraction of the tool name from a middleware request."""
+    for attr in ("name", "tool_name"):
+        if name := getattr(request, attr, None):
+            return str(name)
+    tool = getattr(request, "tool", None)
+    if tool:
+        for attr in ("name", "__name__"):
+            if name := getattr(tool, attr, None):
+                return str(name)
+    return ""
+
+
 async def _stream_tool_events(request: Any, handler: Any) -> Any:
     """Emit ``tool_call`` / ``tool_output`` events so renderers keep working.
 
@@ -27,17 +40,7 @@ async def _stream_tool_events(request: Any, handler: Any) -> Any:
     """
     runtime = getattr(request, "runtime", None)
     agent_name: str | None = None
-    tool_name = next(
-        (n for attr in ("name", "tool_name") if (n := getattr(request, attr, None)))
-        or (
-            n
-            for obj in (getattr(request, "tool", None),)
-            if obj
-            for attr in ("name", "__name__")
-            if (n := getattr(obj, attr, None))
-        ),
-        "",
-    )
+    tool_name = _extract_tool_name(request)
 
     tool_call = getattr(request, "tool_call", None)
     tool_args: dict[str, Any] | None = None
@@ -71,7 +74,7 @@ async def _stream_tool_events(request: Any, handler: Any) -> Any:
     if runtime is not None:
         try:
             event: dict[str, Any] = {"type": "tool_call", "name": tool_name}
-            if isinstance(agent_name, str) and agent_name:
+            if agent_name:
                 event["agent_name"] = agent_name
             runtime.stream_writer(event)
         except Exception:
@@ -104,7 +107,7 @@ async def _stream_tool_events(request: Any, handler: Any) -> Any:
                 "output": "",
                 "output_len": len(content_str),
             }
-            if isinstance(agent_name, str) and agent_name:
+            if agent_name:
                 event["agent_name"] = agent_name
             runtime.stream_writer(event)
         except Exception:

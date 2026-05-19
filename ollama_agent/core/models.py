@@ -51,6 +51,19 @@ def _show_model_cached(model: str, host: str) -> Any:
         ) from exc
 
 
+def invalidate_model_cache(model: str | None = None) -> None:
+    """Clear cached model metadata.
+
+    Call with a specific model name to clear only that entry,
+    or with ``None`` to clear all cached entries.
+
+    Note: ``lru_cache`` does not support per-key invalidation, so
+    the entire cache is cleared regardless.  This is acceptable
+    because the cache rebuilds lazily on the next access.
+    """
+    _show_model_cached.cache_clear()
+
+
 def _response_field(payload: Any, field: str, default: Any = None) -> Any:
     if isinstance(payload, dict):
         return payload.get(field, default)

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 from contextlib import AsyncExitStack
 from typing import Any
 
@@ -14,7 +13,6 @@ from ..mcp import load_subagent_mcp_tools
 from ..settings import ModelSettings, SubAgentSettings
 
 _log = logging.getLogger(__name__)
-_ENV_RE = re.compile(r"\$\{(\w+)\}")
 
 
 async def build_subagents(
