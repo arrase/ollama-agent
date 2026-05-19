@@ -39,6 +39,6 @@ Thumbs.db
 
 # Config
 .ollama-agent/
-
+**/.antigravitycli
 # Test files
 test_*.py
