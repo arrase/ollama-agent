@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 from dataclasses import dataclass, field
@@ -279,15 +280,15 @@ class AgentRuntime:
         return "History cleared."
 
     async def view_memory(self) -> str:
-        return (
-            MEMORY_PATH.read_text(encoding="utf-8")
-            if MEMORY_PATH.exists()
-            else "Memory is empty."
-        )
+        if MEMORY_PATH.exists():
+            return await asyncio.to_thread(MEMORY_PATH.read_text, encoding="utf-8")
+        return "Memory is empty."
 
     async def clear_memory(self) -> str:
-        MEMORY_PATH.write_text(
-            "# Long-Term Memory\n\nNo persistent memories yet.\n", encoding="utf-8"
+        await asyncio.to_thread(
+            MEMORY_PATH.write_text,
+            "# Long-Term Memory\n\nNo persistent memories yet.\n",
+            encoding="utf-8",
         )
         await self.reload()
         return "Memory cleared."
