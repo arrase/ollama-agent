@@ -15,6 +15,7 @@ from qdrant_client.models import (
     Distance,
     FieldCondition,
     Filter,
+    MatchAny,
     MatchValue,
     PointStruct,
     VectorParams,
@@ -213,8 +214,6 @@ class RAGManager:
         self, dir_path: str, extensions: list[str] | None = None
     ) -> dict[str, Any]:
         """Add all files from a directory to the current RAG database."""
-        from qdrant_client.models import MatchAny
-
         client = self._ensure_loaded()
         path = Path(dir_path).expanduser().resolve()
 
