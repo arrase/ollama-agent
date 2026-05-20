@@ -105,7 +105,7 @@ async def load_main_mcp_tools(exit_stack: AsyncExitStack) -> list[Any]:
         async def _cleanup() -> None:
             try:
                 if hasattr(client, "close"):
-                    await client.close()
+                    await client.close()  # type: ignore[attr-defined]
             except Exception:
                 _log.warning("MCP client cleanup failed", exc_info=True)
 
@@ -156,7 +156,7 @@ async def load_subagent_mcp_tools(
         async def _cleanup() -> None:
             try:
                 if hasattr(client, "close"):
-                    await client.close()
+                    await client.close()  # type: ignore[attr-defined]
             except Exception:
                 _log.warning("MCP cleanup failed for subagent '%s'", subagent_name)
 

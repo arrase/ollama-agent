@@ -54,7 +54,6 @@ async def _build_spec(
     spec["model"] = await create_ollama_chat_model(
         model=name,
         base_url=model_settings.base_url,
-        api_key=None,
         context_window=num_ctx if (num_ctx is not None and num_ctx > 0) else None,
         reasoning_effort=validate_reasoning_effort(model_settings.reasoning_effort),
     )
