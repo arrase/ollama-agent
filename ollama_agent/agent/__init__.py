@@ -1,6 +1,6 @@
 """Agent submodule for AI agent functionality."""
 
-from .agent import AgentRuntime, RuntimeResponse
+from .agent import AgentRuntime
 from .builtin_tools import (
     BUILTIN_TOOLS,
     get_rag_manager,
@@ -13,7 +13,6 @@ from .builtin_tools import (
 __all__ = [
     "AgentRuntime",
     "BUILTIN_TOOLS",
-    "RuntimeResponse",
     "get_rag_manager",
     "get_tool_timeout",
     "rag_search",

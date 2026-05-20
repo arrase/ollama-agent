@@ -2,7 +2,7 @@
 
 __version__ = "0.4.1"
 
-from .agent import AgentRuntime, RuntimeResponse
+from .agent import AgentRuntime
 from .core import (
     ALLOWED_REASONING_EFFORTS,
     DEFAULT_REASONING_EFFORT,
@@ -19,7 +19,6 @@ __all__ = [
     "DEFAULT_REASONING_EFFORT",
     "ModelCapabilityError",
     "ReasoningEffortValue",
-    "RuntimeResponse",
     "Settings",
     "load_settings",
 ]
