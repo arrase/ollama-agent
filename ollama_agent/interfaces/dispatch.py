@@ -57,12 +57,12 @@ def build_cli_handlers(
 ) -> dict[str, CLIHandler]:
     """Build the CLI command registry for parsed argparse args."""
 
-    def rag_add() -> None:
+    async def rag_add() -> None:
         load_rag_database(rag_ctx, args.database)
         if args.dir:
-            add_rag_directory(rag_ctx, args.path)
+            await add_rag_directory(rag_ctx, args.path)
             return
-        add_rag_file(rag_ctx, args.path)
+        await add_rag_file(rag_ctx, args.path)
 
     return {
         "task-list": lambda: list_tasks(task_ctx),

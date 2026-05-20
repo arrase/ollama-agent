@@ -113,16 +113,16 @@ class AgentRuntime:
         """Tear down existing resources and rebuild the agent graph."""
         await self._exit_stack.aclose()
         self._exit_stack = contextlib.AsyncExitStack()
-        self._instructions = load_instructions()
-        ensure_memory_file(MEMORY_PATH)
+        self._instructions = await asyncio.to_thread(load_instructions)
+        await asyncio.to_thread(ensure_memory_file, MEMORY_PATH)
         self.graph = await self._build_graph()
 
     async def _build_graph(self) -> Any:
         ms = self.settings.model
-        ensure_model_supports_tools(ms.name, ms.base_url)
+        await ensure_model_supports_tools(ms.name, ms.base_url)
 
         warnings: list[str] = []
-        model = create_ollama_chat_model(
+        model = await create_ollama_chat_model(
             model=ms.name,
             base_url=ms.base_url,
             api_key=None,
@@ -226,15 +226,6 @@ class AgentRuntime:
         config = {"configurable": {"thread_id": thread}}
         user_msg = _maybe_attach_screen_context(prompt)
 
-        # Get initial message count to avoid emitting text from previous turns
-        initial_messages_len = 0
-        try:
-            state = await self.graph.aget_state(config)
-            if state and state.values and "messages" in state.values:
-                initial_messages_len = len(state.values["messages"])
-        except Exception:
-            pass
-
         try:
             async for mode, event in self.graph.astream(
                 {"messages": [user_msg]},
@@ -282,7 +273,7 @@ class AgentRuntime:
 
     async def set_model(self, model_name: str) -> str:
         self.settings.model.name = model_name
-        save_settings(self.settings)
+        await asyncio.to_thread(save_settings, self.settings)
         await self.reload()
         return f"Model set to {model_name}."
 

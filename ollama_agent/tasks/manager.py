@@ -98,14 +98,14 @@ class TaskManager(BaseFileStoreManager["Task"]):
             logger.error("Error loading task %s: %s", task_id, e)
             return None
 
-    def delete(self, task_id: str) -> bool:
+    def delete(self, item_id: str) -> bool:
         """Delete a task by ID."""
         try:
-            self._path(task_id).unlink()
+            self._path(item_id).unlink()
             return True
         except (FileNotFoundError, OSError) as e:
             if isinstance(e, OSError):
-                logger.error("Error deleting task %s: %s", task_id, e)
+                logger.error("Error deleting task %s: %s", item_id, e)
             return False
 
     def list_all(self) -> list[tuple[str, Task]]:

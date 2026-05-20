@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import ollama
 from rich.console import Console
@@ -14,16 +14,19 @@ if TYPE_CHECKING:
     from ..agent import AgentRuntime
 
 
-def _model_client(base_url: str) -> ollama.Client:
-    return ollama.Client(host=base_url)
+async def _list_models(base_url: str) -> list[Any]:
+    """Fetch the list of available Ollama models asynchronously."""
+    client = ollama.AsyncClient(host=base_url)
+    response = await client.list()
+    return getattr(response, "models", [])
 
 
-def list_models(console: Console, current_model: str) -> None:
+async def list_models(console: Console, current_model: str) -> None:
     """Print available Ollama models with tool-support indicators."""
     try:
         settings = load_settings()
         base_url = settings.model.base_url
-        models = getattr(_model_client(base_url).list(), "models", [])
+        models = await _list_models(base_url)
         if not models:
             console.print("[yellow]No models found in Ollama.[/yellow]")
             return
@@ -37,7 +40,7 @@ def list_models(console: Console, current_model: str) -> None:
             try:
                 tool_icon = (
                     "[green]✓[/green]"
-                    if model_supports_tools(name, base_url)
+                    if await model_supports_tools(name, base_url)
                     else "[red]✗[/red]"
                 )
             except ModelCapabilityError:
@@ -63,7 +66,7 @@ async def set_model(
         base_url = settings.model.base_url
         available = {
             getattr(model, "model", "")
-            for model in getattr(_model_client(base_url).list(), "models", [])
+            for model in await _list_models(base_url)
         }
         if model_name not in available:
             console.print(
@@ -81,7 +84,7 @@ async def set_model(
         return current
 
     try:
-        if not model_supports_tools(model_name, base_url):
+        if not await model_supports_tools(model_name, base_url):
             console.print(
                 f"[red]Model '{model_name}' does not support tools.[/red]\n"
                 "[dim]The agent requires tool support.[/dim]"

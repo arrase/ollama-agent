@@ -6,6 +6,7 @@ import hashlib
 import logging
 import mimetypes
 import shutil
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -159,7 +160,7 @@ class RAGManager:
             self._client = None
         self._current_db = None
 
-    def add_file(self, file_path: str) -> dict[str, Any]:
+    async def add_file(self, file_path: str) -> dict[str, Any]:
         """Add a file to the current RAG database."""
         client = self._ensure_loaded()
         path = Path(file_path).expanduser().resolve()
@@ -183,7 +184,7 @@ class RAGManager:
         chunks = self._chunk_text(content)
 
         # Generate embeddings in batch and store
-        embeddings = self._get_embeddings(chunks)
+        embeddings = await self._get_embeddings(chunks)
         points: list[PointStruct] = []
         for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=False)):
             point_id = self._generate_point_id(str(path), i)
@@ -210,7 +211,7 @@ class RAGManager:
             "database": self._current_db,
         }
 
-    def add_directory(
+    async def add_directory(
         self, dir_path: str, extensions: list[str] | None = None
     ) -> dict[str, Any]:
         """Add all files from a directory to the current RAG database."""
@@ -307,7 +308,7 @@ class RAGManager:
             batch = flat_chunks_data[i : i + BATCH_SIZE]
             batch_texts = [b[2] for b in batch]
             try:
-                embeddings = self._get_embeddings(batch_texts)
+                embeddings = await self._get_embeddings(batch_texts)
                 points = []
                 for (
                     (source, fname, chunk, chunk_idx, total_chunks),
@@ -359,13 +360,13 @@ class RAGManager:
 
         return results
 
-    def search(self, query: str, top_k: int | None = None) -> list[dict[str, Any]]:
+    async def search(self, query: str, top_k: int | None = None) -> list[dict[str, Any]]:
         """Search the RAG database for relevant documents."""
         client = self._ensure_loaded()
         top_k = top_k or self.settings.default_top_k
 
         # Get query embedding
-        query_embedding = self._get_embedding(query)
+        query_embedding = await self._get_embedding(query)
 
         # Prefer stable API across qdrant-client versions
         response = client.query_points(
@@ -387,22 +388,22 @@ class RAGManager:
             for hit in results
         ]
 
-    def _get_embedding(self, text: str) -> list[float]:
+    async def _get_embedding(self, text: str) -> list[float]:
         """Generate embedding for text using Ollama."""
-        embeddings = self._get_embeddings([text])
+        embeddings = await self._get_embeddings([text])
         return embeddings[0] if embeddings else []
 
-    def _get_embeddings(self, texts: list[str]) -> list[list[float]]:
+    async def _get_embeddings(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a batch of texts using Ollama."""
         if not texts:
             return []
         try:
-            client = ollama.Client(host=self.settings.embedder_base_url)
-            response = client.embed(
+            client = ollama.AsyncClient(host=self.settings.embedder_base_url)
+            response = await client.embed(
                 model=self.settings.embedder_model,
                 input=texts,
             )
-            embeddings: list[list[float]] = response.get("embeddings", []) or []
+            embeddings: list[list[float]] = getattr(response, "embeddings", []) or []
 
             if len(embeddings) != len(texts):
                 raise RAGError(
@@ -495,7 +496,8 @@ class RAGManager:
             raise RAGError(str(e)) from e
 
     @staticmethod
-    def _generate_point_id(source: str, chunk_index: int) -> int:
-        """Generate a unique point ID from source and chunk index."""
+    def _generate_point_id(source: str, chunk_index: int) -> str:
+        """Generate a unique point ID as a UUID string from source and chunk index."""
         combined = f"{source}:{chunk_index}"
-        return int(hashlib.md5(combined.encode()).hexdigest()[:16], 16)
+        hasher = hashlib.md5(combined.encode())
+        return str(uuid.UUID(hasher.hexdigest()))

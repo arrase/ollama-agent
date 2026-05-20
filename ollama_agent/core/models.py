@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import re
-from functools import lru_cache
 from typing import Any, Callable, Iterable, cast
 
 import ollama
@@ -36,32 +35,16 @@ class ModelContextWindowError(RuntimeError):
     """Raised when the context window for a model cannot be resolved."""
 
 
-def _show_model(model: str, base_url: str | None = None) -> Any:
-    """Fetch and cache Ollama model metadata."""
-    return _show_model_cached(model, (base_url or DEFAULT_BASE_URL).rstrip("/"))
-
-
-@lru_cache(maxsize=None)
-def _show_model_cached(model: str, host: str) -> Any:
+async def _show_model(model: str, base_url: str | None = None) -> Any:
+    """Fetch Ollama model metadata asynchronously."""
+    host = (base_url or DEFAULT_BASE_URL).rstrip("/")
     try:
-        return ollama.Client(host=host).show(model)
+        client = ollama.AsyncClient(host=host)
+        return await client.show(model)
     except Exception as exc:
         raise ModelCapabilityError(
             f"Failed to fetch metadata for '{model}': {exc}"
         ) from exc
-
-
-def invalidate_model_cache(model: str | None = None) -> None:
-    """Clear cached model metadata.
-
-    Call with a specific model name to clear only that entry,
-    or with ``None`` to clear all cached entries.
-
-    Note: ``lru_cache`` does not support per-key invalidation, so
-    the entire cache is cleared regardless.  This is acceptable
-    because the cache rebuilds lazily on the next access.
-    """
-    _show_model_cached.cache_clear()
 
 
 def _response_field(payload: Any, field: str, default: Any = None) -> Any:
@@ -91,9 +74,9 @@ def _model_context_length(model_info: Any) -> int | None:
     return max(values, default=None)
 
 
-def _get_capabilities(model: str, base_url: str | None = None) -> set[str]:
-    """Extract capabilities for a model (metadata is cached in _show_model)."""
-    response = _show_model(model, base_url)
+async def _get_capabilities(model: str, base_url: str | None = None) -> set[str]:
+    """Extract capabilities for a model."""
+    response = await _show_model(model, base_url)
     payload = _response_field(response, "capabilities", {})
     if isinstance(payload, dict):
         payload = payload.get("capabilities", [])
@@ -105,20 +88,20 @@ def _get_capabilities(model: str, base_url: str | None = None) -> set[str]:
     return set()
 
 
-def model_supports_tools(model: str, base_url: str | None = None) -> bool:
+async def model_supports_tools(model: str, base_url: str | None = None) -> bool:
     """Check if a model supports tool calls."""
-    return "tools" in _get_capabilities(model, base_url)
+    return "tools" in await _get_capabilities(model, base_url)
 
 
-def ensure_model_supports_tools(model: str, base_url: str | None = None) -> None:
+async def ensure_model_supports_tools(model: str, base_url: str | None = None) -> None:
     """Raise ModelCapabilityError if the model doesn't support tools."""
-    if not model_supports_tools(model, base_url):
+    if not await model_supports_tools(model, base_url):
         raise ModelCapabilityError(f"Model '{model}' does not support tools.")
 
 
-def model_supports_thinking(model: str, base_url: str | None = None) -> bool:
+async def model_supports_thinking(model: str, base_url: str | None = None) -> bool:
     """Best-effort detection of Ollama thinking support for a model."""
-    capabilities = _get_capabilities(model, base_url)
+    capabilities = await _get_capabilities(model, base_url)
     if "thinking" in capabilities:
         return True
 
@@ -126,7 +109,7 @@ def model_supports_thinking(model: str, base_url: str | None = None) -> bool:
     return any(model_name.startswith(prefix) for prefix in THINKING_MODEL_PREFIXES)
 
 
-def resolve_context_window(
+async def resolve_context_window(
     model: str,
     context_window: int | None,
     base_url: str | None = None,
@@ -137,7 +120,7 @@ def resolve_context_window(
             raise ModelContextWindowError("context_window must be greater than zero.")
         return context_window
 
-    response = _show_model(model, base_url)
+    response = await _show_model(model, base_url)
 
     # 1. Structured info is the most reliable (modern Ollama)
     model_info = _response_field(
@@ -157,7 +140,7 @@ def resolve_context_window(
     )
 
 
-def resolve_ollama_reasoning(
+async def resolve_ollama_reasoning(
     model: str,
     effort: ReasoningEffortValue,
     base_url: str | None = None,
@@ -176,12 +159,12 @@ def resolve_ollama_reasoning(
             return None
         return effort
 
-    if not model_supports_thinking(model, base_url):
+    if not await model_supports_thinking(model, base_url):
         return None
     return effort != "disabled"
 
 
-def create_ollama_chat_model(
+async def create_ollama_chat_model(
     *,
     model: str,
     base_url: str | None,
@@ -193,8 +176,8 @@ def create_ollama_chat_model(
 ) -> ChatOllama:
     """Create a native ChatOllama model with resolved runtime settings."""
     host = (base_url or DEFAULT_BASE_URL).rstrip("/")
-    reasoning = resolve_ollama_reasoning(model, reasoning_effort, host, warn_callback)
-    num_ctx = resolve_context_window(model, context_window, host)
+    reasoning = await resolve_ollama_reasoning(model, reasoning_effort, host, warn_callback)
+    num_ctx = await resolve_context_window(model, context_window, host)
 
     kwargs: dict[str, Any] = {
         "base_url": host,
