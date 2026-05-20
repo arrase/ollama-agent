@@ -185,7 +185,6 @@ def create_ollama_chat_model(
     *,
     model: str,
     base_url: str | None,
-    api_key: str | None = None,
     context_window: int | None,
     reasoning_effort: ReasoningEffortValue,
     temperature: float = 0,

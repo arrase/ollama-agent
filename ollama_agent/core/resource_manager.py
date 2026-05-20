@@ -5,7 +5,6 @@ Provides the shared boilerplate that :class:`SkillManager` and
 
 * ``__init__`` that creates the base directory
 * ``_path`` that builds an item path using a configurable file extension
-* ``validate_id`` that delegates to :func:`validate_identifier`
 
 Subclasses must supply:
 
@@ -21,8 +20,6 @@ import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Generic, TypeVar
-
-from .common import validate_identifier
 
 logger = logging.getLogger(__name__)
 
@@ -46,13 +43,6 @@ class BaseFileStoreManager(ABC, Generic[T]):
     # ------------------------------------------------------------------
     # Shared helpers
     # ------------------------------------------------------------------
-
-    def validate_id(self, name: str) -> str:
-        """Validate that *name* is a safe identifier for this resource type.
-
-        Delegates to :func:`~ollama_agent.core.common.validate_identifier`.
-        """
-        return validate_identifier(name, self._id_label)
 
     def _path(self, item_id: str) -> Path:
         """Return the filesystem path for *item_id*."""

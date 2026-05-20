@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import logging
 from dataclasses import dataclass, field
@@ -15,7 +14,6 @@ from deepagents.middleware.summarization import create_summarization_tool_middle
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from ..core import (
-    assistant_text_from_messages,
     create_ollama_chat_model,
     ensure_model_supports_tools,
     validate_reasoning_effort,
@@ -62,17 +60,6 @@ def _maybe_attach_screen_context(prompt: object) -> dict[str, Any]:
 
     images = [capture_display_as_base64(i) for i in displays]
     return build_multimodal_responses_input(cleaned, images)[0]
-
-
-# ---------------------------------------------------------------------------
-# Runtime response
-# ---------------------------------------------------------------------------
-
-
-@dataclass(slots=True)
-class RuntimeResponse:
-    content: str
-    raw: dict[str, Any] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +112,6 @@ class AgentRuntime:
         model = create_ollama_chat_model(
             model=ms.name,
             base_url=ms.base_url,
-            api_key=None,
             context_window=ms.context_window,
             reasoning_effort=validate_reasoning_effort(ms.reasoning_effort),
             temperature=ms.temperature,
@@ -194,21 +180,6 @@ class AgentRuntime:
     # Public API
     # -------------------------------------------------------------------
 
-    async def invoke(
-        self, message: str, *, thread_id: str | None = None
-    ) -> RuntimeResponse:
-        """Send a message and return the agent response."""
-        thread = thread_id or self.thread_id
-        if self.graph is None:
-            await self.reload()
-        if self.graph is None:
-            return RuntimeResponse("Runtime failed to initialize.")
-
-        config = {"configurable": {"thread_id": thread}}
-        user_msg = _maybe_attach_screen_context(message)
-        raw = await self.graph.ainvoke({"messages": [user_msg]}, config)
-        return _response_from_raw(raw)
-
     async def run_streamed(
         self,
         prompt: object,
@@ -225,15 +196,6 @@ class AgentRuntime:
 
         config = {"configurable": {"thread_id": thread}}
         user_msg = _maybe_attach_screen_context(prompt)
-
-        # Get initial message count to avoid emitting text from previous turns
-        initial_messages_len = 0
-        try:
-            state = await self.graph.aget_state(config)
-            if state and state.values and "messages" in state.values:
-                initial_messages_len = len(state.values["messages"])
-        except Exception:
-            pass
 
         try:
             async for mode, event in self.graph.astream(
@@ -254,32 +216,6 @@ class AgentRuntime:
             _log.error("Streamed agent error: %s", exc)
             yield {"type": "error", "content": str(exc)}
 
-    async def clear_history(self) -> str:
-        """Clear conversation history by deleting the history database."""
-        await self.aclose()
-        if HISTORY_DB_PATH.exists():
-            try:
-                HISTORY_DB_PATH.unlink()
-            except OSError as exc:
-                await self.reload()
-                return f"Failed to clear history: {exc}"
-        await self.reload()
-        return "History cleared."
-
-    async def view_memory(self) -> str:
-        if MEMORY_PATH.exists():
-            return await asyncio.to_thread(MEMORY_PATH.read_text, encoding="utf-8")
-        return "Memory is empty."
-
-    async def clear_memory(self) -> str:
-        await asyncio.to_thread(
-            MEMORY_PATH.write_text,
-            "# Long-Term Memory\n\nNo persistent memories yet.\n",
-            encoding="utf-8",
-        )
-        await self.reload()
-        return "Memory cleared."
-
     async def set_model(self, model_name: str) -> str:
         self.settings.model.name = model_name
         save_settings(self.settings)
@@ -293,25 +229,6 @@ class AgentRuntime:
 # ---------------------------------------------------------------------------
 # Pure helpers (no state)
 # ---------------------------------------------------------------------------
-
-
-def _extract_content(raw: Any) -> str:
-    if isinstance(raw, dict):
-        messages = raw.get("messages")
-        if messages:
-            last = messages[-1]
-            if isinstance(last, dict):
-                return str(last.get("content", ""))
-            return str(getattr(last, "content", ""))
-        return str(raw.get("content", raw))
-    return str(raw)
-
-
-def _response_from_raw(raw: Any) -> RuntimeResponse:
-    content = _extract_content(raw).strip()
-    return RuntimeResponse(
-        content=content or "The agent finished without text output.", raw=raw
-    )
 
 
 def _process_message_chunk(chunk: Any) -> dict[str, Any] | None:
