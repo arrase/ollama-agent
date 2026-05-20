@@ -135,16 +135,20 @@ class OllamaREPL:
         # Dispatch to registered handlers (excludes inline-handled commands)
         _INLINE = {"/exit", "/quit", "/clear", "/new", "/task-create", "/skill-create"}
         if cmd in commands and cmd not in _INLINE:
-            if cmd in {
-                "/task-run",
-                "/task-delete",
-                "/model-set",
-                "/rag-create",
-                "/rag-delete",
-                "/rag-load",
-                "/skill-show",
-                "/skill-delete",
-            } and not args:
+            if (
+                cmd
+                in {
+                    "/task-run",
+                    "/task-delete",
+                    "/model-set",
+                    "/rag-create",
+                    "/rag-delete",
+                    "/rag-load",
+                    "/skill-show",
+                    "/skill-delete",
+                }
+                and not args
+            ):
                 self.console.print(f"[red]Usage: {cmd} <value>[/red]")
                 return
             if cmd == "/rag-add" and not args:

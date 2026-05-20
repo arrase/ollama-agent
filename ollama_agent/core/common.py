@@ -4,12 +4,14 @@ import re
 from typing import Any, Literal, TypedDict
 
 # Reasoning effort types
-ReasoningEffortValue = Literal["low", "medium", "high", "disabled"]
+ReasoningEffortValue = Literal["low", "medium", "high", "disabled", "hide", "enabled"]
 ALLOWED_REASONING_EFFORTS: tuple[ReasoningEffortValue, ...] = (
     "low",
     "medium",
     "high",
     "disabled",
+    "hide",
+    "enabled",
 )
 DEFAULT_REASONING_EFFORT: ReasoningEffortValue = "medium"
 

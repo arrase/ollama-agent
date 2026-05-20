@@ -360,7 +360,9 @@ class RAGManager:
 
         return results
 
-    async def search(self, query: str, top_k: int | None = None) -> list[dict[str, Any]]:
+    async def search(
+        self, query: str, top_k: int | None = None
+    ) -> list[dict[str, Any]]:
         """Search the RAG database for relevant documents."""
         client = self._ensure_loaded()
         top_k = top_k or self.settings.default_top_k

@@ -65,8 +65,7 @@ async def set_model(
         settings = load_settings()
         base_url = settings.model.base_url
         available = {
-            getattr(model, "model", "")
-            for model in await _list_models(base_url)
+            getattr(model, "model", "") for model in await _list_models(base_url)
         }
         if model_name not in available:
             console.print(

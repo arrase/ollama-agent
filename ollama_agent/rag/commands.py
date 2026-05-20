@@ -26,8 +26,11 @@ class RAGContext:
         if resolved := resolve_unique_prefix(name, names):
             return resolved
         matches = [c for c in names if c.startswith((name or "").strip())]
-        msg = (f"Database not found: {name}" if not matches
-               else f"Ambiguous prefix: {name} -> {', '.join(matches)}")
+        msg = (
+            f"Database not found: {name}"
+            if not matches
+            else f"Ambiguous prefix: {name} -> {', '.join(matches)}"
+        )
         self.console.print(f"[red]{msg}[/red]")
         raise SystemExit(1)
 

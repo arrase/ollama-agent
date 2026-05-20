@@ -149,18 +149,24 @@ async def resolve_ollama_reasoning(
     """Translate reasoning_effort to Ollama's native reasoning setting."""
     lower_name = model.lower()
     if lower_name.startswith("gpt-oss"):
-        if effort == "disabled":
-            warning = (
-                "GPT-OSS does not support disabling thinking completely in Ollama; "
-                "continuing with the model default thinking behavior."
-            )
-            if warn_callback is not None:
-                warn_callback(warning)
+        if effort in ("disabled", "hide"):
+            if effort == "disabled":
+                warning = (
+                    "GPT-OSS does not support disabling thinking completely in Ollama; "
+                    "continuing with the model default thinking behavior, but it will be hidden."
+                )
+                if warn_callback is not None:
+                    warn_callback(warning)
             return None
+        if effort == "enabled":
+            return DEFAULT_REASONING_EFFORT
         return effort
 
     if not await model_supports_thinking(model, base_url):
         return None
+
+    if effort in ("hide", "enabled"):
+        return True
     return effort != "disabled"
 
 
@@ -175,7 +181,9 @@ async def create_ollama_chat_model(
 ) -> ChatOllama:
     """Create a native ChatOllama model with resolved runtime settings."""
     host = (base_url or DEFAULT_BASE_URL).rstrip("/")
-    reasoning = await resolve_ollama_reasoning(model, reasoning_effort, host, warn_callback)
+    reasoning = await resolve_ollama_reasoning(
+        model, reasoning_effort, host, warn_callback
+    )
     num_ctx = await resolve_context_window(model, context_window, host)
 
     kwargs: dict[str, Any] = {

@@ -132,9 +132,11 @@ ollama-agent -m "gpt-oss:20b" -e "high" -p "What is the current date?"
 | Model family | `--effort` value | Ollama `think` value | Behaviour |
 |---|---|---|---|
 | **GPT-OSS** | `low` / `medium` / `high` | `"low"` / `"medium"` / `"high"` | Sets the thinking trace length. GPT-OSS only accepts these levels; `true`/`false` is ignored. |
-| **GPT-OSS** | `disabled` | *(not sent)* | GPT-OSS cannot fully disable thinking — a warning is emitted and the model uses its default behaviour. |
-| **Other thinking models** (Qwen 3, DeepSeek R1, DeepSeek-v3.1, …) | any except `disabled` | `true` | Enables thinking. |
-| **Other thinking models** | `disabled` | `false` | Disables thinking. |
+| **GPT-OSS** | `disabled` / `hide` | *(not sent)* | GPT-OSS cannot fully disable thinking. For `disabled`, a warning is emitted and the default level is used. In both cases, the thinking trace is hidden from the UI. |
+| **GPT-OSS** | `enabled` | `"medium"` | Enables thinking using the default `medium` effort level. |
+| **Other thinking models** (Qwen 3, DeepSeek R1, DeepSeek-v3.1, …) | `low` / `medium` / `high` / `enabled` | `true` | Enables thinking. The specific levels are ignored by Ollama but turn on thinking. |
+| **Other thinking models** | `hide` | `true` | The model generates the reasoning trace, but it is hidden from the UI output. |
+| **Other thinking models** | `disabled` | `false` | Disables thinking at the model level. |
 | **Non-thinking models** | *(any)* | *(not sent)* | Setting is ignored. |
 
 Thinking is enabled by default in Ollama for supported models. See the [Ollama thinking docs](https://docs.ollama.com/capabilities/thinking) for the full list of supported models and API details.
@@ -149,7 +151,7 @@ ollama-agent -t 60 -p "Run a long-running task"
 
 - `-m`, `--model`: Specify the AI model to use
 - `-p`, `--prompt`: Provide a prompt for non-interactive mode
-- `-e`, `--effort`: Set reasoning effort level (low, medium, high, disabled)
+- `-e`, `--effort`: Set reasoning effort level (low, medium, high, disabled, hide, enabled)
 - `-t`, `--builtin-tool-timeout`: Set tool-call timeout in seconds (applies to tool executions, including shell backend and built-in tools). Overrides `builtin_tool_timeout` from `config.ini` for the current run.
 - `--rag <database>`: Load a RAG database for the session
 - `--skills-dir <dir>`: Additional skills directory (can be repeated to add multiple sources)
@@ -194,7 +196,7 @@ Example:
 title: "List repo tree"
 prompt: "List all files in this repository as a tree."
 model: "gpt-oss:20b"
-reasoning_effort: "medium"  # low|medium|high|disabled
+reasoning_effort: "medium"  # low|medium|high|disabled|hide|enabled
 ```
 
 **List Tasks:**
@@ -250,7 +252,7 @@ rag:
 |---|---|
 | `model.name` | Default Ollama model. Must support tool calling. |
 | `model.base_url` | Native Ollama host (e.g. `http://localhost:11434`). Must **not** contain an `/v1` path. |
-| `model.reasoning_effort` | Default thinking level: `low`, `medium`, `high`, or `disabled`. See [Thinking / Reasoning](#common-options) above. |
+| `model.reasoning_effort` | Default thinking level: `low`, `medium`, `high`, `disabled`, `hide`, or `enabled`. See [Thinking / Reasoning](#common-options) above. |
 | `model.context_window` | If set, forces the runtime `num_ctx` for the selected model. Leave `null` to let the app resolve it automatically. |
 | `runtime.builtin_tool_timeout` | Timeout in seconds for tool executions. |
 

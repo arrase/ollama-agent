@@ -198,6 +198,8 @@ class AgentRuntime:
         config = {"configurable": {"thread_id": thread}}
         user_msg = _maybe_attach_screen_context(prompt)
 
+        hide_reasoning = self.settings.model.reasoning_effort in ("hide", "disabled")
+
         try:
             async for mode, event in self.graph.astream(
                 {"messages": [user_msg]},
@@ -210,7 +212,9 @@ class AgentRuntime:
 
                 if mode == "messages":
                     chunk = event[0] if isinstance(event, tuple) and event else event
-                    result = _process_message_chunk(chunk)
+                    result = _process_message_chunk(
+                        chunk, hide_reasoning=hide_reasoning
+                    )
                     if result:
                         yield result
         except Exception as exc:
@@ -232,7 +236,10 @@ class AgentRuntime:
 # ---------------------------------------------------------------------------
 
 
-def _process_message_chunk(chunk: Any) -> dict[str, Any] | None:
+def _process_message_chunk(
+    chunk: Any,
+    hide_reasoning: bool = False,
+) -> dict[str, Any] | None:
     """Process 'messages' chunk to extract reasoning or text deltas."""
     chunk_type = str(getattr(chunk, "type", "") or "").lower()
     chunk_name = getattr(chunk, "__class__", type(chunk)).__name__.lower()
@@ -244,6 +251,8 @@ def _process_message_chunk(chunk: Any) -> dict[str, Any] | None:
 
     reasoning = streaming_reasoning(content, additional_kwargs)
     if reasoning:
+        if hide_reasoning:
+            return None
         return {"type": "reasoning_delta", "content": reasoning}
 
     text = streaming_text(content)

@@ -27,7 +27,7 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         "--effort",
         type=str,
         choices=list(ALLOWED_REASONING_EFFORTS),
-        help="Set reasoning effort level (low, medium, high, disabled)",
+        help="Set reasoning effort level (low, medium, high, disabled, hide, enabled)",
     )
     parser.add_argument(
         "-t",
@@ -86,7 +86,7 @@ def _add_task_subcommands(parser: argparse.ArgumentParser) -> None:
         type=str,
         choices=list(ALLOWED_REASONING_EFFORTS),
         required=False,
-        help="Reasoning effort to save with the task",
+        help="Reasoning effort to save with the task (low, medium, high, disabled, hide, enabled)",
     )
     task_create.add_argument(
         "--force", action="store_true", help="Overwrite task if it already exists"
@@ -156,7 +156,9 @@ def create_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def handle_cli_commands(args: argparse.Namespace, settings: Settings | None = None) -> bool:
+def handle_cli_commands(
+    args: argparse.Namespace, settings: Settings | None = None
+) -> bool:
     """Handle CLI commands and return True if a command was handled."""
     if settings is None:
         settings = load_settings()
