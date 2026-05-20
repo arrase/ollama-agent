@@ -22,7 +22,7 @@ set_rag_manager, get_rag_manager = _rag_manager.set, _rag_manager.get
 
 
 @tool
-def rag_search(query: str, top_k: int | None = None) -> RAGToolResult:
+async def rag_search(query: str, top_k: int | None = None) -> RAGToolResult:
     """Search the loaded RAG database for relevant document chunks."""
     if not (mgr := get_rag_manager()):
         return {"success": False, "error": "RAG manager not initialized"}
@@ -32,7 +32,7 @@ def rag_search(query: str, top_k: int | None = None) -> RAGToolResult:
             "error": "No RAG database loaded. Use /rag-load <name> first.",
         }
     try:
-        results = mgr.search(query, top_k)
+        results = await mgr.search(query, top_k)
         context_parts: list[str] = []
         for r in results:
             source = r.get("filename", r.get("source", "unknown"))

@@ -102,10 +102,10 @@ def unload_rag_database(ctx: RAGContext) -> None:
     ctx.console.print(f"[green]Unloaded RAG database:[/green] [cyan]{name}[/cyan]")
 
 
-def add_rag_file(ctx: RAGContext, file_path: str) -> None:
+async def add_rag_file(ctx: RAGContext, file_path: str) -> None:
     """Add a file to the current RAG database."""
     try:
-        result = ctx.rag_manager.add_file(file_path)
+        result = await ctx.rag_manager.add_file(file_path)
         ctx.console.print(
             f"[green]Added to RAG:[/green] [cyan]{result['file']}[/cyan] "
             f"([dim]{result['chunks']} chunks[/dim])"
@@ -120,10 +120,10 @@ def add_rag_file(ctx: RAGContext, file_path: str) -> None:
         raise SystemExit(1)
 
 
-def add_rag_directory(ctx: RAGContext, dir_path: str) -> None:
+async def add_rag_directory(ctx: RAGContext, dir_path: str) -> None:
     """Add all files from a directory to the current RAG database."""
     try:
-        result = ctx.rag_manager.add_directory(dir_path)
+        result = await ctx.rag_manager.add_directory(dir_path)
         ctx.console.print(
             f"[green]Added {result['added']} files[/green] "
             f"([dim]skipped: {result['skipped']}, failed: {result['failed']}[/dim])"

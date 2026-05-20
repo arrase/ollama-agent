@@ -7,8 +7,7 @@ import logging
 from contextlib import AsyncExitStack
 from typing import Any
 
-from langchain_ollama import ChatOllama
-
+from ..core import create_ollama_chat_model, validate_reasoning_effort
 from ..mcp import load_subagent_mcp_tools
 from ..settings import ModelSettings, SubAgentSettings
 
@@ -50,15 +49,15 @@ async def _build_spec(
         "system_prompt": sa.system_prompt or sa.description,
     }
 
-    if sa.model or sa.context_window:
-        name = sa.model or model_settings.name
-        num_ctx = sa.context_window or model_settings.context_window
-        spec["model"] = ChatOllama(
-            model=name,
-            base_url=model_settings.base_url,
-            num_ctx=num_ctx,
-            profile={"max_input_tokens": num_ctx} if num_ctx else {},
-        )
+    name = sa.model or model_settings.name
+    num_ctx = sa.context_window or model_settings.context_window
+    spec["model"] = await create_ollama_chat_model(
+        model=name,
+        base_url=model_settings.base_url,
+        api_key=None,
+        context_window=num_ctx if (num_ctx is not None and num_ctx > 0) else None,
+        reasoning_effort=validate_reasoning_effort(model_settings.reasoning_effort),
+    )
 
     spec["skills"] = ["/skills/"]
 

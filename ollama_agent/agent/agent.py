@@ -100,16 +100,16 @@ class AgentRuntime:
         """Tear down existing resources and rebuild the agent graph."""
         await self._exit_stack.aclose()
         self._exit_stack = contextlib.AsyncExitStack()
-        self._instructions = load_instructions()
-        ensure_memory_file(MEMORY_PATH)
+        self._instructions = await asyncio.to_thread(load_instructions)
+        await asyncio.to_thread(ensure_memory_file, MEMORY_PATH)
         self.graph = await self._build_graph()
 
     async def _build_graph(self) -> Any:
         ms = self.settings.model
-        ensure_model_supports_tools(ms.name, ms.base_url)
+        await ensure_model_supports_tools(ms.name, ms.base_url)
 
         warnings: list[str] = []
-        model = create_ollama_chat_model(
+        model = await create_ollama_chat_model(
             model=ms.name,
             base_url=ms.base_url,
             context_window=ms.context_window,
@@ -218,7 +218,7 @@ class AgentRuntime:
 
     async def set_model(self, model_name: str) -> str:
         self.settings.model.name = model_name
-        save_settings(self.settings)
+        await asyncio.to_thread(save_settings, self.settings)
         await self.reload()
         return f"Model set to {model_name}."
 

@@ -140,14 +140,14 @@ class SkillManager(BaseFileStoreManager["SkillInfo"]):
         (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
         return skill_id
 
-    def delete(self, skill_id: str) -> bool:
+    def delete(self, item_id: str) -> bool:
         """Delete a skill directory entirely."""
-        skill_dir = self._path(skill_id)
+        skill_dir = self._path(item_id)
         if not skill_dir.is_dir():
             return False
         try:
             shutil.rmtree(skill_dir)
             return True
         except OSError as exc:
-            logger.error("Error deleting skill %s: %s", skill_id, exc)
+            logger.error("Error deleting skill %s: %s", item_id, exc)
             return False
