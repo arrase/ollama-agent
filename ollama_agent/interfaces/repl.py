@@ -30,7 +30,10 @@ class OllamaREPL:
         self.runtime = runtime
         self.console = Console()
         self.session: PromptSession = PromptSession(
-            style=Style.from_dict({"prompt": "#ansiwhite bold"})
+            style=Style.from_dict({
+                "prompt": "#81a1c1 bold",  # Nord blue
+                "arrow": "#88c0d0 bold",   # Frost cyan
+            })
         )
         self._task_ctx = CLIContext(console=self.console)
         self._skills_ctx = SkillsContext(console=self.console)
@@ -87,15 +90,12 @@ class OllamaREPL:
             rag_info = f" | RAG: [cyan]{rag_ctx.rag_manager.current_database}[/cyan]"
 
         ms = self.runtime.settings.model
-        self.console.print(
-            Panel(
-                f"[bold green]Ollama Agent[/bold green]\n"
-                f"Model: [cyan]{ms.name}[/cyan] | Effort: [cyan]{ms.reasoning_effort}[/cyan]{rag_info}\n"
-                "Type [bold]/help[/bold] for commands or just start typing to chat.",
-                title="Welcome",
-                border_style="green",
-            )
-        )
+        self.console.print()
+        self.console.print("  [bold green]🤖 Ollama Agent[/bold green]")
+        self.console.print("  [dim]──────────────────────────────────────────────────────────────────[/dim]")
+        self.console.print(f"  [bold]Model:[/bold] [cyan]{ms.name}[/cyan]  |  [bold]Effort:[/bold] [cyan]{ms.reasoning_effort}[/cyan]{rag_info}")
+        self.console.print("  [dim]──────────────────────────────────────────────────────────────────[/dim]")
+        self.console.print("  Type [bold green]/help[/bold green] for commands or just start typing to chat.\n")
 
         # Initialize the runtime
         set_tool_timeout(self.runtime.settings.runtime.builtin_tool_timeout)
@@ -105,7 +105,7 @@ class OllamaREPL:
             while True:
                 try:
                     if user_input := (
-                        await self.session.prompt_async(HTML("<b>❯ </b>"))
+                        await self.session.prompt_async(HTML("<arrow>❯</arrow> "))
                     ).strip():
                         await (
                             self.handle_command(user_input)
@@ -239,15 +239,12 @@ class OllamaREPL:
         self.runtime.thread_id = new_session(self.console)
         self.console.clear()
         ms = self.runtime.settings.model
-        self.console.print(
-            Panel(
-                f"[bold green]Ollama Agent[/bold green]\n"
-                f"Model: [cyan]{ms.name}[/cyan] | Effort: [cyan]{ms.reasoning_effort}[/cyan]\n"
-                "Type [bold]/help[/bold] for commands or just start typing to chat.",
-                title="New Session",
-                border_style="green",
-            )
-        )
+        self.console.print()
+        self.console.print("  [bold green]🤖 Ollama Agent[/bold green] [dim](New Session)[/dim]")
+        self.console.print("  [dim]──────────────────────────────────────────────────────────────────[/dim]")
+        self.console.print(f"  [bold]Model:[/bold] [cyan]{ms.name}[/cyan]  |  [bold]Effort:[/bold] [cyan]{ms.reasoning_effort}[/cyan]")
+        self.console.print("  [dim]──────────────────────────────────────────────────────────────────[/dim]")
+        self.console.print("  Type [bold green]/help[/bold green] for commands or just start typing to chat.\n")
 
     async def _switch_model(self, model_name: str) -> None:
         await set_model(
