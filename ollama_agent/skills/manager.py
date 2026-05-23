@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import yaml  # type: ignore[import-untyped]
 
@@ -26,9 +27,10 @@ class SkillInfo:
     description: str
     content: str
     path: Path
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
-def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
+def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     """Split a SKILL.md into YAML frontmatter dict and body markdown."""
     if not text.startswith("---"):
         return {}, text
@@ -62,6 +64,7 @@ def _read_skill(skill_dir: Path) -> SkillInfo | None:
         description=str(meta.get("description", ""))[:1024],
         content=raw,
         path=skill_dir,
+        metadata=meta,
     )
 
 
@@ -122,6 +125,7 @@ class SkillManager(BaseFileStoreManager["SkillInfo"]):
         description: str,
         instructions: str,
         overwrite: bool = False,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """Create a skill directory with a SKILL.md and return the skill ID."""
         skill_id = self.validate_skill_id(skill_id)
@@ -130,8 +134,12 @@ class SkillManager(BaseFileStoreManager["SkillInfo"]):
             raise FileExistsError(f"Skill already exists: {skill_id}")
         skill_dir.mkdir(parents=True, exist_ok=True)
 
+        meta = {"name": name, "description": description}
+        if metadata:
+            meta.update(metadata)
+
         frontmatter = yaml.safe_dump(
-            {"name": name, "description": description},
+            meta,
             allow_unicode=True,
             default_flow_style=False,
         ).strip()

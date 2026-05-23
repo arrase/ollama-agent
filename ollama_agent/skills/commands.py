@@ -75,9 +75,14 @@ def create_skill(
     name: str,
     description: str,
     instructions: str,
+    module: str | None = None,
     force: bool = False,
 ) -> None:
     """Create a new skill."""
+    metadata = {}
+    if module:
+        metadata["module"] = module
+
     try:
         created = ctx.skill_manager.create(
             skill_id,
@@ -85,6 +90,7 @@ def create_skill(
             description=ctx._require(description, "Description"),
             instructions=ctx._require(instructions, "Instructions"),
             overwrite=force,
+            metadata=metadata,
         )
         ctx.console.print(f"[green]Skill created:[/green] {name} ({created})")
     except FileExistsError:
