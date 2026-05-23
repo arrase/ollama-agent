@@ -24,7 +24,7 @@ dependencies = [
     "prompt_toolkit>=3.0.52",
     "qdrant-client>=1.17.1",
     "rich>=15.0.0",
-    "mcp>=1.23.0",
+    "mcp>=1.27.1",
 ]
 
 [project.scripts]
