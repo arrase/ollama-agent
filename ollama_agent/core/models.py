@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Callable, Iterable, cast
+from typing import Any, Callable, cast
 
 import ollama
 from langchain_ollama import ChatOllama
@@ -48,13 +48,11 @@ async def _show_model(model: str, base_url: str | None = None) -> Any:
 
 
 def _response_field(payload: Any, field: str, default: Any = None) -> Any:
-    if isinstance(payload, dict):
-        return payload.get(field, default)
-    return getattr(payload, field, default)
+    return payload.get(field, default) if isinstance(payload, dict) else getattr(payload, field, default)
 
 
-def _parse_num_ctx(text: Any) -> int | None:
-    if not isinstance(text, str):
+def _parse_num_ctx(text: str | None) -> int | None:
+    if not text:
         return None
     match = re.search(
         r"^\s*(?:PARAMETER\s+)?num_ctx\s+(\d+)\s*$", text, re.IGNORECASE | re.MULTILINE
@@ -62,10 +60,9 @@ def _parse_num_ctx(text: Any) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def _model_context_length(model_info: Any) -> int | None:
-    if not isinstance(model_info, dict):
+def _model_context_length(model_info: dict[str, Any] | None) -> int | None:
+    if not model_info:
         return None
-
     values = [
         int(v)
         for k, v in model_info.items()
@@ -77,14 +74,11 @@ def _model_context_length(model_info: Any) -> int | None:
 async def _get_capabilities(model: str, base_url: str | None = None) -> set[str]:
     """Extract capabilities for a model."""
     response = await _show_model(model, base_url)
-    payload = _response_field(response, "capabilities", {})
-    if isinstance(payload, dict):
-        payload = payload.get("capabilities", [])
-
-    if isinstance(payload, Iterable) and not isinstance(payload, str):
-        return {str(c).lower() for c in payload if c}
-
-    logger.warning("Model '%s' does not expose capabilities", model)
+    caps = _response_field(response, "capabilities", {})
+    if isinstance(caps, dict):
+        caps = caps.get("capabilities", [])
+    if isinstance(caps, list):
+        return {str(c).lower() for c in caps}
     return set()
 
 

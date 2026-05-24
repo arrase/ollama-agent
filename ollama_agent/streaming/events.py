@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 async def stream_agent_events(
     runtime: "AgentRuntime",
-    prompt: object,
+    prompt: str,
     renderer: "StreamingRenderer",
     *,
     thread_id: str | None = None,
@@ -47,7 +47,7 @@ async def stream_agent_events(
 
 
 async def run_non_interactive(
-    runtime: "AgentRuntime", prompt: object, *, thread_id: str | None = None
+    runtime: "AgentRuntime", prompt: str, *, thread_id: str | None = None
 ) -> None:
     """Stream agent output to the console (non-interactive mode)."""
     await stream_agent_events(
@@ -57,3 +57,4 @@ async def run_non_interactive(
         thread_id=thread_id,
         ignore={"agent_update"},
     )
+

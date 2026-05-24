@@ -6,7 +6,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ..agent import AgentRuntime
-from ..core import resolve_unique_prefix, validate_reasoning_effort
+from ..core import validate_reasoning_effort
 from ..settings import load_settings
 from ..streaming import run_non_interactive
 from .manager import Task, TaskManager
@@ -23,10 +23,6 @@ class CLIContext:
         matches = self.task_manager.find_matches(task_id)
         if len(matches) == 1:
             return matches[0]
-        candidates = [p.stem for p in self.task_manager.tasks_dir.glob("*.yaml")]
-        resolved = resolve_unique_prefix(task_id, sorted(candidates))
-        if resolved and (t := self.task_manager.load(resolved)) is not None:
-            return (resolved, t)
         msg = (
             f"Task not found: {task_id}"
             if not matches

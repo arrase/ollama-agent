@@ -104,6 +104,11 @@ def build_repl_handlers(
     current_model: Callable[[], str],
     base_url: Callable[[], str],
     switch_model: Callable[[str], Awaitable[None]],
+    handle_exit: Callable[[list[str]], object],
+    handle_clear: Callable[[list[str]], object],
+    handle_new: Callable[[list[str]], Awaitable[None]],
+    handle_task_create: Callable[[list[str]], Awaitable[None]],
+    handle_skill_create: Callable[[list[str]], Awaitable[None]],
 ) -> dict[str, REPLCommand]:
     """Build the REPL command registry for slash commands."""
 
@@ -121,14 +126,14 @@ def build_repl_handlers(
 
     return {
         "/help": REPLCommand("Show this help message", "General", None, lambda _: None),
-        "/exit": REPLCommand("Exit the REPL", "General", None, lambda _: None),
-        "/quit": REPLCommand("Exit the REPL", "General", None, lambda _: None),
-        "/clear": REPLCommand("Clear the screen", "General", None, lambda _: None),
+        "/exit": REPLCommand("Exit the REPL", "General", None, handle_exit),
+        "/quit": REPLCommand("Exit the REPL", "General", None, handle_exit),
+        "/clear": REPLCommand("Clear the screen", "General", None, handle_clear),
         "/new": REPLCommand(
             "Start a new chat session (clears context)",
             "Session Management",
             None,
-            lambda _: None,
+            handle_new,
         ),
         "/models": REPLCommand(
             "List available Ollama models",
@@ -221,15 +226,16 @@ def build_repl_handlers(
             "Create a task",
             "Task Management",
             "/task-create <id> [--force]",
-            lambda _: None,
+            handle_task_create,
         ),
         "/skill-create": REPLCommand(
             "Create a skill",
             "Skills Management",
             "/skill-create <id> [--force]",
-            lambda _: None,
+            handle_skill_create,
         ),
     }
+
 
 
 def render_repl_help(console: Console, commands: dict[str, REPLCommand]) -> None:

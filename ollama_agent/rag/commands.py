@@ -6,7 +6,6 @@ from rich.console import Console
 from rich.table import Table
 
 from .manager import RAGManager, RAGError, RAGDatabaseExistsError, RAGNotLoadedError
-from ..core.common import resolve_unique_prefix
 
 
 @dataclass
@@ -18,14 +17,10 @@ class RAGContext:
 
     def _find_or_exit(self, name: str) -> str:
         """Find a database by name/prefix or exit."""
-        names = [
-            d.get("name", "")
-            for d in self.rag_manager.list_databases()
-            if isinstance(d, dict)
-        ]
-        if resolved := resolve_unique_prefix(name, names):
-            return resolved
-        matches = [c for c in names if c.startswith((name or "").strip())]
+        names = [d["name"] for d in self.rag_manager.list_databases()]
+        matches = [c for c in names if c.startswith(name.strip())]
+        if len(matches) == 1:
+            return matches[0]
         msg = (
             f"Database not found: {name}"
             if not matches

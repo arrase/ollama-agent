@@ -20,7 +20,6 @@ from ..core import (
     validate_reasoning_effort,
 )
 from ..mcp import load_main_mcp_tools
-from ..rag import RAGManager
 from ..settings import (
     HISTORY_DB_PATH,
     MEMORY_PATH,
@@ -48,10 +47,8 @@ _log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _maybe_attach_screen_context(prompt: object) -> dict[str, Any]:
+def _maybe_attach_screen_context(prompt: str) -> dict[str, Any]:
     """Convert @dpN tokens to a multimodal user message (LangChain content blocks)."""
-    if not isinstance(prompt, str):
-        return {"role": "user", "content": str(prompt)}
     if "@dp" not in prompt:
         return {"role": "user", "content": prompt}
 
@@ -82,7 +79,6 @@ class AgentRuntime:
     thread_id: str = "default"
     graph: Any = field(default=None, init=False, repr=False)
     _instructions: str = field(default="", init=False)
-    _rag_manager: RAGManager | None = field(default=None, init=False)
     _exit_stack: contextlib.AsyncExitStack = field(
         default_factory=contextlib.AsyncExitStack, init=False, repr=False
     )
@@ -92,10 +88,6 @@ class AgentRuntime:
 
     async def __aexit__(self, *exc: object) -> None:
         await self.aclose()
-
-    @property
-    def rag_manager(self) -> RAGManager | None:
-        return self._rag_manager
 
     async def reload(self) -> None:
         """Tear down existing resources and rebuild the agent graph."""
@@ -183,7 +175,7 @@ class AgentRuntime:
 
     async def run_streamed(
         self,
-        prompt: object,
+        prompt: str,
         *,
         thread_id: str | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:

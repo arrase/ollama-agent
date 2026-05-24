@@ -32,17 +32,14 @@ class SkillInfo:
 
 def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     """Split a SKILL.md into YAML frontmatter dict and body markdown."""
-    if not text.startswith("---"):
-        return {}, text
-    end = text.find("---", 3)
-    if end == -1:
-        return {}, text
-    try:
-        meta = yaml.safe_load(text[3:end]) or {}
-    except yaml.YAMLError:
-        meta = {}
-    body = text[end + 3 :].lstrip("\n")
-    return (meta if isinstance(meta, dict) else {}), body
+    if text.startswith("---") and (end := text.find("---", 3)) != -1:
+        try:
+            meta = yaml.safe_load(text[3:end])
+            if isinstance(meta, dict):
+                return meta, text[end + 3 :].lstrip("\n")
+        except yaml.YAMLError:
+            pass
+    return {}, text
 
 
 def _read_skill(skill_dir: Path) -> SkillInfo | None:

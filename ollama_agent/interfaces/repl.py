@@ -59,6 +59,11 @@ class OllamaREPL:
                 current_model=lambda: self.runtime.settings.model.name,
                 base_url=lambda: self.runtime.settings.model.base_url,
                 switch_model=self._switch_model,
+                handle_exit=self._handle_exit,
+                handle_clear=self._handle_clear,
+                handle_new=self._handle_new_session,
+                handle_task_create=self._handle_task_create,
+                handle_skill_create=self._handle_skill_create,
             )
         return self._commands
 
@@ -153,44 +158,16 @@ class OllamaREPL:
             render_repl_help(self.console, commands)
             return
 
-        # Dispatch to registered handlers (excludes inline-handled commands)
-        _INLINE = {"/exit", "/quit", "/clear", "/new", "/task-create", "/skill-create"}
-        if cmd in commands and cmd not in _INLINE:
-            if (
-                cmd
-                in {
-                    "/task-run",
-                    "/task-delete",
-                    "/model-set",
-                    "/rag-create",
-                    "/rag-delete",
-                    "/rag-load",
-                    "/skill-show",
-                    "/skill-delete",
-                }
-                and not args
-            ):
-                self.console.print(f"[red]Usage: {cmd} <value>[/red]")
-                return
-            if cmd == "/rag-add" and not args:
-                self.console.print("[red]Usage: /rag-add <file_or_dir> [--dir][/red]")
-                return
-            await self._safe(commands[cmd].handler, args)
+        if cmd not in commands:
+            self.console.print(f"[red]Unknown command:[/red] {cmd}")
             return
 
-        match cmd:
-            case "/exit" | "/quit":
-                raise EOFError
-            case "/clear":
-                self.console.clear()
-            case "/new":
-                await self._handle_new_session()
-            case "/task-create":
-                await self._handle_task_create(args)
-            case "/skill-create":
-                await self._handle_skill_create(args)
-            case _:
-                self.console.print(f"[red]Unknown command:[/red] {cmd}")
+        spec = commands[cmd]
+        if spec.usage and not args:
+            self.console.print(f"[red]Usage: {spec.usage}[/red]")
+            return
+
+        await self._safe(spec.handler, args)
 
     async def _prompt_multiline(self, prompt_html: str, hint: str) -> str:
         self.console.print(f"[dim]{hint}[/dim]")
@@ -210,9 +187,6 @@ class OllamaREPL:
         return val or default
 
     async def _handle_task_create(self, args: list[str]) -> None:
-        if not args:
-            self.console.print("[red]Usage: /task-create <task_id> [--force][/red]")
-            return
         task_id, force = args[0], "--force" in args[1:]
         ms = self.runtime.settings.model
 
@@ -235,9 +209,6 @@ class OllamaREPL:
         )
 
     async def _handle_skill_create(self, args: list[str]) -> None:
-        if not args:
-            self.console.print("[red]Usage: /skill-create <skill_id> [--force][/red]")
-            return
         skill_id, force = args[0], "--force" in args[1:]
 
         name = await self._prompt_line("name")
@@ -256,10 +227,16 @@ class OllamaREPL:
             force=force,
         )
 
-    async def _handle_new_session(self) -> None:
+    async def _handle_new_session(self, args: list[str]) -> None:
         self.runtime.thread_id = new_session(self.console)
         self.console.clear()
         self._print_header(new_session=True)
+
+    def _handle_exit(self, args: list[str]) -> None:
+        raise EOFError
+
+    def _handle_clear(self, args: list[str]) -> None:
+        self.console.clear()
 
     async def _switch_model(self, model_name: str) -> None:
         await set_model(
@@ -272,3 +249,4 @@ class OllamaREPL:
     async def handle_chat(self, prompt: str) -> None:
         renderer = ConsoleStreamingRenderer(self.console)
         await stream_agent_events(self.runtime, prompt, renderer, auto_close=True)
+

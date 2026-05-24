@@ -54,9 +54,7 @@ def assistant_text_from_messages(messages: list[Any]) -> str:
     blocks; those must be ignored (no fallback to raw str()).
     """
     for msg in reversed(messages):
-        msg_type = str(getattr(msg, "type", "") or "").lower()
-        cls_name = getattr(msg, "__class__", type(msg)).__name__.lower()
-        if msg_type == "ai" or "aimessage" in cls_name or cls_name == "ai":
+        if getattr(msg, "type", None) == "ai":
             return extract_text(getattr(msg, "content", None)) or ""
     return ""
 

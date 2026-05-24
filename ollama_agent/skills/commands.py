@@ -9,7 +9,6 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
-from ..core import resolve_unique_prefix
 from .manager import SkillInfo, SkillManager
 
 
@@ -24,14 +23,6 @@ class SkillsContext:
         matches = self.skill_manager.find_matches(skill_id)
         if len(matches) == 1:
             return matches[0]
-        candidates = [
-            d.name
-            for d in self.skill_manager.skills_dir.iterdir()
-            if d.is_dir() and (d / "SKILL.md").is_file()
-        ]
-        resolved = resolve_unique_prefix(skill_id, sorted(candidates))
-        if resolved and (s := self.skill_manager.get(resolved)) is not None:
-            return (resolved, s)
         msg = (
             f"Skill not found: {skill_id}"
             if not matches
