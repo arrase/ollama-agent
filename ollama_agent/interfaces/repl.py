@@ -76,6 +76,36 @@ class OllamaREPL:
             self._rag_ctx.rag_manager.unload()
         await self.runtime.aclose()
 
+    def _print_header(self, new_session: bool = False) -> None:
+        """Print the REPL header inside a beautiful box Panel."""
+        ms = self.runtime.settings.model
+        
+        rag_info = ""
+        if self._rag_ctx and self._rag_ctx.rag_manager.current_database:
+            rag_info = f"  |  [bold]RAG:[/bold] [cyan]{self._rag_ctx.rag_manager.current_database}[/cyan]"
+
+        title = "[bold green]🤖 Ollama Agent[/bold green]"
+        if new_session:
+            title += " [dim](New Session)[/dim]"
+
+        info_lines = [
+            f"[bold]Model:[/bold] [cyan]{ms.name}[/cyan]  |  [bold]Effort:[/bold] [cyan]{ms.reasoning_effort}[/cyan]{rag_info}",
+            "[dim]─────────────────────────────────────────────────────[/dim]",
+            "Type [bold green]/help[/bold green] for commands or just start typing to chat."
+        ]
+
+        panel = Panel(
+            "\n".join(info_lines),
+            title=title,
+            title_align="left",
+            border_style="green",
+            expand=False,
+            padding=(1, 1)
+        )
+        self.console.print()
+        self.console.print(panel)
+        self.console.print()
+
     async def run(self) -> None:
         # Load initial RAG database if specified
         rag_ctx = self._get_rag_ctx()
@@ -85,17 +115,7 @@ class OllamaREPL:
             except SystemExit:
                 pass
 
-        rag_info = ""
-        if rag_ctx.rag_manager.current_database:
-            rag_info = f" | RAG: [cyan]{rag_ctx.rag_manager.current_database}[/cyan]"
-
-        ms = self.runtime.settings.model
-        self.console.print()
-        self.console.print("  [bold green]🤖 Ollama Agent[/bold green]")
-        self.console.print("  [dim]──────────────────────────────────────────────────────────────────[/dim]")
-        self.console.print(f"  [bold]Model:[/bold] [cyan]{ms.name}[/cyan]  |  [bold]Effort:[/bold] [cyan]{ms.reasoning_effort}[/cyan]{rag_info}")
-        self.console.print("  [dim]──────────────────────────────────────────────────────────────────[/dim]")
-        self.console.print("  Type [bold green]/help[/bold green] for commands or just start typing to chat.\n")
+        self._print_header(new_session=False)
 
         # Initialize the runtime
         set_tool_timeout(self.runtime.settings.runtime.builtin_tool_timeout)
@@ -238,13 +258,7 @@ class OllamaREPL:
     async def _handle_new_session(self) -> None:
         self.runtime.thread_id = new_session(self.console)
         self.console.clear()
-        ms = self.runtime.settings.model
-        self.console.print()
-        self.console.print("  [bold green]🤖 Ollama Agent[/bold green] [dim](New Session)[/dim]")
-        self.console.print("  [dim]──────────────────────────────────────────────────────────────────[/dim]")
-        self.console.print(f"  [bold]Model:[/bold] [cyan]{ms.name}[/cyan]  |  [bold]Effort:[/bold] [cyan]{ms.reasoning_effort}[/cyan]")
-        self.console.print("  [dim]──────────────────────────────────────────────────────────────────[/dim]")
-        self.console.print("  Type [bold green]/help[/bold green] for commands or just start typing to chat.\n")
+        self._print_header(new_session=True)
 
     async def _switch_model(self, model_name: str) -> None:
         await set_model(
