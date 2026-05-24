@@ -35,9 +35,9 @@ class ModelContextWindowError(RuntimeError):
     """Raised when the context window for a model cannot be resolved."""
 
 
-async def _show_model(model: str, base_url: str | None = None) -> Any:
+async def _show_model(model: str, base_url: str) -> Any:
     """Fetch Ollama model metadata asynchronously."""
-    host = (base_url or DEFAULT_BASE_URL).rstrip("/")
+    host = base_url.rstrip("/")
     try:
         client = ollama.AsyncClient(host=host)
         return await client.show(model)
@@ -71,7 +71,7 @@ def _model_context_length(model_info: dict[str, Any] | None) -> int | None:
     return max(values, default=None)
 
 
-async def _get_capabilities(model: str, base_url: str | None = None) -> set[str]:
+async def _get_capabilities(model: str, base_url: str) -> set[str]:
     """Extract capabilities for a model."""
     response = await _show_model(model, base_url)
     caps = _response_field(response, "capabilities", {})
@@ -82,18 +82,18 @@ async def _get_capabilities(model: str, base_url: str | None = None) -> set[str]
     return set()
 
 
-async def model_supports_tools(model: str, base_url: str | None = None) -> bool:
+async def model_supports_tools(model: str, base_url: str) -> bool:
     """Check if a model supports tool calls."""
     return "tools" in await _get_capabilities(model, base_url)
 
 
-async def ensure_model_supports_tools(model: str, base_url: str | None = None) -> None:
+async def ensure_model_supports_tools(model: str, base_url: str) -> None:
     """Raise ModelCapabilityError if the model doesn't support tools."""
     if not await model_supports_tools(model, base_url):
         raise ModelCapabilityError(f"Model '{model}' does not support tools.")
 
 
-async def model_supports_thinking(model: str, base_url: str | None = None) -> bool:
+async def model_supports_thinking(model: str, base_url: str) -> bool:
     """Best-effort detection of Ollama thinking support for a model."""
     capabilities = await _get_capabilities(model, base_url)
     if "thinking" in capabilities:
@@ -106,7 +106,7 @@ async def model_supports_thinking(model: str, base_url: str | None = None) -> bo
 async def resolve_context_window(
     model: str,
     context_window: int | None,
-    base_url: str | None = None,
+    base_url: str,
 ) -> int:
     """Resolve the effective context window for a model."""
     if context_window is not None:
@@ -137,8 +137,8 @@ async def resolve_context_window(
 async def resolve_ollama_reasoning(
     model: str,
     effort: ReasoningEffortValue,
-    base_url: str | None = None,
-    warn_callback: Callable[[str], None] | None = None,
+    base_url: str,
+    warn_callback: Callable[[str], None] = lambda _: None,
 ) -> bool | str | None:
     """Translate reasoning_effort to Ollama's native reasoning setting."""
     lower_name = model.lower()
@@ -167,14 +167,14 @@ async def resolve_ollama_reasoning(
 async def create_ollama_chat_model(
     *,
     model: str,
-    base_url: str | None,
+    base_url: str,
     context_window: int | None,
     reasoning_effort: ReasoningEffortValue,
     temperature: float = 0,
-    warn_callback: Callable[[str], None] | None = None,
+    warn_callback: Callable[[str], None] = lambda _: None,
 ) -> ChatOllama:
     """Create a native ChatOllama model with resolved runtime settings."""
-    host = (base_url or DEFAULT_BASE_URL).rstrip("/")
+    host = base_url.rstrip("/")
     reasoning = await resolve_ollama_reasoning(
         model, reasoning_effort, host, warn_callback
     )

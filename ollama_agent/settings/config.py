@@ -148,23 +148,21 @@ def _subagents_from_list(
 # ---------------------------------------------------------------------------
 
 
-def load_settings(settings_path: Path | None = None) -> Settings:
+def load_settings(settings_path: Path = SETTINGS_PATH) -> Settings:
     """Load settings from YAML file or create defaults."""
-    path = settings_path or SETTINGS_PATH
-    if not path.exists():
+    if not settings_path.exists():
         settings = Settings()
-        save_settings(settings, path)
+        save_settings(settings, settings_path)
         return settings
-    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    raw = yaml.safe_load(settings_path.read_text(encoding="utf-8")) or {}
     return Settings.from_dict(raw)
 
 
-def save_settings(settings: Settings, settings_path: Path | None = None) -> None:
+def save_settings(settings: Settings, settings_path: Path = SETTINGS_PATH) -> None:
     """Save settings to YAML file."""
-    path = settings_path or SETTINGS_PATH
-    path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
     text = yaml.safe_dump(settings.to_dict(), sort_keys=False, allow_unicode=True)
-    path.write_text(text, encoding="utf-8")
+    settings_path.write_text(text, encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------

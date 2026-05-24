@@ -73,8 +73,8 @@ class SkillManager(BaseFileStoreManager["SkillInfo"]):
     _ext: str = ""  # skills are directories, no file extension
     _id_label: str = "skill_id"
 
-    def __init__(self, skills_dir: Path | None = None) -> None:
-        super().__init__(skills_dir or self.DEFAULT_DIR)
+    def __init__(self, skills_dir: Path = SKILLS_DIR) -> None:
+        super().__init__(skills_dir)
 
     @property
     def skills_dir(self) -> Path:

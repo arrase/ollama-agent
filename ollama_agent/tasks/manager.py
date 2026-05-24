@@ -50,8 +50,8 @@ class TaskManager(BaseFileStoreManager["Task"]):
     _ext: str = ".yaml"  # tasks are stored as <id>.yaml files
     _id_label: str = "task_id"
 
-    def __init__(self, tasks_dir: Path | None = None) -> None:
-        super().__init__(tasks_dir or self.DEFAULT_DIR)
+    def __init__(self, tasks_dir: Path = TASKS_DIR) -> None:
+        super().__init__(tasks_dir)
 
     @property
     def tasks_dir(self) -> Path:

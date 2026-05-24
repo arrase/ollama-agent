@@ -177,7 +177,7 @@ class AgentRuntime:
         self,
         prompt: str,
         *,
-        thread_id: str | None = None,
+        thread_id: str = "",
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream agent events for the given prompt."""
         thread = thread_id or self.thread_id

@@ -26,11 +26,11 @@ async def stream_agent_events(
     prompt: str,
     renderer: "StreamingRenderer",
     *,
-    thread_id: str | None = None,
-    ignore: Iterable[str] | None = None,
+    thread_id: str = "",
+    ignore: Iterable[str] = (),
     auto_close: bool = True,
 ) -> None:
-    ignored = set(ignore or ())
+    ignored = set(ignore)
     try:
         async for event in runtime.run_streamed(prompt, thread_id=thread_id):
             etype = event.get("type")
@@ -47,7 +47,7 @@ async def stream_agent_events(
 
 
 async def run_non_interactive(
-    runtime: "AgentRuntime", prompt: str, *, thread_id: str | None = None
+    runtime: "AgentRuntime", prompt: str, *, thread_id: str = ""
 ) -> None:
     """Stream agent output to the console (non-interactive mode)."""
     await stream_agent_events(

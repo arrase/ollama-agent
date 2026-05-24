@@ -47,8 +47,8 @@ class RAGManager:
 
     COLLECTION_NAME = "documents"
 
-    def __init__(self, settings: RAGSettings | None = None) -> None:
-        self.settings = settings or RAGSettings()
+    def __init__(self, settings: RAGSettings) -> None:
+        self.settings = settings
         self._rag_dir = Path(self.settings.rag_dir)
         self._rag_dir.mkdir(parents=True, exist_ok=True)
         self._client: QdrantClient | None = None
@@ -212,7 +212,26 @@ class RAGManager:
         }
 
     async def add_directory(
-        self, dir_path: str, extensions: list[str] | None = None
+        self,
+        dir_path: str,
+        extensions: tuple[str, ...] = (
+            ".txt",
+            ".md",
+            ".py",
+            ".js",
+            ".ts",
+            ".json",
+            ".yaml",
+            ".yml",
+            ".html",
+            ".css",
+            ".xml",
+            ".csv",
+            ".rst",
+            ".ini",
+            ".cfg",
+            ".sh",
+        ),
     ) -> dict[str, Any]:
         """Add all files from a directory to the current RAG database."""
         client = self._ensure_loaded()
@@ -223,27 +242,6 @@ class RAGManager:
 
         if not path.is_dir():
             raise RAGError(f"Not a directory: {dir_path}")
-
-        # Default extensions for text files
-        if extensions is None:
-            extensions = [
-                ".txt",
-                ".md",
-                ".py",
-                ".js",
-                ".ts",
-                ".json",
-                ".yaml",
-                ".yml",
-                ".html",
-                ".css",
-                ".xml",
-                ".csv",
-                ".rst",
-                ".ini",
-                ".cfg",
-                ".sh",
-            ]
 
         results: dict[str, Any] = {"added": 0, "failed": 0, "skipped": 0, "files": []}
 

@@ -12,8 +12,8 @@ from .manager import RAGManager, RAGError, RAGDatabaseExistsError, RAGNotLoadedE
 class RAGContext:
     """Holds shared resources for RAG commands."""
 
+    rag_manager: RAGManager
     console: Console = field(default_factory=Console)
-    rag_manager: RAGManager = field(default_factory=RAGManager)
 
     def _find_or_exit(self, name: str) -> str:
         """Find a database by name/prefix or exit."""
