@@ -102,9 +102,22 @@ def build_repl_handlers(
     get_rag_ctx: Callable[[], RAGContext],
     console: Console,
     current_model: Callable[[], str],
+    base_url: Callable[[], str],
     switch_model: Callable[[str], Awaitable[None]],
 ) -> dict[str, REPLCommand]:
     """Build the REPL command registry for slash commands."""
+
+    def handle_rag_add(args: list[str]) -> object:
+        is_dir = "--dir" in args
+        paths = [a for a in args if a != "--dir"]
+        if not paths:
+            get_rag_ctx().console.print("[red]Error: Missing file or directory path.[/red]")
+            return None
+        return (
+            add_rag_directory(get_rag_ctx(), paths[0])
+            if is_dir
+            else add_rag_file(get_rag_ctx(), paths[0])
+        )
 
     return {
         "/help": REPLCommand("Show this help message", "General", None, lambda _: None),
@@ -121,7 +134,7 @@ def build_repl_handlers(
             "List available Ollama models",
             "Model Management",
             None,
-            lambda _: list_models(console, current_model()),
+            lambda _: list_models(console, current_model(), base_url()),
         ),
         "/model-set": REPLCommand(
             "Switch to a different model",
@@ -184,11 +197,7 @@ def build_repl_handlers(
             "Add file(s) to RAG",
             "RAG (Document Retrieval)",
             "/rag-add <path> [--dir]",
-            lambda args: (
-                add_rag_directory(get_rag_ctx(), args[0])
-                if "--dir" in args[1:]
-                else add_rag_file(get_rag_ctx(), args[0])
-            ),
+            handle_rag_add,
         ),
         "/skills": REPLCommand(
             "List all skills",

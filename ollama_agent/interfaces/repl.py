@@ -57,6 +57,7 @@ class OllamaREPL:
                 get_rag_ctx=self._get_rag_ctx,
                 console=self.console,
                 current_model=lambda: self.runtime.settings.model.name,
+                base_url=lambda: self.runtime.settings.model.base_url,
                 switch_model=self._switch_model,
             )
         return self._commands

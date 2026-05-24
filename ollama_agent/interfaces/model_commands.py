@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any
 
 import ollama
 from rich.console import Console
 
 from ..core import ModelCapabilityError, model_supports_tools
-from ..settings import load_settings
 
 if TYPE_CHECKING:
     from ..agent import AgentRuntime
@@ -21,30 +21,37 @@ async def _list_models(base_url: str) -> list[Any]:
     return getattr(response, "models", [])
 
 
-async def list_models(console: Console, current_model: str) -> None:
+async def list_models(
+    console: Console,
+    current_model: str,
+    base_url: str,
+) -> None:
     """Print available Ollama models with tool-support indicators."""
     try:
-        settings = load_settings()
-        base_url = settings.model.base_url
         models = await _list_models(base_url)
         if not models:
             console.print("[yellow]No models found in Ollama.[/yellow]")
             return
+        
+        valid_models = [m for m in models if getattr(m, "model", None)]
+        
+        async def get_tool_icon(model_name: str) -> str:
+            try:
+                supported = await model_supports_tools(model_name, base_url)
+                return "[green]✓[/green]" if supported else "[red]✗[/red]"
+            except ModelCapabilityError:
+                return "[yellow]?[/yellow]"
+
+        tool_icons = await asyncio.gather(
+            *(get_tool_icon(getattr(m, "model")) for m in valid_models)
+        )
+
         console.print("[bold]Available Models:[/bold]\n[dim]─" + "─" * 59 + "[/dim]")
-        for item in models:
-            if not (name := getattr(item, "model", None)):
-                continue
+        for item, tool_icon in zip(valid_models, tool_icons):
+            name = getattr(item, "model")
             marker = " [green]◀ current[/green]" if name == current_model else ""
             size_gb = getattr(item, "size", 0) / (1024**3)
             size_str = f"{size_gb:.1f}GB" if size_gb else ""
-            try:
-                tool_icon = (
-                    "[green]✓[/green]"
-                    if await model_supports_tools(name, base_url)
-                    else "[red]✗[/red]"
-                )
-            except ModelCapabilityError:
-                tool_icon = "[yellow]?[/yellow]"
             console.print(f"  {tool_icon} [cyan]{name}[/cyan] {size_str}{marker}")
         console.print(
             "[dim]─" * 60
@@ -62,8 +69,7 @@ async def set_model(
 ) -> str:
     """Switch to model_name, returning the new model name."""
     try:
-        settings = load_settings()
-        base_url = settings.model.base_url
+        base_url = runtime.settings.model.base_url
         available = {
             getattr(model, "model", "") for model in await _list_models(base_url)
         }
