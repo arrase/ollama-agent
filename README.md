@@ -284,6 +284,20 @@ ollama-agent --config-reset config-file
 > **Note**: When upgrading from v0.1 to v0.2, it is recommended to reset the system prompt to ensure compatibility with new features:
 > `ollama-agent --config-reset system-prompt`
 
+## LangSmith Tracing
+
+Ollama Agent supports native tracing via [LangSmith](https://docs.smith.langchain.com/). To enable it, simply add the `langsmith` section to your `~/.ollama-agent/settings.yaml`:
+
+```yaml
+langsmith:
+  api_key: "your-api-key"
+  tracing: "true"
+  project: "your-project-name"
+  endpoint: "https://api.smith.langchain.com" # Optional, useful for EU or specific regions
+```
+
+When configured, the agent will automatically inject these values into the environment upon startup, enabling deep tracing of tool executions, reasoning steps, and agent workflows. If omitted, no environment variables will be injected and tracing will remain disabled.
+
 ## Persistent Memory
 
 The agent manages its own long-term memory via a file located at `~/.ollama-agent/MEMORY.md`. The agent uses built-in tools to read, update, and persist facts, preferences, and context across sessions automatically.
