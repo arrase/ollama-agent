@@ -31,6 +31,7 @@ def main() -> None:
         return
 
     settings = load_settings()
+    settings.setup_environment()
 
     # Apply CLI overrides
     if args.model:

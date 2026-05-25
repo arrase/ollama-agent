@@ -90,24 +90,51 @@ class SubAgentSettings:
 
 
 @dataclass(slots=True)
+class LangSmithSettings:
+    api_key: str = ""
+    tracing: str = ""
+    project: str = ""
+    endpoint: str = ""
+
+
+@dataclass(slots=True)
 class Settings:
     model: ModelSettings = field(default_factory=ModelSettings)
     runtime: RuntimeSettings = field(default_factory=RuntimeSettings)
     rag: RAGSettings = field(default_factory=RAGSettings)
     subagents: list[SubAgentSettings] = field(default_factory=list)
+    langsmith: LangSmithSettings | None = None
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any] | None) -> Self:
         raw = raw or {}
+        langsmith_raw = raw.get("langsmith")
         return cls(
             model=_dataclass_from_dict(ModelSettings, raw.get("model")),
             runtime=_dataclass_from_dict(RuntimeSettings, raw.get("runtime")),
             rag=_dataclass_from_dict(RAGSettings, raw.get("rag")),
             subagents=_subagents_from_list(raw.get("subagents")),
+            langsmith=_dataclass_from_dict(LangSmithSettings, langsmith_raw) if langsmith_raw else None,
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        if d.get("langsmith") is None:
+            d.pop("langsmith", None)
+        return d
+
+    def setup_environment(self) -> None:
+        """Inject settings into the environment variables."""
+        if self.langsmith:
+            import os
+            if self.langsmith.api_key:
+                os.environ["LANGSMITH_API_KEY"] = self.langsmith.api_key
+            if self.langsmith.tracing:
+                os.environ["LANGSMITH_TRACING"] = self.langsmith.tracing
+            if self.langsmith.project:
+                os.environ["LANGSMITH_PROJECT"] = self.langsmith.project
+            if self.langsmith.endpoint:
+                os.environ["LANGSMITH_ENDPOINT"] = self.langsmith.endpoint
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +181,7 @@ def load_settings(settings_path: Path = SETTINGS_PATH) -> Settings:
         settings = Settings()
         save_settings(settings, settings_path)
         return settings
+    
     raw = yaml.safe_load(settings_path.read_text(encoding="utf-8")) or {}
     return Settings.from_dict(raw)
 
