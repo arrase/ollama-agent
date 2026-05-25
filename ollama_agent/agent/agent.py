@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, AsyncGenerator, Self, cast
@@ -76,7 +77,7 @@ class AgentRuntime:
     """
 
     settings: Settings = field(default_factory=Settings)
-    thread_id: str = "default"
+    thread_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     graph: Any = field(default=None, init=False, repr=False)
     _instructions: str = field(default="", init=False)
     _exit_stack: contextlib.AsyncExitStack = field(
