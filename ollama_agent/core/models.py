@@ -19,13 +19,6 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "http://localhost:11434"
 
-THINKING_MODEL_PREFIXES = (
-    "deepseek-r1",
-    "deepseek-v3.1",
-    "gpt-oss",
-    "qwen3",
-)
-
 
 class ModelCapabilityError(RuntimeError):
     """Raised when the selected model cannot run tool calls."""
@@ -96,11 +89,7 @@ async def ensure_model_supports_tools(model: str, base_url: str) -> None:
 async def model_supports_thinking(model: str, base_url: str) -> bool:
     """Best-effort detection of Ollama thinking support for a model."""
     capabilities = await _get_capabilities(model, base_url)
-    if "thinking" in capabilities:
-        return True
-
-    model_name = model.lower()
-    return any(model_name.startswith(prefix) for prefix in THINKING_MODEL_PREFIXES)
+    return "thinking" in capabilities
 
 
 async def resolve_context_window(
