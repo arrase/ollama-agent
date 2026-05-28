@@ -5,6 +5,8 @@ import inspect
 from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.styles import Style
+
+from .completer import SlashCommandCompleter
 from rich.console import Console
 from rich.panel import Panel
 
@@ -33,7 +35,8 @@ class OllamaREPL:
             style=Style.from_dict({
                 "prompt": "#81a1c1 bold",  # Nord blue
                 "arrow": "#88c0d0 bold",   # Frost cyan
-            })
+            }),
+            completer=SlashCommandCompleter(self._get_commands),
         )
         self._task_ctx = CLIContext(console=self.console)
         self._skills_ctx = SkillsContext(console=self.console)
