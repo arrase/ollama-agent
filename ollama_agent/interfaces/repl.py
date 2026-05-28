@@ -1,23 +1,22 @@
 """REPL interface for Ollama Agent."""
 
-import inspect
-
 from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.styles import Style
 
-from .completer import SlashCommandCompleter
 from rich.console import Console
 from rich.panel import Panel
 
 from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager, set_tool_timeout
 from ..rag import RAGContext, RAGManager, load_rag_database
-from ..skills import SkillsContext, create_skill
+from ..skills import SkillsContext
 from ..streaming import ConsoleStreamingRenderer, stream_agent_events
-from ..tasks.commands import CLIContext, create_task
+from ..tasks.commands import CLIContext
+from .completer import SlashCommandCompleter
 from .dispatch import build_repl_handlers, render_repl_help
 from .model_commands import set_model
+from .repl_wizards import safe_call, skill_create_wizard, task_create_wizard
 from .session_commands import new_session
 
 
@@ -65,20 +64,18 @@ class OllamaREPL:
                 handle_exit=self._handle_exit,
                 handle_clear=self._handle_clear,
                 handle_new=self._handle_new_session,
-                handle_task_create=self._handle_task_create,
-                handle_skill_create=self._handle_skill_create,
+                handle_task_create=lambda args: task_create_wizard(
+                    self.session, self.console, self._task_ctx,
+                    self.runtime.settings.model.name,
+                    self.runtime.settings.model.reasoning_effort,
+                    args,
+                ),
+                handle_skill_create=lambda args: skill_create_wizard(
+                    self.session, self.console, self._skills_ctx, args,
+                ),
             )
         return self._commands
 
-    @staticmethod
-    async def _safe(fn, *args, **kwargs):
-        """Call fn(*args, **kwargs), silencing SystemExit (already printed)."""
-        try:
-            result = fn(*args, **kwargs)
-            if inspect.isawaitable(result):
-                await result
-        except SystemExit:
-            pass
 
     async def cleanup(self) -> None:
         if self._rag_ctx:
@@ -108,7 +105,7 @@ class OllamaREPL:
             title=title,
             title_align="left",
             border_style="green",
-            expand=False,
+            expand=True,
             padding=(1, 1)
         )
         self.console.print()
@@ -170,65 +167,7 @@ class OllamaREPL:
             self.console.print(f"[red]Usage: {spec.usage}[/red]")
             return
 
-        await self._safe(spec.handler, args)
-
-    async def _prompt_multiline(self, prompt_html: str, hint: str) -> str:
-        self.console.print(f"[dim]{hint}[/dim]")
-        buf = self.session.default_buffer
-        old_multiline = buf.multiline
-        try:
-            return await self.session.prompt_async(HTML(prompt_html), multiline=True)
-        finally:
-            buf.multiline = old_multiline
-
-    async def _prompt_line(self, label: str, default: str = "") -> str:
-        prompt_html = f"<b>{label}</b>"
-        if default:
-            prompt_html += f" (default: {default})"
-        prompt_html += "> "
-        val = (await self.session.prompt_async(HTML(prompt_html))).strip()
-        return val or default
-
-    async def _handle_task_create(self, args: list[str]) -> None:
-        task_id, force = args[0], "--force" in args[1:]
-        ms = self.runtime.settings.model
-
-        title = await self._prompt_line("title")
-        model = await self._prompt_line("model", ms.name)
-        effort = await self._prompt_line("effort", ms.reasoning_effort)
-        task_prompt = await self._prompt_multiline(
-            "<b>prompt> </b>",
-            "Enter the task prompt (multiline). Finish with Esc+Enter.",
-        )
-        await self._safe(
-            create_task,
-            self._task_ctx,
-            task_id,
-            title=title,
-            prompt=task_prompt,
-            model=model,
-            reasoning_effort=effort,
-            force=force,
-        )
-
-    async def _handle_skill_create(self, args: list[str]) -> None:
-        skill_id, force = args[0], "--force" in args[1:]
-
-        name = await self._prompt_line("name")
-        description = await self._prompt_line("description")
-        instructions = await self._prompt_multiline(
-            "<b>instructions> </b>",
-            "Enter skill instructions (multiline markdown). Finish with Esc+Enter.",
-        )
-        await self._safe(
-            create_skill,
-            self._skills_ctx,
-            skill_id,
-            name=name,
-            description=description,
-            instructions=instructions,
-            force=force,
-        )
+        await safe_call(spec.handler, args)
 
     async def _handle_new_session(self, args: list[str]) -> None:
         self.runtime.thread_id = new_session(self.console)
