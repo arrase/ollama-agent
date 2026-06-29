@@ -22,12 +22,18 @@ _AT_MENTION_RE = re.compile(
 # Characters whose presence in a completed path require quoting.
 _NEEDS_QUOTE_RE = re.compile(r"""[\s"'\(\)\[\]\{\},;]""")
 
+# Maximum number of completion candidates to prevent UI slowdown.
+_MAX_COMPLETIONS = 200
+
 
 class SlashCommandCompleter(Completer):
     """Tab-completer that suggests slash commands and file mentions.
 
-    Slash commands: trigger when typing `/` as the first word.
-    File mentions: trigger when typing `@` anywhere in the line.
+    Slash commands: trigger when typing ``/`` as the first word.
+    File mentions: trigger when typing ``@`` anywhere in the line.
+    File completions recursively walk the project tree and present every
+    file and directory as a flat, filterable list of relative paths —
+    similar to Codex or Claude Code.
     """
 
     def __init__(self, get_commands: Callable[[], dict[str, REPLCommand]]) -> None:
@@ -38,7 +44,7 @@ class SlashCommandCompleter(Completer):
     ) -> Iterable[Completion]:
         text_before = document.text_before_cursor
 
-        # 1. Check if user is typing a file/directory reference (starts with @)
+        # 1. File/directory @-mention completion
         match = _AT_MENTION_RE.search(text_before)
         if match:
             if match.group(1) is not None:
@@ -54,12 +60,11 @@ class SlashCommandCompleter(Completer):
             yield from self._get_path_completions(prefix, quote_char)
             return
 
-        # 2. Check if user is typing a slash command
+        # 2. Slash command completion
         text = text_before.lstrip()
         if not text.startswith("/"):
             return
 
-        # If we're past the first word, nothing to complete for slash commands.
         if " " in text:
             return
 
@@ -74,84 +79,105 @@ class SlashCommandCompleter(Completer):
     def _get_path_completions(
         self, prefix: str, quote_char: str | None
     ) -> Iterable[Completion]:
-        """Generate autocompletion suggestions for paths starting with the prefix."""
-        try:
-            dir_part, file_part = os.path.split(prefix)
-        except (TypeError, ValueError):
-            return
+        """Recursively walk the project tree and yield matching paths.
 
-        search_dir = Path.cwd()
-        if dir_part:
-            try:
-                resolved_dir = Path(dir_part).expanduser()
-                if not resolved_dir.is_absolute():
-                    resolved_dir = Path.cwd() / resolved_dir
-                if resolved_dir.is_dir():
-                    search_dir = resolved_dir
-                else:
-                    return
-            except (OSError, ValueError) as exc:
-                _log.debug("Path resolution failed for '%s': %s", dir_part, exc)
-                return
-
-        if not search_dir.exists():
-            return
+        Every file and directory under the working directory is presented as
+        a relative path.  The typed *prefix* filters the flat list so the
+        user can drill into deep paths by simply typing (e.g. ``@core/pr``
+        immediately narrows to ``ollama_agent/core/prompt_processor.py``).
+        """
+        cwd = Path.cwd()
+        show_hidden = prefix.startswith(".")
+        count = 0
 
         try:
-            entries = sorted(search_dir.iterdir(), key=lambda p: p.name)
+            tree = os.walk(cwd)
         except OSError as exc:
-            _log.debug("Cannot list directory '%s': %s", search_dir, exc)
+            _log.debug("Cannot walk '%s': %s", cwd, exc)
             return
 
-        for item in entries:
-            # Ignore hidden files unless explicitly typed
-            if item.name.startswith(".") and not file_part.startswith("."):
-                continue
+        for root, dirs, files in tree:
+            root_path = Path(root)
 
-            # Filter out common ignored directories to keep autocompletion clean
-            if item.is_dir() and item.name in IGNORED_DIRECTORY_NAMES:
-                continue
+            # Build the filtered, sorted list of child directories with
+            # their precomputed relative paths.  This list simultaneously
+            # controls which directories os.walk descends into (via the
+            # dirs[:] in-place mutation) and which ones are emitted as
+            # completion candidates.
+            candidate_dirs: list[tuple[str, str]] = []
+            for dirname in sorted(dirs):
+                if dirname in IGNORED_DIRECTORY_NAMES:
+                    continue
+                if not show_hidden and dirname.startswith("."):
+                    continue
+                rel = str((root_path / dirname).relative_to(cwd)) + "/"
+                # Prune branches that cannot contain prefix matches:
+                # keep only ancestors of the prefix or descendants of it.
+                if not (prefix.startswith(rel) or rel.startswith(prefix)):
+                    continue
+                candidate_dirs.append((dirname, rel))
 
-            if not item.name.startswith(file_part):
-                continue
+            # Control os.walk traversal — only descend into kept dirs.
+            dirs[:] = [d for d, _ in candidate_dirs]
 
-            is_dir = item.is_dir()
-            dir_suffix = "/" if is_dir else ""
-            completed_path = (
-                os.path.join(dir_part, item.name) if dir_part else item.name
-            )
+            # --- Emit directory completions ---
+            for _, rel in candidate_dirs:
+                if count >= _MAX_COMPLETIONS:
+                    return
+                # Skip the directory itself when the prefix matches exactly
+                # — the user already typed it and wants its contents.
+                if rel == prefix or not rel.startswith(prefix):
+                    continue
+                count += 1
+                yield self._build_completion(
+                    rel, prefix, quote_char, display_meta="Directory"
+                )
 
-            needs_quote = bool(_NEEDS_QUOTE_RE.search(completed_path))
+            # --- Emit file completions ---
+            for filename in sorted(files):
+                if count >= _MAX_COMPLETIONS:
+                    return
+                if not show_hidden and filename.startswith("."):
+                    continue
+                rel = str((root_path / filename).relative_to(cwd))
+                if not rel.startswith(prefix):
+                    continue
 
-            display_name = item.name + dir_suffix
-            meta = "Directory" if is_dir else "File"
-
-            if not is_dir:
+                meta = "File"
                 try:
-                    size_kb = item.stat().st_size / 1024
+                    size_kb = (root_path / filename).stat().st_size / 1024
                     meta = f"File ({size_kb:.1f} KB)"
                 except OSError:
                     pass
 
-            # Append trailing slash to directory completions so the user
-            # can continue typing a deeper path immediately.
-            completion_text = completed_path + dir_suffix
+                count += 1
+                yield self._build_completion(
+                    rel, prefix, quote_char, display_meta=meta
+                )
 
-            if quote_char is not None:
-                # User already opened quotes — close them after the path.
-                text = completion_text + quote_char
-                start_pos = -len(prefix)
-            elif needs_quote:
-                # Wrap in double quotes, replacing the bare @ prefix.
-                text = f'"{completion_text}"'
-                start_pos = -len(prefix) - 1
-            else:
-                text = completion_text
-                start_pos = -len(prefix)
+    def _build_completion(
+        self,
+        rel_path: str,
+        prefix: str,
+        quote_char: str | None,
+        display_meta: str,
+    ) -> Completion:
+        """Build a ``Completion`` for a relative path string."""
+        needs_quote = bool(_NEEDS_QUOTE_RE.search(rel_path))
 
-            yield Completion(
-                text,
-                start_position=start_pos,
-                display=display_name,
-                display_meta=meta,
-            )
+        if quote_char is not None:
+            text = rel_path + quote_char
+            start_pos = -len(prefix)
+        elif needs_quote:
+            text = f'"{rel_path}"'
+            start_pos = -len(prefix) - 1
+        else:
+            text = rel_path
+            start_pos = -len(prefix)
+
+        return Completion(
+            text,
+            start_position=start_pos,
+            display=rel_path,
+            display_meta=display_meta,
+        )
