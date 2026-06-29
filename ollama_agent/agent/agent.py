@@ -31,34 +31,12 @@ from ..settings import (
     save_settings,
 )
 from ..streaming.parsers import streaming_reasoning, streaming_text
-from ..vision import (
-    build_multimodal_responses_input,
-    capture_display_as_base64,
-    extract_display_tokens,
-)
 from .builtin_tools import BUILTIN_TOOLS, get_tool_timeout
 from .middleware import stream_tool_events_mw
 from .subagents import build_subagents
 
 _log = logging.getLogger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Vision helper
-# ---------------------------------------------------------------------------
-
-
-def _maybe_attach_screen_context(prompt: str) -> dict[str, Any]:
-    """Convert @dpN tokens to a multimodal user message (LangChain content blocks)."""
-    if "@dp" not in prompt:
-        return {"role": "user", "content": prompt}
-
-    cleaned, displays = extract_display_tokens(prompt)
-    if not displays:
-        return {"role": "user", "content": prompt}
-
-    images = [capture_display_as_base64(i) for i in displays]
-    return build_multimodal_responses_input(cleaned, images)[0]
 
 
 # ---------------------------------------------------------------------------
@@ -189,7 +167,7 @@ class AgentRuntime:
             return
 
         config = {"configurable": {"thread_id": thread}}
-        user_msg = _maybe_attach_screen_context(prompt)
+        user_msg = {"role": "user", "content": prompt}
 
         hide_reasoning = self.settings.model.reasoning_effort in ("hide", "disabled")
 
