@@ -4,6 +4,23 @@ import os
 import re
 from pathlib import Path
 
+# Shared set of directory names to skip during traversal and autocompletion.
+# Importable by other modules (e.g. the completer) to avoid duplication.
+IGNORED_DIRECTORY_NAMES: frozenset[str] = frozenset({
+    ".git",
+    ".github",
+    ".vscode",
+    ".idea",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "env",
+    ".env",
+    "build",
+    "dist",
+})
+
 
 class PromptProcessingError(Exception):
     """Exception raised when prompt processing fails, e.g., referenced file not found."""
@@ -12,7 +29,7 @@ class PromptProcessingError(Exception):
 def is_binary_file(file_path: Path) -> bool:
     """Check if a file is binary by searching for null bytes in the first block."""
     try:
-        with open(file_path, "rb") as f:
+        with file_path.open("rb") as f:
             chunk = f.read(1024)
             return b"\x00" in chunk
     except Exception:
@@ -26,23 +43,9 @@ def should_ignore_path(path: Path, root_path: Path) -> bool:
     except ValueError:
         rel_path = path
 
-    ignored_names = {
-        ".git",
-        ".github",
-        ".vscode",
-        ".idea",
-        "node_modules",
-        "__pycache__",
-        ".venv",
-        "venv",
-        "env",
-        ".env",
-        "build",
-        "dist",
-    }
     for part in rel_path.parts:
         if (
-            part in ignored_names
+            part in IGNORED_DIRECTORY_NAMES
             or part.endswith(".egg-info")
             or (part.startswith(".") and part not in (".", ".."))
         ):
@@ -69,7 +72,7 @@ def read_file_content(file_path: Path, max_file_size: int = 1024 * 1024) -> str:
         raise PromptProcessingError(f"Cannot read binary file: {file_path}")
 
     try:
-        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+        with file_path.open("r", encoding="utf-8", errors="replace") as f:
             return f.read()
     except Exception as e:
         raise PromptProcessingError(f"Failed to read file {file_path}: {e}")
@@ -81,7 +84,11 @@ def resolve_context_files(
     max_files: int = 100,
     max_total_size: int = 10 * 1024 * 1024,
 ) -> dict[Path, str]:
-    """Resolve a target file or directory into a dict mapping Paths to contents."""
+    """Resolve a target file or directory into a dict mapping Paths to contents.
+
+    Returns an empty dict if the path disappeared between the existence check
+    and this call (TOCTOU race).
+    """
     files_content: dict[Path, str] = {}
     total_size = 0
 
@@ -90,50 +97,50 @@ def resolve_context_files(
         files_content[target_path] = content
         return files_content
 
-    if target_path.is_dir():
-        for root, dirs, files in os.walk(target_path):
-            dirs[:] = [
-                d
-                for d in dirs
-                if not should_ignore_path(Path(root) / d, target_path)
-            ]
-
-            for file_name in files:
-                file_path = Path(root) / file_name
-                if should_ignore_path(file_path, target_path):
-                    continue
-
-                if is_binary_file(file_path):
-                    continue
-
-                try:
-                    size = file_path.stat().st_size
-                except Exception:
-                    continue
-
-                if size > max_file_size:
-                    continue
-
-                if len(files_content) >= max_files:
-                    raise PromptProcessingError(
-                        f"Directory traversal exceeded limit of {max_files} files in: {target_path}"
-                    )
-
-                if total_size + size > max_total_size:
-                    raise PromptProcessingError(
-                        f"Directory traversal exceeded total size limit of {max_total_size} bytes in: {target_path}"
-                    )
-
-                try:
-                    content = read_file_content(file_path, max_file_size)
-                    files_content[file_path] = content
-                    total_size += size
-                except PromptProcessingError:
-                    continue
-
+    if not target_path.is_dir():
         return files_content
 
-    raise PromptProcessingError(f"Target path does not exist: {target_path}")
+    for root, dirs, files in os.walk(target_path):
+        dirs[:] = [
+            d
+            for d in dirs
+            if not should_ignore_path(Path(root) / d, target_path)
+        ]
+
+        for file_name in files:
+            file_path = Path(root) / file_name
+            if should_ignore_path(file_path, target_path):
+                continue
+
+            if is_binary_file(file_path):
+                continue
+
+            try:
+                size = file_path.stat().st_size
+            except Exception:
+                continue
+
+            if size > max_file_size:
+                continue
+
+            if len(files_content) >= max_files:
+                raise PromptProcessingError(
+                    f"Directory traversal exceeded limit of {max_files} files in: {target_path}"
+                )
+
+            if total_size + size > max_total_size:
+                raise PromptProcessingError(
+                    f"Directory traversal exceeded total size limit of {max_total_size} bytes in: {target_path}"
+                )
+
+            try:
+                content = read_file_content(file_path, max_file_size)
+                files_content[file_path] = content
+                total_size += size
+            except PromptProcessingError:
+                continue
+
+    return files_content
 
 
 def process_prompt_mentions(
@@ -147,7 +154,7 @@ def process_prompt_mentions(
     If a mention looks like a path but does not exist, raises PromptProcessingError.
     """
     pattern = re.compile(
-        r'(?:^|(?<=[\s\(\[\{\<]))@(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'\(\[\{\<\>,;]+))'
+        r'(?:^|(?<=[\s\(\[\{<]))@(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'\(\[\{<>,;]+))'
     )
 
     matches = list(pattern.finditer(prompt))
@@ -207,7 +214,7 @@ def process_prompt_mentions(
 
     context_blocks = []
     cwd = Path.cwd()
-    for file_path, content in all_context_contents.items():
+    for file_path, content in sorted(all_context_contents.items()):
         try:
             rel_path = file_path.relative_to(cwd)
         except ValueError:

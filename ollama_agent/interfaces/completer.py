@@ -1,5 +1,6 @@
 """Autocomplete support for REPL slash commands and file mentions."""
 
+import logging
 import os
 import re
 from pathlib import Path
@@ -8,7 +9,18 @@ from typing import Callable, Iterable
 from prompt_toolkit.completion import CompleteEvent, Completion, Completer
 from prompt_toolkit.document import Document
 
+from ..core.prompt_processor import IGNORED_DIRECTORY_NAMES
 from .dispatch import REPLCommand
+
+_log = logging.getLogger(__name__)
+
+# @-mention regex: matches @"quoted", @'quoted', or @bare at word boundaries.
+_AT_MENTION_RE = re.compile(
+    r"""(?:^|[\s\(\[\{<])@(?:"([^"]*)|'([^']*)|([^\s"'\(\[\{<>,;]*))$"""
+)
+
+# Characters whose presence in a completed path require quoting.
+_NEEDS_QUOTE_RE = re.compile(r"""[\s"'\(\)\[\]\{\},;]""")
 
 
 class SlashCommandCompleter(Completer):
@@ -27,19 +39,12 @@ class SlashCommandCompleter(Completer):
         text_before = document.text_before_cursor
 
         # 1. Check if user is typing a file/directory reference (starts with @)
-        # Match rightmost @-mention prefix before the cursor
-        match = re.search(
-            r'(?:^|[\s\(\[\{\<])@(?:"([^"]*)|\'([^\']*)|([^\s"\'\(\[\{\<\>,;]*))$',
-            text_before,
-        )
+        match = _AT_MENTION_RE.search(text_before)
         if match:
-            double_quote = match.group(1) is not None
-            single_quote = match.group(2) is not None
-
-            if double_quote:
+            if match.group(1) is not None:
                 prefix = match.group(1)
                 quote_char = '"'
-            elif single_quote:
+            elif match.group(2) is not None:
                 prefix = match.group(2)
                 quote_char = "'"
             else:
@@ -72,7 +77,7 @@ class SlashCommandCompleter(Completer):
         """Generate autocompletion suggestions for paths starting with the prefix."""
         try:
             dir_part, file_part = os.path.split(prefix)
-        except Exception:
+        except (TypeError, ValueError):
             return
 
         search_dir = Path.cwd()
@@ -85,72 +90,68 @@ class SlashCommandCompleter(Completer):
                     search_dir = resolved_dir
                 else:
                     return
-            except Exception:
+            except (OSError, ValueError) as exc:
+                _log.debug("Path resolution failed for '%s': %s", dir_part, exc)
                 return
 
         if not search_dir.exists():
             return
 
         try:
-            for item in search_dir.iterdir():
-                # Ignore hidden files unless explicitly typed
-                if item.name.startswith(".") and not file_part.startswith("."):
-                    continue
-
-                # Filter out extremely common ignored directories to keep autocompletion clean
-                if item.is_dir() and item.name in {
-                    ".git",
-                    ".venv",
-                    "venv",
-                    "__pycache__",
-                    "node_modules",
-                    "build",
-                    "dist",
-                }:
-                    continue
-
-                if item.name.startswith(file_part):
-                    completed_path = (
-                        os.path.join(dir_part, item.name) if dir_part else item.name
-                    )
-
-                    needs_quote = bool(
-                        re.search(r'[\s"\'\(\)\[\]\{\},;]', completed_path)
-                    )
-
-                    is_dir = item.is_dir()
-                    suffix = "/" if is_dir else ""
-                    display_name = item.name + suffix
-                    meta = "Directory" if is_dir else "File"
-
-                    if not is_dir:
-                        try:
-                            size_kb = item.stat().st_size / 1024
-                            meta = f"File ({size_kb:.1f} KB)"
-                        except Exception:
-                            pass
-
-                    if quote_char is not None:
-                        # User already opened quotes.
-                        # Replacement text is completed_path + quote_char (closing quote)
-                        # Replace starting from prefix.
-                        text = completed_path + quote_char
-                        start_pos = -len(prefix)
-                    else:
-                        # User did not open quotes.
-                        if needs_quote:
-                            # We wrap the whole thing in double quotes, replacing the @ as well.
-                            text = f'"{completed_path}"'
-                            start_pos = -len(prefix) - 1
-                        else:
-                            text = completed_path
-                            start_pos = -len(prefix)
-
-                    yield Completion(
-                        text,
-                        start_position=start_pos,
-                        display=display_name,
-                        display_meta=meta,
-                    )
-        except Exception:
+            entries = sorted(search_dir.iterdir(), key=lambda p: p.name)
+        except OSError as exc:
+            _log.debug("Cannot list directory '%s': %s", search_dir, exc)
             return
+
+        for item in entries:
+            # Ignore hidden files unless explicitly typed
+            if item.name.startswith(".") and not file_part.startswith("."):
+                continue
+
+            # Filter out common ignored directories to keep autocompletion clean
+            if item.is_dir() and item.name in IGNORED_DIRECTORY_NAMES:
+                continue
+
+            if not item.name.startswith(file_part):
+                continue
+
+            is_dir = item.is_dir()
+            dir_suffix = "/" if is_dir else ""
+            completed_path = (
+                os.path.join(dir_part, item.name) if dir_part else item.name
+            )
+
+            needs_quote = bool(_NEEDS_QUOTE_RE.search(completed_path))
+
+            display_name = item.name + dir_suffix
+            meta = "Directory" if is_dir else "File"
+
+            if not is_dir:
+                try:
+                    size_kb = item.stat().st_size / 1024
+                    meta = f"File ({size_kb:.1f} KB)"
+                except OSError:
+                    pass
+
+            # Append trailing slash to directory completions so the user
+            # can continue typing a deeper path immediately.
+            completion_text = completed_path + dir_suffix
+
+            if quote_char is not None:
+                # User already opened quotes — close them after the path.
+                text = completion_text + quote_char
+                start_pos = -len(prefix)
+            elif needs_quote:
+                # Wrap in double quotes, replacing the bare @ prefix.
+                text = f'"{completion_text}"'
+                start_pos = -len(prefix) - 1
+            else:
+                text = completion_text
+                start_pos = -len(prefix)
+
+            yield Completion(
+                text,
+                start_position=start_pos,
+                display=display_name,
+                display_meta=meta,
+            )

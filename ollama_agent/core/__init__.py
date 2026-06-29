@@ -23,7 +23,11 @@ from .models import (
     resolve_ollama_reasoning,
     validate_reasoning_effort,
 )
-from .prompt_processor import PromptProcessingError, process_prompt_mentions
+from .prompt_processor import (
+    IGNORED_DIRECTORY_NAMES,
+    PromptProcessingError,
+    process_prompt_mentions,
+)
 from .resource_manager import BaseFileStoreManager
 
 __all__ = [
@@ -51,6 +55,7 @@ __all__ = [
     "resolve_unique_prefix",
     "validate_identifier",
     # Prompt Processor
+    "IGNORED_DIRECTORY_NAMES",
     "PromptProcessingError",
     "process_prompt_mentions",
 ]

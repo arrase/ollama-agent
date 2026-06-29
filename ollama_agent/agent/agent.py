@@ -16,6 +16,7 @@ from deepagents.middleware.summarization import create_summarization_tool_middle
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from ..core import (
+    PromptProcessingError,
     create_ollama_chat_model,
     ensure_model_supports_tools,
     process_prompt_mentions,
@@ -172,8 +173,13 @@ class AgentRuntime:
 
         try:
             processed_prompt = process_prompt_mentions(prompt)
-            user_msg = {"role": "user", "content": processed_prompt}
+        except PromptProcessingError as exc:
+            yield {"type": "error", "content": str(exc)}
+            return
 
+        user_msg = {"role": "user", "content": processed_prompt}
+
+        try:
             async for mode, event in self.graph.astream(
                 {"messages": [user_msg]},
                 config,
