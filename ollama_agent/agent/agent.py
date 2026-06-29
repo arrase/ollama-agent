@@ -18,6 +18,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from ..core import (
     create_ollama_chat_model,
     ensure_model_supports_tools,
+    process_prompt_mentions,
     validate_reasoning_effort,
 )
 from ..mcp import load_main_mcp_tools
@@ -167,11 +168,12 @@ class AgentRuntime:
             return
 
         config = {"configurable": {"thread_id": thread}}
-        user_msg = {"role": "user", "content": prompt}
-
         hide_reasoning = self.settings.model.reasoning_effort in ("hide", "disabled")
 
         try:
+            processed_prompt = process_prompt_mentions(prompt)
+            user_msg = {"role": "user", "content": processed_prompt}
+
             async for mode, event in self.graph.astream(
                 {"messages": [user_msg]},
                 config,

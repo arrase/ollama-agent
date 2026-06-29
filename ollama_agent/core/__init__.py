@@ -23,6 +23,7 @@ from .models import (
     resolve_ollama_reasoning,
     validate_reasoning_effort,
 )
+from .prompt_processor import PromptProcessingError, process_prompt_mentions
 from .resource_manager import BaseFileStoreManager
 
 __all__ = [
@@ -49,4 +50,7 @@ __all__ = [
     "final_text_from_state",
     "resolve_unique_prefix",
     "validate_identifier",
+    # Prompt Processor
+    "PromptProcessingError",
+    "process_prompt_mentions",
 ]
