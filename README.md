@@ -116,10 +116,15 @@ Ollama Agent supports referencing files or directories directly in your prompt u
 To protect the model's context window, directory traversal automatically filters out system and build directories (such as `.git`, `.venv`, `node_modules`, `build`, etc.) and skips binary files.
 
 #### Safety Limits
-The following safety limits are enforced to avoid overloaded contexts:
-*   Max individual file size: 1 MB
-*   Max total files in a directory mention: 100 files
-*   Max total context size: 10 MB
+The following default safety limits are enforced to avoid overloaded contexts. They can be customized in `~/.ollama-agent/settings.yaml` under the `mentions` key:
+
+```yaml
+mentions:
+  max_file_size: 1048576      # Max individual file size in bytes (default: 1 MB)
+  max_files: 100               # Max files in a directory mention (default: 100)
+  max_total_size: 10485760     # Max total attached context in bytes (default: 10 MB)
+  max_completions: 200         # Max autocompletion candidates (default: 200)
+```
 
 #### Decorator & Mention Safety
 To avoid false positives, words starting with `@` that do not exist (like Python's `@decorator` syntax or `@staticmethod`) are ignored and treated as literal text. However, if a nonexistent path contains path separators (e.g. `@src/mainn.py`) or standard file extensions (e.g. `@file.py`), the agent will halt and report a `File or directory not found` error so you can correct it.

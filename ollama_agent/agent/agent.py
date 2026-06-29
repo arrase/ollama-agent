@@ -172,7 +172,13 @@ class AgentRuntime:
         hide_reasoning = self.settings.model.reasoning_effort in ("hide", "disabled")
 
         try:
-            processed_prompt = process_prompt_mentions(prompt)
+            ms = self.settings.mentions
+            processed_prompt = process_prompt_mentions(
+                prompt,
+                max_file_size=ms.max_file_size,
+                max_files=ms.max_files,
+                max_total_size=ms.max_total_size,
+            )
         except PromptProcessingError as exc:
             yield {"type": "error", "content": str(exc)}
             return

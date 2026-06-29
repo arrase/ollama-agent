@@ -22,8 +22,8 @@ _AT_MENTION_RE = re.compile(
 # Characters whose presence in a completed path require quoting.
 _NEEDS_QUOTE_RE = re.compile(r"""[\s"'\(\)\[\]\{\},;]""")
 
-# Maximum number of completion candidates to prevent UI slowdown.
-_MAX_COMPLETIONS = 200
+# Fallback when no explicit max_completions is provided.
+_DEFAULT_MAX_COMPLETIONS = 200
 
 
 class SlashCommandCompleter(Completer):
@@ -36,8 +36,13 @@ class SlashCommandCompleter(Completer):
     similar to Codex or Claude Code.
     """
 
-    def __init__(self, get_commands: Callable[[], dict[str, REPLCommand]]) -> None:
+    def __init__(
+        self,
+        get_commands: Callable[[], dict[str, REPLCommand]],
+        max_completions: int = _DEFAULT_MAX_COMPLETIONS,
+    ) -> None:
         self._get_commands = get_commands
+        self._max_completions = max_completions
 
     def get_completions(
         self, document: Document, complete_event: CompleteEvent
@@ -122,7 +127,7 @@ class SlashCommandCompleter(Completer):
 
             # --- Emit directory completions ---
             for _, rel in candidate_dirs:
-                if count >= _MAX_COMPLETIONS:
+                if count >= self._max_completions:
                     return
                 # Skip the directory itself when the prefix matches exactly
                 # — the user already typed it and wants its contents.
@@ -135,7 +140,7 @@ class SlashCommandCompleter(Completer):
 
             # --- Emit file completions ---
             for filename in sorted(files):
-                if count >= _MAX_COMPLETIONS:
+                if count >= self._max_completions:
                     return
                 if not show_hidden and filename.startswith("."):
                     continue
