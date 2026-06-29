@@ -19,6 +19,7 @@ from ..core import (
     PromptProcessingError,
     create_ollama_chat_model,
     ensure_model_supports_tools,
+    get_model_capabilities,
     process_prompt_mentions,
     validate_reasoning_effort,
 )
@@ -171,19 +172,41 @@ class AgentRuntime:
         config = {"configurable": {"thread_id": thread}}
         hide_reasoning = self.settings.model.reasoning_effort in ("hide", "disabled")
 
+        # 1. Fetch active model capabilities
+        ms = self.settings.model
         try:
-            ms = self.settings.mentions
-            processed_prompt = process_prompt_mentions(
+            capabilities = await get_model_capabilities(ms.name, ms.base_url)
+        except Exception as exc:
+            _log.warning("Could not fetch capabilities for model %s: %s", ms.name, exc)
+            capabilities = set()
+
+        # 2. Process prompt mentions with capabilities and traversal controls
+        try:
+            mentions_cfg = self.settings.mentions
+            processed_prompt, attachments, warnings = process_prompt_mentions(
                 prompt,
-                max_file_size=ms.max_file_size,
-                max_files=ms.max_files,
-                max_total_size=ms.max_total_size,
+                max_file_size=mentions_cfg.max_file_size,
+                max_files=mentions_cfg.max_files,
+                max_total_size=mentions_cfg.max_total_size,
+                allow_binary_traversal=mentions_cfg.allow_binary_traversal,
+                allowed_capabilities=capabilities,
             )
         except PromptProcessingError as exc:
             yield {"type": "error", "content": str(exc)}
             return
 
-        user_msg = {"role": "user", "content": processed_prompt}
+        # Yield any warnings to the UI
+        for warning in warnings:
+            yield {"type": "warning", "content": warning}
+
+        # 3. Construct user message (multimodal vs text-only)
+        if attachments:
+            user_msg = {
+                "role": "user",
+                "content": [{"type": "text", "text": processed_prompt}] + attachments
+            }
+        else:
+            user_msg = {"role": "user", "content": processed_prompt}
 
         try:
             async for mode, event in self.graph.astream(

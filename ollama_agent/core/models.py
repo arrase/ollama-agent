@@ -64,7 +64,7 @@ def _model_context_length(model_info: dict[str, Any] | None) -> int | None:
     return max(values, default=None)
 
 
-async def _get_capabilities(model: str, base_url: str) -> set[str]:
+async def get_model_capabilities(model: str, base_url: str) -> set[str]:
     """Extract capabilities for a model."""
     response = await _show_model(model, base_url)
     caps = _response_field(response, "capabilities", {})
@@ -77,7 +77,7 @@ async def _get_capabilities(model: str, base_url: str) -> set[str]:
 
 async def model_supports_tools(model: str, base_url: str) -> bool:
     """Check if a model supports tool calls."""
-    return "tools" in await _get_capabilities(model, base_url)
+    return "tools" in await get_model_capabilities(model, base_url)
 
 
 async def ensure_model_supports_tools(model: str, base_url: str) -> None:
@@ -88,7 +88,7 @@ async def ensure_model_supports_tools(model: str, base_url: str) -> None:
 
 async def model_supports_thinking(model: str, base_url: str) -> bool:
     """Best-effort detection of Ollama thinking support for a model."""
-    capabilities = await _get_capabilities(model, base_url)
+    capabilities = await get_model_capabilities(model, base_url)
     return "thinking" in capabilities
 
 
