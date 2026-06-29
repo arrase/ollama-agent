@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ollama Agent - Local AI Assistant</title>
-    <meta name="description" content="A powerful CLI and REPL for interacting with local AI models via Ollama. Built on DeepAgents and LangChain with tool execution, screen vision, memory, RAG, and skills.">
+    <meta name="description" content="A powerful CLI and REPL for interacting with local AI models via Ollama. Built on DeepAgents and LangChain with tool execution, memory, RAG, and skills.">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -27,7 +27,7 @@
         <div class="container">
             <h1>Your Local AI Assistant</h1>
             <p>A powerful command-line interface and REPL for interacting with local Ollama models. <br>
-            Built on <a href="https://docs.langchain.com/oss/python/deepagents/overview" target="_blank" style="color:var(--accent-color)">DeepAgents</a> and <a href="https://github.com/langchain-ai/langchain" target="_blank" style="color:var(--accent-color)">LangChain</a>, featuring integrated shell execution, screen vision, memory management, RAG, and skills.</p>
+            Built on <a href="https://docs.langchain.com/oss/python/deepagents/overview" target="_blank" style="color:var(--accent-color)">DeepAgents</a> and <a href="https://github.com/langchain-ai/langchain" target="_blank" style="color:var(--accent-color)">LangChain</a>, featuring integrated shell execution, memory management, RAG, and skills.</p>
             
             <div class="hero-buttons">
                 <a href="#usage" class="cta-button">Get Started</a>
@@ -140,30 +140,6 @@ ollama-agent -p "Summarize README.md" --rag docs_db</div>
                                 <tr><td>MEMORY.md</td><td>Markdown file where facts are persisted</td></tr>
                             </table>
                         </div>
-                    </div>
-                </div>
-
-                <!-- Screen Vision -->
-                <div class="feature-item">
-                    <div class="feature-header">
-                        <div class="feature-icon"><i class="fas fa-eye"></i></div>
-                        <div>
-                            <h3>Screen Vision</h3>
-                            <p class="feature-description">Give your agent eyes. Capture and analyze your screen contents.</p>
-                        </div>
-                    </div>
-                    <div class="feature-body">
-                        <p style="color:#b2bec3; margin-bottom:10px">Supported on Linux (X11/Wayland).</p>
-                        <div class="usage-box">
-                            <p class="usage-title">Syntax</p>
-                            <table class="cmd-table">
-                                <tr><td>@dp0</td><td>Capture primary display</td></tr>
-                                <tr><td>@dp1</td><td>Capture second monitor</td></tr>
-                            </table>
-                        </div>
-                         <div class="feature-code">
-# Example prompt
-"Look at @dp0 and help me fix this error message"</div>
                     </div>
                 </div>
 

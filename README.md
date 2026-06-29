@@ -10,7 +10,6 @@ Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to i
 - **Thinking / Reasoning**: Leverages Ollama's native [thinking capability](https://docs.ollama.com/capabilities/thinking) to expose model reasoning traces. Configurable per model via `--effort`.
 - **Automatic Context Window**: Resolves the model's effective context window (`num_ctx`) automatically from Ollama metadata, or allows manual override in config.
 - **Per-session Model Switching**: Change the model mid-conversation and continue from that point with the new model (context preserved). The change is not permanent and only affects the current session.
-- **Screen Vision (Screenshots)**: Attach monitor screenshots in prompts using `@dpN` for visual context.
 - **Tool-Powered**: The agent can execute shell commands via an integrated shell backend, allowing it to interact with your local environment to perform tasks.
 - **MCP Integration**: Extend the main agent with [Model Context Protocol](https://modelcontextprotocol.io/) servers (`mcp_servers.json`) that provide additional tools as isolated subagents.
 - **Custom Subagents**: Define specialized subagents in `settings.yaml` with their own model, skills, and MCP servers — each with isolated context for clean delegation.
@@ -28,7 +27,6 @@ Before installing/running the app, make sure you have:
 - **Ollama (or compatible API) running**.
 - **A model that supports tool calling** (required). If the selected model does not support tools/function-calling, the app will exit.
 - **The embeddings model downloaded in Ollama**. By default, RAG uses `nomic-embed-text:latest`.
-- **Vision-capable model (optional)**: only required if you want to use Screen Vision (`@dpN`). If your model does not support vision, the app will still work but it won't be able to "see" screenshots.
 
 ```bash
 # Required embeddings model (default for RAG)
@@ -104,18 +102,6 @@ ollama-agent --prompt "List all files in the current directory as JSON."
 # Or using the short form:
 ollama-agent -p "List all files in the current directory as JSON."
 ```
-
-### Screen Vision (Screenshots)
-
-Screen vision is not limited to a specific mode: it works anywhere you can type a prompt (both REPL and CLI).
-
-Attach a screenshot of a monitor as context by including `@dpN` in your prompt (`N` is a 0-based monitor index):
-
-```bash
-ollama-agent -p "Describe what you see in @dp0"
-```
-
-If you include multiple tokens (e.g. `@dp0 @dp1`), the agent will capture and attach each requested monitor.
 
 ### Common Options
 
@@ -654,6 +640,5 @@ Interested in contributing? Great! Here’s how to get started.
 - `ollama_agent/skills/`: Skills management and DeepAgents skills integration.
 - `ollama_agent/rag/`: RAG implementation for context retrieval.
 - `ollama_agent/mcp/`: MCP server lifecycle and integration helpers.
-- `ollama_agent/vision/`: Screen vision and screenshot analysis.
 - `ollama_agent/streaming/`: Console output streaming, rendering, and non-interactive runner.
 - `ollama_agent/settings/`: Application configuration and centralized filesystem paths.
