@@ -1,6 +1,7 @@
 """Settings package for application configuration."""
 
 from .config import (
+    MentionSettings,
     ModelSettings,
     RAGSettings,
     RuntimeSettings,
@@ -37,6 +38,7 @@ __all__ = [
     "SKILLS_DIR",
     "TASKS_DIR",
     # Settings
+    "MentionSettings",
     "ModelSettings",
     "RAGSettings",
     "RuntimeSettings",

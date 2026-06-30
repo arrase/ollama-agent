@@ -17,11 +17,16 @@ from .models import (
     ModelContextWindowError,
     create_ollama_chat_model,
     ensure_model_supports_tools,
+    get_model_capabilities,
     model_supports_tools,
     model_supports_thinking,
     resolve_context_window,
     resolve_ollama_reasoning,
     validate_reasoning_effort,
+)
+from .prompt_processor import (
+    PromptProcessingError,
+    process_prompt_mentions,
 )
 from .resource_manager import BaseFileStoreManager
 
@@ -38,6 +43,7 @@ __all__ = [
     "ModelContextWindowError",
     "create_ollama_chat_model",
     "ensure_model_supports_tools",
+    "get_model_capabilities",
     "model_supports_tools",
     "model_supports_thinking",
     "resolve_context_window",
@@ -49,4 +55,7 @@ __all__ = [
     "final_text_from_state",
     "resolve_unique_prefix",
     "validate_identifier",
+    # Prompt Processor
+    "PromptProcessingError",
+    "process_prompt_mentions",
 ]

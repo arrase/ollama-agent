@@ -35,7 +35,10 @@ class OllamaREPL:
                 "prompt": "#81a1c1 bold",  # Nord blue
                 "arrow": "#88c0d0 bold",   # Frost cyan
             }),
-            completer=SlashCommandCompleter(self._get_commands),
+            completer=SlashCommandCompleter(
+                self._get_commands,
+                max_completions=runtime.settings.mentions.max_completions,
+            ),
         )
         self._task_ctx = CLIContext(console=self.console)
         self._skills_ctx = SkillsContext(console=self.console)

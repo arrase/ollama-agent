@@ -98,10 +98,21 @@ class LangSmithSettings:
 
 
 @dataclass(slots=True)
+class MentionSettings:
+    """Configuration for @-mention file/directory context injection."""
+
+    max_file_size: int = 1_048_576       # 1 MB
+    max_files: int = 100
+    max_total_size: int = 10_485_760     # 10 MB
+    max_completions: int = 200
+
+
+@dataclass(slots=True)
 class Settings:
     model: ModelSettings = field(default_factory=ModelSettings)
     runtime: RuntimeSettings = field(default_factory=RuntimeSettings)
     rag: RAGSettings = field(default_factory=RAGSettings)
+    mentions: MentionSettings = field(default_factory=MentionSettings)
     subagents: list[SubAgentSettings] = field(default_factory=list)
     langsmith: LangSmithSettings | None = None
 
@@ -113,6 +124,7 @@ class Settings:
             model=_dataclass_from_dict(ModelSettings, raw.get("model")),
             runtime=_dataclass_from_dict(RuntimeSettings, raw.get("runtime")),
             rag=_dataclass_from_dict(RAGSettings, raw.get("rag")),
+            mentions=_dataclass_from_dict(MentionSettings, raw.get("mentions")),
             subagents=_subagents_from_list(raw.get("subagents")),
             langsmith=_dataclass_from_dict(LangSmithSettings, langsmith_raw) if langsmith_raw else None,
         )

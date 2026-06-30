@@ -19,6 +19,7 @@ Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to i
 - **Persistent Memory**: Native memory layer backed by `MEMORY.md`, allowing the agent to persist long-term context across sessions.
 - **RAG (Retrieval Augmented Generation)**: Create and manage document databases for context-aware responses using local embeddings and Qdrant.
 - **Skills**: Extend the agent with reusable, on-demand capabilities via the [Agent Skills specification](https://agentskills.io/specification). Skills provide task-specific instructions and context through progressive disclosure.
+- **File/Directory Context (@-mentions)**: Reference local files or directories directly in your prompts (e.g. `@src/main.py` or `@.`). Type `@` in the REPL to interactively autocomplete file and folder paths in the terminal!
 
 ## Prerequisites (Important)
 
@@ -102,6 +103,31 @@ ollama-agent --prompt "List all files in the current directory as JSON."
 # Or using the short form:
 ollama-agent -p "List all files in the current directory as JSON."
 ```
+
+### File / Directory Context (@-mentions)
+
+Ollama Agent supports referencing files or directories directly in your prompt using the `@` symbol, automatically loading their content into the agent's context.
+
+*   **Single File**: `@filename.txt` or `@"file name with spaces.txt"`
+*   **Directory Traversal**: `@src` or `@.` (recursively reads all text files in the directory).
+*   **Autocompletion**: In the REPL, type `@` and hit `Tab` to interactively autocomplete file and folder paths in the terminal!
+
+#### File Formats
+Text files are attached as raw text blocks, and multimodal files (such as images and audio) are base64-encoded and attached as native multimodal inputs. Other binary files (such as `.zip` or executables) are automatically skipped during directory traversal.
+
+#### Safety Limits
+The following default safety limits are enforced to avoid overloaded contexts. They can be customized in `~/.ollama-agent/settings.yaml` under the `mentions` key:
+
+```yaml
+mentions:
+  max_file_size: 1048576      # Max individual file size in bytes (default: 1 MB)
+  max_files: 100               # Max files in a directory mention (default: 100)
+  max_total_size: 10485760     # Max total attached context in bytes (default: 10 MB)
+  max_completions: 200         # Max autocompletion candidates (default: 200)
+```
+
+#### Decorator & Mention Safety
+To avoid false positives, words starting with `@` that do not exist (like Python's `@decorator` syntax or `@staticmethod`) are ignored and treated as literal text. However, if a nonexistent path contains path separators (e.g. `@src/mainn.py`) or standard file extensions (e.g. `@file.py`), the agent will halt and report a `File or directory not found` error so you can correct it.
 
 ### Common Options
 

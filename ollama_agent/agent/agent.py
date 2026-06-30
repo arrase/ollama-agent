@@ -16,8 +16,10 @@ from deepagents.middleware.summarization import create_summarization_tool_middle
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from ..core import (
+    PromptProcessingError,
     create_ollama_chat_model,
     ensure_model_supports_tools,
+    process_prompt_mentions,
     validate_reasoning_effort,
 )
 from ..mcp import load_main_mcp_tools
@@ -167,9 +169,29 @@ class AgentRuntime:
             return
 
         config = {"configurable": {"thread_id": thread}}
-        user_msg = {"role": "user", "content": prompt}
-
         hide_reasoning = self.settings.model.reasoning_effort in ("hide", "disabled")
+
+        # 1. Process prompt mentions
+        try:
+            mentions_cfg = self.settings.mentions
+            processed_prompt, attachments = process_prompt_mentions(
+                prompt,
+                max_file_size=mentions_cfg.max_file_size,
+                max_files=mentions_cfg.max_files,
+                max_total_size=mentions_cfg.max_total_size,
+            )
+        except PromptProcessingError as exc:
+            yield {"type": "error", "content": str(exc)}
+            return
+
+        # 2. Construct user message (multimodal vs text-only)
+        if attachments:
+            user_msg = {
+                "role": "user",
+                "content": [{"type": "text", "text": processed_prompt}] + attachments
+            }
+        else:
+            user_msg = {"role": "user", "content": processed_prompt}
 
         try:
             async for mode, event in self.graph.astream(
