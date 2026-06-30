@@ -21,7 +21,7 @@ from ..agent.builtin_tools import set_rag_manager, set_tool_timeout
 from ..rag import RAGContext, RAGManager, load_rag_database
 from ..skills import SkillsContext, create_skill
 from ..tasks.commands import CLIContext, create_task
-from .dispatch import build_repl_handlers
+from .dispatch import build_repl_handlers, render_repl_help
 from .model_commands import set_model
 from .session_commands import new_session
 from .repl_wizards import safe_call
@@ -220,24 +220,96 @@ class TaskCreateModal(ModalScreen):
     """Modal dialog form for creating a new Task."""
 
     CSS = """
-    TaskCreateModal { align: center middle; }
-    #modal-grid {
-        width: 70; height: auto;
-        background: #1e1e2e; border: thick #89b4fa;
+    TaskCreateModal {
+        align: center middle;
+        background: rgba(0, 0, 0, 0.6);
+    }
+    #modal-card {
+        width: 65;
+        height: auto;
+        background: #1e1e2e;
+        border: solid #89b4fa;
         padding: 1 2;
-        grid-size: 2; grid-columns: 15 50; grid-gutter: 1;
     }
     #modal-title {
-        column-span: 2; text-align: center;
-        text-style: bold; color: #89b4fa; margin-bottom: 1;
+        width: 100%;
+        text-align: center;
+        text-style: bold;
+        color: #89b4fa;
+        margin-bottom: 1;
     }
-    .field-label { content-align: right middle; color: #bac2de; }
-    .modal-input { background: #11111b; border: tall #45475a; color: #cdd6f4; }
-    .modal-input:focus { border: tall #89b4fa; }
-    #prompt-area { height: 6; background: #11111b; border: tall #45475a; color: #cdd6f4; }
-    #prompt-area:focus { border: tall #89b4fa; }
-    #button-row { column-span: 2; layout: horizontal; align: center middle; margin-top: 1; }
-    .modal-button { margin: 0 2; }
+    .form-container {
+        width: 100%;
+        height: auto;
+        layout: vertical;
+    }
+    .form-row {
+        height: 1;
+        margin-bottom: 1;
+        align: left middle;
+    }
+    .field-label {
+        width: 12;
+        content-align: right middle;
+        color: #bac2de;
+        margin-right: 2;
+    }
+    .modal-input {
+        width: 1fr;
+        background: #11111b !important;
+        border: none !important;
+        color: #cdd6f4 !important;
+        height: 1;
+        padding: 0 1;
+    }
+    .modal-input:focus {
+        background: #313244 !important;
+        color: #cdd6f4 !important;
+        border: none !important;
+    }
+    .modal-input:disabled {
+        color: #6c7086 !important;
+        background: #11111b !important;
+        border: none !important;
+    }
+    .modal-input > .input--cursor {
+        background: #cdd6f4 !important;
+        color: #11111b !important;
+    }
+    .modal-input > .input--selection {
+        background: #585b70 !important;
+        color: #cdd6f4 !important;
+    }
+    .prompt-label {
+        color: #bac2de;
+        margin-bottom: 0;
+        margin-top: 1;
+    }
+    #prompt-area {
+        height: 5;
+        background: #11111b !important;
+        border: solid #45475a !important;
+        color: #cdd6f4 !important;
+        margin-top: 1;
+        margin-bottom: 1;
+    }
+    #prompt-area:focus {
+        background: #11111b !important;
+        color: #cdd6f4 !important;
+        border: solid #89b4fa !important;
+    }
+    #button-row {
+        width: 100%;
+        height: 3;
+        align: center middle;
+        margin-top: 1;
+    }
+    .modal-button {
+        height: 1;
+        border: none;
+        margin: 0 2;
+        min-width: 12;
+    }
     """
 
     def __init__(self, app_ref: "OllamaAgentApp", task_id: str, force: bool):
@@ -247,25 +319,26 @@ class TaskCreateModal(ModalScreen):
         self.force = force
 
     def compose(self) -> ComposeResult:
-        yield Grid(
-            Label(f"Create Task: {self.task_id}" if self.task_id else "Create Task", id="modal-title"),
-            Label("Task ID:", classes="field-label"),
-            Input(value=self.task_id, id="task-id-input", classes="modal-input", disabled=bool(self.task_id)),
-            Label("Title:", classes="field-label"),
-            Input(placeholder="Enter task title", id="title-input", classes="modal-input"),
-            Label("Model:", classes="field-label"),
-            Input(value=self.app_ref.repl.runtime.settings.model.name, id="model-input", classes="modal-input"),
-            Label("Effort:", classes="field-label"),
-            Input(value=self.app_ref.repl.runtime.settings.model.reasoning_effort, id="effort-input", classes="modal-input"),
-            Label("Prompt:", classes="field-label"),
-            TextArea(id="prompt-area"),
-            Container(
-                Button("Cancel", id="cancel-btn", variant="error", classes="modal-button"),
-                Button("Create", id="create-btn", variant="success", classes="modal-button"),
-                id="button-row",
-            ),
-            id="modal-grid",
-        )
+        with Container(id="modal-card"):
+            yield Label(f"Create Task: {self.task_id}" if self.task_id else "Create Task", id="modal-title")
+            with Container(classes="form-container"):
+                with Horizontal(classes="form-row"):
+                    yield Label("Task ID:", classes="field-label")
+                    yield Input(value=self.task_id, id="task-id-input", classes="modal-input", disabled=bool(self.task_id))
+                with Horizontal(classes="form-row"):
+                    yield Label("Title:", classes="field-label")
+                    yield Input(placeholder="Enter task title", id="title-input", classes="modal-input")
+                with Horizontal(classes="form-row"):
+                    yield Label("Model:", classes="field-label")
+                    yield Input(value=self.app_ref.repl.runtime.settings.model.name, id="model-input", classes="modal-input")
+                with Horizontal(classes="form-row"):
+                    yield Label("Effort:", classes="field-label")
+                    yield Input(value=self.app_ref.repl.runtime.settings.model.reasoning_effort, id="effort-input", classes="modal-input")
+                yield Label("Prompt:", classes="prompt-label")
+                yield TextArea(id="prompt-area")
+            with Horizontal(id="button-row"):
+                yield Button("Cancel", id="cancel-btn", variant="error", classes="modal-button")
+                yield Button("Create", id="create-btn", variant="success", classes="modal-button")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "cancel-btn":
@@ -284,24 +357,96 @@ class SkillCreateModal(ModalScreen):
     """Modal dialog form for creating a new Skill."""
 
     CSS = """
-    SkillCreateModal { align: center middle; }
-    #skill-modal-grid {
-        width: 70; height: auto;
-        background: #1e1e2e; border: thick #a6e3a1;
+    SkillCreateModal {
+        align: center middle;
+        background: rgba(0, 0, 0, 0.6);
+    }
+    #skill-modal-card {
+        width: 65;
+        height: auto;
+        background: #1e1e2e;
+        border: solid #a6e3a1;
         padding: 1 2;
-        grid-size: 2; grid-columns: 15 50; grid-gutter: 1;
     }
     #skill-modal-title {
-        column-span: 2; text-align: center;
-        text-style: bold; color: #a6e3a1; margin-bottom: 1;
+        width: 100%;
+        text-align: center;
+        text-style: bold;
+        color: #a6e3a1;
+        margin-bottom: 1;
     }
-    .field-label { content-align: right middle; color: #bac2de; }
-    .modal-input { background: #11111b; border: tall #45475a; color: #cdd6f4; }
-    .modal-input:focus { border: tall #a6e3a1; }
-    #instructions-area { height: 6; background: #11111b; border: tall #45475a; color: #cdd6f4; }
-    #instructions-area:focus { border: tall #a6e3a1; }
-    #skill-button-row { column-span: 2; layout: horizontal; align: center middle; margin-top: 1; }
-    .modal-button { margin: 0 2; }
+    .form-container {
+        width: 100%;
+        height: auto;
+        layout: vertical;
+    }
+    .form-row {
+        height: 1;
+        margin-bottom: 1;
+        align: left middle;
+    }
+    .field-label {
+        width: 12;
+        content-align: right middle;
+        color: #bac2de;
+        margin-right: 2;
+    }
+    .modal-input {
+        width: 1fr;
+        background: #11111b !important;
+        border: none !important;
+        color: #cdd6f4 !important;
+        height: 1;
+        padding: 0 1;
+    }
+    .modal-input:focus {
+        background: #313244 !important;
+        color: #cdd6f4 !important;
+        border: none !important;
+    }
+    .modal-input:disabled {
+        color: #6c7086 !important;
+        background: #11111b !important;
+        border: none !important;
+    }
+    .modal-input > .input--cursor {
+        background: #cdd6f4 !important;
+        color: #11111b !important;
+    }
+    .modal-input > .input--selection {
+        background: #585b70 !important;
+        color: #cdd6f4 !important;
+    }
+    .prompt-label {
+        color: #bac2de;
+        margin-bottom: 0;
+        margin-top: 1;
+    }
+    #instructions-area {
+        height: 5;
+        background: #11111b !important;
+        border: solid #45475a !important;
+        color: #cdd6f4 !important;
+        margin-top: 1;
+        margin-bottom: 1;
+    }
+    #instructions-area:focus {
+        background: #11111b !important;
+        color: #cdd6f4 !important;
+        border: solid #a6e3a1 !important;
+    }
+    #skill-button-row {
+        width: 100%;
+        height: 3;
+        align: center middle;
+        margin-top: 1;
+    }
+    .modal-button {
+        height: 1;
+        border: none;
+        margin: 0 2;
+        min-width: 12;
+    }
     """
 
     def __init__(self, app_ref: "OllamaAgentApp", skill_id: str, force: bool):
@@ -311,23 +456,23 @@ class SkillCreateModal(ModalScreen):
         self.force = force
 
     def compose(self) -> ComposeResult:
-        yield Grid(
-            Label(f"Create Skill: {self.skill_id}" if self.skill_id else "Create Skill", id="skill-modal-title"),
-            Label("Skill ID:", classes="field-label"),
-            Input(value=self.skill_id, id="skill-id-input", classes="modal-input", disabled=bool(self.skill_id)),
-            Label("Name:", classes="field-label"),
-            Input(placeholder="Enter skill name", id="name-input", classes="modal-input"),
-            Label("Description:", classes="field-label"),
-            Input(placeholder="Enter description", id="desc-input", classes="modal-input"),
-            Label("Instructions:", classes="field-label"),
-            TextArea(id="instructions-area"),
-            Container(
-                Button("Cancel", id="cancel-btn", variant="error", classes="modal-button"),
-                Button("Create", id="create-btn", variant="success", classes="modal-button"),
-                id="skill-button-row",
-            ),
-            id="skill-modal-grid",
-        )
+        with Container(id="skill-modal-card"):
+            yield Label(f"Create Skill: {self.skill_id}" if self.skill_id else "Create Skill", id="skill-modal-title")
+            with Container(classes="form-container"):
+                with Horizontal(classes="form-row"):
+                    yield Label("Skill ID:", classes="field-label")
+                    yield Input(value=self.skill_id, id="skill-id-input", classes="modal-input", disabled=bool(self.skill_id))
+                with Horizontal(classes="form-row"):
+                    yield Label("Name:", classes="field-label")
+                    yield Input(placeholder="Enter skill name", id="name-input", classes="modal-input")
+                with Horizontal(classes="form-row"):
+                    yield Label("Description:", classes="field-label")
+                    yield Input(placeholder="Enter description", id="desc-input", classes="modal-input")
+                yield Label("Instructions:", classes="prompt-label")
+                yield TextArea(id="instructions-area")
+            with Horizontal(id="skill-button-row"):
+                yield Button("Cancel", id="cancel-btn", variant="error", classes="modal-button")
+                yield Button("Create", id="create-btn", variant="success", classes="modal-button")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "cancel-btn":
@@ -381,6 +526,9 @@ class OllamaAgentApp(App):
         display: none;
         color: #cdd6f4;
         scrollbar-size: 1 1;
+        dock: bottom;
+        width: 60%;
+        margin: 0 0 0 2;
     }
 
     /* ── Input bar ────────────────────────────────── */
@@ -392,13 +540,23 @@ class OllamaAgentApp(App):
         padding: 0 1;
     }
     ReplInput {
-        background: #11111b;
-        border: none;
-        color: #cdd6f4;
+        background: #11111b !important;
+        border: none !important;
+        color: #cdd6f4 !important;
         width: 1fr;
     }
     ReplInput:focus {
-        border: none;
+        background: #11111b !important;
+        color: #cdd6f4 !important;
+        border: none !important;
+    }
+    ReplInput > .input--cursor {
+        background: #cdd6f4 !important;
+        color: #11111b !important;
+    }
+    ReplInput > .input--selection {
+        background: #585b70 !important;
+        color: #cdd6f4 !important;
     }
     #prompt-char {
         width: 3;
@@ -412,11 +570,11 @@ class OllamaAgentApp(App):
     .msg-role {
         text-style: bold;
         margin-bottom: 0;
-        padding: 0;
+        padding: 0 0 0 1;
         height: auto;
     }
     .msg-content {
-        padding: 0 0 0 2;
+        padding: 0 0 0 1;
         height: auto;
         color: #cdd6f4;
     }
@@ -424,7 +582,8 @@ class OllamaAgentApp(App):
     /* ── User bubble ──────────────────────────────── */
     UserMessage {
         margin: 1 0;
-        padding: 0;
+        padding: 0 0 0 1;
+        border-left: solid #89b4fa;
         height: auto;
         background: transparent;
     }
@@ -433,14 +592,15 @@ class OllamaAgentApp(App):
     .thinking-body {
         color: #cba6f7;
         text-style: italic;
-        margin: 0 0 1 2;
+        margin: 0 0 1 1;
         padding: 0;
     }
 
     /* ── Agent response ───────────────────────────── */
     AgentResponse {
         margin: 1 0;
-        padding: 0;
+        padding: 0 0 0 1;
+        border-left: solid #a6e3a1;
         height: auto;
         background: transparent;
     }
@@ -463,9 +623,10 @@ class OllamaAgentApp(App):
 
     /* ── System messages ──────────────────────────── */
     SystemMessage {
-        margin: 1 0 1 2;
-        padding: 0;
-        color: #a6adc8;
+        margin: 1 0;
+        padding: 0 0 0 1;
+        border-left: solid #cba6f7;
+        color: #cdd6f4;
         height: auto;
         background: transparent;
     }
@@ -478,10 +639,10 @@ class OllamaAgentApp(App):
     def compose(self) -> ComposeResult:
         yield AgentHeader(self.repl)
         yield ScrollableContainer(id="chat-scroll")
-        yield OptionList(id="autocomplete-list")
         with Horizontal(id="input-bar"):
             yield Static("❯ ", id="prompt-char")
             yield ReplInput(placeholder="Type message or /command…", id="repl-input")
+        yield OptionList(id="autocomplete-list")
 
     def on_mount(self) -> None:
         self.query_one(ReplInput).focus()
@@ -661,6 +822,16 @@ class OllamaAgentApp(App):
             scroll.query("*").remove()
             return
 
+        if cmd == "/help":
+            commands = self.repl._get_commands()
+            with self.repl.console.capture() as capture:
+                render_repl_help(self.repl.console, commands)
+            output = capture.get()
+            if output:
+                scroll.mount(SystemMessage(Text.from_ansi(output)))
+                self._deferred_scroll()
+            return
+
         if cmd == "/new":
             scroll.query("*").remove()
             commands = self.repl._get_commands()
@@ -670,7 +841,7 @@ class OllamaAgentApp(App):
                     await safe_call(spec.handler, args)
                 output = capture.get()
                 if output:
-                    scroll.mount(SystemMessage(output))
+                    scroll.mount(SystemMessage(Text.from_ansi(output)))
                     self._deferred_scroll()
             return
 
@@ -692,10 +863,10 @@ class OllamaAgentApp(App):
             except SystemExit:
                 return
 
-            scroll.mount(SystemMessage(
+            scroll.mount(SystemMessage(Text.from_ansi(
                 f"[bold cyan]▶ Executing:[/bold cyan] {t.title} ({tid})\n"
                 f"  Model: {t.model} │ Effort: {t.reasoning_effort}"
-            ))
+            )))
             agent_msg = AgentResponse()
             scroll.mount(agent_msg)
             self._deferred_scroll()
@@ -722,7 +893,7 @@ class OllamaAgentApp(App):
             await safe_call(spec.handler, args)
         output = capture.get()
         if output:
-            scroll.mount(SystemMessage(output))
+            scroll.mount(SystemMessage(Text.from_ansi(output)))
             self._deferred_scroll()
 
     # ── Modal helpers ─────────────────────────────────────────────────────
@@ -744,7 +915,7 @@ class OllamaAgentApp(App):
             )
         output = capture.get()
         if output:
-            scroll.mount(SystemMessage(output))
+            scroll.mount(SystemMessage(Text.from_ansi(output)))
             self._deferred_scroll()
 
     def _push_skill_modal(self, skill_id: str, force: bool):
@@ -764,7 +935,7 @@ class OllamaAgentApp(App):
             )
         output = capture.get()
         if output:
-            scroll.mount(SystemMessage(output))
+            scroll.mount(SystemMessage(Text.from_ansi(output)))
             self._deferred_scroll()
 
     # ── Streaming chat ────────────────────────────────────────────────────
@@ -831,7 +1002,7 @@ class OllamaREPL:
         rag_database: str | None = None,
     ):
         self.runtime = runtime
-        self.console = Console()
+        self.console = Console(force_terminal=True, color_system="truecolor")
         self._task_ctx = CLIContext(console=self.console)
         self._skills_ctx = SkillsContext(console=self.console)
         self._initial_rag_database = rag_database
