@@ -112,8 +112,8 @@ Ollama Agent supports referencing files or directories directly in your prompt u
 *   **Directory Traversal**: `@src` or `@.` (recursively reads all text files in the directory).
 *   **Autocompletion**: In the REPL, type `@` and hit `Tab` to interactively autocomplete file and folder paths in the terminal!
 
-#### Ignored Paths and Formats
-To protect the model's context window, directory traversal automatically filters out system and build directories (such as `.git`, `.venv`, `node_modules`, `build`, etc.) and skips binary files.
+#### File Formats
+Text files are attached as raw text blocks, and multimodal files (such as images and audio) are base64-encoded and attached as native multimodal inputs. Other binary files (such as `.zip` or executables) are automatically skipped during directory traversal.
 
 #### Safety Limits
 The following default safety limits are enforced to avoid overloaded contexts. They can be customized in `~/.ollama-agent/settings.yaml` under the `mentions` key:

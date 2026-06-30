@@ -9,7 +9,6 @@ from typing import Callable, Iterable
 from prompt_toolkit.completion import CompleteEvent, Completion, Completer
 from prompt_toolkit.document import Document
 
-from ..core.prompt_processor import IGNORED_DIRECTORY_NAMES
 from .dispatch import REPLCommand
 
 _log = logging.getLogger(__name__)
@@ -111,8 +110,6 @@ class SlashCommandCompleter(Completer):
             # completion candidates.
             candidate_dirs: list[tuple[str, str]] = []
             for dirname in sorted(dirs):
-                if dirname in IGNORED_DIRECTORY_NAMES:
-                    continue
                 if not show_hidden and dirname.startswith("."):
                     continue
                 rel = str((root_path / dirname).relative_to(cwd)) + "/"

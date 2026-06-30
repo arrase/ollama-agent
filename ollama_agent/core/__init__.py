@@ -25,7 +25,6 @@ from .models import (
     validate_reasoning_effort,
 )
 from .prompt_processor import (
-    IGNORED_DIRECTORY_NAMES,
     PromptProcessingError,
     process_prompt_mentions,
 )
@@ -57,7 +56,6 @@ __all__ = [
     "resolve_unique_prefix",
     "validate_identifier",
     # Prompt Processor
-    "IGNORED_DIRECTORY_NAMES",
     "PromptProcessingError",
     "process_prompt_mentions",
 ]

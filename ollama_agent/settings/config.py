@@ -105,7 +105,6 @@ class MentionSettings:
     max_files: int = 100
     max_total_size: int = 10_485_760     # 10 MB
     max_completions: int = 200
-    allow_binary_traversal: bool = False
 
 
 @dataclass(slots=True)

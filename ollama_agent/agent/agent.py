@@ -19,7 +19,6 @@ from ..core import (
     PromptProcessingError,
     create_ollama_chat_model,
     ensure_model_supports_tools,
-    get_model_capabilities,
     process_prompt_mentions,
     validate_reasoning_effort,
 )
@@ -172,34 +171,20 @@ class AgentRuntime:
         config = {"configurable": {"thread_id": thread}}
         hide_reasoning = self.settings.model.reasoning_effort in ("hide", "disabled")
 
-        # 1. Fetch active model capabilities
-        ms = self.settings.model
-        try:
-            capabilities = await get_model_capabilities(ms.name, ms.base_url)
-        except Exception as exc:
-            _log.warning("Could not fetch capabilities for model %s: %s", ms.name, exc)
-            capabilities = set()
-
-        # 2. Process prompt mentions with capabilities and traversal controls
+        # 1. Process prompt mentions
         try:
             mentions_cfg = self.settings.mentions
-            processed_prompt, attachments, warnings = process_prompt_mentions(
+            processed_prompt, attachments = process_prompt_mentions(
                 prompt,
                 max_file_size=mentions_cfg.max_file_size,
                 max_files=mentions_cfg.max_files,
                 max_total_size=mentions_cfg.max_total_size,
-                allow_binary_traversal=mentions_cfg.allow_binary_traversal,
-                allowed_capabilities=capabilities,
             )
         except PromptProcessingError as exc:
             yield {"type": "error", "content": str(exc)}
             return
 
-        # Yield any warnings to the UI
-        for warning in warnings:
-            yield {"type": "warning", "content": warning}
-
-        # 3. Construct user message (multimodal vs text-only)
+        # 2. Construct user message (multimodal vs text-only)
         if attachments:
             user_msg = {
                 "role": "user",
