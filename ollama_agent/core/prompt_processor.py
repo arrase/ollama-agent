@@ -24,7 +24,44 @@ def get_file_type(file_path: Path) -> str:
         return "image/" + (ext[1:] if ext != ".jpg" else "jpeg")
     if ext in (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac"):
         return "audio/" + (ext[1:] if ext != ".mp3" else "mpeg")
+    if ext in (".mp4", ".mpeg", ".mov", ".avi", ".flv", ".mpg", ".webm", ".wmv", ".3gpp"):
+        return "video/" + (ext[1:] if ext != ".mov" else "quicktime")
+    if ext == ".pdf":
+        return "application/pdf"
+    if ext == ".ppt":
+        return "application/vnd.ms-powerpoint"
+    if ext == ".pptx":
+        return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
     return ""
+
+
+def classify_multimodal_file(file_path: Path) -> str | None:
+    """Classify a file into a LangChain multimodal type, or None if it should be treated as text."""
+    suffix = file_path.suffix.lower()
+    if suffix in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg", ".heic", ".heif"):
+        return "image"
+    if suffix in (".mp4", ".mpeg", ".mov", ".avi", ".flv", ".mpg", ".webm", ".wmv", ".3gpp"):
+        return "video"
+    if suffix in (".wav", ".mp3", ".aiff", ".aac", ".ogg", ".flac", ".m4a"):
+        return "audio"
+    if suffix in (".pdf", ".ppt", ".pptx"):
+        return "file"
+
+    mime = get_file_type(file_path)
+    if mime:
+        if mime.startswith("image/"):
+            return "image"
+        if mime.startswith("audio/"):
+            return "audio"
+        if mime.startswith("video/"):
+            return "video"
+        if (
+            mime == "application/pdf"
+            or mime.startswith("application/vnd.ms-powerpoint")
+            or mime.startswith("application/vnd.openxmlformats-officedocument.presentationml")
+        ):
+            return "file"
+    return None
 
 
 def is_binary_file(file_path: Path) -> bool:
@@ -120,17 +157,15 @@ def resolve_context_files(
                 f"Total context size limit of {max_total_size} bytes exceeded."
             )
 
-        mime = get_file_type(file_path)
-        is_image = mime.startswith("image/")
-        is_audio = mime.startswith("audio/")
+        attachment_type = classify_multimodal_file(file_path)
 
-        if is_image or is_audio:
+        if attachment_type is not None:
+            mime = get_file_type(file_path) or f"{attachment_type}/*"
             b64_data = read_binary_file_b64(file_path, max_file_size)
             binary_attachments.append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:{mime};base64,{b64_data}"
-                }
+                "type": attachment_type,
+                "base64": b64_data,
+                "mime_type": mime
             })
             total_size += size
         else:
@@ -156,11 +191,9 @@ def resolve_context_files(
             if size > max_file_size:
                 continue
 
-            mime = get_file_type(file_path)
-            is_image = mime.startswith("image/")
-            is_audio = mime.startswith("audio/")
+            attachment_type = classify_multimodal_file(file_path)
 
-            if is_image or is_audio:
+            if attachment_type is not None:
                 if len(text_contents) + len(binary_attachments) >= max_files:
                     raise PromptProcessingError(
                         f"Mentions limit exceeded: max {max_files} files."
@@ -170,12 +203,12 @@ def resolve_context_files(
                         f"Total context size limit of {max_total_size} bytes exceeded."
                     )
                 try:
+                    mime = get_file_type(file_path) or f"{attachment_type}/*"
                     b64_data = read_binary_file_b64(file_path, max_file_size)
                     binary_attachments.append({
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{mime};base64,{b64_data}"
-                        }
+                        "type": attachment_type,
+                        "base64": b64_data,
+                        "mime_type": mime
                     })
                     total_size += size
                 except Exception:
@@ -271,12 +304,9 @@ def process_prompt_mentions(
                 all_context_contents.update(text_content)
                 all_binary_attachments.extend(bin_attachments)
 
-            mime = get_file_type(candidate_path)
-            is_image = mime.startswith("image/")
-            is_audio = mime.startswith("audio/")
-            if candidate_path.is_file() and (is_image or is_audio):
-                file_type_label = "image" if is_image else "audio"
-                replacements.append((start, end, f"[{file_type_label}: {path_str}]"))
+            attachment_type = classify_multimodal_file(candidate_path)
+            if candidate_path.is_file() and attachment_type is not None:
+                replacements.append((start, end, f"[{attachment_type}: {path_str}]"))
         else:
             has_separator = "/" in path_str or "\\" in path_str
             has_extension = bool(re.search(r"\.[a-zA-Z0-9]{1,5}$", path_str))
