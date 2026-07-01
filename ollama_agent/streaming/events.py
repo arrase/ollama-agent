@@ -11,6 +11,7 @@ import logging
 from typing import TYPE_CHECKING, Iterable
 
 from rich.console import Console
+from langgraph.types import Command
 
 from .console_renderer import ConsoleStreamingRenderer
 
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 async def stream_agent_events(
     runtime: "AgentRuntime",
-    prompt: str,
+    prompt: str | Command,
     renderer: "StreamingRenderer",
     *,
     thread_id: str = "",
@@ -31,11 +32,26 @@ async def stream_agent_events(
     auto_close: bool = True,
 ) -> None:
     ignored = set(ignore)
+    current_prompt = prompt
     try:
-        async for event in runtime.run_streamed(prompt, thread_id=thread_id):
-            etype = event.get("type")
-            if etype and etype not in ignored:
-                renderer.on_event(event)
+        while True:
+            interrupted = False
+            interrupt_event = None
+            async for event in runtime.run_streamed(current_prompt, thread_id=thread_id):
+                etype = event.get("type")
+                if etype == "interrupt":
+                    interrupted = True
+                    interrupt_event = event
+                elif etype and etype not in ignored:
+                    renderer.on_event(event)
+
+            if interrupted and interrupt_event:
+                decisions = renderer.handle_interrupt(interrupt_event, runtime)
+                if decisions is not None:
+                    current_prompt = Command(resume={"decisions": decisions})
+                    continue
+
+            break
     except asyncio.CancelledError:
         pass
     except Exception as exc:
@@ -47,7 +63,7 @@ async def stream_agent_events(
 
 
 async def run_non_interactive(
-    runtime: "AgentRuntime", prompt: str, *, thread_id: str = ""
+    runtime: "AgentRuntime", prompt: str | Command, *, thread_id: str = ""
 ) -> None:
     """Stream agent output to the console (non-interactive mode)."""
     await stream_agent_events(

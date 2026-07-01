@@ -1,12 +1,15 @@
 """Console streaming renderer for CLI output."""
 
 from __future__ import annotations
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
 from rich.padding import Padding
 from .base import StreamingRenderer
+
+if TYPE_CHECKING:
+    from ..agent import AgentRuntime
 
 
 class ConsoleStreamingRenderer(StreamingRenderer):
@@ -100,6 +103,47 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         self.console.print(
             f"  [yellow]⚠ Warning: {event.get('content', 'Unknown warning')}[/yellow]"
         )
+
+    def handle_interrupt(self, event: dict[str, Any], runtime: AgentRuntime) -> list[dict[str, Any]] | None:
+        self._toggle_live(False)
+        self._end_reasoning()
+
+        interrupts = event.get("interrupts", [])
+        if not interrupts:
+            return None
+
+        self.console.print("\n  [bold yellow]⚠️ Sensitive Tool Approval Required[/bold yellow]")
+
+        interrupt_val = interrupts[0].value
+        action_requests = interrupt_val.get("action_requests", [])
+
+        for req in action_requests:
+            name = req.get("name", "unknown")
+            args = req.get("args", {})
+            self.console.print(f"  Tool: [bold]{name}[/bold]")
+            self.console.print(f"  Arguments: {args}")
+
+        try:
+            while True:
+                self.console.print("  [bold cyan]Choose action:[/bold cyan] ([bold]a[/bold])pprove / ([bold]r[/bold])eject / allow ([bold]s[/bold])ession / ([bold]c[/bold])ancel: ", end="")
+                choice = input().strip().lower()
+                if choice == "a":
+                    return [{"type": "approve"} for _ in action_requests]
+                elif choice == "r":
+                    return [{
+                        "type": "reject",
+                        "message": f"User rejected executing tool '{req.get('name')}'."
+                    } for req in action_requests]
+                elif choice == "s":
+                    for req in action_requests:
+                        runtime.auto_approved_tools.add(req.get("name", ""))
+                    return [{"type": "approve"} for _ in action_requests]
+                elif choice == "c":
+                    self.console.print("  [red]✗ Cancelled[/red]\n")
+                    raise KeyboardInterrupt()
+        except (EOFError, KeyboardInterrupt):
+            self.console.print("  [red]✗ Cancelled[/red]\n")
+            raise KeyboardInterrupt()
 
     def close(self) -> None:
         self._toggle_live(False)

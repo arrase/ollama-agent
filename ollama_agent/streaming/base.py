@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ..agent import AgentRuntime
 
 
 class StreamingRenderer(ABC):
@@ -21,6 +24,10 @@ class StreamingRenderer(ABC):
     def on_warning(self, event: dict[str, Any]) -> None:
         """Handle a warning event."""
         print(f"Warning: {event.get('content', 'Unknown warning')}")
+
+    def handle_interrupt(self, event: dict[str, Any], runtime: AgentRuntime) -> list[dict[str, Any]] | None:
+        """Handle an interrupt event. Default implementation does nothing."""
+        return None
 
     @abstractmethod
     def close(self) -> None:
