@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, AsyncGenerator, Self, cast
 
 from deepagents import create_deep_agent
-from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend, StateBackend
+from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
 from deepagents.middleware.summarization import create_summarization_tool_middleware
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
@@ -99,8 +99,7 @@ class AgentRuntime:
 
         # Backend: CWD for shell + APP_DIR for agent files (memory, etc.)
         timeout = int(get_tool_timeout())
-        default_backend = StateBackend()
-        workspace_backend = LocalShellBackend(
+        default_backend = LocalShellBackend(
             root_dir=Path.cwd(),
             timeout=timeout,
             virtual_mode=not self.settings.runtime.allow_traversal,
@@ -118,7 +117,6 @@ class AgentRuntime:
             routes={
                 "/agent/": agent_backend,
                 "/skills/": skills_backend,
-                "/workspace/": workspace_backend,
             },
         )
 
