@@ -57,7 +57,7 @@ class AgentHeader(Static):
         )
         rag_info = f"  │  [bold #f5c2e7]RAG[/bold #f5c2e7] {rag_db}" if rag_db else ""
         self.update(
-            f"  [bold #a6e3a1]🤖 Ollama Agent[/bold #a6e3a1]  │  "
+            f"[bold #a6e3a1]🤖 Ollama Agent[/bold #a6e3a1]  │  "
             f"[bold #89b4fa]Model[/bold #89b4fa] {ms.name}  │  "
             f"[bold #fab387]Effort[/bold #fab387] {ms.reasoning_effort}{rag_info}"
         )
@@ -68,6 +68,10 @@ class AgentHeader(Static):
 
 class ReplInput(TextArea):
     """Interactive input field that captures Tab/arrow keys for autocomplete."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("highlight_cursor_line", False)
+        super().__init__(**kwargs)
 
     class Submitted(Message):
         """Emitted when the user submits the input."""
@@ -520,16 +524,17 @@ class OllamaAgentApp(App):
 
     /* ── Header ───────────────────────────────────── */
     AgentHeader {
-        background: #11111b;
+        background: #1e1e2e;
         color: #cdd6f4;
-        height: 3;
-        content-align: left middle;
+        height: 2;
+        content-align: center middle;
         padding: 0 1;
         border-bottom: solid #313244;
     }
 
     /* ── Chat area ────────────────────────────────── */
     #chat-scroll {
+        background: #1e1e2e;
         height: 1fr;
         padding: 0 1;
         scrollbar-color: #585b70;
@@ -554,36 +559,40 @@ class OllamaAgentApp(App):
     #input-bar {
         dock: bottom;
         height: auto;
-        background: #11111b;
+        background: #1e1e2e;
         border-top: solid #313244;
         padding: 0 1;
     }
     ReplInput {
-        background: #11111b !important;
+        background: #1e1e2e !important;
         border: none !important;
         color: #cdd6f4 !important;
         width: 1fr;
-        height: auto;
+        height: 3;
         max-height: 10;
+        padding: 0 !important;
     }
     ReplInput:focus {
-        background: #11111b !important;
+        background: #1e1e2e !important;
         color: #cdd6f4 !important;
         border: none !important;
     }
-    ReplInput > .textarea--cursor {
+    ReplInput .text-area--cursor {
         background: #cdd6f4 !important;
-        color: #11111b !important;
+        color: #1e1e2e !important;
     }
-    ReplInput > .textarea--selection {
+    ReplInput .text-area--cursor-line {
+        background: transparent !important;
+    }
+    ReplInput .text-area--selection {
         background: #585b70 !important;
         color: #cdd6f4 !important;
     }
     #prompt-char {
-        width: 3;
+        width: 2;
         color: #89b4fa;
         text-style: bold;
-        content-align: left middle;
+        content-align: left top;
         padding: 0;
     }
 
