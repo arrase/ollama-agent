@@ -11,6 +11,7 @@ from rich.markdown import Markdown as RichMarkdown
 
 from textual.app import App, ComposeResult
 from textual import events
+from textual.message import Message
 from textual.containers import Grid, Container, ScrollableContainer, Horizontal
 from textual.widgets import Button, Input, TextArea, Static, OptionList, Markdown
 from textual.widgets.option_list import Option
@@ -65,40 +66,58 @@ class AgentHeader(Static):
 # ─── Custom Input ─────────────────────────────────────────────────────────────
 
 
-class ReplInput(Input):
+class ReplInput(TextArea):
     """Interactive input field that captures Tab/arrow keys for autocomplete."""
+
+    class Submitted(Message):
+        """Emitted when the user submits the input."""
+        def __init__(self, input_widget: "ReplInput", value: str) -> None:
+            super().__init__()
+            self.input = input_widget
+            self.value = value
 
     async def on_key(self, event: events.Key) -> None:
         app = self.app
         autolist = app.query_one("#autocomplete-list")
-        if not autolist.display:
-            return
-        if event.key == "down":
+        if autolist.display:
+            if event.key == "down":
+                event.stop()
+                event.prevent_default()
+                if autolist.highlighted is None:
+                    autolist.highlighted = 0
+                elif autolist.highlighted < autolist.option_count - 1:
+                    autolist.highlighted += 1
+                return
+            elif event.key == "up":
+                event.stop()
+                event.prevent_default()
+                if autolist.highlighted is not None and autolist.highlighted > 0:
+                    autolist.highlighted -= 1
+                return
+            elif event.key == "tab":
+                event.stop()
+                event.prevent_default()
+                if autolist.highlighted is not None:
+                    app.accept_completion(autolist.highlighted)
+                return
+            elif event.key == "escape":
+                event.stop()
+                event.prevent_default()
+                app.hide_autocomplete()
+                return
+            elif event.key == "enter":
+                event.stop()
+                event.prevent_default()
+                if autolist.highlighted is not None:
+                    app.accept_completion(autolist.highlighted)
+                return
+
+        if event.key == "enter":
             event.stop()
             event.prevent_default()
-            if autolist.highlighted is None:
-                autolist.highlighted = 0
-            elif autolist.highlighted < autolist.option_count - 1:
-                autolist.highlighted += 1
-        elif event.key == "up":
-            event.stop()
-            event.prevent_default()
-            if autolist.highlighted is not None and autolist.highlighted > 0:
-                autolist.highlighted -= 1
-        elif event.key == "tab":
-            event.stop()
-            event.prevent_default()
-            if autolist.highlighted is not None:
-                app.accept_completion(autolist.highlighted)
-        elif event.key == "escape":
-            event.stop()
-            event.prevent_default()
-            app.hide_autocomplete()
-        elif event.key == "enter":
-            event.stop()
-            event.prevent_default()
-            if autolist.highlighted is not None:
-                app.accept_completion(autolist.highlighted)
+            val = self.text.strip()
+            if val:
+                self.post_message(self.Submitted(self, val))
 
 
 # ─── Chat Message Widgets ─────────────────────────────────────────────────────
@@ -544,17 +563,19 @@ class OllamaAgentApp(App):
         border: none !important;
         color: #cdd6f4 !important;
         width: 1fr;
+        height: auto;
+        max-height: 10;
     }
     ReplInput:focus {
         background: #11111b !important;
         color: #cdd6f4 !important;
         border: none !important;
     }
-    ReplInput > .input--cursor {
+    ReplInput > .textarea--cursor {
         background: #cdd6f4 !important;
         color: #11111b !important;
     }
-    ReplInput > .input--selection {
+    ReplInput > .textarea--selection {
         background: #585b70 !important;
         color: #cdd6f4 !important;
     }
@@ -641,7 +662,7 @@ class OllamaAgentApp(App):
         yield ScrollableContainer(id="chat-scroll")
         with Horizontal(id="input-bar"):
             yield Static("❯ ", id="prompt-char")
-            yield ReplInput(placeholder="Type message or /command…", id="repl-input")
+            yield ReplInput(id="repl-input")
         yield OptionList(id="autocomplete-list")
 
     def on_mount(self) -> None:
@@ -649,17 +670,17 @@ class OllamaAgentApp(App):
 
     # ── Input events ──────────────────────────────────────────────────────
 
-    def on_input_changed(self, event: Input.Changed) -> None:
-        if event.input.id == "repl-input":
-            self.update_autocomplete(event.value)
+    def on_text_area_changed(self, event: TextArea.Changed) -> None:
+        if event.text_area.id == "repl-input":
+            self.update_autocomplete(event.text_area.text)
 
-    def on_input_submitted(self, event: Input.Submitted) -> None:
+    def on_repl_input_submitted(self, event: ReplInput.Submitted) -> None:
         if event.input.id != "repl-input":
             return
         val = event.value.strip()
         if not val:
             return
-        event.input.value = ""
+        event.input.text = ""
 
         if val.startswith("/"):
             self.run_worker(self._run_slash_command(val))
@@ -723,7 +744,7 @@ class OllamaAgentApp(App):
         completed_text = option.id
 
         inp = self.query_one(ReplInput)
-        val = inp.value
+        val = inp.text
 
         if val.lstrip().startswith("/"):
             new_val = completed_text + " "
@@ -738,8 +759,8 @@ class OllamaAgentApp(App):
                 suffix = "" if completed_text.endswith("/") else " "
                 new_val = val[:at_idx] + "@" + completed_text + suffix
 
-        inp.value = new_val
-        inp.cursor_position = len(new_val)
+        inp.text = new_val
+        inp.action_cursor_line_end()
         self.hide_autocomplete()
         inp.focus()
 
