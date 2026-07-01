@@ -50,6 +50,7 @@ class ModelSettings:
 class RuntimeSettings:
     allow_traversal: bool = True
     builtin_tool_timeout: int = 30
+    collapse_thinking: bool = True
 
 
 @dataclass(slots=True)
