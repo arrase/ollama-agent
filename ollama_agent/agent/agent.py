@@ -14,6 +14,7 @@ from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
 from deepagents.middleware.summarization import create_summarization_tool_middleware
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.types import Command
 
 from ..core import (
     PromptProcessingError,
@@ -58,6 +59,8 @@ class AgentRuntime:
 
     settings: Settings = field(default_factory=Settings)
     thread_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    yolo_mode: bool = field(default=False)
+    auto_approved_tools: set[str] = field(default_factory=set)
     graph: Any = field(default=None, init=False, repr=False)
     _instructions: str = field(default="", init=False)
     _exit_stack: contextlib.AsyncExitStack = field(
@@ -127,6 +130,29 @@ class AgentRuntime:
             exit_stack=self._exit_stack,
         )
 
+        def should_interrupt_tool(request: Any) -> bool:
+            if self.yolo_mode:
+                return False
+            tool_name = request.tool_call["name"]
+            if tool_name in self.auto_approved_tools:
+                return False
+            return True
+
+        interrupt_on = {
+            "execute": {
+                "allowed_decisions": ["approve", "reject"],
+                "when": should_interrupt_tool,
+            },
+            "write_file": {
+                "allowed_decisions": ["approve", "reject"],
+                "when": should_interrupt_tool,
+            },
+            "edit_file": {
+                "allowed_decisions": ["approve", "reject"],
+                "when": should_interrupt_tool,
+            },
+        }
+
         kwargs: dict[str, Any] = dict(
             model=model,
             tools=[*BUILTIN_TOOLS, *mcp_tools],
@@ -140,6 +166,7 @@ class AgentRuntime:
                 stream_tool_events_mw,
             ],
             name="ollama-agent",
+            interrupt_on=interrupt_on,
         )
         if subagents:
             kwargs["subagents"] = subagents
@@ -156,7 +183,7 @@ class AgentRuntime:
 
     async def run_streamed(
         self,
-        prompt: str,
+        prompt: str | Command,
         *,
         thread_id: str = "",
     ) -> AsyncGenerator[dict[str, Any], None]:
@@ -171,31 +198,36 @@ class AgentRuntime:
         config = {"configurable": {"thread_id": thread}}
         hide_reasoning = self.settings.model.reasoning_effort in ("hide", "disabled")
 
-        # 1. Process prompt mentions
-        try:
-            mentions_cfg = self.settings.mentions
-            processed_prompt, attachments = process_prompt_mentions(
-                prompt,
-                max_file_size=mentions_cfg.max_file_size,
-                max_files=mentions_cfg.max_files,
-                max_total_size=mentions_cfg.max_total_size,
-            )
-        except PromptProcessingError as exc:
-            yield {"type": "error", "content": str(exc)}
-            return
-
-        # 2. Construct user message (multimodal vs text-only)
-        if attachments:
-            user_msg = {
-                "role": "user",
-                "content": [{"type": "text", "text": processed_prompt}] + attachments
-            }
+        if isinstance(prompt, Command):
+            inputs = prompt
         else:
-            user_msg = {"role": "user", "content": processed_prompt}
+            # 1. Process prompt mentions
+            try:
+                mentions_cfg = self.settings.mentions
+                processed_prompt, attachments = process_prompt_mentions(
+                    prompt,
+                    max_file_size=mentions_cfg.max_file_size,
+                    max_files=mentions_cfg.max_files,
+                    max_total_size=mentions_cfg.max_total_size,
+                )
+            except PromptProcessingError as exc:
+                yield {"type": "error", "content": str(exc)}
+                return
+
+            # 2. Construct user message (multimodal vs text-only)
+            if attachments:
+                user_msg = {
+                    "role": "user",
+                    "content": [{"type": "text", "text": processed_prompt}] + attachments
+                }
+            else:
+                user_msg = {"role": "user", "content": processed_prompt}
+
+            inputs = {"messages": [user_msg]}
 
         try:
             async for mode, event in self.graph.astream(
-                {"messages": [user_msg]},
+                inputs,
                 config,
                 stream_mode=["messages", "custom"],
             ):
@@ -210,6 +242,11 @@ class AgentRuntime:
                     )
                     if result:
                         yield result
+
+            # Check if we were interrupted
+            state = await self.graph.aget_state(config)
+            if state.interrupts:
+                yield {"type": "interrupt", "interrupts": state.interrupts, "config": config}
         except Exception as exc:
             _log.error("Streamed agent error: %s", exc)
             yield {"type": "error", "content": str(exc)}

@@ -47,6 +47,12 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         choices=["all", "system-prompt", "config-file"],
         help="Reset configuration or system prompt to defaults",
     )
+    parser.add_argument(
+        "-y",
+        "--yolo",
+        action="store_true",
+        help="Enable YOLO mode (bypasses all tool execution confirmation prompts)",
+    )
 
 
 def _add_subparser(
@@ -185,7 +191,7 @@ def handle_cli_commands(
         if args.builtin_tool_timeout is not None:
             settings.runtime.builtin_tool_timeout = args.builtin_tool_timeout
 
-        runtime = AgentRuntime(settings=settings)
+        runtime = AgentRuntime(settings=settings, yolo_mode=getattr(args, "yolo", False))
 
         async def _run():
             async with runtime:
