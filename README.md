@@ -92,6 +92,7 @@ The REPL provides a persistent chat session. You can use slash commands to manag
 - `/skill-show <id>`: Show skill details.
 - `/skill-create <id>`: Create a skill interactively.
 - `/skill-delete <id>`: Delete a skill.
+- `/yolo [on|off]`: Toggle YOLO mode or set it explicitly (on/off).
 - `/exit`: Quit the application.
 
 ### Non-Interactive Mode
@@ -103,6 +104,27 @@ ollama-agent --prompt "List all files in the current directory as JSON."
 # Or using the short form:
 ollama-agent -p "List all files in the current directory as JSON."
 ```
+
+### Human-in-the-Loop & YOLO Mode
+
+For security and control, Ollama Agent includes a **Human-in-the-Loop (HITL)** approval flow. By default, before running shell commands (`execute`) or writing/modifying local files (`write_file`, `edit_file`), the agent pauses execution and displays an inline confirmation widget in the terminal:
+
+- **Approve**: Authorize this single tool execution.
+- **Reject**: Block the tool execution and send feedback to the agent so it can attempt an alternative approach.
+- **Allow Session**: Authorize this execution and automatically approve all future calls for this specific tool type (e.g., all file writes) for the remainder of the current session.
+- **Cancel**: Completely abort the tool call and stop agent execution, returning control to the REPL input so you can type new instructions.
+
+#### YOLO Mode
+
+If you trust the agent and want to run tasks without any confirmation prompts, you can enable **YOLO Mode**:
+
+- **CLI Flag**: Start the agent with `-y` or `--yolo` (e.g. `ollama-agent -y` or `ollama-agent --yolo`).
+- **Slash Command**: Toggle it dynamically inside the REPL using `/yolo`, or explicitly set it with `/yolo on` and `/yolo off`.
+
+When YOLO mode is active:
+1. Confirmations are bypassed entirely.
+2. The REPL status bar shows `YOLO: On` (in red).
+3. The prompt symbol changes color to **red** (`❯❯ `) to make it highly visible.
 
 ### File / Directory Context (@-mentions)
 
@@ -165,6 +187,7 @@ ollama-agent -t 60 -p "Run a long-running task"
 - `-p`, `--prompt`: Provide a prompt for non-interactive mode
 - `-e`, `--effort`: Set reasoning effort level (low, medium, high, disabled, hide, enabled)
 - `-t`, `--builtin-tool-timeout`: Set tool-call timeout in seconds (applies to tool executions, including shell backend and built-in tools). Overrides `builtin_tool_timeout` from `config.ini` for the current run.
+- `-y`, `--yolo`: Enable YOLO mode (bypasses all tool execution confirmation prompts)
 - `--rag <database>`: Load a RAG database for the session
 - `--skills-dir <dir>`: Additional skills directory (can be repeated to add multiple sources)
 
