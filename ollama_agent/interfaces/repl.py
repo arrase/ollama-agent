@@ -16,6 +16,7 @@ from textual.containers import Grid, Container, ScrollableContainer, Horizontal
 from textual.widgets import Button, Input, TextArea, Static, OptionList, Markdown
 from textual.widgets.option_list import Option
 from textual.screen import ModalScreen
+from langgraph.types import Command
 
 from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager, set_tool_timeout
@@ -56,10 +57,11 @@ class AgentHeader(Static):
             else None
         )
         rag_info = f"  │  [bold #f5c2e7]RAG[/bold #f5c2e7] {rag_db}" if rag_db else ""
+        yolo_status = "[bold #f38ba8]YOLO: On[/bold #f38ba8]" if self.repl.runtime.yolo_mode else "[bold #a6e3a1]YOLO: Off[/bold #a6e3a1]"
         self.update(
             f"[bold #a6e3a1]🤖 Ollama Agent[/bold #a6e3a1]  │  "
             f"[bold #89b4fa]Model[/bold #89b4fa] {ms.name}  │  "
-            f"[bold #fab387]Effort[/bold #fab387] {ms.reasoning_effort}{rag_info}"
+            f"[bold #fab387]Effort[/bold #fab387] {ms.reasoning_effort}{rag_info}  │  {yolo_status}"
         )
 
 
@@ -509,9 +511,84 @@ class SkillCreateModal(ModalScreen):
             ))
 
 
+class ToolApprovalWidget(Container):
+    """Inline widget prompting the user for approval of sensitive tool calls."""
+
+    def __init__(self, action_requests: list[dict], app_ref: "OllamaAgentApp", scroll, agent_msg: AgentResponse, **kwargs):
+        super().__init__(**kwargs)
+        self.action_requests = action_requests
+        self.app_ref = app_ref
+        self.scroll = scroll
+        self.agent_msg = agent_msg
+        self.buttons_container = None
+
+    def compose(self) -> ComposeResult:
+        yield Static("⚠️ Sensitive Tool Approval Required", classes="approval-title")
+        for req in self.action_requests:
+            name = req.get("name", "unknown")
+            args = req.get("args", {})
+            yield Static(f"Tool: [bold]{name}[/bold]\nArguments: {args}", classes="approval-details")
+        
+        with Horizontal(classes="approval-buttons") as buttons:
+            self.buttons_container = buttons
+            yield Button("Approve", id="approve-btn", variant="success", classes="approval-btn")
+            yield Button("Reject", id="reject-btn", variant="error", classes="approval-btn")
+            yield Button("Allow Session", id="allow-btn", variant="primary", classes="approval-btn")
+            yield Button("Cancel", id="cancel-btn", classes="approval-btn")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        event.stop()
+        
+        # Disable all buttons to prevent double-click
+        for child in self.buttons_container.query(Button):
+            child.disabled = True
+            
+        decision_type = event.button.id
+        decisions = []
+        
+        for req in self.action_requests:
+            name = req.get("name", "unknown")
+            if decision_type == "approve-btn":
+                decisions.append({"type": "approve"})
+            elif decision_type == "reject-btn":
+                decisions.append({
+                    "type": "reject",
+                    "message": f"User rejected executing tool '{name}'."
+                })
+            elif decision_type == "allow-btn":
+                # Add this tool type to auto-approved tools for this session
+                self.app_ref.repl.runtime.auto_approved_tools.add(name)
+                decisions.append({"type": "approve"})
+            elif decision_type == "cancel-btn":
+                decisions.append({
+                    "type": "reject",
+                    "message": "User cancelled the execution."
+                })
+
+        # Remove the buttons container from view or replace with status
+        self.buttons_container.remove()
+        
+        # Display the chosen action
+        status_text = ""
+        if decision_type == "approve-btn":
+            status_text = "[green]✓ Approved[/green]"
+        elif decision_type == "reject-btn":
+            status_text = "[red]✗ Rejected[/red]"
+        elif decision_type == "allow-btn":
+            status_text = "[blue]✓ Allowed for session & approved[/blue]"
+        elif decision_type == "cancel-btn":
+            status_text = "[red]✗ Cancelled[/red]"
+            
+        self.mount(Static(f"  {status_text}"))
+        
+        if decision_type != "cancel-btn":
+            # Resume agent stream
+            self.app_ref.run_worker(
+                self.app_ref._handle_approval_decision(decisions, self.scroll, self.agent_msg)
+            )
+
+
 # ─── Main TUI App ────────────────────────────────────────────────────────────
-
-
 class OllamaAgentApp(App):
     """Main Textual Application representing the Agent's interactive TUI."""
 
@@ -589,11 +666,43 @@ class OllamaAgentApp(App):
         color: #cdd6f4 !important;
     }
     #prompt-char {
-        width: 2;
+        width: 3;
         color: #89b4fa;
         text-style: bold;
         content-align: left top;
         padding: 0;
+    }
+
+    /* ── Tool Approval ────────────────────────────── */
+    ToolApprovalWidget {
+        background: #1e1e2e;
+        border-left: solid #eed49f;
+        margin: 1 0;
+        padding: 0 0 0 1;
+        height: auto;
+        layout: vertical;
+    }
+    .approval-title {
+        color: #eed49f;
+        text-style: bold;
+        margin-bottom: 0;
+        padding-left: 1;
+    }
+    .approval-details {
+        color: #cdd6f4;
+        margin-bottom: 1;
+        padding-left: 2;
+    }
+    .approval-buttons {
+        height: 3;
+        align: left middle;
+        padding-left: 2;
+    }
+    .approval-btn {
+        margin-right: 1;
+        min-width: 10;
+        height: 1;
+        border: none;
     }
 
     /* ── Message roles ────────────────────────────── */
@@ -670,12 +779,24 @@ class OllamaAgentApp(App):
         yield AgentHeader(self.repl)
         yield ScrollableContainer(id="chat-scroll")
         with Horizontal(id="input-bar"):
-            yield Static("❯ ", id="prompt-char")
+            yield Static("❯❯ ", id="prompt-char")
             yield ReplInput(id="repl-input")
         yield OptionList(id="autocomplete-list")
 
     def on_mount(self) -> None:
         self.query_one(ReplInput).focus()
+        self.update_yolo_ui()
+
+    def update_yolo_ui(self) -> None:
+        prompt_char = self.query_one("#prompt-char")
+        if self.repl.runtime.yolo_mode:
+            prompt_char.styles.color = "#f38ba8"  # Red
+        else:
+            prompt_char.styles.color = "#89b4fa"  # Blue
+
+        # Update the header immediately
+        header = self.query_one(AgentHeader)
+        header.update_header()
 
     # ── Input events ──────────────────────────────────────────────────────
 
@@ -844,6 +965,27 @@ class OllamaAgentApp(App):
         args = parts[1:]
         scroll = self.query_one("#chat-scroll")
 
+        if cmd == "/yolo":
+            if args:
+                val = args[0].lower()
+                if val in ("on", "true", "yes", "1"):
+                    self.repl.runtime.yolo_mode = True
+                elif val in ("off", "false", "no", "0"):
+                    self.repl.runtime.yolo_mode = False
+                else:
+                    scroll.mount(SystemMessage("[red]Usage: /yolo [on|off][/red]"))
+                    self._deferred_scroll()
+                    return
+            else:
+                self.repl.runtime.yolo_mode = not self.repl.runtime.yolo_mode
+
+            status = "ON" if self.repl.runtime.yolo_mode else "OFF"
+            color = "red" if self.repl.runtime.yolo_mode else "green"
+            scroll.mount(SystemMessage(f"[bold {color}]YOLO mode is now {status}[/bold {color}]"))
+            self._deferred_scroll()
+            self.update_yolo_ui()
+            return
+
         if cmd in ("/exit", "/quit"):
             self.exit()
             return
@@ -969,8 +1111,15 @@ class OllamaAgentApp(App):
             self._deferred_scroll()
 
     # ── Streaming chat ────────────────────────────────────────────────────
-
+ 
     async def _stream_chat(self, prompt: str, scroll, agent_msg: AgentResponse):
+        await self._run_stream(prompt, scroll, agent_msg)
+
+    async def _handle_approval_decision(self, decisions: list[dict], scroll, agent_msg: AgentResponse):
+        command = Command(resume={"decisions": decisions})
+        await self._run_stream(command, scroll, agent_msg)
+
+    async def _run_stream(self, prompt: str | Command, scroll, agent_msg: AgentResponse):
         app = self
 
         class _Renderer(StreamingRenderer):
@@ -1017,6 +1166,28 @@ class OllamaAgentApp(App):
             await stream_agent_events(self.repl.runtime, prompt, _Renderer(agent_msg), auto_close=True)
         except Exception as e:
             scroll.mount(SystemMessage(f"[red]Error: {e}[/red]"))
+            self._deferred_scroll()
+            return
+
+        # Check if the execution got interrupted
+        config = {"configurable": {"thread_id": self.repl.runtime.thread_id}}
+        try:
+            state = await self.repl.runtime.graph.aget_state(config)
+            if state.interrupts:
+                interrupt_val = state.interrupts[0].value
+                action_requests = interrupt_val.get("action_requests", [])
+
+                # Mount approval widget
+                approval_widget = ToolApprovalWidget(
+                    action_requests=action_requests,
+                    app_ref=self,
+                    scroll=scroll,
+                    agent_msg=agent_msg,
+                )
+                agent_msg.mount(approval_widget)
+                self._deferred_scroll()
+        except Exception as e:
+            scroll.mount(SystemMessage(f"[red]Error checking state: {e}[/red]"))
             self._deferred_scroll()
 
 

@@ -126,6 +126,12 @@ def build_repl_handlers(
 
     return {
         "/help": REPLCommand("Show this help message", "General", None, lambda _: None),
+        "/yolo": REPLCommand(
+            "Toggle YOLO mode or set it explicitly (on/off)",
+            "General",
+            "/yolo [on|off]",
+            lambda _: None,
+        ),
         "/exit": REPLCommand("Exit the REPL", "General", None, handle_exit),
         "/quit": REPLCommand("Exit the REPL", "General", None, handle_exit),
         "/clear": REPLCommand("Clear the screen", "General", None, handle_clear),

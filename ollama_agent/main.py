@@ -50,7 +50,7 @@ def main() -> None:
         if handle_cli_commands(args, settings):
             return
 
-        runtime = AgentRuntime(settings=settings)
+        runtime = AgentRuntime(settings=settings, yolo_mode=getattr(args, "yolo", False))
 
         repl = OllamaREPL(
             runtime=runtime,
