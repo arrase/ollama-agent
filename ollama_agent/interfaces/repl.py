@@ -13,7 +13,7 @@ from textual.app import App, ComposeResult
 from textual import events
 from textual.message import Message
 from textual.containers import Grid, Container, ScrollableContainer, Horizontal
-from textual.widgets import Button, Input, TextArea, Static, OptionList, Markdown
+from textual.widgets import Button, Input, TextArea, Static, OptionList, Markdown, Collapsible
 from textual.widgets.option_list import Option
 from textual.screen import ModalScreen
 from langgraph.types import Command
@@ -157,26 +157,59 @@ class AgentResponse(Container):
             classes="msg-role",
         )
         self.current_thinking = None
+        self.current_thinking_text = None
         self.current_text_widget = None
         self._text_chunks = []
+        self.thinking_timer = None
+        self._thinking_dots_count = 3
 
     def compose(self) -> ComposeResult:
         yield self._header
 
+    def _animate_thinking(self) -> None:
+        if self.current_thinking is not None:
+            num_dots = (getattr(self, "_thinking_dots_count", 2) % 6) + 1
+            self._thinking_dots_count = num_dots
+            dots = "." * num_dots
+            self.current_thinking.title = f"🧠 Thinking{dots}"
+
+    def _stop_thinking_animation(self) -> None:
+        if getattr(self, "thinking_timer", None) is not None:
+            self.thinking_timer.stop()
+            self.thinking_timer = None
+        if self.current_thinking is not None:
+            self.current_thinking.title = "🧠 Thinking"
+
     def append_thinking(self, delta: str) -> None:
         self.current_text_widget = None
         if self.current_thinking is None:
-            self.current_thinking = Static("", classes="msg-content thinking-body")
+            collapse_default = True
+            if self.app and hasattr(self.app, "repl"):
+                collapse_default = getattr(
+                    self.app.repl.runtime.settings.runtime,
+                    "collapse_thinking",
+                    True,
+                )
+            self.current_thinking_text = Static("", classes="msg-content thinking-body")
+            self.current_thinking_text._chunks = []
+            self.current_thinking = Collapsible(
+                self.current_thinking_text,
+                title="🧠 Thinking...",
+                collapsed=collapse_default,
+            )
             self.mount(self.current_thinking)
-        if not hasattr(self.current_thinking, "_chunks"):
-            self.current_thinking._chunks = []
-        self.current_thinking._chunks.append(delta)
-        self.current_thinking.update(
-            f"[dim italic #cba6f7]{''.join(self.current_thinking._chunks)}[/dim italic #cba6f7]"
+            self._thinking_dots_count = 3
+            self.thinking_timer = self.set_interval(0.5, self._animate_thinking)
+
+        self.current_thinking_text._chunks.append(delta)
+        self.current_thinking_text.update(
+            f"[dim italic #cba6f7]{''.join(self.current_thinking_text._chunks)}[/dim italic #cba6f7]"
         )
 
     def append_text(self, delta: str) -> None:
+        self._stop_thinking_animation()
         self.current_thinking = None
+        self.current_thinking_text = None
         if self.current_text_widget is None:
             self.current_text_widget = Static("", classes="msg-content")
             self.mount(self.current_text_widget)
@@ -185,22 +218,30 @@ class AgentResponse(Container):
         self.current_text_widget.update(RichMarkdown("".join(self._text_chunks)))
 
     def add_tool_call(self, name: str, agent: str | None = None) -> None:
+        self._stop_thinking_animation()
         self.current_thinking = None
+        self.current_thinking_text = None
         self.current_text_widget = None
         self.mount(ToolCallMessage(tool_name=name, agent_name=agent))
 
     def add_tool_output(self, agent: str | None = None, output_len: int | None = None) -> None:
+        self._stop_thinking_animation()
         self.current_thinking = None
+        self.current_thinking_text = None
         self.current_text_widget = None
         self.mount(ToolOutputMessage(agent_name=agent, output_len=output_len))
 
     def add_error(self, content: str) -> None:
+        self._stop_thinking_animation()
         self.current_thinking = None
+        self.current_thinking_text = None
         self.current_text_widget = None
         self.mount(SystemMessage(f"[red]❌ {content}[/red]"))
 
     def add_warning(self, content: str) -> None:
+        self._stop_thinking_animation()
         self.current_thinking = None
+        self.current_thinking_text = None
         self.current_text_widget = None
         self.mount(SystemMessage(f"[yellow]⚠ {content}[/yellow]"))
 
@@ -733,6 +774,33 @@ class OllamaAgentApp(App):
         text-style: italic;
         margin: 0 0 1 1;
         padding: 0;
+    }
+    Collapsible {
+        background: transparent !important;
+        border: none !important;
+        margin: 0;
+        padding: 0 0 1 0;
+    }
+    Collapsible > Contents {
+        background: transparent !important;
+        border: none !important;
+        margin: 0;
+        padding: 0 0 0 1;
+    }
+    CollapsibleTitle {
+        background: transparent !important;
+        border: none !important;
+        color: #cba6f7 !important;
+        text-style: italic !important;
+        padding: 0;
+    }
+    CollapsibleTitle:hover {
+        background: transparent !important;
+        color: #cba6f7 !important;
+    }
+    CollapsibleTitle:focus {
+        background: transparent !important;
+        color: #cba6f7 !important;
     }
 
     /* ── Agent response ───────────────────────────── */
