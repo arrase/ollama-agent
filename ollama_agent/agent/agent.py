@@ -31,6 +31,8 @@ from ..settings import (
     Settings,
     ensure_memory_file,
     load_instructions,
+    load_fs_policy_traversal,
+    load_fs_policy_sandboxed,
     save_settings,
 )
 from ..streaming.parsers import streaming_reasoning, streaming_text
@@ -77,7 +79,16 @@ class AgentRuntime:
         """Tear down existing resources and rebuild the agent graph."""
         await self._exit_stack.aclose()
         self._exit_stack = contextlib.AsyncExitStack()
-        self._instructions = await asyncio.to_thread(load_instructions)
+        base_instructions = await asyncio.to_thread(load_instructions)
+        if self.settings.runtime.allow_traversal:
+            fs_policy = await asyncio.to_thread(load_fs_policy_traversal)
+        else:
+            fs_policy = await asyncio.to_thread(load_fs_policy_sandboxed)
+        
+        if "{FILESYSTEM_POLICY}" in base_instructions:
+            self._instructions = base_instructions.replace("{FILESYSTEM_POLICY}", fs_policy)
+        else:
+            self._instructions = base_instructions + "\n\n" + fs_policy
         await asyncio.to_thread(ensure_memory_file, MEMORY_PATH)
         self.graph = await self._build_graph()
 

@@ -41,6 +41,18 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         metavar="DATABASE",
         help="Load a RAG database for the session",
     )
+    parser.add_argument(
+        "--allow-traversal",
+        action="store_true",
+        default=None,
+        help="Allow virtual filesystem traversal to OS directories",
+    )
+    parser.add_argument(
+        "--no-allow-traversal",
+        action="store_false",
+        dest="allow_traversal",
+        help="Sandbox agent to project directory",
+    )
 
     parser.add_argument(
         "--config-reset",
@@ -190,6 +202,8 @@ def handle_cli_commands(
             settings.model.reasoning_effort = args.effort
         if args.builtin_tool_timeout is not None:
             settings.runtime.builtin_tool_timeout = args.builtin_tool_timeout
+        if getattr(args, "allow_traversal", None) is not None:
+            settings.runtime.allow_traversal = args.allow_traversal
 
         runtime = AgentRuntime(settings=settings, yolo_mode=getattr(args, "yolo", False))
 

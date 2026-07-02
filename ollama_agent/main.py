@@ -43,6 +43,8 @@ def main() -> None:
         settings.model.reasoning_effort = args.effort
     if args.builtin_tool_timeout is not None:
         settings.runtime.builtin_tool_timeout = args.builtin_tool_timeout
+    if getattr(args, "allow_traversal", None) is not None:
+        settings.runtime.allow_traversal = args.allow_traversal
 
     set_tool_timeout(settings.runtime.builtin_tool_timeout)
 

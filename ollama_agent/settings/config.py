@@ -10,7 +10,14 @@ from typing import Any, Self
 
 import yaml  # type: ignore[import-untyped]
 
-from .paths import INSTRUCTIONS_PATH, MEMORY_PATH, SETTINGS_PATH, RAG_DIR
+from .paths import (
+    INSTRUCTIONS_PATH,
+    MEMORY_PATH,
+    SETTINGS_PATH,
+    RAG_DIR,
+    FS_POLICY_TRAVERSAL_PATH,
+    FS_POLICY_SANDBOXED_PATH,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +31,7 @@ def _default_instructions() -> str:
     try:
         return (
             resources.files(__package__)
-            .joinpath("default_instructions.md")
+            .joinpath("prompts/default_instructions.md")
             .read_text(encoding="utf-8")
             .strip()
         )
@@ -48,7 +55,7 @@ class ModelSettings:
 
 @dataclass(slots=True)
 class RuntimeSettings:
-    allow_traversal: bool = True
+    allow_traversal: bool = False
     builtin_tool_timeout: int = 30
     collapse_thinking: bool = True
 
@@ -226,6 +233,42 @@ def load_instructions(instructions_path: Path = INSTRUCTIONS_PATH) -> str:
         return _default_instructions()
 
 
+def load_fs_policy_traversal(policy_path: Path = FS_POLICY_TRAVERSAL_PATH) -> str:
+    """Load filesystem traversal policy from file or return defaults."""
+    default_text = (
+        resources.files(__package__)
+        .joinpath("prompts/fs_policy_traversal.md")
+        .read_text(encoding="utf-8")
+        .strip()
+    )
+    if not policy_path.exists():
+        policy_path.parent.mkdir(parents=True, exist_ok=True)
+        policy_path.write_text(default_text + "\n", encoding="utf-8")
+        return default_text
+    try:
+        return policy_path.read_text(encoding="utf-8").strip() or default_text
+    except Exception:
+        return default_text
+
+
+def load_fs_policy_sandboxed(policy_path: Path = FS_POLICY_SANDBOXED_PATH) -> str:
+    """Load sandboxed filesystem policy from file or return defaults."""
+    default_text = (
+        resources.files(__package__)
+        .joinpath("prompts/fs_policy_sandboxed.md")
+        .read_text(encoding="utf-8")
+        .strip()
+    )
+    if not policy_path.exists():
+        policy_path.parent.mkdir(parents=True, exist_ok=True)
+        policy_path.write_text(default_text + "\n", encoding="utf-8")
+        return default_text
+    try:
+        return policy_path.read_text(encoding="utf-8").strip() or default_text
+    except Exception:
+        return default_text
+
+
 # ---------------------------------------------------------------------------
 # Memory scaffold
 # ---------------------------------------------------------------------------
@@ -258,5 +301,13 @@ def reset_config(option: str) -> None:
     if option in ("all", "system-prompt"):
         if INSTRUCTIONS_PATH.exists():
             INSTRUCTIONS_PATH.unlink()
+        if FS_POLICY_TRAVERSAL_PATH.exists():
+            FS_POLICY_TRAVERSAL_PATH.unlink()
+        if FS_POLICY_SANDBOXED_PATH.exists():
+            FS_POLICY_SANDBOXED_PATH.unlink()
         load_instructions()
+        load_fs_policy_traversal()
+        load_fs_policy_sandboxed()
         print(f"Reset: Restored default system prompt at {INSTRUCTIONS_PATH}")
+        print(f"Reset: Restored default traversal policy at {FS_POLICY_TRAVERSAL_PATH}")
+        print(f"Reset: Restored default sandboxed policy at {FS_POLICY_SANDBOXED_PATH}")
