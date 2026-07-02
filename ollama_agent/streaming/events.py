@@ -53,7 +53,7 @@ async def stream_agent_events(
 
             break
     except asyncio.CancelledError:
-        pass
+        raise
     except Exception as exc:
         logger.exception("Error streaming agent events: %s", exc)
         renderer.on_error({"type": "error", "content": str(exc)})

@@ -1,5 +1,6 @@
 """REPL interface for Ollama Agent using Textual TUI."""
 
+import asyncio
 import os
 import re
 import time
@@ -12,6 +13,7 @@ from rich.text import Text
 from textual.app import App, ComposeResult
 from textual import events
 from textual.message import Message
+from textual.worker import Worker
 from textual.containers import Grid, Container, ScrollableContainer, Horizontal
 from textual.widgets import Button, Input, TextArea, Static, OptionList, Markdown, Collapsible
 from textual.widgets.option_list import Option
@@ -643,7 +645,7 @@ class ToolApprovalWidget(Container):
         
         if decision_type != "cancel-btn":
             # Resume agent stream
-            self.app_ref.run_worker(
+            self.app_ref._current_worker = self.app_ref.run_worker(
                 self.app_ref._handle_approval_decision(decisions, self.scroll, self.agent_msg)
             )
 
@@ -651,6 +653,22 @@ class ToolApprovalWidget(Container):
 # ─── Main TUI App ────────────────────────────────────────────────────────────
 class OllamaAgentApp(App):
     """Main Textual Application representing the Agent's interactive TUI."""
+
+    BINDINGS = [
+        ("escape", "cancel_generation", "Interrumpir"),
+        ("ctrl+c", "cancel_or_quit", "Interrumpir/Salir"),
+    ]
+
+    def action_cancel_generation(self) -> None:
+        if self._is_generating and hasattr(self, "_current_worker") and self._current_worker is not None:
+            self._current_worker.cancel()
+
+    def action_cancel_or_quit(self) -> None:
+        if self._is_generating:
+            if hasattr(self, "_current_worker") and self._current_worker is not None:
+                self._current_worker.cancel()
+        else:
+            self.exit()
 
     CSS = """
     /* ── Base ─────────────────────────────────────── */
@@ -862,6 +880,7 @@ class OllamaAgentApp(App):
         super().__init__()
         self.repl = repl
         self._is_generating = False
+        self._current_worker: Worker | None = None
 
     def compose(self) -> ComposeResult:
         yield AgentHeader(self.repl)
@@ -903,14 +922,14 @@ class OllamaAgentApp(App):
         event.input.text = ""
 
         if val.startswith("/"):
-            self.run_worker(self._run_slash_command(val))
+            self._current_worker = self.run_worker(self._run_slash_command(val))
         else:
             scroll = self.query_one("#chat-scroll")
             scroll.mount(UserMessage(val))
             agent_msg = AgentResponse()
             scroll.mount(agent_msg)
             self._deferred_scroll()
-            self.run_worker(self._stream_chat(val, scroll, agent_msg))
+            self._current_worker = self.run_worker(self._stream_chat(val, scroll, agent_msg))
 
     # ── Autocomplete ──────────────────────────────────────────────────────
 
@@ -1273,32 +1292,38 @@ class OllamaAgentApp(App):
                 self._do_scroll()
 
         try:
-            await stream_agent_events(self.repl.runtime, prompt, _Renderer(agent_msg), auto_close=True)
-        except Exception as e:
-            scroll.mount(SystemMessage(f"[red]Error: {e}[/red]"))
-            self._deferred_scroll()
-            return
-
-        # Check if the execution got interrupted
-        config = {"configurable": {"thread_id": self.repl.runtime.thread_id}}
-        try:
-            state = await self.repl.runtime.graph.aget_state(config)
-            if state.interrupts:
-                interrupt_val = state.interrupts[0].value
-                action_requests = interrupt_val.get("action_requests", [])
-
-                # Mount approval widget
-                approval_widget = ToolApprovalWidget(
-                    action_requests=action_requests,
-                    app_ref=self,
-                    scroll=scroll,
-                    agent_msg=agent_msg,
-                )
-                agent_msg.mount(approval_widget)
+            try:
+                await stream_agent_events(self.repl.runtime, prompt, _Renderer(agent_msg), auto_close=True)
+            except asyncio.CancelledError:
+                scroll.mount(SystemMessage("[red]🛑 Execution interrupted by user.[/red]"))
                 self._deferred_scroll()
-        except Exception as e:
-            scroll.mount(SystemMessage(f"[red]Error checking state: {e}[/red]"))
-            self._deferred_scroll()
+                self.query_one(ReplInput).focus()
+                raise
+            except Exception as e:
+                scroll.mount(SystemMessage(f"[red]Error: {e}[/red]"))
+                self._deferred_scroll()
+                return
+
+            # Check if the execution got interrupted
+            config = {"configurable": {"thread_id": self.repl.runtime.thread_id}}
+            try:
+                state = await self.repl.runtime.graph.aget_state(config)
+                if state.interrupts:
+                    interrupt_val = state.interrupts[0].value
+                    action_requests = interrupt_val.get("action_requests", [])
+
+                    # Mount approval widget
+                    approval_widget = ToolApprovalWidget(
+                        action_requests=action_requests,
+                        app_ref=self,
+                        scroll=scroll,
+                        agent_msg=agent_msg,
+                    )
+                    agent_msg.mount(approval_widget)
+                    self._deferred_scroll()
+            except Exception as e:
+                scroll.mount(SystemMessage(f"[red]Error checking state: {e}[/red]"))
+                self._deferred_scroll()
         finally:
             self._is_generating = False
 
