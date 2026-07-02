@@ -19,10 +19,12 @@ from textual.widgets import Button, Input, TextArea, Static, OptionList, Markdow
 from textual.widgets.option_list import Option
 from textual.screen import ModalScreen
 from langgraph.types import Command
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager, set_tool_timeout
 from ..rag import RAGContext, RAGManager, load_rag_database
+from ..settings.paths import APP_DIR, HISTORY_DB_PATH
 from ..skills import SkillsContext, create_skill
 from ..tasks.commands import CLIContext, create_task
 from .dispatch import build_repl_handlers, render_repl_help
@@ -76,6 +78,73 @@ class ReplInput(TextArea):
     def __init__(self, **kwargs):
         kwargs.setdefault("highlight_cursor_line", False)
         super().__init__(**kwargs)
+        self._history: list[str] = []
+        self._history_index: int = 0
+        self._temp_input: str = ""
+
+    async def on_mount(self) -> None:
+        super().on_mount()
+        await self._load_history()
+
+    async def _load_history(self) -> None:
+        history_path = APP_DIR / "tui_history.txt"
+        loaded_set = set()
+        self._history = []
+
+        if history_path.exists():
+            try:
+                with open(history_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        entry = line.strip("\n")
+                        if entry and not entry.startswith("/") and entry not in loaded_set:
+                            self._history.append(entry)
+                            loaded_set.add(entry)
+            except Exception:
+                pass
+
+        # If the history is short or empty, try to populate it with previous user prompts from the DB checkpointer
+        if len(self._history) < 50:
+            if HISTORY_DB_PATH.exists():
+                try:
+                    async with AsyncSqliteSaver.from_conn_string(str(HISTORY_DB_PATH)) as saver:
+                        async for checkpoint_tuple in saver.alist(None):
+                            checkpoint = checkpoint_tuple.checkpoint
+                            values = checkpoint.get("channel_values", {})
+                            for key, val in values.items():
+                                if isinstance(val, list):
+                                    for msg in val:
+                                        msg_type = getattr(msg, "type", None) or type(msg).__name__.lower()
+                                        if "human" in msg_type or "user" in msg_type:
+                                            content = getattr(msg, "content", None)
+                                            if content and isinstance(content, str):
+                                                entry = content.strip()
+                                                if entry and not entry.startswith("/") and entry not in loaded_set:
+                                                    self._history.insert(0, entry)
+                                                    loaded_set.add(entry)
+                except Exception:
+                    pass
+
+        self._history_index = len(self._history)
+        self._temp_input = ""
+
+    def add_history_entry(self, entry: str) -> None:
+        if not entry or entry.startswith("/"):
+            return
+        if self._history and self._history[-1] == entry:
+            self._history_index = len(self._history)
+            self._temp_input = ""
+            return
+        self._history.append(entry)
+        self._history_index = len(self._history)
+        self._temp_input = ""
+
+        history_path = APP_DIR / "tui_history.txt"
+        try:
+            history_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(history_path, "a", encoding="utf-8") as f:
+                f.write(entry + "\n")
+        except Exception:
+            pass
 
     class Submitted(Message):
         """Emitted when the user submits the input."""
@@ -118,6 +187,30 @@ class ReplInput(TextArea):
                 event.prevent_default()
                 if autolist.highlighted is not None:
                     app.accept_completion(autolist.highlighted)
+                return
+        else:
+            if event.key == "up":
+                event.stop()
+                event.prevent_default()
+                if self._history:
+                    if self._history_index == len(self._history):
+                        self._temp_input = self.text
+                    if self._history_index > 0:
+                        self._history_index -= 1
+                        self.text = self._history[self._history_index]
+                        self.action_cursor_line_end()
+                return
+            elif event.key == "down":
+                event.stop()
+                event.prevent_default()
+                if self._history:
+                    if self._history_index < len(self._history):
+                        self._history_index += 1
+                        if self._history_index == len(self._history):
+                            self.text = self._temp_input
+                        else:
+                            self.text = self._history[self._history_index]
+                        self.action_cursor_line_end()
                 return
 
         if event.key == "enter":
@@ -920,6 +1013,7 @@ class OllamaAgentApp(App):
         if not val:
             return
         event.input.text = ""
+        event.input.add_history_entry(val)
 
         if val.startswith("/"):
             self._current_worker = self.run_worker(self._run_slash_command(val))
