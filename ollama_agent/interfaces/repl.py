@@ -7,7 +7,6 @@ from typing import Any
 
 from rich.console import Console
 from rich.text import Text
-from rich.markdown import Markdown as RichMarkdown
 
 from textual.app import App, ComposeResult
 from textual import events
@@ -211,11 +210,11 @@ class AgentResponse(Container):
         self.current_thinking = None
         self.current_thinking_text = None
         if self.current_text_widget is None:
-            self.current_text_widget = Static("", classes="msg-content")
+            self.current_text_widget = Markdown("", classes="msg-content")
             self.mount(self.current_text_widget)
             self._text_chunks = []
         self._text_chunks.append(delta)
-        self.current_text_widget.update(RichMarkdown("".join(self._text_chunks)))
+        self.current_text_widget.update("".join(self._text_chunks))
 
     def add_tool_call(self, name: str, agent: str | None = None) -> None:
         self._stop_thinking_animation()
