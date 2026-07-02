@@ -100,7 +100,6 @@ async def load_main_mcp_tools(exit_stack: AsyncExitStack) -> list[Any]:
 
     try:
         client = MultiServerMCPClient(connections)  # type: ignore[arg-type]
-        tools = await client.get_tools()
 
         async def _cleanup() -> None:
             try:
@@ -110,6 +109,7 @@ async def load_main_mcp_tools(exit_stack: AsyncExitStack) -> list[Any]:
                 _log.warning("MCP client cleanup failed", exc_info=True)
 
         exit_stack.push_async_callback(_cleanup)
+        tools = await client.get_tools()
         _log.info(
             "Loaded %d MCP tools from %d servers",
             len(tools),
@@ -151,7 +151,6 @@ async def load_subagent_mcp_tools(
 
     try:
         client = MultiServerMCPClient(servers)  # type: ignore[arg-type]
-        tools = await client.get_tools()
 
         async def _cleanup() -> None:
             try:
@@ -161,6 +160,7 @@ async def load_subagent_mcp_tools(
                 _log.warning("MCP cleanup failed for subagent '%s'", subagent_name)
 
         exit_stack.push_async_callback(_cleanup)
+        tools = await client.get_tools()
         return tools
     except Exception as exc:
         _log.warning("Subagent '%s': MCP tools failed to load: %s", subagent_name, exc)

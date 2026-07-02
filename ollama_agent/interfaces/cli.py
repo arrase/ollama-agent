@@ -6,11 +6,11 @@ import inspect
 
 from ..agent import AgentRuntime
 from ..core import ALLOWED_REASONING_EFFORTS
-from ..rag import RAGContext, RAGManager
+from ..rag import RAGContext, RAGManager, RAGError
 from ..settings import Settings, load_settings
 from ..skills import SkillManager, SkillsContext, SkillError
 from ..streaming import run_non_interactive
-from ..tasks.commands import CLIContext
+from ..tasks.commands import CLIContext, TaskError
 from .dispatch import build_cli_handlers
 
 
@@ -191,7 +191,7 @@ def handle_cli_commands(
             result = handlers[cmd]()
             if inspect.isawaitable(result):
                 asyncio.run(result)  # type: ignore[arg-type]
-        except SkillError:
+        except (SkillError, TaskError, RAGError):
             raise SystemExit(1)
         return True
 

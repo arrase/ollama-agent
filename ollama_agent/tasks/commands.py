@@ -12,6 +12,22 @@ from ..streaming import run_non_interactive
 from .manager import Task, TaskManager
 
 
+class TaskError(Exception):
+    """Base exception for task command failures."""
+
+
+class TaskNotFoundError(TaskError):
+    """Raised when a task cannot be resolved by its ID/prefix."""
+
+
+class AmbiguousTaskError(TaskError):
+    """Raised when a task ID prefix matches multiple tasks."""
+
+
+class ValidationError(TaskError):
+    """Raised when a validation rule fails for task parameters."""
+
+
 @dataclass
 class CLIContext:
     """Holds shared resources for task-related commands."""
@@ -29,12 +45,14 @@ class CLIContext:
             else f"Ambiguous prefix: {task_id} -> {', '.join(t[0] for t in matches)}"
         )
         self.console.print(f"[red]{msg}[/red]")
-        raise SystemExit(1)
+        if not matches:
+            raise TaskNotFoundError(msg)
+        raise AmbiguousTaskError(msg)
 
     def _require(self, value: str, name: str) -> str:
         if not (cleaned := value.strip().strip("\n")):
             self.console.print(f"[red]{name} cannot be empty.[/red]")
-            raise SystemExit(1)
+            raise ValidationError(f"{name} cannot be empty.")
         return cleaned
 
 
@@ -101,11 +119,11 @@ def create_task(
         ctx.console.print(
             f"[green]Task created:[/green] {task.title} ({ctx.task_manager.save(task_id, task, overwrite=force)})"
         )
-    except FileExistsError:
+    except FileExistsError as exc:
         ctx.console.print(
             f"[red]Task already exists:[/red] {task_id} (use --force to overwrite)"
         )
-        raise SystemExit(1)
+        raise TaskError(f"Task already exists: {task_id}") from exc
     except ValueError as e:
         ctx.console.print(f"[red]{e}[/red]")
-        raise SystemExit(1)
+        raise ValidationError(str(e)) from e

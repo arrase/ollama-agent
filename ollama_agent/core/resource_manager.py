@@ -46,7 +46,10 @@ class BaseFileStoreManager(ABC, Generic[T]):
 
     def _path(self, item_id: str) -> Path:
         """Return the filesystem path for *item_id*."""
-        return self.base_dir / f"{item_id}{self._ext}"
+        resolved = (self.base_dir / f"{item_id}{self._ext}").resolve()
+        if not resolved.is_relative_to(self.base_dir.resolve()):
+            raise ValueError(f"Path traversal detected: {item_id}")
+        return resolved
 
     # ------------------------------------------------------------------
     # Abstract interface – subclasses must implement

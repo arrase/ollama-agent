@@ -65,7 +65,8 @@ class TaskManager(BaseFileStoreManager["Task"]):
 
     def save(self, task_id: str, task: Task, *, overwrite: bool = False) -> str:
         """Save a task and return its ID."""
-        path = self._path(task_id := self.validate_task_id(task_id))
+        task_id = self.validate_task_id(task_id)
+        path = self._path(task_id)
         if path.exists() and not overwrite:
             raise FileExistsError(f"Task already exists: {task_id}")
         path.write_text(
@@ -81,13 +82,13 @@ class TaskManager(BaseFileStoreManager["Task"]):
             return [(prefix, task)]
         return [
             (p.stem, t)
-            for p in self.tasks_dir.glob(f"{prefix}*.yaml")
-            if (t := self.get(p.stem))
+            for p in self.tasks_dir.iterdir()
+            if p.is_file() and p.suffix == ".yaml" and p.stem.startswith(prefix) and (t := self.get(p.stem))
         ]
 
-    def get(self, task_id: str) -> Task | None:
+    def get(self, item_id: str) -> Task | None:
         """Retrieve a task by ID."""
-        path = self._path(task_id)
+        path = self._path(item_id)
         if not path.exists():
             return None
         try:
@@ -95,7 +96,7 @@ class TaskManager(BaseFileStoreManager["Task"]):
                 yaml.safe_load(path.read_text(encoding="utf-8")) or {}
             )
         except Exception as e:
-            logger.error("Error loading task %s: %s", task_id, e)
+            logger.error("Error loading task %s: %s", item_id, e)
             return None
 
     def delete(self, item_id: str) -> bool:

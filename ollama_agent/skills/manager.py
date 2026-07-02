@@ -86,9 +86,9 @@ class SkillManager(BaseFileStoreManager["SkillInfo"]):
         """Validate skill_id: letters, numbers, underscore, dash only."""
         return validate_identifier(skill_id, "skill_id")
 
-    def get(self, skill_id: str) -> SkillInfo | None:
+    def get(self, item_id: str) -> SkillInfo | None:
         """Load a single skill by ID."""
-        d = self._path(skill_id)
+        d = self._path(item_id)
         if not d.is_dir():
             return None
         return _read_skill(d)
