@@ -161,6 +161,8 @@ class AgentResponse(Container):
         self._text_chunks = []
         self.thinking_timer = None
         self._thinking_dots_count = 3
+        self._text_update_timer = None
+        self._last_text_update = 0.0
 
     def compose(self) -> ComposeResult:
         yield self._header
@@ -214,9 +216,25 @@ class AgentResponse(Container):
             self.mount(self.current_text_widget)
             self._text_chunks = []
         self._text_chunks.append(delta)
-        self.current_text_widget.update("".join(self._text_chunks))
+        
+        import time
+        now = time.monotonic()
+        if now - self._last_text_update > 0.1:
+            self.flush_text()
+        elif self._text_update_timer is None:
+            self._text_update_timer = self.set_timer(0.1, self.flush_text)
+
+    def flush_text(self) -> None:
+        if getattr(self, "_text_update_timer", None) is not None:
+            self._text_update_timer.stop()
+            self._text_update_timer = None
+        if getattr(self, "current_text_widget", None) is not None:
+            self.current_text_widget.update("".join(self._text_chunks))
+        import time
+        self._last_text_update = time.monotonic()
 
     def add_tool_call(self, name: str, agent: str | None = None) -> None:
+        self.flush_text()
         self._stop_thinking_animation()
         self.current_thinking = None
         self.current_thinking_text = None
@@ -224,6 +242,7 @@ class AgentResponse(Container):
         self.mount(ToolCallMessage(tool_name=name, agent_name=agent))
 
     def add_tool_output(self, agent: str | None = None, output_len: int | None = None) -> None:
+        self.flush_text()
         self._stop_thinking_animation()
         self.current_thinking = None
         self.current_thinking_text = None
@@ -231,6 +250,7 @@ class AgentResponse(Container):
         self.mount(ToolOutputMessage(agent_name=agent, output_len=output_len))
 
     def add_error(self, content: str) -> None:
+        self.flush_text()
         self._stop_thinking_animation()
         self.current_thinking = None
         self.current_thinking_text = None
@@ -238,6 +258,7 @@ class AgentResponse(Container):
         self.mount(SystemMessage(f"[red]❌ {content}[/red]"))
 
     def add_warning(self, content: str) -> None:
+        self.flush_text()
         self._stop_thinking_animation()
         self.current_thinking = None
         self.current_thinking_text = None
@@ -1204,9 +1225,10 @@ class OllamaAgentApp(App):
                     self._last_max_scroll_y = scroll.max_scroll_y
 
             def _scroll(self) -> None:
-                if scroll.scroll_y < self._last_scroll_y:
+                # If scroll_y decreased but max_scroll_y didn't drop, the user scrolled up.
+                if scroll.scroll_y < self._last_scroll_y and scroll.max_scroll_y >= self._last_max_scroll_y:
                     self._auto_scroll = False
-                elif scroll.scroll_y >= scroll.max_scroll_y - 2:
+                elif scroll.scroll_y >= scroll.max_scroll_y - 4:
                     self._auto_scroll = True
                 self._last_scroll_y = scroll.scroll_y
                 self._last_max_scroll_y = scroll.max_scroll_y
@@ -1244,6 +1266,7 @@ class OllamaAgentApp(App):
             def close(self) -> None:
                 if hasattr(self, "_timer"):
                     self._timer.stop()
+                self.widget.flush_text()
                 self._do_scroll()
 
         try:
