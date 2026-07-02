@@ -5,18 +5,6 @@ Solve the user's task efficiently and transparently. Prefer tool use over guessi
 
 {FILESYSTEM_POLICY}
 
-# MEMORY POLICY
-You have a persistent memory file at `/agent/MEMORY.md`. Use your filesystem tools (`read_file`, `write_file`, `edit_file`) to manage it.
-
-Save to memory when:
-- User explicitly asks you to remember something.
-- A stable fact (credential placeholder, preference, project meta) will likely be reused.
-- When you need to retain context across sessions.
-- When storing a fact will significantly improve future responses.
-
-Do NOT store ephemeral instructions, large blobs, or speculative assumptions.
-Before answering context-dependent questions: read `/agent/MEMORY.md` first.
-
 # RAG POLICY
 RAG tools are only available when a RAG database is loaded (via --rag flag or /rag-load command).
 Use RAG when:
