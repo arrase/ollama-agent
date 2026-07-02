@@ -1,12 +1,15 @@
 """Console streaming renderer for CLI output."""
 
 from __future__ import annotations
+
 import asyncio
 from typing import TYPE_CHECKING, Any
+
 from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
 from rich.padding import Padding
+
 from .base import StreamingRenderer
 
 if TYPE_CHECKING:
@@ -109,7 +112,9 @@ class ConsoleStreamingRenderer(StreamingRenderer):
             f"  [yellow]⚠ Warning: {event.get('content', 'Unknown warning')}[/yellow]"
         )
 
-    async def handle_interrupt(self, event: dict[str, Any], runtime: AgentRuntime) -> list[dict[str, Any]] | None:
+    async def handle_interrupt(
+        self, event: dict[str, Any], runtime: AgentRuntime
+    ) -> list[dict[str, Any]] | None:
         self._toggle_live(False)
         self._end_reasoning()
 
@@ -130,7 +135,12 @@ class ConsoleStreamingRenderer(StreamingRenderer):
 
         try:
             while True:
-                self.console.print("  [bold cyan]Choose action:[/bold cyan] ([bold]a[/bold])pprove / ([bold]r[/bold])eject / allow ([bold]s[/bold])ession / ([bold]c[/bold])ancel: ", end="")
+                prompt_msg = (
+                    "  [bold cyan]Choose action:[/bold cyan] "
+                    "([bold]a[/bold])pprove / ([bold]r[/bold])eject / "
+                    "allow ([bold]s[/bold])ession / ([bold]c[/bold])ancel: "
+                )
+                self.console.print(prompt_msg, end="")
                 choice = (await asyncio.to_thread(input)).strip().lower()
                 if choice == "a":
                     return [{"type": "approve"} for _ in action_requests]

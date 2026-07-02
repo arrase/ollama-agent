@@ -59,21 +59,18 @@ def assistant_text_from_messages(messages: list[Any]) -> str:
     return ""
 
 
-def final_text_from_state(state: Any) -> str:
+def final_text_from_state(state: dict[str, Any]) -> str:
     """Extract a final, user-facing string from a DeepAgents state payload."""
-    try:
-        messages = state.get("messages") if isinstance(state, dict) else None
-        if isinstance(messages, list) and messages:
-            text = assistant_text_from_messages(messages)
-            if text:
-                return text
+    messages = state.get("messages")
+    if messages:
+        text = assistant_text_from_messages(messages)
+        if text:
+            return text
 
-            # Fallback: preserve prior behavior if we couldn't find assistant text.
-            last = messages[-1]
-            content = getattr(last, "content", last)
-            return extract_text(content) or str(content or "")
-    except Exception:
-        pass
+        # Fallback: preserve prior behavior if we couldn't find assistant text.
+        last = messages[-1]
+        content = getattr(last, "content", last)
+        return extract_text(content) or str(content)
     return str(state)
 
 

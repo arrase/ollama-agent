@@ -53,9 +53,7 @@ def _parse_num_ctx(text: str | None) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def _model_context_length(model_info: dict[str, Any] | None) -> int | None:
-    if not model_info:
-        return None
+def _model_context_length(model_info: dict[str, Any]) -> int | None:
     values = [
         int(v)
         for k, v in model_info.items()
@@ -138,8 +136,7 @@ async def resolve_ollama_reasoning(
                     "GPT-OSS does not support disabling thinking completely in Ollama; "
                     "continuing with the model default thinking behavior, but it will be hidden."
                 )
-                if warn_callback is not None:
-                    warn_callback(warning)
+                warn_callback(warning)
             return None
         if effort == "enabled":
             return DEFAULT_REASONING_EFFORT

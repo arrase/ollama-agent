@@ -77,8 +77,8 @@ async def _stream_tool_events(request: Any, handler: Any) -> Any:
             if agent_name:
                 event["agent_name"] = agent_name
             runtime.stream_writer(event)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to write tool_call event: %s", e)
 
     timeout_s = int(get_tool_timeout())
     try:
@@ -110,8 +110,8 @@ async def _stream_tool_events(request: Any, handler: Any) -> Any:
             if agent_name:
                 event["agent_name"] = agent_name
             runtime.stream_writer(event)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to write tool_output event: %s", e)
     return result
 
 

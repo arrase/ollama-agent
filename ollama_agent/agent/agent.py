@@ -202,13 +202,11 @@ class AgentRuntime:
         thread = thread_id or self.thread_id
         if self.graph is None:
             await self.reload()
-        if self.graph is None:
-            yield {"type": "error", "content": "Runtime failed to initialize."}
-            return
 
         config = {"configurable": {"thread_id": thread}}
         hide_reasoning = self.settings.model.reasoning_effort in ("hide", "disabled")
 
+        inputs: dict[str, Any] | Command
         if isinstance(prompt, Command):
             inputs = prompt
         else:

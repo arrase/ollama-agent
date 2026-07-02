@@ -8,7 +8,7 @@ from ..agent import AgentRuntime
 from ..core import ALLOWED_REASONING_EFFORTS
 from ..rag import RAGContext, RAGManager
 from ..settings import Settings, load_settings
-from ..skills import SkillManager, SkillsContext
+from ..skills import SkillManager, SkillsContext, SkillError
 from ..streaming import run_non_interactive
 from ..tasks.commands import CLIContext
 from .dispatch import build_cli_handlers
@@ -175,11 +175,9 @@ def create_argument_parser() -> argparse.ArgumentParser:
 
 
 def handle_cli_commands(
-    args: argparse.Namespace, settings: Settings | None = None
+    args: argparse.Namespace, settings: Settings
 ) -> bool:
     """Handle CLI commands and return True if a command was handled."""
-    if settings is None:
-        settings = load_settings()
     ctx = CLIContext()
     rag_ctx = RAGContext(rag_manager=RAGManager(settings.rag))
     skills_ctx = SkillsContext(skill_manager=SkillManager())
@@ -189,9 +187,12 @@ def handle_cli_commands(
         args, task_ctx=ctx, rag_ctx=rag_ctx, skills_ctx=skills_ctx
     )
     if cmd in handlers:
-        result = handlers[cmd]()
-        if inspect.isawaitable(result):
-            asyncio.run(result)  # type: ignore[arg-type]
+        try:
+            result = handlers[cmd]()
+            if inspect.isawaitable(result):
+                asyncio.run(result)  # type: ignore[arg-type]
+        except SkillError:
+            raise SystemExit(1)
         return True
 
     if args.prompt:

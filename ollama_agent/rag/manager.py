@@ -382,11 +382,11 @@ class RAGManager:
 
         return [
             {
-                "content": hit.payload.get("content", "") if hit.payload else "",
-                "source": hit.payload.get("source", "") if hit.payload else "",
-                "filename": hit.payload.get("filename", "") if hit.payload else "",
+                "content": (payload := hit.payload or {}).get("content", ""),
+                "source": payload.get("source", ""),
+                "filename": payload.get("filename", ""),
                 "score": hit.score,
-                "chunk_index": hit.payload.get("chunk_index", 0) if hit.payload else 0,
+                "chunk_index": payload.get("chunk_index", 0),
             }
             for hit in results
         ]

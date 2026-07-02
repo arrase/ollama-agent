@@ -12,6 +12,22 @@ from rich.table import Table
 from .manager import SkillInfo, SkillManager
 
 
+class SkillError(Exception):
+    """Base exception for skill command failures."""
+
+
+class SkillNotFoundError(SkillError):
+    """Raised when a skill cannot be resolved by its ID/prefix."""
+
+
+class AmbiguousSkillError(SkillError):
+    """Raised when a skill ID prefix matches multiple skills."""
+
+
+class ValidationError(SkillError):
+    """Raised when a validation rule fails for skill parameters."""
+
+
 @dataclass
 class SkillsContext:
     """Holds shared resources for skill-related commands."""
@@ -29,12 +45,14 @@ class SkillsContext:
             else f"Ambiguous prefix: {skill_id} -> {', '.join(t[0] for t in matches)}"
         )
         self.console.print(f"[red]{msg}[/red]")
-        raise SystemExit(1)
+        if not matches:
+            raise SkillNotFoundError(msg)
+        raise AmbiguousSkillError(msg)
 
     def _require(self, value: str, name: str) -> str:
         if not (cleaned := value.strip().strip("\n")):
             self.console.print(f"[red]{name} cannot be empty.[/red]")
-            raise SystemExit(1)
+            raise ValidationError(f"{name} cannot be empty.")
         return cleaned
 
 
@@ -84,14 +102,14 @@ def create_skill(
             metadata=metadata,
         )
         ctx.console.print(f"[green]Skill created:[/green] {name} ({created})")
-    except FileExistsError:
+    except FileExistsError as exc:
         ctx.console.print(
             f"[red]Skill already exists:[/red] {skill_id} (use --force to overwrite)"
         )
-        raise SystemExit(1)
+        raise SkillError(f"Skill already exists: {skill_id}") from exc
     except ValueError as exc:
         ctx.console.print(f"[red]{exc}[/red]")
-        raise SystemExit(1)
+        raise ValidationError(str(exc)) from exc
 
 
 def delete_skill(ctx: SkillsContext, skill_id: str) -> None:

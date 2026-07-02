@@ -35,10 +35,10 @@ class Task:
     @classmethod
     def from_dict(cls, d: dict) -> Task:
         return cls(
-            str(d.get("title", "")),
-            str(d.get("prompt", "")),
-            str(d.get("model", "")),
-            d.get("reasoning_effort", DEFAULT_REASONING_EFFORT),  # type: ignore[arg-type]
+            title=d["title"],
+            prompt=d["prompt"],
+            model=d["model"],
+            reasoning_effort=d.get("reasoning_effort", DEFAULT_REASONING_EFFORT),
         )
 
 
@@ -77,16 +77,16 @@ class TaskManager(BaseFileStoreManager["Task"]):
         """Return all tasks whose id starts with prefix."""
         if not (prefix := prefix.strip()):
             return []
-        if (task := self.load(prefix)) is not None:  # Fast-path: exact match
+        if (task := self.get(prefix)) is not None:  # Fast-path: exact match
             return [(prefix, task)]
         return [
             (p.stem, t)
             for p in self.tasks_dir.glob(f"{prefix}*.yaml")
-            if (t := self.load(p.stem))
+            if (t := self.get(p.stem))
         ]
 
-    def load(self, task_id: str) -> Task | None:
-        """Load a task by ID."""
+    def get(self, task_id: str) -> Task | None:
+        """Retrieve a task by ID."""
         path = self._path(task_id)
         if not path.exists():
             return None
@@ -113,6 +113,6 @@ class TaskManager(BaseFileStoreManager["Task"]):
         tasks = [
             (p.stem, t)
             for p in self.tasks_dir.glob("*.yaml")
-            if (t := self.load(p.stem))
+            if (t := self.get(p.stem))
         ]
         return sorted(tasks, key=lambda x: x[1].title.lower())

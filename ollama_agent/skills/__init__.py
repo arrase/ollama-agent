@@ -2,6 +2,7 @@
 
 from .commands import (
     SkillsContext,
+    SkillError,
     create_skill,
     delete_skill,
     list_skills,
@@ -13,6 +14,7 @@ __all__ = [
     "SkillInfo",
     "SkillManager",
     "SkillsContext",
+    "SkillError",
     "create_skill",
     "delete_skill",
     "list_skills",

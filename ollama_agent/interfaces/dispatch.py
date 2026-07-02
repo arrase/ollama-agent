@@ -75,7 +75,7 @@ def build_cli_handlers(
             prompt=args.task_prompt,
             model=(args.task_model or args.model or ""),
             reasoning_effort=(args.task_effort or args.effort),
-            force=bool(args.force),
+            force=args.force,
         ),
         "rag-list": lambda: list_rag_databases(rag_ctx),
         "rag-create": lambda: create_rag_database(rag_ctx, args.name),
@@ -90,7 +90,7 @@ def build_cli_handlers(
             name=args.name,
             description=args.description,
             instructions=args.instructions,
-            force=bool(args.force),
+            force=args.force,
         ),
     }
 

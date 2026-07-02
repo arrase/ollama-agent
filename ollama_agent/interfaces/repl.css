@@ -1,0 +1,203 @@
+/* ── Base ─────────────────────────────────────── */
+Screen {
+    background: #1e1e2e;
+    layout: vertical;
+}
+
+/* ── Header ───────────────────────────────────── */
+AgentHeader {
+    background: #1e1e2e;
+    color: #cdd6f4;
+    height: 2;
+    content-align: center middle;
+    padding: 0 1;
+    border-bottom: solid #313244;
+}
+
+/* ── Chat area ────────────────────────────────── */
+#chat-scroll {
+    background: #1e1e2e;
+    height: 1fr;
+    padding: 0 1;
+    scrollbar-color: #585b70;
+    scrollbar-color-active: #89b4fa;
+    scrollbar-color-hover: #a6adc8;
+}
+
+/* ── Autocomplete popup ───────────────────────── */
+#autocomplete-list {
+    background: #181825;
+    border: round #45475a;
+    max-height: 10;
+    display: none;
+    color: #cdd6f4;
+    scrollbar-size: 1 1;
+    dock: bottom;
+    width: 60%;
+    margin: 0 0 0 2;
+}
+
+/* ── Input bar ────────────────────────────────── */
+#input-bar {
+    dock: bottom;
+    height: auto;
+    background: #1e1e2e;
+    border-top: solid #313244;
+    padding: 0 1;
+}
+ReplInput {
+    background: #1e1e2e !important;
+    border: none !important;
+    color: #cdd6f4 !important;
+    width: 1fr;
+    height: 3;
+    max-height: 10;
+    padding: 0 !important;
+}
+ReplInput:focus {
+    background: #1e1e2e !important;
+    color: #cdd6f4 !important;
+    border: none !important;
+}
+ReplInput .text-area--cursor {
+    background: #cdd6f4 !important;
+    color: #1e1e2e !important;
+}
+ReplInput .text-area--cursor-line {
+    background: transparent !important;
+}
+ReplInput .text-area--selection {
+    background: #585b70 !important;
+    color: #cdd6f4 !important;
+}
+#prompt-char {
+    width: 3;
+    color: #89b4fa;
+    text-style: bold;
+    content-align: left top;
+    padding: 0;
+}
+
+/* ── Tool Approval ────────────────────────────── */
+ToolApprovalWidget {
+    background: #1e1e2e;
+    border-left: solid #eed49f;
+    margin: 1 0;
+    padding: 0 0 0 1;
+    height: auto;
+    layout: vertical;
+}
+.approval-title {
+    color: #eed49f;
+    text-style: bold;
+    margin-bottom: 0;
+    padding-left: 1;
+}
+.approval-details {
+    color: #cdd6f4;
+    margin-bottom: 1;
+    padding-left: 2;
+}
+.approval-buttons {
+    height: 3;
+    align: left middle;
+    padding-left: 2;
+}
+.approval-btn {
+    margin-right: 1;
+    min-width: 10;
+    height: 1;
+    border: none;
+}
+
+/* ── Message roles ────────────────────────────── */
+.msg-role {
+    text-style: bold;
+    margin-bottom: 0;
+    padding: 0 0 0 1;
+    height: auto;
+}
+.msg-content {
+    padding: 0 0 0 1;
+    height: auto;
+    color: #cdd6f4;
+}
+
+/* ── User bubble ──────────────────────────────── */
+UserMessage {
+    margin: 1 0;
+    padding: 0 0 0 1;
+    border-left: solid #89b4fa;
+    height: auto;
+    background: transparent;
+}
+
+/* ── Agent thinking ───────────────────────────── */
+.thinking-body {
+    color: #cba6f7;
+    text-style: italic;
+    margin: 0 0 1 1;
+    padding: 0;
+}
+Collapsible {
+    background: transparent !important;
+    border: none !important;
+    margin: 0;
+    padding: 0 0 1 0;
+}
+Collapsible > Contents {
+    background: transparent !important;
+    border: none !important;
+    margin: 0;
+    padding: 0 0 0 1;
+}
+CollapsibleTitle {
+    background: transparent !important;
+    border: none !important;
+    color: #cba6f7 !important;
+    text-style: italic !important;
+    padding: 0;
+}
+CollapsibleTitle:hover {
+    background: transparent !important;
+    color: #cba6f7 !important;
+}
+CollapsibleTitle:focus {
+    background: transparent !important;
+    color: #cba6f7 !important;
+}
+
+/* ── Agent response ───────────────────────────── */
+AgentResponse {
+    margin: 1 0;
+    padding: 0 0 0 1;
+    border-left: solid #a6e3a1;
+    height: auto;
+    background: transparent;
+}
+
+/* ── Tool events ──────────────────────────────── */
+ToolCallMessage {
+    margin: 0 0 0 2;
+    padding: 0;
+    height: auto;
+    color: #eed49f;
+    background: transparent;
+}
+ToolOutputMessage {
+    margin: 0 0 0 2;
+    padding: 0;
+    height: auto;
+    color: #8bd5ca;
+    background: transparent;
+}
+
+/* ── System messages ──────────────── SystemMessage */
+SystemMessage {
+    margin: 1 0;
+    padding: 0 0 0 1;
+    border-left: solid #cba6f7;
+    color: #cdd6f4;
+    height: auto;
+    background: transparent;
+}

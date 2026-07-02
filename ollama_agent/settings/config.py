@@ -7,7 +7,7 @@ import os
 from dataclasses import asdict, dataclass, field, fields
 from importlib import resources
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Self, Callable
 
 import yaml  # type: ignore[import-untyped]
 
@@ -123,38 +123,37 @@ class Settings:
     rag: RAGSettings = field(default_factory=RAGSettings)
     mentions: MentionSettings = field(default_factory=MentionSettings)
     subagents: list[SubAgentSettings] = field(default_factory=list)
-    langsmith: LangSmithSettings | None = None
+    langsmith: LangSmithSettings = field(default_factory=LangSmithSettings)
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any] | None) -> Self:
         raw = raw or {}
-        langsmith_raw = raw.get("langsmith")
         return cls(
             model=_dataclass_from_dict(ModelSettings, raw.get("model")),
             runtime=_dataclass_from_dict(RuntimeSettings, raw.get("runtime")),
             rag=_dataclass_from_dict(RAGSettings, raw.get("rag")),
             mentions=_dataclass_from_dict(MentionSettings, raw.get("mentions")),
             subagents=_subagents_from_list(raw.get("subagents")),
-            langsmith=_dataclass_from_dict(LangSmithSettings, langsmith_raw) if langsmith_raw else None,
+            langsmith=_dataclass_from_dict(LangSmithSettings, raw.get("langsmith")),
         )
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
-        if d.get("langsmith") is None:
+        ls = d.get("langsmith", {})
+        if ls and not any(ls.values()):
             d.pop("langsmith", None)
         return d
 
     def setup_environment(self) -> None:
         """Inject settings into the environment variables."""
-        if self.langsmith:
-            if self.langsmith.api_key:
-                os.environ["LANGSMITH_API_KEY"] = self.langsmith.api_key
-            if self.langsmith.tracing:
-                os.environ["LANGSMITH_TRACING"] = self.langsmith.tracing
-            if self.langsmith.project:
-                os.environ["LANGSMITH_PROJECT"] = self.langsmith.project
-            if self.langsmith.endpoint:
-                os.environ["LANGSMITH_ENDPOINT"] = self.langsmith.endpoint
+        if self.langsmith.api_key:
+            os.environ["LANGSMITH_API_KEY"] = self.langsmith.api_key
+        if self.langsmith.tracing:
+            os.environ["LANGSMITH_TRACING"] = self.langsmith.tracing
+        if self.langsmith.project:
+            os.environ["LANGSMITH_PROJECT"] = self.langsmith.project
+        if self.langsmith.endpoint:
+            os.environ["LANGSMITH_ENDPOINT"] = self.langsmith.endpoint
 
 
 # ---------------------------------------------------------------------------
@@ -218,55 +217,46 @@ def save_settings(settings: Settings, settings_path: Path = SETTINGS_PATH) -> No
 # ---------------------------------------------------------------------------
 
 
+def _load_prompt_file(file_path: Path, default_factory: Callable[[], str]) -> str:
+    """Helper to load a prompt file with fallback creation and error handling."""
+    default_text = default_factory()
+    if not file_path.exists():
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(default_text + "\n", encoding="utf-8")
+        return default_text
+    try:
+        return file_path.read_text(encoding="utf-8").strip() or default_text
+    except Exception:
+        return default_text
+
+
 def load_instructions(instructions_path: Path = INSTRUCTIONS_PATH) -> str:
     """Load agent instructions from file or return defaults."""
-    if not instructions_path.exists():
-        instructions_path.parent.mkdir(parents=True, exist_ok=True)
-        instructions_path.write_text(_default_instructions() + "\n", encoding="utf-8")
-        return _default_instructions()
-    try:
-        return (
-            instructions_path.read_text(encoding="utf-8").strip()
-            or _default_instructions()
-        )
-    except Exception:
-        return _default_instructions()
+    return _load_prompt_file(instructions_path, _default_instructions)
 
 
 def load_fs_policy_traversal(policy_path: Path = FS_POLICY_TRAVERSAL_PATH) -> str:
     """Load filesystem traversal policy from file or return defaults."""
-    default_text = (
-        resources.files(__package__)
-        .joinpath("prompts/fs_policy_traversal.md")
-        .read_text(encoding="utf-8")
-        .strip()
-    )
-    if not policy_path.exists():
-        policy_path.parent.mkdir(parents=True, exist_ok=True)
-        policy_path.write_text(default_text + "\n", encoding="utf-8")
-        return default_text
-    try:
-        return policy_path.read_text(encoding="utf-8").strip() or default_text
-    except Exception:
-        return default_text
+    def _default_traversal() -> str:
+        return (
+            resources.files(__package__)
+            .joinpath("prompts/fs_policy_traversal.md")
+            .read_text(encoding="utf-8")
+            .strip()
+        )
+    return _load_prompt_file(policy_path, _default_traversal)
 
 
 def load_fs_policy_sandboxed(policy_path: Path = FS_POLICY_SANDBOXED_PATH) -> str:
     """Load sandboxed filesystem policy from file or return defaults."""
-    default_text = (
-        resources.files(__package__)
-        .joinpath("prompts/fs_policy_sandboxed.md")
-        .read_text(encoding="utf-8")
-        .strip()
-    )
-    if not policy_path.exists():
-        policy_path.parent.mkdir(parents=True, exist_ok=True)
-        policy_path.write_text(default_text + "\n", encoding="utf-8")
-        return default_text
-    try:
-        return policy_path.read_text(encoding="utf-8").strip() or default_text
-    except Exception:
-        return default_text
+    def _default_sandboxed() -> str:
+        return (
+            resources.files(__package__)
+            .joinpath("prompts/fs_policy_sandboxed.md")
+            .read_text(encoding="utf-8")
+            .strip()
+        )
+    return _load_prompt_file(policy_path, _default_sandboxed)
 
 
 # ---------------------------------------------------------------------------

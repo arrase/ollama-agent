@@ -43,12 +43,12 @@ async def list_models(
                 return "[yellow]?[/yellow]"
 
         tool_icons = await asyncio.gather(
-            *(get_tool_icon(getattr(m, "model")) for m in valid_models)
+            *(get_tool_icon(m.model) for m in valid_models)
         )
 
         console.print("[bold]Available Models:[/bold]\n[dim]─" + "─" * 59 + "[/dim]")
         for item, tool_icon in zip(valid_models, tool_icons):
-            name = getattr(item, "model")
+            name = item.model
             marker = " [green]◀ current[/green]" if name == current_model else ""
             size_gb = getattr(item, "size", 0) / (1024**3)
             size_str = f"{size_gb:.1f}GB" if size_gb else ""
@@ -71,7 +71,7 @@ async def set_model(
     try:
         base_url = runtime.settings.model.base_url
         available = {
-            getattr(model, "model", "") for model in await _list_models(base_url)
+            model.model for model in await _list_models(base_url)
         }
         if model_name not in available:
             console.print(

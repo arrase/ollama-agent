@@ -53,6 +53,10 @@ class BaseFileStoreManager(ABC, Generic[T]):
     # ------------------------------------------------------------------
 
     @abstractmethod
+    def get(self, item_id: str) -> T | None:
+        """Retrieve a resource by *item_id*, or return None if it doesn't exist."""
+
+    @abstractmethod
     def find_matches(self, prefix: str) -> list[tuple[str, T]]:
         """Return items whose id starts with *prefix*."""
 

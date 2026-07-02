@@ -135,12 +135,8 @@ def resolve_context_files(
     binary_attachments: list[dict[str, Any]] = []
     total_size = 0
 
-    def add_file(file_path: Path) -> None:
+    def add_file(file_path: Path, ignore_errors: bool = False) -> None:
         nonlocal total_size
-        if len(text_contents) + len(binary_attachments) >= max_files:
-            raise PromptProcessingError(
-                f"Mentions limit exceeded: max {max_files} files."
-            )
 
         try:
             size = file_path.stat().st_size
@@ -148,8 +144,22 @@ def resolve_context_files(
             return
 
         if size > max_file_size:
+            if ignore_errors:
+                return
             raise PromptProcessingError(
                 f"File too large: {file_path} ({size} bytes, limit is {max_file_size} bytes)"
+            )
+
+        attachment_type = classify_multimodal_file(file_path)
+        if attachment_type is None:
+            if is_binary_file(file_path):
+                if ignore_errors:
+                    return
+                raise PromptProcessingError(f"Cannot read binary file as text: {file_path}")
+
+        if len(text_contents) + len(binary_attachments) >= max_files:
+            raise PromptProcessingError(
+                f"Mentions limit exceeded: max {max_files} files."
             )
 
         if total_size + size > max_total_size:
@@ -157,24 +167,27 @@ def resolve_context_files(
                 f"Total context size limit of {max_total_size} bytes exceeded."
             )
 
-        attachment_type = classify_multimodal_file(file_path)
-
-        if attachment_type is not None:
-            mime = get_file_type(file_path) or f"{attachment_type}/*"
-            b64_data = read_binary_file_b64(file_path, max_file_size)
-            binary_attachments.append({
-                "type": attachment_type,
-                "base64": b64_data,
-                "mime_type": mime
-            })
-            total_size += size
-        else:
-            content = read_file_content(file_path, max_file_size)
-            text_contents[file_path] = content
-            total_size += size
+        try:
+            if attachment_type is not None:
+                mime = get_file_type(file_path) or f"{attachment_type}/*"
+                b64_data = read_binary_file_b64(file_path, max_file_size)
+                binary_attachments.append({
+                    "type": attachment_type,
+                    "base64": b64_data,
+                    "mime_type": mime
+                })
+                total_size += size
+            else:
+                content = read_file_content(file_path, max_file_size)
+                text_contents[file_path] = content
+                total_size += size
+        except Exception as e:
+            if ignore_errors:
+                return
+            raise PromptProcessingError(f"Failed to add file {file_path}: {e}") from e
 
     if target_path.is_file():
-        add_file(target_path)
+        add_file(target_path, ignore_errors=False)
         return text_contents, binary_attachments
 
     if not target_path.is_dir():
@@ -182,55 +195,7 @@ def resolve_context_files(
 
     for root, dirs, files in os.walk(target_path):
         for file_name in files:
-            file_path = Path(root) / file_name
-            try:
-                size = file_path.stat().st_size
-            except Exception:
-                continue
-
-            if size > max_file_size:
-                continue
-
-            attachment_type = classify_multimodal_file(file_path)
-
-            if attachment_type is not None:
-                if len(text_contents) + len(binary_attachments) >= max_files:
-                    raise PromptProcessingError(
-                        f"Mentions limit exceeded: max {max_files} files."
-                    )
-                if total_size + size > max_total_size:
-                    raise PromptProcessingError(
-                        f"Total context size limit of {max_total_size} bytes exceeded."
-                    )
-                try:
-                    mime = get_file_type(file_path) or f"{attachment_type}/*"
-                    b64_data = read_binary_file_b64(file_path, max_file_size)
-                    binary_attachments.append({
-                        "type": attachment_type,
-                        "base64": b64_data,
-                        "mime_type": mime
-                    })
-                    total_size += size
-                except Exception:
-                    continue
-            else:
-                if is_binary_file(file_path):
-                    continue
-
-                if len(text_contents) + len(binary_attachments) >= max_files:
-                    raise PromptProcessingError(
-                        f"Mentions limit exceeded: max {max_files} files."
-                    )
-                if total_size + size > max_total_size:
-                    raise PromptProcessingError(
-                        f"Total context size limit of {max_total_size} bytes exceeded."
-                    )
-                try:
-                    content = read_file_content(file_path, max_file_size)
-                    text_contents[file_path] = content
-                    total_size += size
-                except Exception:
-                    continue
+            add_file(Path(root) / file_name, ignore_errors=True)
 
     return text_contents, binary_attachments
 
