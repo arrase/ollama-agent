@@ -46,7 +46,7 @@ async def stream_agent_events(
                     renderer.on_event(event)
 
             if interrupted and interrupt_event:
-                decisions = renderer.handle_interrupt(interrupt_event, runtime)
+                decisions = await renderer.handle_interrupt(interrupt_event, runtime)
                 if decisions is not None:
                     current_prompt = Command(resume={"decisions": decisions})
                     continue

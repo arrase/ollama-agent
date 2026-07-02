@@ -1,6 +1,7 @@
 """Console streaming renderer for CLI output."""
 
 from __future__ import annotations
+import asyncio
 from typing import TYPE_CHECKING, Any
 from rich.console import Console
 from rich.live import Live
@@ -16,9 +17,13 @@ class ConsoleStreamingRenderer(StreamingRenderer):
     """Renderer for streaming to the console."""
 
     def __init__(self, console: Console) -> None:
-        self.console, self.live = console, Live(console=console, refresh_per_second=10)
+        self.console = console
+        self.live = Live(console=console, refresh_per_second=10)
         self._text: list[str] = []
-        self._banner_shown = self._reasoning = self._live_active = False
+        self._banner_shown = False
+        self._reasoning = False
+        self._live_active = False
+        self._rendered_reasoning = ""
 
     def _toggle_live(self, start: bool) -> None:
         if start and not self._live_active:
@@ -104,7 +109,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
             f"  [yellow]⚠ Warning: {event.get('content', 'Unknown warning')}[/yellow]"
         )
 
-    def handle_interrupt(self, event: dict[str, Any], runtime: AgentRuntime) -> list[dict[str, Any]] | None:
+    async def handle_interrupt(self, event: dict[str, Any], runtime: AgentRuntime) -> list[dict[str, Any]] | None:
         self._toggle_live(False)
         self._end_reasoning()
 
@@ -126,14 +131,14 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         try:
             while True:
                 self.console.print("  [bold cyan]Choose action:[/bold cyan] ([bold]a[/bold])pprove / ([bold]r[/bold])eject / allow ([bold]s[/bold])ession / ([bold]c[/bold])ancel: ", end="")
-                choice = input().strip().lower()
+                choice = (await asyncio.to_thread(input)).strip().lower()
                 if choice == "a":
                     return [{"type": "approve"} for _ in action_requests]
                 elif choice == "r":
                     return [{
                         "type": "reject",
-                        "message": f"User rejected executing tool '{req.get('name')}'."
-                    } for req in action_requests]
+                        "message": f"User rejected executing tool '{r.get('name')}'."
+                    } for r in action_requests]
                 elif choice == "s":
                     for req in action_requests:
                         runtime.auto_approved_tools.add(req.get("name", ""))

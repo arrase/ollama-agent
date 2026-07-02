@@ -25,7 +25,7 @@ class StreamingRenderer(ABC):
         """Handle a warning event."""
         print(f"Warning: {event.get('content', 'Unknown warning')}")
 
-    def handle_interrupt(self, event: dict[str, Any], runtime: AgentRuntime) -> list[dict[str, Any]] | None:
+    async def handle_interrupt(self, event: dict[str, Any], runtime: AgentRuntime) -> list[dict[str, Any]] | None:
         """Handle an interrupt event. Default implementation does nothing."""
         return None
 

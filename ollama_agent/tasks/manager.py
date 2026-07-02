@@ -75,7 +75,7 @@ class TaskManager(BaseFileStoreManager["Task"]):
 
     def find_matches(self, prefix: str) -> list[tuple[str, Task]]:
         """Return all tasks whose id starts with prefix."""
-        if not (prefix := (prefix or "").strip()):
+        if not (prefix := prefix.strip()):
             return []
         if (task := self.load(prefix)) is not None:  # Fast-path: exact match
             return [(prefix, task)]

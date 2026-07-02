@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import asdict, dataclass, field, fields
 from importlib import resources
 from pathlib import Path
@@ -146,7 +147,6 @@ class Settings:
     def setup_environment(self) -> None:
         """Inject settings into the environment variables."""
         if self.langsmith:
-            import os
             if self.langsmith.api_key:
                 os.environ["LANGSMITH_API_KEY"] = self.langsmith.api_key
             if self.langsmith.tracing:

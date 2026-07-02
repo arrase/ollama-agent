@@ -2,6 +2,7 @@
 
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -217,7 +218,6 @@ class AgentResponse(Container):
             self._text_chunks = []
         self._text_chunks.append(delta)
         
-        import time
         now = time.monotonic()
         if now - self._last_text_update > 0.1:
             self.flush_text()
@@ -230,7 +230,6 @@ class AgentResponse(Container):
             self._text_update_timer = None
         if getattr(self, "current_text_widget", None) is not None:
             self.current_text_widget.update("".join(self._text_chunks))
-        import time
         self._last_text_update = time.monotonic()
 
     def add_tool_call(self, name: str, agent: str | None = None) -> None:
@@ -862,6 +861,7 @@ class OllamaAgentApp(App):
     def __init__(self, repl: "OllamaREPL"):
         super().__init__()
         self.repl = repl
+        self._is_generating = False
 
     def compose(self) -> ComposeResult:
         yield AgentHeader(self.repl)
@@ -894,6 +894,8 @@ class OllamaAgentApp(App):
 
     def on_repl_input_submitted(self, event: ReplInput.Submitted) -> None:
         if event.input.id != "repl-input":
+            return
+        if getattr(self, "_is_generating", False):
             return
         val = event.value.strip()
         if not val:
@@ -1208,6 +1210,7 @@ class OllamaAgentApp(App):
         await self._run_stream(command, scroll, agent_msg)
 
     async def _run_stream(self, prompt: str | Command, scroll, agent_msg: AgentResponse):
+        self._is_generating = True
         app = self
 
         class _Renderer(StreamingRenderer):
@@ -1296,6 +1299,8 @@ class OllamaAgentApp(App):
         except Exception as e:
             scroll.mount(SystemMessage(f"[red]Error checking state: {e}[/red]"))
             self._deferred_scroll()
+        finally:
+            self._is_generating = False
 
 
 # ─── OllamaREPL entry-point (unchanged public API) ───────────────────────────

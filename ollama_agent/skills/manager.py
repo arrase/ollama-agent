@@ -95,7 +95,7 @@ class SkillManager(BaseFileStoreManager["SkillInfo"]):
 
     def find_matches(self, prefix: str) -> list[tuple[str, SkillInfo]]:
         """Return all skills whose id starts with *prefix*."""
-        if not (prefix := (prefix or "").strip()):
+        if not (prefix := prefix.strip()):
             return []
         if (skill := self.get(prefix)) is not None:
             return [(prefix, skill)]

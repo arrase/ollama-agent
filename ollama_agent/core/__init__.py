@@ -9,7 +9,6 @@ from .common import (
     assistant_text_from_messages,
     extract_text,
     final_text_from_state,
-    resolve_unique_prefix,
     validate_identifier,
 )
 from .models import (
@@ -53,7 +52,6 @@ __all__ = [
     "assistant_text_from_messages",
     "extract_text",
     "final_text_from_state",
-    "resolve_unique_prefix",
     "validate_identifier",
     # Prompt Processor
     "PromptProcessingError",

@@ -77,14 +77,17 @@ class RAGManager:
         for path in self._rag_dir.iterdir():
             if not path.is_dir():
                 continue
+            client = None
             try:
                 client = QdrantClient(path=str(path))
                 info = client.get_collection(self.COLLECTION_NAME)
                 count = info.points_count
-                client.close()
             except Exception:
                 # Not a valid RAG database (or unreadable)
                 continue
+            finally:
+                if client is not None:
+                    client.close()
             dbs.append(
                 {
                     "name": path.name,
@@ -472,12 +475,20 @@ class RAGManager:
 
     def _read_file(self, path: Path) -> str:
         """Read file content, handling different encodings."""
-        # Check if it's a text file
-        mime_type, _ = mimetypes.guess_type(str(path))
-        if mime_type and not mime_type.startswith(
-            ("text/", "application/json", "application/xml")
-        ):
-            raise RAGError(f"Unsupported file type: {mime_type}")
+        # Check if it's a text/code file
+        allowed_extensions = {
+            ".py", ".js", ".ts", ".tsx", ".jsx", ".sh", ".yaml", ".yml",
+            ".json", ".xml", ".md", ".txt", ".toml", ".c", ".cpp", ".h",
+            ".hpp", ".go", ".rs", ".css", ".html", ".sql", ".ini", ".cfg",
+            ".properties", ".java", ".kt", ".gradle", ".bat", ".ps1"
+        }
+        
+        if path.suffix.lower() not in allowed_extensions:
+            mime_type, _ = mimetypes.guess_type(str(path))
+            if mime_type and not mime_type.startswith(
+                ("text/", "application/json", "application/xml")
+            ):
+                raise RAGError(f"Unsupported file type: {mime_type}")
 
         for encoding in ["utf-8", "latin-1", "cp1252"]:
             try:

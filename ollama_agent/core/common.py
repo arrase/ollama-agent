@@ -77,23 +77,9 @@ def final_text_from_state(state: Any) -> str:
     return str(state)
 
 
-def resolve_unique_prefix(prefix: str, candidates: list[str]) -> str | None:
-    """Resolve a unique candidate starting with prefix.
-
-    Returns the resolved candidate, or None if there is no unique match.
-    """
-    p = (prefix or "").strip()
-    if not p:
-        return None
-    matches = [c for c in candidates if c.startswith(p)]
-    if len(matches) == 1:
-        return matches[0]
-    return None
-
-
 def validate_identifier(name: str, label: str = "identifier") -> str:
     """Validate that *name* contains only [A-Za-z0-9_-]. Raises ValueError otherwise."""
-    name = (name or "").strip()
+    name = name.strip()
     if not name or not re.fullmatch(r"[A-Za-z0-9_-]+", name):
         raise ValueError(f"Invalid {label}. Use only letters, numbers, '_' and '-'.")
     return name

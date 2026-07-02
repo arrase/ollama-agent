@@ -32,7 +32,7 @@ class SkillsContext:
         raise SystemExit(1)
 
     def _require(self, value: str, name: str) -> str:
-        if not (cleaned := (value or "").strip().strip("\n")):
+        if not (cleaned := value.strip().strip("\n")):
             self.console.print(f"[red]{name} cannot be empty.[/red]")
             raise SystemExit(1)
         return cleaned
