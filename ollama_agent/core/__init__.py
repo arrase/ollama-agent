@@ -28,7 +28,6 @@ from .prompt_processor import (
     process_prompt_mentions,
 )
 from .resource_manager import BaseFileStoreManager
-from .warmup import preload_model
 
 __all__ = [
     # Types
@@ -57,6 +56,4 @@ __all__ = [
     # Prompt Processor
     "PromptProcessingError",
     "process_prompt_mentions",
-    # Warmup
-    "preload_model",
 ]

@@ -593,7 +593,6 @@ class OllamaREPL:
 
         set_tool_timeout(self.runtime.settings.runtime.builtin_tool_timeout)
         await self.runtime.reload()
-        self.runtime.preload()
 
         app = OllamaAgentApp(self)
         try:
@@ -603,7 +602,6 @@ class OllamaREPL:
 
     async def _switch_model(self, model_name: str) -> None:
         await set_model(self.console, model_name, runtime=self.runtime)
-        self.runtime.preload()
 
     async def _handle_new_session(self, args: list[str]) -> None:
         self.runtime.thread_id = new_session(self.console)

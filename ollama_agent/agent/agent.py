@@ -20,7 +20,6 @@ from ..core import (
     PromptProcessingError,
     create_ollama_chat_model,
     ensure_model_supports_tools,
-    preload_model,
     process_prompt_mentions,
     validate_reasoning_effort,
 )
@@ -92,18 +91,6 @@ class AgentRuntime:
             self._instructions = base_instructions + "\n\n" + fs_policy
         await asyncio.to_thread(ensure_memory_file, MEMORY_PATH)
         self.graph = await self._build_graph()
-
-    def preload(self) -> asyncio.Task[None]:
-        """Launch model preload as a background task.
-
-        Returns the ``asyncio.Task`` handle.  The task is fire-and-forget:
-        failures are logged but never propagated.
-        """
-        ms = self.settings.model
-        return asyncio.create_task(
-            preload_model(ms.name, ms.base_url),
-            name="model-preload",
-        )
 
     async def _build_graph(self) -> Any:
         ms = self.settings.model
