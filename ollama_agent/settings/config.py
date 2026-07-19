@@ -59,6 +59,7 @@ class RuntimeSettings:
     allow_traversal: bool = False
     builtin_tool_timeout: int = 30
     collapse_thinking: bool = True
+    inherit_env: bool = False
 
 
 @dataclass(slots=True)

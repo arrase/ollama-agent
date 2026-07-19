@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import platform
 from contextlib import AsyncExitStack
 from typing import Any
 
@@ -43,10 +44,13 @@ async def _build_spec(
         _log.warning("Skipping subagent '%s': missing description", sa.name)
         return None
 
+    base_prompt = sa.system_prompt or sa.description
+    os_info = f"\n\n# ENVIRONMENT\nOperating System: {platform.system()} ({platform.release()})\n"
+
     spec: dict[str, Any] = {
         "name": sa.name,
         "description": sa.description,
-        "system_prompt": sa.system_prompt or sa.description,
+        "system_prompt": base_prompt + os_info,
     }
 
     name = sa.model or model_settings.name

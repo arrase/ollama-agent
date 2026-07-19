@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import platform
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -89,6 +90,10 @@ class AgentRuntime:
             self._instructions = base_instructions.replace("{FILESYSTEM_POLICY}", fs_policy)
         else:
             self._instructions = base_instructions + "\n\n" + fs_policy
+            
+        os_info = f"\n\n# ENVIRONMENT\nOperating System: {platform.system()} ({platform.release()})\n"
+        self._instructions += os_info
+
         await asyncio.to_thread(ensure_memory_file, MEMORY_PATH)
         self.graph = await self._build_graph()
 
@@ -114,6 +119,7 @@ class AgentRuntime:
             root_dir=Path.cwd(),
             timeout=timeout,
             virtual_mode=not self.settings.runtime.allow_traversal,
+            inherit_env=self.settings.runtime.inherit_env,
         )
         agent_backend = FilesystemBackend(
             root_dir=MEMORY_PATH.parent,
