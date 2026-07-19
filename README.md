@@ -273,6 +273,7 @@ model:
 runtime:
   allow_traversal: true
   builtin_tool_timeout: 30
+  inherit_env: false
 rag:
   rag_dir: /home/arrase/.ollama-agent/rag
   embedder_model: nomic-embed-text:latest
@@ -290,6 +291,7 @@ rag:
 | `model.reasoning_effort` | Default thinking level: `low`, `medium`, `high`, `disabled`, `hide`, or `enabled`. See [Thinking / Reasoning](#common-options) above. |
 | `model.context_window` | If set, forces the runtime `num_ctx` for the selected model. Leave `null` to let the app resolve it automatically. |
 | `runtime.builtin_tool_timeout` | Timeout in seconds for tool executions. |
+| `runtime.inherit_env` | If true, local shell commands execute with the parent's full environment variables (e.g. PATH). |
 
 ### Context Window Resolution
 
