@@ -52,6 +52,66 @@ _AT_MENTION_RE = re.compile(
     r"""(?:^|[\s\(\[\{<])@(?:"([^"]*)|'([^']*)|([^\s"'\(\[\{<>,;]*))$"""
 )
 
+class _TUIStreamingRenderer(StreamingRenderer):
+    def __init__(self, app: OllamaAgentApp, scroll: Any, widget: AgentResponse):
+        self.app = app
+        self.scroll = scroll
+        self.widget = widget
+        self._auto_scroll = True
+        self._last_scroll_y = scroll.scroll_y
+        self._last_max_scroll_y = scroll.max_scroll_y
+        self._timer = app.set_interval(0.1, self._do_scroll)
+
+    def _do_scroll(self) -> None:
+        if self._auto_scroll:
+            self.scroll.scroll_end(animate=False)
+            self._last_scroll_y = self.scroll.scroll_y
+            self._last_max_scroll_y = self.scroll.max_scroll_y
+
+    def _scroll(self) -> None:
+        # If scroll_y decreased but max_scroll_y didn't drop, the user scrolled up.
+        if self.scroll.scroll_y < self._last_scroll_y and self.scroll.max_scroll_y >= self._last_max_scroll_y:
+            self._auto_scroll = False
+        elif self.scroll.scroll_y >= self.scroll.max_scroll_y - 4:
+            self._auto_scroll = True
+        self._last_scroll_y = self.scroll.scroll_y
+        self._last_max_scroll_y = self.scroll.max_scroll_y
+
+    def on_text_delta(self, event: dict[str, Any]) -> None:
+        self.widget.append_text(event.get("content", ""))
+        self._scroll()
+
+    def on_reasoning_delta(self, event: dict[str, Any]) -> None:
+        self.widget.append_thinking(event.get("content", ""))
+        self._scroll()
+
+    def on_tool_call(self, event: dict[str, Any]) -> None:
+        self.widget.add_tool_call(
+            name=event.get("name", "unknown"),
+            agent=event.get("agent_name"),
+        )
+        self._scroll()
+
+    def on_tool_output(self, event: dict[str, Any]) -> None:
+        self.widget.add_tool_output(
+            agent=event.get("agent_name"),
+            output_len=event.get("output_len"),
+        )
+        self._scroll()
+
+    def on_error(self, event: dict[str, Any]) -> None:
+        self.widget.add_error(event.get("content", "Unknown error"))
+        self._scroll()
+
+    def on_warning(self, event: dict[str, Any]) -> None:
+        self.widget.add_warning(event.get("content", "Unknown warning"))
+        self._scroll()
+
+    def close(self) -> None:
+        self._timer.stop()
+        self.widget.flush_text()
+        self._do_scroll()
+
 
 # ─── Header ──────────────────────────────────────────────────────────────────
 
@@ -222,7 +282,14 @@ class OllamaAgentApp(App):
         except OSError:
             return
 
+        max_dirs_visited = 50
+        dirs_visited = 0
+
         for root, dirs, files in tree:
+            dirs_visited += 1
+            if dirs_visited > max_dirs_visited:
+                return
+
             root_path = Path(root)
             candidate_dirs = []
             for dirname in sorted(dirs):
@@ -280,56 +347,12 @@ class OllamaAgentApp(App):
         args = parts[1:]
         scroll = self.query_one("#chat-scroll")
 
-        if cmd == "/yolo":
-            if args:
-                val = args[0].lower()
-                if val in ("on", "true", "yes", "1"):
-                    self.repl.runtime.yolo_mode = True
-                elif val in ("off", "false", "no", "0"):
-                    self.repl.runtime.yolo_mode = False
-                else:
-                    scroll.mount(SystemMessage("[red]Usage: /yolo [on|off][/red]"))
-                    self._deferred_scroll()
-                    return
-            else:
-                self.repl.runtime.yolo_mode = not self.repl.runtime.yolo_mode
-
-            status = "ON" if self.repl.runtime.yolo_mode else "OFF"
-            color = "red" if self.repl.runtime.yolo_mode else "green"
-            scroll.mount(SystemMessage(f"[bold {color}]YOLO mode is now {status}[/bold {color}]"))
-            self._deferred_scroll()
-            self.update_yolo_ui()
-            return
-
         if cmd in ("/exit", "/quit"):
             self.exit()
             return
 
         if cmd == "/clear":
             scroll.query("*").remove()
-            return
-
-        if cmd == "/help":
-            commands = self.repl._get_commands()
-            with self.repl.console.capture() as capture:
-                render_repl_help(self.repl.console, commands)
-            output = capture.get()
-            if output:
-                scroll.mount(SystemMessage(Text.from_ansi(output)))
-                self._deferred_scroll()
-            return
-
-        if cmd == "/new":
-            scroll.query("*").remove()
-            commands = self.repl._get_commands()
-            spec = commands.get("/new")
-            if spec:
-                with self.repl.console.capture() as capture:
-                    await safe_call(spec.handler, args)
-                output = capture.get()
-                if output:
-                    scroll.mount(SystemMessage(Text.from_ansi(output)))
-                    self._deferred_scroll()
             return
 
         if cmd == "/task-create":
@@ -382,6 +405,9 @@ class OllamaAgentApp(App):
         if output:
             scroll.mount(SystemMessage(Text.from_ansi(output)))
             self._deferred_scroll()
+
+        if cmd == "/yolo":
+            self.update_yolo_ui()
 
     # ── Modal helpers ─────────────────────────────────────────────────────
 
@@ -436,69 +462,10 @@ class OllamaAgentApp(App):
 
     async def _run_stream(self, prompt: str | Command, scroll, agent_msg: AgentResponse):
         self._is_generating = True
-        app = self
-
-        class _Renderer(StreamingRenderer):
-            def __init__(self, widget: AgentResponse):
-                self.widget = widget
-                self._auto_scroll = True
-                self._last_scroll_y = scroll.scroll_y
-                self._last_max_scroll_y = scroll.max_scroll_y
-                self._timer = app.set_interval(0.1, self._do_scroll)
-
-            def _do_scroll(self) -> None:
-                if self._auto_scroll:
-                    scroll.scroll_end(animate=False)
-                    self._last_scroll_y = scroll.scroll_y
-                    self._last_max_scroll_y = scroll.max_scroll_y
-
-            def _scroll(self) -> None:
-                # If scroll_y decreased but max_scroll_y didn't drop, the user scrolled up.
-                if scroll.scroll_y < self._last_scroll_y and scroll.max_scroll_y >= self._last_max_scroll_y:
-                    self._auto_scroll = False
-                elif scroll.scroll_y >= scroll.max_scroll_y - 4:
-                    self._auto_scroll = True
-                self._last_scroll_y = scroll.scroll_y
-                self._last_max_scroll_y = scroll.max_scroll_y
-
-            def on_text_delta(self, event: dict[str, Any]) -> None:
-                self.widget.append_text(event.get("content", ""))
-                self._scroll()
-
-            def on_reasoning_delta(self, event: dict[str, Any]) -> None:
-                self.widget.append_thinking(event.get("content", ""))
-                self._scroll()
-
-            def on_tool_call(self, event: dict[str, Any]) -> None:
-                self.widget.add_tool_call(
-                    name=event.get("name", "unknown"),
-                    agent=event.get("agent_name"),
-                )
-                self._scroll()
-
-            def on_tool_output(self, event: dict[str, Any]) -> None:
-                self.widget.add_tool_output(
-                    agent=event.get("agent_name"),
-                    output_len=event.get("output_len"),
-                )
-                self._scroll()
-
-            def on_error(self, event: dict[str, Any]) -> None:
-                self.widget.add_error(event.get("content", "Unknown error"))
-                self._scroll()
-
-            def on_warning(self, event: dict[str, Any]) -> None:
-                self.widget.add_warning(event.get("content", "Unknown warning"))
-                self._scroll()
-
-            def close(self) -> None:
-                self._timer.stop()
-                self.widget.flush_text()
-                self._do_scroll()
 
         try:
             try:
-                await stream_agent_events(self.repl.runtime, prompt, _Renderer(agent_msg), auto_close=True)
+                await stream_agent_events(self.repl.runtime, prompt, _TUIStreamingRenderer(self, scroll, agent_msg), auto_close=True)
             except asyncio.CancelledError:
                 scroll.mount(SystemMessage("[red]🛑 Execution interrupted by user.[/red]"))
                 self._deferred_scroll()
@@ -575,6 +542,7 @@ class OllamaREPL:
                 handle_new=self._handle_new_session,
                 handle_task_create=lambda _: None,
                 handle_skill_create=lambda _: None,
+                handle_yolo=self._handle_yolo_cmd,
             )
         return self._commands
 
@@ -605,3 +573,20 @@ class OllamaREPL:
 
     async def _handle_new_session(self, args: list[str]) -> None:
         self.runtime.thread_id = new_session(self.console)
+
+    def _handle_yolo_cmd(self, args: list[str]) -> None:
+        if args:
+            val = args[0].lower()
+            if val in ("on", "true", "yes", "1"):
+                self.runtime.yolo_mode = True
+            elif val in ("off", "false", "no", "0"):
+                self.runtime.yolo_mode = False
+            else:
+                self.console.print("[red]Usage: /yolo [on|off][/red]")
+                return
+        else:
+            self.runtime.yolo_mode = not self.runtime.yolo_mode
+
+        status = "ON" if self.runtime.yolo_mode else "OFF"
+        color = "red" if self.runtime.yolo_mode else "green"
+        self.console.print(f"[bold {color}]YOLO mode is now {status}[/bold {color}]")

@@ -70,16 +70,23 @@ class ReplInput(TextArea):
         loaded_set = set()
         self._history = []
 
-        if history_path.exists():
-            try:
-                with open(history_path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        entry = line.strip("\n")
-                        if entry and not entry.startswith("/") and entry not in loaded_set:
-                            self._history.append(entry)
-                            loaded_set.add(entry)
-            except Exception:
-                pass
+        def _read_history() -> list[str]:
+            res = []
+            if history_path.exists():
+                try:
+                    with open(history_path, "r", encoding="utf-8") as f:
+                        for line in f:
+                            entry = line.strip("\n")
+                            if entry and not entry.startswith("/") and entry not in loaded_set:
+                                res.append(entry)
+                                loaded_set.add(entry)
+                except Exception:
+                    pass
+            return res
+
+        import asyncio
+        file_entries = await asyncio.to_thread(_read_history)
+        self._history.extend(file_entries)
 
         # If the history is short or empty, try to populate it with previous user prompts from the DB checkpointer
         if len(self._history) < 50:
@@ -132,64 +139,74 @@ class ReplInput(TextArea):
             self.input = input_widget
             self.value = value
 
+    def _handle_autocomplete_key(self, event: events.Key, app: Any, autolist: Any) -> bool:
+        if event.key == "down":
+            event.stop()
+            event.prevent_default()
+            if autolist.highlighted is None:
+                autolist.highlighted = 0
+            elif autolist.highlighted < autolist.option_count - 1:
+                autolist.highlighted += 1
+            return True
+        elif event.key == "up":
+            event.stop()
+            event.prevent_default()
+            if autolist.highlighted is not None and autolist.highlighted > 0:
+                autolist.highlighted -= 1
+            return True
+        elif event.key == "tab":
+            event.stop()
+            event.prevent_default()
+            if autolist.highlighted is not None:
+                app.accept_completion(autolist.highlighted)
+            return True
+        elif event.key == "escape":
+            event.stop()
+            event.prevent_default()
+            app.hide_autocomplete()
+            return True
+        elif event.key == "enter":
+            event.stop()
+            event.prevent_default()
+            if autolist.highlighted is not None:
+                app.accept_completion(autolist.highlighted)
+            return True
+        return False
+
+    def _handle_history_key(self, event: events.Key) -> bool:
+        if event.key == "up":
+            event.stop()
+            event.prevent_default()
+            if self._history:
+                if self._history_index == len(self._history):
+                    self._temp_input = self.text
+                if self._history_index > 0:
+                    self._history_index -= 1
+                    self.text = self._history[self._history_index]
+                    self.action_cursor_line_end()
+            return True
+        elif event.key == "down":
+            event.stop()
+            event.prevent_default()
+            if self._history:
+                if self._history_index < len(self._history):
+                    self._history_index += 1
+                    if self._history_index == len(self._history):
+                        self.text = self._temp_input
+                    else:
+                        self.text = self._history[self._history_index]
+                    self.action_cursor_line_end()
+            return True
+        return False
+
     async def on_key(self, event: events.Key) -> None:
         app: Any = self.app
         autolist = app.query_one("#autocomplete-list")
         if autolist.display:
-            if event.key == "down":
-                event.stop()
-                event.prevent_default()
-                if autolist.highlighted is None:
-                    autolist.highlighted = 0
-                elif autolist.highlighted < autolist.option_count - 1:
-                    autolist.highlighted += 1
-                return
-            elif event.key == "up":
-                event.stop()
-                event.prevent_default()
-                if autolist.highlighted is not None and autolist.highlighted > 0:
-                    autolist.highlighted -= 1
-                return
-            elif event.key == "tab":
-                event.stop()
-                event.prevent_default()
-                if autolist.highlighted is not None:
-                    app.accept_completion(autolist.highlighted)
-                return
-            elif event.key == "escape":
-                event.stop()
-                event.prevent_default()
-                app.hide_autocomplete()
-                return
-            elif event.key == "enter":
-                event.stop()
-                event.prevent_default()
-                if autolist.highlighted is not None:
-                    app.accept_completion(autolist.highlighted)
+            if self._handle_autocomplete_key(event, app, autolist):
                 return
         else:
-            if event.key == "up":
-                event.stop()
-                event.prevent_default()
-                if self._history:
-                    if self._history_index == len(self._history):
-                        self._temp_input = self.text
-                    if self._history_index > 0:
-                        self._history_index -= 1
-                        self.text = self._history[self._history_index]
-                        self.action_cursor_line_end()
-                return
-            elif event.key == "down":
-                event.stop()
-                event.prevent_default()
-                if self._history:
-                    if self._history_index < len(self._history):
-                        self._history_index += 1
-                        if self._history_index == len(self._history):
-                            self.text = self._temp_input
-                        else:
-                            self.text = self._history[self._history_index]
-                        self.action_cursor_line_end()
+            if self._handle_history_key(event):
                 return
 
         if event.key == "enter":

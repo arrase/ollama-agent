@@ -33,7 +33,7 @@ async def list_models(
             console.print("[yellow]No models found in Ollama.[/yellow]")
             return
         
-        valid_models = [m for m in models if getattr(m, "model", None)]
+        valid_models = [m for m in models if m.model]
         
         async def get_tool_icon(model_name: str) -> str:
             try:

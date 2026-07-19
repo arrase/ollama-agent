@@ -14,10 +14,16 @@ if TYPE_CHECKING:
     from ..rag import RAGManager
 
 
-_tool_timeout: ContextVar[int] = ContextVar("tool_timeout", default=30)
+_tool_timeout: int = 30
 _rag_manager: ContextVar["RAGManager | None"] = ContextVar("rag_manager", default=None)
 
-set_tool_timeout, get_tool_timeout = _tool_timeout.set, _tool_timeout.get
+def set_tool_timeout(timeout: int) -> None:
+    global _tool_timeout
+    _tool_timeout = timeout
+
+def get_tool_timeout() -> int:
+    return _tool_timeout
+
 set_rag_manager, get_rag_manager = _rag_manager.set, _rag_manager.get
 
 
