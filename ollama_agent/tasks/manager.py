@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
+from typing import Any
 
 import yaml  # type: ignore[import-untyped]
 
@@ -33,7 +34,7 @@ class Task:
         self.reasoning_effort = validate_reasoning_effort(self.reasoning_effort)
 
     @classmethod
-    def from_dict(cls, d: dict) -> Task:
+    def from_dict(cls, d: dict[str, Any]) -> Task:
         return cls(
             title=d["title"],
             prompt=d["prompt"],

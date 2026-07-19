@@ -44,14 +44,12 @@ class SkillsContext:
             if not matches
             else f"Ambiguous prefix: {skill_id} -> {', '.join(t[0] for t in matches)}"
         )
-        self.console.print(f"[red]{msg}[/red]")
         if not matches:
             raise SkillNotFoundError(msg)
         raise AmbiguousSkillError(msg)
 
     def _require(self, value: str, name: str) -> str:
         if not (cleaned := value.strip().strip("\n")):
-            self.console.print(f"[red]{name} cannot be empty.[/red]")
             raise ValidationError(f"{name} cannot be empty.")
         return cleaned
 

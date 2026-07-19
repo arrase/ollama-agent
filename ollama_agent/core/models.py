@@ -41,7 +41,7 @@ async def _show_model(model: str, base_url: str) -> Any:
 
 
 def _response_field(payload: Any, field: str, default: Any = None) -> Any:
-    return payload.get(field, default) if isinstance(payload, dict) else getattr(payload, field, default)
+    return getattr(payload, field, default)
 
 
 def _parse_num_ctx(text: str | None) -> int | None:

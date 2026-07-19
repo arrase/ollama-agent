@@ -109,6 +109,7 @@ def build_repl_handlers(
     handle_new: Callable[[list[str]], Awaitable[None]],
     handle_task_create: Callable[[list[str]], Awaitable[None]],
     handle_skill_create: Callable[[list[str]], Awaitable[None]],
+    handle_yolo: Callable[[list[str]], object],
 ) -> dict[str, REPLCommand]:
     """Build the REPL command registry for slash commands."""
 
@@ -124,13 +125,14 @@ def build_repl_handlers(
             else add_rag_file(get_rag_ctx(), paths[0])
         )
 
-    return {
-        "/help": REPLCommand("Show this help message", "General", None, lambda _: None),
+    cmds: dict[str, REPLCommand] = {}
+    cmds.update({
+        "/help": REPLCommand("Show this help message", "General", None, lambda _: render_repl_help(console, cmds)),
         "/yolo": REPLCommand(
             "Toggle YOLO mode or set it explicitly (on/off)",
             "General",
             "/yolo [on|off]",
-            lambda _: None,
+            handle_yolo,
         ),
         "/exit": REPLCommand("Exit the REPL", "General", None, handle_exit),
         "/quit": REPLCommand("Exit the REPL", "General", None, handle_exit),
@@ -240,7 +242,8 @@ def build_repl_handlers(
             "/skill-create <id> [--force]",
             handle_skill_create,
         ),
-    }
+    })
+    return cmds
 
 
 

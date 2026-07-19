@@ -89,7 +89,7 @@ class AgentRuntime:
         if "{FILESYSTEM_POLICY}" in base_instructions:
             self._instructions = base_instructions.replace("{FILESYSTEM_POLICY}", fs_policy)
         else:
-            self._instructions = base_instructions + "\n\n" + fs_policy
+            self._instructions = f"{base_instructions}\n\n{fs_policy}"
             
         os_info = f"\n\n# ENVIRONMENT\nOperating System: {platform.system()} ({platform.release()})\n"
         self._instructions += os_info

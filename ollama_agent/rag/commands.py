@@ -34,7 +34,6 @@ class RAGContext:
             if not matches
             else f"Ambiguous prefix: {name} -> {', '.join(matches)}"
         )
-        self.console.print(f"[red]{msg}[/red]")
         if not matches:
             raise RAGDatabaseNotFoundError(msg)
         raise AmbiguousRAGDatabaseError(msg)
@@ -54,7 +53,7 @@ def list_rag_databases(ctx: RAGContext) -> None:
 
     for db in dbs:
         status = "[green]◀ active[/green]" if db["active"] else ""
-        table.add_row(db["name"], str(db["chunks"]), status)
+        table.add_row(db["name"], str(db["chunks"]) if db["chunks"] is not None else "-", status)
 
     ctx.console.print(table)
 

@@ -143,19 +143,11 @@ def resolve_context_files(
         except Exception:
             return
 
-        if size > max_file_size:
+        attachment_type = classify_multimodal_file(file_path)
+        if attachment_type is None and is_binary_file(file_path):
             if ignore_errors:
                 return
-            raise PromptProcessingError(
-                f"File too large: {file_path} ({size} bytes, limit is {max_file_size} bytes)"
-            )
-
-        attachment_type = classify_multimodal_file(file_path)
-        if attachment_type is None:
-            if is_binary_file(file_path):
-                if ignore_errors:
-                    return
-                raise PromptProcessingError(f"Cannot read binary file as text: {file_path}")
+            raise PromptProcessingError(f"Cannot read binary file as text: {file_path}")
 
         if len(text_contents) + len(binary_attachments) >= max_files:
             raise PromptProcessingError(
@@ -176,11 +168,10 @@ def resolve_context_files(
                     "base64": b64_data,
                     "mime_type": mime
                 })
-                total_size += size
             else:
                 content = read_file_content(file_path, max_file_size)
                 text_contents[file_path] = content
-                total_size += size
+            total_size += size
         except Exception as e:
             if ignore_errors:
                 return

@@ -27,6 +27,14 @@ from ..core.common import validate_identifier
 
 logger = logging.getLogger(__name__)
 
+SUPPORTED_RAG_EXTENSIONS: frozenset[str] = frozenset({
+    ".py", ".js", ".ts", ".tsx", ".jsx", ".sh", ".yaml", ".yml",
+    ".json", ".xml", ".md", ".txt", ".toml", ".c", ".cpp", ".h",
+    ".hpp", ".go", ".rs", ".css", ".html", ".sql", ".ini", ".cfg",
+    ".properties", ".java", ".kt", ".gradle", ".bat", ".ps1",
+    ".csv", ".rst",
+})
+
 
 class RAGError(RuntimeError):
     """Base exception for RAG operations."""
@@ -74,29 +82,26 @@ class RAGManager:
     def list_databases(self) -> list[dict[str, Any]]:
         """List all available RAG databases."""
         dbs = []
-        for path in self._rag_dir.iterdir():
+        for path in sorted(self._rag_dir.iterdir()):
             if not path.is_dir():
                 continue
-            client = None
-            try:
-                client = QdrantClient(path=str(path))
-                info = client.get_collection(self.COLLECTION_NAME)
-                count = info.points_count
-            except Exception:
-                # Not a valid RAG database (or unreadable)
-                continue
-            finally:
-                if client is not None:
-                    client.close()
+            is_active = path.name == self._current_db
+            chunks = None
+            if is_active and self._client is not None:
+                try:
+                    info = self._client.get_collection(self.COLLECTION_NAME)
+                    chunks = info.points_count
+                except Exception:
+                    pass
             dbs.append(
                 {
                     "name": path.name,
                     "path": str(path),
-                    "chunks": count,
-                    "active": path.name == self._current_db,
+                    "chunks": chunks,
+                    "active": is_active,
                 }
             )
-        return sorted(dbs, key=lambda x: x["name"])
+        return dbs
 
     def create_database(self, name: str) -> str:
         """Create a new RAG database."""
@@ -217,24 +222,7 @@ class RAGManager:
     async def add_directory(
         self,
         dir_path: str,
-        extensions: tuple[str, ...] = (
-            ".txt",
-            ".md",
-            ".py",
-            ".js",
-            ".ts",
-            ".json",
-            ".yaml",
-            ".yml",
-            ".html",
-            ".css",
-            ".xml",
-            ".csv",
-            ".rst",
-            ".ini",
-            ".cfg",
-            ".sh",
-        ),
+        extensions: frozenset[str] = SUPPORTED_RAG_EXTENSIONS,
     ) -> dict[str, Any]:
         """Add all files from a directory to the current RAG database."""
         client = self._ensure_loaded()
@@ -285,9 +273,6 @@ class RAGManager:
             client.delete(
                 collection_name=self.COLLECTION_NAME, points_selector=filt, wait=True
             )
-        except TypeError:
-            # Older qdrant-client versions may not support wait=.
-            client.delete(collection_name=self.COLLECTION_NAME, points_selector=filt)
         except Exception as e:
             logger.warning(
                 "Failed to delete existing points for directory batch: %s", e
@@ -435,9 +420,6 @@ class RAGManager:
             client.delete(
                 collection_name=self.COLLECTION_NAME, points_selector=filt, wait=True
             )
-        except TypeError:
-            # Older qdrant-client versions may not support wait=.
-            client.delete(collection_name=self.COLLECTION_NAME, points_selector=filt)
         except Exception as e:
             raise RAGError(
                 f"Failed to delete existing points for source '{source}': {e}"
@@ -476,14 +458,7 @@ class RAGManager:
     def _read_file(self, path: Path) -> str:
         """Read file content, handling different encodings."""
         # Check if it's a text/code file
-        allowed_extensions = {
-            ".py", ".js", ".ts", ".tsx", ".jsx", ".sh", ".yaml", ".yml",
-            ".json", ".xml", ".md", ".txt", ".toml", ".c", ".cpp", ".h",
-            ".hpp", ".go", ".rs", ".css", ".html", ".sql", ".ini", ".cfg",
-            ".properties", ".java", ".kt", ".gradle", ".bat", ".ps1"
-        }
-        
-        if path.suffix.lower() not in allowed_extensions:
+        if path.suffix.lower() not in SUPPORTED_RAG_EXTENSIONS:
             mime_type, _ = mimetypes.guess_type(str(path))
             if mime_type and not mime_type.startswith(
                 ("text/", "application/json", "application/xml")
