@@ -1,6 +1,6 @@
 """Ollama Agent - AI agent to interact with local models."""
 
-__version__ = "0.6.2"
+__version__ = "0.6.4"
 
 from .agent import AgentRuntime
 from .core import (
