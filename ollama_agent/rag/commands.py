@@ -1,5 +1,7 @@
 """Shared RAG management commands used by CLI and REPL."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 
 from rich.console import Console

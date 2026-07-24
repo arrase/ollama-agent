@@ -1,5 +1,7 @@
 """Core logic for parsing, resolving, and injecting file context from @-mentions."""
 
+from __future__ import annotations
+
 import base64
 import mimetypes
 import os

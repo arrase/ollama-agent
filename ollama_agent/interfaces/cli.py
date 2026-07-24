@@ -1,5 +1,7 @@
 """Command-line interface for the application."""
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import inspect

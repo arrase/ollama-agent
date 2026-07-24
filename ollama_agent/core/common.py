@@ -1,5 +1,7 @@
 """Shared type definitions and utilities for the application."""
 
+from __future__ import annotations
+
 import re
 from typing import Any, Literal, TypedDict
 

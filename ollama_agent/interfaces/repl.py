@@ -1,5 +1,7 @@
 """REPL interface for Ollama Agent using Textual TUI."""
 
+from __future__ import annotations
+
 import asyncio
 import os
 import re
