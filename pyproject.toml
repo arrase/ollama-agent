@@ -22,7 +22,7 @@ dependencies = [
     "textual>=8.2.8",
     "qdrant-client>=1.18.0",
     "rich>=15.0.0",
-    "mcp>=1.28.1",
+    "mcp>=2.0.0",
 ]
 
 [project.scripts]
