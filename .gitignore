@@ -42,3 +42,4 @@ Thumbs.db
 **/.antigravitycli
 # Test files
 test_*.py
+site/
