@@ -45,10 +45,6 @@ theme:
 
 plugins: []
 
-extra_javascript:
-  - javascripts/mathjax.js
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
-
 extra_css:
   - https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css
   - stylesheets/extra.css
@@ -58,8 +54,6 @@ markdown_extensions:
   - md_in_html
   - admonition
   - pymdownx.details
-  - pymdownx.arithmatex:
-      generic: true
 
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
