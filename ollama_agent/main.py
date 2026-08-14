@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import warnings
 
+from langchain_core._api.deprecation import LangChainPendingDeprecationWarning
 from rich.console import Console
 
 from .agent import AgentRuntime
@@ -12,16 +13,11 @@ from .interfaces.cli import create_argument_parser, handle_cli_commands
 from .interfaces.repl import OllamaREPL
 from .settings import load_settings, reset_config
 
-try:
-    from langchain_core._api.deprecation import LangChainPendingDeprecationWarning
-
-    warnings.filterwarnings(
-        "ignore",
-        category=LangChainPendingDeprecationWarning,
-        message=".*allowed_objects.*",
-    )
-except ImportError:
-    pass
+warnings.filterwarnings(
+    "ignore",
+    category=LangChainPendingDeprecationWarning,
+    message=".*allowed_objects.*",
+)
 
 
 def main() -> None:

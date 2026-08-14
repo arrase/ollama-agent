@@ -81,11 +81,8 @@ async def load_main_mcp_tools(exit_stack: AsyncExitStack) -> list[Any]:
         return []
 
     try:
-
-        def _read_and_parse():
-            return json.loads(MCP_SERVERS_PATH.read_text(encoding="utf-8"))
-
-        data = await asyncio.to_thread(_read_and_parse)
+        raw_json = await asyncio.to_thread(MCP_SERVERS_PATH.read_text, encoding="utf-8")
+        data = json.loads(raw_json)
     except (json.JSONDecodeError, OSError) as exc:
         _log.error("Failed to load MCP config %s: %s", MCP_SERVERS_PATH, exc)
         return []

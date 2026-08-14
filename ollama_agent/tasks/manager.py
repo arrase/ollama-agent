@@ -105,9 +105,10 @@ class TaskManager(BaseFileStoreManager["Task"]):
         try:
             self._path(item_id).unlink()
             return True
-        except (FileNotFoundError, OSError) as e:
-            if isinstance(e, OSError):
-                logger.error("Error deleting task %s: %s", item_id, e)
+        except FileNotFoundError:
+            return False
+        except OSError as e:
+            logger.error("Error deleting task %s: %s", item_id, e)
             return False
 
     def list_all(self) -> list[tuple[str, Task]]:
