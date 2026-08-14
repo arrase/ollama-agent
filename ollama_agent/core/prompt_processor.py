@@ -72,7 +72,7 @@ def is_binary_file(file_path: Path) -> bool:
         with file_path.open("rb") as f:
             chunk = f.read(1024)
             return b"\x00" in chunk
-    except Exception:
+    except OSError:
         return True
 
 
@@ -83,8 +83,8 @@ def read_file_content(file_path: Path, max_file_size: int = 1024 * 1024) -> str:
 
     try:
         file_size = file_path.stat().st_size
-    except Exception as e:
-        raise PromptProcessingError(f"Failed to get file stats for {file_path}: {e}")
+    except OSError as e:
+        raise PromptProcessingError(f"Failed to get file stats for {file_path}: {e}") from e
 
     if file_size > max_file_size:
         raise PromptProcessingError(
@@ -97,16 +97,16 @@ def read_file_content(file_path: Path, max_file_size: int = 1024 * 1024) -> str:
     try:
         with file_path.open("r", encoding="utf-8", errors="replace") as f:
             return f.read()
-    except Exception as e:
-        raise PromptProcessingError(f"Failed to read file {file_path}: {e}")
+    except OSError as e:
+        raise PromptProcessingError(f"Failed to read file {file_path}: {e}") from e
 
 
 def read_binary_file_b64(file_path: Path, max_file_size: int = 1024 * 1024) -> str:
     """Read a binary file and return its content as a base64 encoded string."""
     try:
         file_size = file_path.stat().st_size
-    except Exception as e:
-        raise PromptProcessingError(f"Failed to get file stats for {file_path}: {e}")
+    except OSError as e:
+        raise PromptProcessingError(f"Failed to get file stats for {file_path}: {e}") from e
 
     if file_size > max_file_size:
         raise PromptProcessingError(
@@ -116,8 +116,8 @@ def read_binary_file_b64(file_path: Path, max_file_size: int = 1024 * 1024) -> s
     try:
         with file_path.open("rb") as f:
             return base64.b64encode(f.read()).decode("utf-8")
-    except Exception as e:
-        raise PromptProcessingError(f"Failed to read binary file {file_path}: {e}")
+    except OSError as e:
+        raise PromptProcessingError(f"Failed to read binary file {file_path}: {e}") from e
 
 
 def resolve_context_files(
@@ -142,7 +142,7 @@ def resolve_context_files(
 
         try:
             size = file_path.stat().st_size
-        except Exception:
+        except OSError:
             return
 
         attachment_type = classify_multimodal_file(file_path)

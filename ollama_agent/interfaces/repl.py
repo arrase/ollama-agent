@@ -202,12 +202,12 @@ class OllamaAgentApp(App):
     # ── Autocomplete ──────────────────────────────────────────────────────
 
     def hide_autocomplete(self) -> None:
-        autolist = self.query_one("#autocomplete-list")
+        autolist = self.query_one("#autocomplete-list", OptionList)
         autolist.display = False
         autolist.highlighted = None
 
     def update_autocomplete(self, value: str) -> None:
-        autolist = self.query_one("#autocomplete-list")
+        autolist = self.query_one("#autocomplete-list", OptionList)
         text = value.lstrip()
 
         # 1. Slash-command candidates
@@ -246,8 +246,10 @@ class OllamaAgentApp(App):
         if option_index is None or option_index < 0:
             return
 
-        autolist = self.query_one("#autocomplete-list")
+        autolist = self.query_one("#autocomplete-list", OptionList)
         option = autolist.get_option_at_index(option_index)
+        if option.id is None:
+            return
         completed_text = option.id
 
         inp = self.query_one(ReplInput)
@@ -455,14 +457,14 @@ class OllamaAgentApp(App):
 
     # ── Streaming chat ────────────────────────────────────────────────────
  
-    async def _stream_chat(self, prompt: str, scroll, agent_msg: AgentResponse):
+    async def _stream_chat(self, prompt: str, scroll: Any, agent_msg: AgentResponse) -> None:
         await self._run_stream(prompt, scroll, agent_msg)
 
-    async def _handle_approval_decision(self, decisions: list[dict], scroll, agent_msg: AgentResponse):
-        command = Command(resume={"decisions": decisions})
+    async def _handle_approval_decision(self, decisions: list[dict[str, Any]], scroll: Any, agent_msg: AgentResponse) -> None:
+        command: Command[Any] = Command(resume={"decisions": decisions})
         await self._run_stream(command, scroll, agent_msg)
 
-    async def _run_stream(self, prompt: str | Command, scroll, agent_msg: AgentResponse):
+    async def _run_stream(self, prompt: str | Command[Any], scroll: Any, agent_msg: AgentResponse) -> None:
         self._is_generating = True
 
         try:

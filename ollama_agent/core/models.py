@@ -40,10 +40,6 @@ async def _show_model(model: str, base_url: str) -> Any:
         ) from exc
 
 
-def _response_field(payload: Any, field: str, default: Any = None) -> Any:
-    return getattr(payload, field, default)
-
-
 def _parse_num_ctx(text: str | None) -> int | None:
     if not text:
         return None
@@ -65,7 +61,7 @@ def _model_context_length(model_info: dict[str, Any]) -> int | None:
 async def get_model_capabilities(model: str, base_url: str) -> set[str]:
     """Extract capabilities for a model."""
     response = await _show_model(model, base_url)
-    caps = _response_field(response, "capabilities", {})
+    caps = getattr(response, "capabilities", {})
     if isinstance(caps, dict):
         caps = caps.get("capabilities", [])
     if isinstance(caps, list):
@@ -104,15 +100,13 @@ async def resolve_context_window(
     response = await _show_model(model, base_url)
 
     # 1. Structured info is the most reliable (modern Ollama)
-    model_info = _response_field(
-        response, "model_info", _response_field(response, "modelinfo", {})
-    )
-    if resolved := _model_context_length(model_info):
+    model_info = getattr(response, "model_info", getattr(response, "modelinfo", {}))
+    if isinstance(model_info, dict) and (resolved := _model_context_length(model_info)):
         return resolved
 
     # 2. Fallback to parameters or modelfile regex
     for field_name in ("parameters", "modelfile"):
-        if resolved := _parse_num_ctx(_response_field(response, field_name)):
+        if resolved := _parse_num_ctx(getattr(response, field_name, None)):
             return resolved
 
     raise ModelContextWindowError(

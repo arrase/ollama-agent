@@ -2,25 +2,22 @@
 
 from __future__ import annotations
 
-import logging
 import os
 from dataclasses import asdict, dataclass, field, fields
 from importlib import resources
 from pathlib import Path
-from typing import Any, Self, Callable
+from typing import Any, Callable, Self
 
 import yaml  # type: ignore[import-untyped]
 
 from .paths import (
+    FS_POLICY_SANDBOXED_PATH,
+    FS_POLICY_TRAVERSAL_PATH,
     INSTRUCTIONS_PATH,
     MEMORY_PATH,
-    SETTINGS_PATH,
     RAG_DIR,
-    FS_POLICY_TRAVERSAL_PATH,
-    FS_POLICY_SANDBOXED_PATH,
+    SETTINGS_PATH,
 )
-
-logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -29,15 +26,12 @@ logger = logging.getLogger(__name__)
 
 
 def _default_instructions() -> str:
-    try:
-        return (
-            resources.files(__package__)
-            .joinpath("prompts/default_instructions.md")
-            .read_text(encoding="utf-8")
-            .strip()
-        )
-    except Exception:
-        return "You are an AI Assistant."
+    return (
+        resources.files(__package__)
+        .joinpath("prompts/default_instructions.md")
+        .read_text(encoding="utf-8")
+        .strip()
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -219,16 +213,14 @@ def save_settings(settings: Settings, settings_path: Path = SETTINGS_PATH) -> No
 
 
 def _load_prompt_file(file_path: Path, default_factory: Callable[[], str]) -> str:
-    """Helper to load a prompt file with fallback creation and error handling."""
-    default_text = default_factory()
+    """Helper to load a prompt file with initial creation from default factory."""
     if not file_path.exists():
+        default_text = default_factory()
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(default_text + "\n", encoding="utf-8")
         return default_text
-    try:
-        return file_path.read_text(encoding="utf-8").strip() or default_text
-    except Exception:
-        return default_text
+    content = file_path.read_text(encoding="utf-8").strip()
+    return content if content else default_factory()
 
 
 def load_instructions(instructions_path: Path = INSTRUCTIONS_PATH) -> str:

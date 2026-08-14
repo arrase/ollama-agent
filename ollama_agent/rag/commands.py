@@ -68,12 +68,12 @@ def create_rag_database(ctx: RAGContext, name: str) -> None:
             f"[green]RAG database created:[/green] [cyan]{created}[/cyan]"
         )
         ctx.console.print(f"[dim]Load it with /rag-load {created}[/dim]")
-    except RAGDatabaseExistsError as e:
+    except RAGDatabaseExistsError:
         ctx.console.print(f"[red]Database already exists:[/red] {name}")
-        raise e
+        raise
     except RAGError as e:
         ctx.console.print(f"[red]{e}[/red]")
-        raise e
+        raise
 
 
 def delete_rag_database(ctx: RAGContext, name: str) -> None:
@@ -98,7 +98,7 @@ def load_rag_database(ctx: RAGContext, name: str) -> None:
         )
     except RAGError as e:
         ctx.console.print(f"[red]{e}[/red]")
-        raise e
+        raise
 
 
 def unload_rag_database(ctx: RAGContext) -> None:
@@ -119,14 +119,14 @@ async def add_rag_file(ctx: RAGContext, file_path: str) -> None:
             f"[green]Added to RAG:[/green] [cyan]{result['file']}[/cyan] "
             f"([dim]{result['chunks']} chunks[/dim])"
         )
-    except RAGNotLoadedError as e:
+    except RAGNotLoadedError:
         ctx.console.print(
             "[red]No RAG database loaded.[/red] Use /rag-load <name> first."
         )
-        raise e
+        raise
     except RAGError as e:
         ctx.console.print(f"[red]{e}[/red]")
-        raise e
+        raise
 
 
 async def add_rag_directory(ctx: RAGContext, dir_path: str) -> None:
@@ -137,14 +137,14 @@ async def add_rag_directory(ctx: RAGContext, dir_path: str) -> None:
             f"[green]Added {result['added']} files[/green] "
             f"([dim]skipped: {result['skipped']}, failed: {result['failed']}[/dim])"
         )
-    except RAGNotLoadedError as e:
+    except RAGNotLoadedError:
         ctx.console.print(
             "[red]No RAG database loaded.[/red] Use /rag-load <name> first."
         )
-        raise e
+        raise
     except RAGError as e:
         ctx.console.print(f"[red]{e}[/red]")
-        raise e
+        raise
 
 
 def show_rag_status(ctx: RAGContext) -> None:

@@ -107,8 +107,8 @@ def build_repl_handlers(
     handle_exit: Callable[[list[str]], object],
     handle_clear: Callable[[list[str]], object],
     handle_new: Callable[[list[str]], Awaitable[None]],
-    handle_task_create: Callable[[list[str]], Awaitable[None]],
-    handle_skill_create: Callable[[list[str]], Awaitable[None]],
+    handle_task_create: Callable[[list[str]], object],
+    handle_skill_create: Callable[[list[str]], object],
     handle_yolo: Callable[[list[str]], object],
 ) -> dict[str, REPLCommand]:
     """Build the REPL command registry for slash commands."""

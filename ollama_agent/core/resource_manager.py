@@ -16,12 +16,9 @@ Subclasses must supply:
 
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Generic, TypeVar
-
-logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 

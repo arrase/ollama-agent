@@ -41,7 +41,7 @@ async def rag_search(query: str, top_k: int | None = None) -> RAGToolResult:
         results = await mgr.search(query, top_k)
         context_parts: list[str] = []
         for r in results:
-            source = r.get("filename", r.get("source", "unknown"))
+            source = r.get("filename") or r.get("source") or "unknown"
             context_parts.append(f"[Source: {source}]\n{r['content']}")
         context = "\n\n---\n\n".join(context_parts) if context_parts else ""
         return {"success": True, "context": context, "results": results}

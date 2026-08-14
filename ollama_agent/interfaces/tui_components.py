@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
@@ -12,7 +13,7 @@ from textual.app import ComposeResult
 from textual.containers import Container, Horizontal
 from textual.message import Message
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Static, TextArea, Collapsible, Markdown
+from textual.widgets import Button, Input, Static, TextArea, Collapsible, Markdown, OptionList
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from ..settings.paths import APP_DIR, HISTORY_DB_PATH
@@ -28,7 +29,7 @@ if TYPE_CHECKING:
 class AgentHeader(Static):
     """Dynamic TUI Header displaying agent status information."""
 
-    def __init__(self, repl: OllamaREPL, **kwargs):
+    def __init__(self, repl: OllamaREPL, **kwargs: Any):
         super().__init__(**kwargs)
         self.repl = repl
 
@@ -54,7 +55,7 @@ class AgentHeader(Static):
 class ReplInput(TextArea):
     """Interactive input field that captures Tab/arrow keys for autocomplete."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any):
         kwargs.setdefault("highlight_cursor_line", False)
         super().__init__(**kwargs)
         self._history: list[str] = []
@@ -73,42 +74,34 @@ class ReplInput(TextArea):
         def _read_history() -> list[str]:
             res = []
             if history_path.exists():
-                try:
-                    with open(history_path, "r", encoding="utf-8") as f:
-                        for line in f:
-                            entry = line.strip("\n")
-                            if entry and not entry.startswith("/") and entry not in loaded_set:
-                                res.append(entry)
-                                loaded_set.add(entry)
-                except Exception:
-                    pass
+                with open(history_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        entry = line.strip("\n")
+                        if entry and not entry.startswith("/") and entry not in loaded_set:
+                            res.append(entry)
+                            loaded_set.add(entry)
             return res
 
-        import asyncio
         file_entries = await asyncio.to_thread(_read_history)
         self._history.extend(file_entries)
 
         # If the history is short or empty, try to populate it with previous user prompts from the DB checkpointer
-        if len(self._history) < 50:
-            if HISTORY_DB_PATH.exists():
-                try:
-                    async with AsyncSqliteSaver.from_conn_string(str(HISTORY_DB_PATH)) as saver:
-                        async for checkpoint_tuple in saver.alist(None):
-                            checkpoint = checkpoint_tuple.checkpoint
-                            values = checkpoint.get("channel_values", {})
-                            for key, val in values.items():
-                                if isinstance(val, list):
-                                    for msg in val:
-                                        msg_type = getattr(msg, "type", None) or type(msg).__name__.lower()
-                                        if "human" in msg_type or "user" in msg_type:
-                                            content = getattr(msg, "content", None)
-                                            if content and isinstance(content, str):
-                                                entry = content.strip()
-                                                if entry and not entry.startswith("/") and entry not in loaded_set:
-                                                    self._history.insert(0, entry)
-                                                    loaded_set.add(entry)
-                except Exception:
-                    pass
+        if len(self._history) < 50 and HISTORY_DB_PATH.exists():
+            async with AsyncSqliteSaver.from_conn_string(str(HISTORY_DB_PATH)) as saver:
+                async for checkpoint_tuple in saver.alist(None):
+                    checkpoint = checkpoint_tuple.checkpoint
+                    values = checkpoint.get("channel_values", {})
+                    for key, val in values.items():
+                        if isinstance(val, list):
+                            for msg in val:
+                                msg_type = getattr(msg, "type", None) or type(msg).__name__.lower()
+                                if "human" in msg_type or "user" in msg_type:
+                                    content = getattr(msg, "content", None)
+                                    if content and isinstance(content, str):
+                                        entry = content.strip()
+                                        if entry and not entry.startswith("/") and entry not in loaded_set:
+                                            self._history.insert(0, entry)
+                                            loaded_set.add(entry)
 
         self._history_index = len(self._history)
         self._temp_input = ""
@@ -125,12 +118,9 @@ class ReplInput(TextArea):
         self._temp_input = ""
 
         history_path = APP_DIR / "tui_history.txt"
-        try:
-            history_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(history_path, "a", encoding="utf-8") as f:
-                f.write(entry + "\n")
-        except Exception:
-            pass
+        history_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(history_path, "a", encoding="utf-8") as f:
+            f.write(entry + "\n")
 
     class Submitted(Message):
         """Emitted when the user submits the input."""
@@ -139,7 +129,7 @@ class ReplInput(TextArea):
             self.input = input_widget
             self.value = value
 
-    def _handle_autocomplete_key(self, event: events.Key, app: Any, autolist: Any) -> bool:
+    def _handle_autocomplete_key(self, event: events.Key, app: Any, autolist: OptionList) -> bool:
         if event.key == "down":
             event.stop()
             event.prevent_default()
@@ -201,7 +191,7 @@ class ReplInput(TextArea):
 
     async def on_key(self, event: events.Key) -> None:
         app: Any = self.app
-        autolist = app.query_one("#autocomplete-list")
+        autolist = app.query_one("#autocomplete-list", OptionList)
         if autolist.display:
             if self._handle_autocomplete_key(event, app, autolist):
                 return
@@ -240,7 +230,7 @@ class AgentResponse(Container):
     It dynamically hosts thinking, text responses, and tool calls in order.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._header = Static(
             "[bold #a6e3a1]🤖 Agent[/bold #a6e3a1]",
@@ -248,6 +238,7 @@ class AgentResponse(Container):
         )
         self.current_thinking: Collapsible | None = None
         self.current_thinking_text: Static | None = None
+        self._thinking_chunks: list[str] = []
         self.current_text_widget: Markdown | None = None
         self._text_chunks: list[str] = []
         self.thinking_timer: Any = None
@@ -284,7 +275,7 @@ class AgentResponse(Container):
                     True,
                 )
             self.current_thinking_text = Static("", classes="msg-content thinking-body")
-            self.current_thinking_text._chunks = []  # type: ignore[attr-defined]
+            self._thinking_chunks = []
             self.current_thinking = Collapsible(
                 self.current_thinking_text,
                 title="🧠 Thinking...",
@@ -295,9 +286,9 @@ class AgentResponse(Container):
             self.thinking_timer = self.set_interval(0.5, self._animate_thinking)
 
         if self.current_thinking_text is not None:
-            self.current_thinking_text._chunks.append(delta)  # type: ignore[attr-defined]
+            self._thinking_chunks.append(delta)
             self.current_thinking_text.update(
-                f"[dim italic #cba6f7]{''.join(self.current_thinking_text._chunks)}[/dim italic #cba6f7]"  # type: ignore[attr-defined]
+                f"[dim italic #cba6f7]{''.join(self._thinking_chunks)}[/dim italic #cba6f7]"
             )
 
     def append_text(self, delta: str) -> None:
@@ -360,7 +351,7 @@ class AgentResponse(Container):
 class ToolCallMessage(Static):
     """One-line tool invocation event."""
 
-    def __init__(self, tool_name: str, agent_name: str | None = None, **kwargs):
+    def __init__(self, tool_name: str, agent_name: str | None = None, **kwargs: Any):
         prefix = f"[{agent_name}] " if agent_name else ""
         super().__init__(
             f"  [#f9e2af]✦ {prefix}[/#f9e2af][bold #f9e2af]{tool_name}[/bold #f9e2af]",
@@ -371,7 +362,7 @@ class ToolCallMessage(Static):
 class ToolOutputMessage(Static):
     """One-line tool output acknowledgement."""
 
-    def __init__(self, agent_name: str | None = None, output_len: int | None = None, **kwargs):
+    def __init__(self, agent_name: str | None = None, output_len: int | None = None, **kwargs: Any):
         prefix = f"[{agent_name}] " if agent_name else ""
         suffix = f" ({output_len} chars)" if output_len is not None else ""
         super().__init__(
@@ -428,11 +419,11 @@ class TaskCreateModal(ModalScreen):
             self.dismiss()
         elif event.button.id == "create-btn":
             self.dismiss((
-                self.query_one("#task-id-input").value.strip(),
-                self.query_one("#title-input").value.strip(),
-                self.query_one("#model-input").value.strip(),
-                self.query_one("#effort-input").value.strip(),
-                self.query_one("#prompt-area").text,
+                self.query_one("#task-id-input", Input).value.strip(),
+                self.query_one("#title-input", Input).value.strip(),
+                self.query_one("#model-input", Input).value.strip(),
+                self.query_one("#effort-input", Input).value.strip(),
+                self.query_one("#prompt-area", TextArea).text,
             ))
 
 
@@ -469,10 +460,10 @@ class SkillCreateModal(ModalScreen):
             self.dismiss()
         elif event.button.id == "create-btn":
             self.dismiss((
-                self.query_one("#skill-id-input").value.strip(),
-                self.query_one("#name-input").value.strip(),
-                self.query_one("#desc-input").value.strip(),
-                self.query_one("#instructions-area").text,
+                self.query_one("#skill-id-input", Input).value.strip(),
+                self.query_one("#name-input", Input).value.strip(),
+                self.query_one("#desc-input", Input).value.strip(),
+                self.query_one("#instructions-area", TextArea).text,
             ))
 
 
