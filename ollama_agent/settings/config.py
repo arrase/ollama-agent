@@ -102,6 +102,18 @@ class LangSmithSettings:
 
 
 @dataclass(slots=True)
+class TavilySettings:
+    """Configuration for Tavily-backed web tools."""
+
+    api_key: str = ""
+    max_results: int = 5
+    search_depth: str = "basic"
+    chunks_per_source: int = 3
+    extract_depth: str = "basic"
+    max_content_chars: int = 20_000
+
+
+@dataclass(slots=True)
 class MentionSettings:
     """Configuration for @-mention file/directory context injection."""
 
@@ -119,6 +131,7 @@ class Settings:
     mentions: MentionSettings = field(default_factory=MentionSettings)
     subagents: list[SubAgentSettings] = field(default_factory=list)
     langsmith: LangSmithSettings = field(default_factory=LangSmithSettings)
+    tavily: TavilySettings = field(default_factory=TavilySettings)
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any] | None) -> Self:
@@ -130,6 +143,7 @@ class Settings:
             mentions=_dataclass_from_dict(MentionSettings, raw.get("mentions")),
             subagents=_subagents_from_list(raw.get("subagents")),
             langsmith=_dataclass_from_dict(LangSmithSettings, raw.get("langsmith")),
+            tavily=_dataclass_from_dict(TavilySettings, raw.get("tavily")),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -137,6 +151,8 @@ class Settings:
         ls = d.get("langsmith", {})
         if ls and not any(ls.values()):
             d.pop("langsmith", None)
+        if d.get("tavily") == asdict(TavilySettings()):
+            d.pop("tavily", None)
         return d
 
     def setup_environment(self) -> None:
