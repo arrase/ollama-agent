@@ -11,6 +11,7 @@ Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to i
 - **Automatic Context Window**: Resolves the model's effective context window (`num_ctx`) automatically from Ollama metadata, or allows manual override in config.
 - **Per-session Model Switching**: Change the model mid-conversation and continue from that point with the new model (context preserved). The change is not permanent and only affects the current session.
 - **Tool-Powered**: The agent can execute shell commands via an integrated shell backend, allowing it to interact with your local environment to perform tasks.
+- **Web Search & Fetch**: Optionally search the web and fetch readable page content through Tavily-powered built-in tools.
 - **MCP Integration**: Extend the main agent with [Model Context Protocol](https://modelcontextprotocol.io/) servers (`mcp_servers.json`) that provide additional tools as isolated subagents.
 - **Custom Subagents**: Define specialized subagents in `settings.yaml` with their own model, skills, and MCP servers — each with isolated context for clean delegation.
 - **Session Management**: Conversations are automatically saved and can be reloaded, deleted, or switched between.
@@ -292,6 +293,37 @@ rag:
 | `model.context_window` | If set, forces the runtime `num_ctx` for the selected model. Leave `null` to let the app resolve it automatically. |
 | `runtime.builtin_tool_timeout` | Timeout in seconds for tool executions. |
 | `runtime.inherit_env` | If true, local shell commands execute with the parent's full environment variables (e.g. PATH). |
+
+### Tavily Web Search
+
+Ollama Agent can optionally provide `web_search` and `web_fetch` tools through
+[Tavily](https://www.tavily.com/). Add a Tavily API key to
+`~/.ollama-agent/settings.yaml` to enable both tools:
+
+```yaml
+tavily:
+  api_key: "tvly-your-api-key"
+  max_results: 5
+  search_depth: basic
+  chunks_per_source: 3
+  extract_depth: basic
+  max_content_chars: 20000
+```
+
+Alternatively, leave `api_key` empty and set the standard environment variable:
+
+```bash
+export TAVILY_API_KEY="tvly-your-api-key"
+```
+
+`web_search` returns ranked source snippets and supports general, news, and
+finance searches, date ranges, and domain filters. `web_fetch` uses Tavily
+Extract to retrieve readable Markdown from a selected URL. The tools are not
+registered when neither configuration source contains an API key.
+
+Web queries and fetched URLs are sent to Tavily and may count against your
+Tavily plan. Keep `settings.yaml` private because an API key stored there is
+plain text.
 
 ### Context Window Resolution
 

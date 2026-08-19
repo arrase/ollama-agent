@@ -1,6 +1,6 @@
 # Configuration Reference
 
-`ollama-agent` uses a centralized YAML configuration file stored at `~/.ollama-agent/settings.yaml` to manage model parameters, runtime security policies, document retrieval settings, context loading limits, telemetry tracing, and subagent declarations.
+`ollama-agent` uses a centralized YAML configuration file stored at `~/.ollama-agent/settings.yaml` to manage model parameters, runtime security policies, document retrieval settings, optional web access, context loading limits, telemetry tracing, and subagent declarations.
 
 ---
 
@@ -43,6 +43,15 @@ mentions:
   max_files: 100                          # Maximum number of files attached per directory mention
   max_total_size: 10485760                # Maximum total context payload size in bytes (10 MB)
   max_completions: 200                    # Maximum autocompletion candidates displayed in REPL
+
+# Optional Tavily Web Search & Page Extraction
+tavily:
+  api_key: ""                            # Tavily key; TAVILY_API_KEY is used when empty
+  max_results: 5                         # Maximum search results returned to the model (1-20)
+  search_depth: "basic"                  # Search depth: basic or advanced
+  chunks_per_source: 3                   # Relevant content chunks returned per source
+  extract_depth: "basic"                 # Page extraction depth: basic or advanced
+  max_content_chars: 20000               # Maximum fetched page content returned to the model
 
 # Telemetry & Tracing via LangSmith
 langsmith:
@@ -101,6 +110,48 @@ flowchart TD
    ```
    ModelCapabilityError: Model 'llama2:latest' does not support tools.
    ```
+
+---
+
+## Tavily Web Search & Page Extraction
+
+Tavily integration adds two optional built-in tools:
+
+* `web_search`: Returns ranked web results with source URLs and relevant snippets.
+* `web_fetch`: Extracts readable Markdown from a selected HTTP or HTTPS URL.
+
+The tools are registered only when a key is present in `tavily.api_key` or the
+`TAVILY_API_KEY` environment variable. The YAML value takes precedence when
+both are set.
+
+```yaml
+tavily:
+  api_key: "tvly-your-api-key"
+  max_results: 5
+  search_depth: basic
+  chunks_per_source: 3
+  extract_depth: basic
+  max_content_chars: 20000
+```
+
+`max_results` is both the default and the upper bound for model-requested
+result counts. Tavily supports up to 20 results. `max_content_chars` prevents a
+large page extraction from overwhelming the local model's context window.
+
+`search_depth` and `extract_depth` accept `basic` or `advanced`. Advanced
+requests can provide better recall at a higher Tavily credit cost. Search
+answers, raw page content, and images are not requested during `web_search`;
+the local Ollama model synthesizes its answer from the returned source
+snippets and can call `web_fetch` when it needs more detail.
+
+!!! warning
+    Web queries and fetched URLs are sent to Tavily. An API key stored in
+    `settings.yaml` is plain text, so keep the file private and never commit it
+    to source control.
+
+See the [Tavily Search API](https://docs.tavily.com/documentation/api-reference/endpoint/search)
+and [Extract API](https://docs.tavily.com/documentation/api-reference/endpoint/extract)
+for provider behavior and usage details.
 
 ---
 

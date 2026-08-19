@@ -50,6 +50,11 @@
     <p>Native support for Model Context Protocol servers to dynamically extend agent capabilities with external tools, APIs, and databases.</p>
   </div>
   <div class="feature-card">
+    <i class="fa-solid fa-globe feature-icon"></i>
+    <h3>Web Search & Fetch</h3>
+    <p>Optional Tavily integration for current web results and readable page extraction through built-in agent tools.</p>
+  </div>
+  <div class="feature-card">
     <i class="fa-solid fa-wand-magic-sparkles feature-icon"></i>
     <h3>Agent Skills</h3>
     <p>Reusable, modular skill definitions adhering to the Agent Skills spec with progressive disclosure and dynamic context loading.</p>
@@ -86,4 +91,4 @@ Explore the complete technical guides for Ollama Agent:
 - **[MCP & Subagents Architecture](mcp_subagents.md)**: Model Context Protocol setup, subagent configuration, and isolated task delegation.
 - **[RAG Engine Guide](rag.md)**: Local vector database creation, document chunking, embeddings setup with Ollama & Qdrant.
 - **[Skills, Tasks & Memory](skills_tasks_memory.md)**: Authoring reusable skills, managing saved task templates, and configuring persistent `MEMORY.md`.
-- **[Configuration & Tracing](configuration.md)**: Comprehensive `settings.yaml` reference, context window auto-resolution, and model reasoning effort levels.
+- **[Configuration & Tracing](configuration.md)**: Comprehensive `settings.yaml` reference, Tavily web tools, context window auto-resolution, and model reasoning effort levels.
