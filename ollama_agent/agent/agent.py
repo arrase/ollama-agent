@@ -40,7 +40,6 @@ from ..streaming.parsers import streaming_reasoning, streaming_text
 from .builtin_tools import BUILTIN_TOOLS, get_tool_timeout
 from .middleware import stream_tool_events_mw
 from .subagents import build_subagents
-from .web_tools import build_tavily_tools
 
 _log = logging.getLogger(__name__)
 
@@ -141,9 +140,6 @@ class AgentRuntime:
         # MCP flat tools (for main agent, from mcp_servers.json)
         mcp_tools = await load_main_mcp_tools(self._exit_stack)
 
-        # Optional Tavily web search and page extraction tools
-        web_tools = build_tavily_tools(self.settings.tavily)
-
         # Custom subagents (from settings.yaml)
         subagents = await build_subagents(
             self.settings.subagents,
@@ -176,7 +172,7 @@ class AgentRuntime:
 
         kwargs: dict[str, Any] = dict(
             model=model,
-            tools=[*BUILTIN_TOOLS, *web_tools, *mcp_tools],
+            tools=[*BUILTIN_TOOLS, *mcp_tools],
             system_prompt=self._instructions,
             backend=backend,
             memory=["/agent/MEMORY.md"],
