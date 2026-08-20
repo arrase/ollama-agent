@@ -19,7 +19,7 @@ AgentHeader {
 #chat-scroll {
     background: #0d1117;
     height: 1fr;
-    padding: 1 2;
+    padding: 1 0 1 2;
     scrollbar-size: 1 1;
     scrollbar-color: #30363d;
     scrollbar-color-active: #38bdf8;
