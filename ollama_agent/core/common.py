@@ -73,9 +73,25 @@ def final_text_from_state(state: dict[str, Any]) -> str:
     return str(state)
 
 
+_WINDOWS_RESERVED_NAMES: frozenset[str] = frozenset({
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+})
+
+
 def validate_identifier(name: str, label: str = "identifier") -> str:
-    """Validate that *name* contains only [A-Za-z0-9_-]. Raises ValueError otherwise."""
+    """Validate that *name* contains only [A-Za-z0-9_-] and is not a reserved system name."""
     name = name.strip()
-    if not name or not re.fullmatch(r"[A-Za-z0-9_-]+", name):
-        raise ValueError(f"Invalid {label}. Use only letters, numbers, '_' and '-'.")
+    if (
+        not name
+        or not re.fullmatch(r"[A-Za-z0-9_-]+", name)
+        or name.upper() in _WINDOWS_RESERVED_NAMES
+    ):
+        raise ValueError(
+            f"Invalid {label}. Use only letters, numbers, '_' and '-' (reserved device names not allowed)."
+        )
     return name

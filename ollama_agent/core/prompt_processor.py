@@ -8,6 +8,8 @@ import os
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlparse
+from urllib.request import url2pathname
 
 
 class PromptProcessingError(Exception):
@@ -47,11 +49,14 @@ _MIME_EXTENSIONS: dict[str, str] = {
 
 
 def get_file_type(file_path: Path) -> str:
-    """Guess the MIME type of a file using mimetypes, with custom extension fallback."""
+    """Guess the MIME type of a file, prioritizing explicit text overrides and custom extensions."""
+    suffix = file_path.suffix.lower()
+    if suffix == ".ts":
+        return "text/plain"
+    if suffix in _MIME_EXTENSIONS:
+        return _MIME_EXTENSIONS[suffix]
     mime, _ = mimetypes.guess_type(str(file_path))
-    if mime:
-        return mime
-    return _MIME_EXTENSIONS.get(file_path.suffix.lower(), "")
+    return mime or ""
 
 
 def classify_multimodal_file(file_path: Path) -> str | None:
@@ -240,14 +245,23 @@ def process_prompt_mentions(
 
         if not is_quoted:
             while path_str and path_str[-1] in ".,?:;!":
-                if path_str.endswith("..") or path_str == ".":
+                if (
+                    path_str.endswith("..")
+                    or path_str == "."
+                    or bool(re.match(r"^[a-zA-Z]:$", path_str))
+                ):
                     break
                 path_str = path_str[:-1]
 
         if not path_str:
             continue
 
-        candidate_path = Path(path_str).expanduser()
+        resolved_target = path_str
+        if resolved_target.startswith(("file://", "file:")):
+            parsed = urlparse(resolved_target)
+            resolved_target = url2pathname(unquote(parsed.path))
+
+        candidate_path = Path(resolved_target).expanduser()
         if not candidate_path.is_absolute():
             candidate_path = (Path.cwd() / candidate_path).resolve()
         else:
@@ -289,9 +303,9 @@ def process_prompt_mentions(
     cwd = Path.cwd()
     for file_path, content in sorted(all_context_contents.items()):
         try:
-            rel_path = file_path.relative_to(cwd)
+            rel_path = file_path.relative_to(cwd).as_posix()
         except ValueError:
-            rel_path = file_path
+            rel_path = file_path.as_posix()
 
         context_blocks.append(
             f'<context_file path="{rel_path}">\n{content}\n</context_file>'

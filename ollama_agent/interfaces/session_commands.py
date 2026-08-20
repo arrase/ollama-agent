@@ -34,14 +34,13 @@ def get_available_sessions(db_path: Path = HISTORY_DB_PATH) -> list[dict[str, An
         return []
 
     try:
-        conn = sqlite3.connect(str(db_path))
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT thread_id, COUNT(*) as steps FROM checkpoints GROUP BY thread_id ORDER BY rowid DESC"
-        )
-        rows = cursor.fetchall()
-        conn.close()
-        return [{"thread_id": row[0], "steps": row[1]} for row in rows]
+        with sqlite3.connect(str(db_path)) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT thread_id, COUNT(*) as steps FROM checkpoints GROUP BY thread_id ORDER BY MAX(rowid) DESC"
+            )
+            rows = cursor.fetchall()
+            return [{"thread_id": row[0], "steps": row[1]} for row in rows]
     except (sqlite3.Error, OSError):
         return []
 
@@ -130,12 +129,11 @@ def delete_session(
         return False
 
     try:
-        conn = sqlite3.connect(str(db_path))
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM checkpoints WHERE thread_id = ?", (resolved,))
-        cursor.execute("DELETE FROM writes WHERE thread_id = ?", (resolved,))
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(str(db_path)) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM checkpoints WHERE thread_id = ?", (resolved,))
+            cursor.execute("DELETE FROM writes WHERE thread_id = ?", (resolved,))
+            conn.commit()
         console.print(f"[green]✓ Deleted session:[/green] [cyan]{resolved}[/cyan]")
         return True
     except (sqlite3.Error, OSError) as exc:

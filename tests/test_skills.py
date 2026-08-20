@@ -79,6 +79,18 @@ class TestSkillsManager(unittest.TestCase):
         self.assertEqual(all_skills[0][1].name, "Alpha Skill")
         self.assertEqual(all_skills[1][1].name, "Beta Skill")
 
+    def test_get_skill_with_lowercase_filename(self) -> None:
+        skill_dir = self.skills_dir / "custom-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "skill.md").write_text(
+            "---\nname: Lowercase Skill\ndescription: Discovered via lowercase\n---\n# Help",
+            encoding="utf-8",
+        )
+        loaded = self.mgr.get("custom-skill")
+        self.assertIsNotNone(loaded)
+        assert loaded is not None
+        self.assertEqual(loaded.name, "Lowercase Skill")
+
 
 if __name__ == "__main__":
     unittest.main()

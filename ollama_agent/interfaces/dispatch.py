@@ -68,6 +68,16 @@ REPL_SECTIONS: tuple[str, ...] = (
 )
 
 
+async def _cli_export_session(
+    console: Console,
+    runtime: Any,
+    session_id: str,
+    output_path: str | None = None,
+) -> None:
+    async with runtime:
+        await export_session(console, runtime, session_id, output_path=output_path)
+
+
 def build_cli_handlers(
     args: argparse.Namespace,
     *,
@@ -75,7 +85,7 @@ def build_cli_handlers(
     rag_ctx: RAGContext,
     skills_ctx: SkillsContext,
 ) -> dict[str, CLIHandler]:
-    """Build the CLI command registry for parsed argparse args."""
+    """Map parsed CLI subcommands to their synchronous or async handler functions."""
 
     async def rag_add() -> None:
         load_rag_database(rag_ctx, args.database)
@@ -114,11 +124,11 @@ def build_cli_handlers(
         ),
         "session-list": lambda: list_sessions(Console()),
         "session-delete": lambda: delete_session(Console(), args.session_id),
-        "session-export": lambda: export_session(
+        "session-export": lambda: _cli_export_session(
             Console(),
-            args._runtime if hasattr(args, "_runtime") else None,  # type: ignore[arg-type]
+            args._runtime,
             args.session_id,
-            output_path=getattr(args, "output", None),
+            output_path=args.output,
         ),
     }
 

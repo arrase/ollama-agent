@@ -56,7 +56,7 @@ class RAGManager:
 
     def __init__(self, settings: RAGSettings) -> None:
         self.settings = settings
-        self._rag_dir = Path(self.settings.rag_dir)
+        self._rag_dir = Path(self.settings.rag_dir).expanduser().resolve()
         self._rag_dir.mkdir(parents=True, exist_ok=True)
         self._client: QdrantClient | None = None
         self._current_db: str | None = None

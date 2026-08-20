@@ -109,7 +109,9 @@ class ReplInput(TextArea):
     """Interactive input field that captures Tab/arrow keys for autocomplete."""
 
     BINDINGS = [
+        ("ctrl+v", "paste", "Paste"),
         ("super+v", "paste", "Paste"),
+        ("shift+insert", "paste", "Paste"),
     ]
 
     def __init__(self, **kwargs: Any) -> None:
@@ -143,7 +145,7 @@ class ReplInput(TextArea):
             if history_path.exists():
                 with open(history_path, "r", encoding="utf-8") as f:
                     for line in f:
-                        entry = line.strip("\n")
+                        entry = line.rstrip("\r\n")
                         if entry and not entry.startswith("/") and entry not in loaded_set:
                             res.append(entry)
                             loaded_set.add(entry)

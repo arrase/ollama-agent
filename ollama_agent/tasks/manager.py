@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any
@@ -67,9 +68,11 @@ class TaskManager(BaseFileStoreManager[Task]):
         path = self._path(task_id)
         if path.exists() and not overwrite:
             raise FileExistsError(f"Task already exists: {task_id}")
-        path.write_text(
+        tmp_path = path.with_suffix(".tmp")
+        tmp_path.write_text(
             yaml.safe_dump(asdict(task), allow_unicode=True), encoding="utf-8"
         )
+        os.replace(tmp_path, path)
         return task_id
 
     def find_matches(self, prefix: str) -> list[tuple[str, Task]]:

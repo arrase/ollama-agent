@@ -455,15 +455,17 @@ class OllamaAgentApp(App):
                 return
 
             root_path = Path(root)
+            prefix_lower = prefix.lower()
             candidate_dirs = []
             for dirname in sorted(dirs):
                 if not show_hidden and dirname.startswith("."):
                     continue
                 try:
-                    rel = str((root_path / dirname).relative_to(cwd)) + "/"
+                    rel = (root_path / dirname).relative_to(cwd).as_posix() + "/"
                 except ValueError:
                     continue
-                if prefix.startswith(rel) or rel.startswith(prefix):
+                rel_lower = rel.lower()
+                if prefix_lower.startswith(rel_lower) or rel_lower.startswith(prefix_lower):
                     candidate_dirs.append((dirname, rel))
 
             dirs[:] = [d for d, _ in candidate_dirs]
@@ -471,7 +473,8 @@ class OllamaAgentApp(App):
             for _, rel in candidate_dirs:
                 if count >= max_completions:
                     return
-                if rel == prefix or not rel.startswith(prefix):
+                rel_lower = rel.lower()
+                if rel_lower == prefix_lower or not rel_lower.startswith(prefix_lower):
                     continue
                 count += 1
                 yield rel, "dir"
@@ -482,10 +485,10 @@ class OllamaAgentApp(App):
                 if not show_hidden and filename.startswith("."):
                     continue
                 try:
-                    rel = str((root_path / filename).relative_to(cwd))
+                    rel = (root_path / filename).relative_to(cwd).as_posix()
                 except ValueError:
                     continue
-                if not rel.startswith(prefix):
+                if not rel.lower().startswith(prefix_lower):
                     continue
                 meta = "file"
                 try:
@@ -837,6 +840,8 @@ class OllamaREPL:
             await app.run_async()
         except KeyboardInterrupt:
             pass
+        finally:
+            await self.cleanup()
 
     async def _switch_model(self, model_name: str) -> None:
         await set_model(self.console, model_name, runtime=self.runtime)

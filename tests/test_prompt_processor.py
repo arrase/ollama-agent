@@ -107,6 +107,21 @@ class TestPromptProcessor(unittest.TestCase):
         with self.assertRaises(PromptProcessingError):
             process_prompt_mentions(prompt)
 
+    def test_get_file_type_typescript_classified_as_text(self) -> None:
+        self.assertEqual(classify_multimodal_file(Path("index.ts")), None)
+
+    def test_process_prompt_mentions_with_file_uri(self) -> None:
+        file = self.base_path / "service.py"
+        file.write_text("class Service: pass", encoding="utf-8")
+
+        file_uri = file.as_uri()
+        prompt = f"Analyze @{file_uri}"
+        processed, attachments = process_prompt_mentions(prompt)
+
+        self.assertIn("--- Attached Context ---", processed)
+        self.assertIn("class Service: pass", processed)
+        self.assertEqual(len(attachments), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

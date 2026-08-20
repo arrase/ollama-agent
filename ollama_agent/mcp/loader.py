@@ -15,11 +15,11 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from ..settings import MCP_SERVERS_PATH, SubAgentMCPServer
 
 _log = logging.getLogger(__name__)
-_ENV_RE = re.compile(r"\$\{(\w+)\}")
+_ENV_RE = re.compile(r"\$\{([^}]+)\}|%([^%]+)%")
 
 
 def _resolve_env(env: dict[str, str]) -> dict[str, str] | None:
-    """Resolve ``${VAR}`` patterns against ``os.environ``.
+    """Resolve ``${VAR}`` and ``%VAR%`` patterns against ``os.environ``.
 
     Returns the resolved dict (possibly empty) on success, or ``None``
     when required environment variables are missing.
@@ -28,12 +28,17 @@ def _resolve_env(env: dict[str, str]) -> dict[str, str] | None:
         return {}
     resolved: dict[str, str] = {}
     for key, value in env.items():
-        referenced = _ENV_RE.findall(value)
-        missing = [var for var in referenced if var not in os.environ]
-        if missing:
-            _log.warning("Missing environment variables: %s", ", ".join(missing))
+        def _replace(match: re.Match[str]) -> str:
+            var_name = match.group(1) or match.group(2)
+            if var_name not in os.environ:
+                raise KeyError(var_name)
+            return os.environ[var_name]
+
+        try:
+            resolved[key] = _ENV_RE.sub(_replace, value)
+        except KeyError as exc:
+            _log.warning("Missing environment variable: %s", exc)
             return None
-        resolved[key] = _ENV_RE.sub(lambda m: os.environ[m.group(1)], value)
     return resolved
 
 
@@ -99,8 +104,6 @@ async def load_main_mcp_tools(exit_stack: AsyncExitStack | None = None) -> list[
 
     try:
         client = MultiServerMCPClient(connections)  # type: ignore[arg-type]
-        if exit_stack is not None:
-            await exit_stack.enter_async_context(client)  # type: ignore[arg-type]
         tools = await client.get_tools()
         _log.info(
             "Loaded %d MCP tools from %d servers",
@@ -143,8 +146,6 @@ async def load_subagent_mcp_tools(
 
     try:
         client = MultiServerMCPClient(servers)  # type: ignore[arg-type]
-        if exit_stack is not None:
-            await exit_stack.enter_async_context(client)  # type: ignore[arg-type]
         tools = await client.get_tools()
         return tools
     except Exception as exc:
