@@ -32,7 +32,7 @@ flowchart TD
         ShellBackend["LocalShellBackend / CompositeBackend"]
         RAGEngine["Qdrant Vector Store & Ollama Embeddings"]
         MCPAdapter["MCP Server Adapters (mcp_servers.json)"]
-        MemoryStore["FilesystemBackend (/agent/MEMORY.md)"]
+        MemoryStore["FilesystemBackend (/agent/MEMORY.md, AGENTS.md)"]
     end
 
     REPL --> Runtime
@@ -67,7 +67,7 @@ sequenceDiagram
     participant LLM as Ollama LLM
 
     UI->>Runtime: reload() / run_streamed(prompt)
-    Runtime->>Backend: Initialize CompositeBackend (Shell + Virtual /agent/ + /skills/)
+    Runtime->>Backend: Initialize CompositeBackend (Shell + Virtual /agent/ + /skills/ + /project/)
     Runtime->>Graph: create_deep_agent(model, tools, backend, checkpointer, interrupt_on)
     UI->>Graph: astream(inputs, config, stream_mode)
     Graph->>LLM: Generate response / tool calls
@@ -79,10 +79,12 @@ sequenceDiagram
 #### Graph Construction Details
 - **Lifecycle Management**: `AgentRuntime` owns an internal `AsyncExitStack` to manage resources (SQLite database connections, MCP process pipes, and HTTP sessions). Calling `reload()` gracefully tears down existing resources and re-instantiates the graph.
 - **Backend Composition**: A `CompositeBackend` routes filesystem and tool requests:
-  - `/agent/`: Routed to `FilesystemBackend` pointing to `~/.ollama-agent/` (e.g. `MEMORY.md`).
+  - `/agent/`: Routed to `FilesystemBackend` pointing to `~/.ollama-agent/` (e.g. `MEMORY.md`, global `AGENTS.md`).
   - `/skills/`: Routed to `FilesystemBackend` pointing to `~/.ollama-agent/skills/`.
+  - `/project/`: Optional route to `FilesystemBackend` pointing to repository root when `AGENTS.md` is in an ancestor directory.
   - Default route: `LocalShellBackend` operating on the current working directory (`Path.cwd()`).
 - **Dynamic System Instructions**: The system prompt is constructed dynamically by blending base instructions, filesystem policy directives (traversal mode vs sandboxed mode), and local environment runtime metadata (`platform.system()`, `platform.release()`).
+
 
 ---
 

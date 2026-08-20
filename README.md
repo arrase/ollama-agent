@@ -16,8 +16,9 @@ Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to i
 - **Session Management**: Conversations are automatically saved and can be reloaded, deleted, or switched between.
 - **Task Management**: Save frequently used prompts as "tasks" and execute them with a simple command.
 - **Configurable**: Easily configure the model, Ollama host, context window, and reasoning effort.
-- **Persistent Memory**: Native memory layer backed by `MEMORY.md`, allowing the agent to persist long-term context across sessions.
+- **Persistent Memory & Project Guidelines**: Native memory layer backed by `MEMORY.md` and repository-level `AGENTS.md` standard support, allowing the agent to persist long-term context and follow project-specific conventions.
 - **RAG (Retrieval Augmented Generation)**: Create and manage document databases for context-aware responses using local embeddings and Qdrant.
+
 - **Skills**: Extend the agent with reusable, on-demand capabilities via the [Agent Skills specification](https://agentskills.io/specification). Skills provide task-specific instructions and context through progressive disclosure.
 - **File/Directory Context (@-mentions)**: Reference local files or directories directly in your prompts (e.g. `@src/main.py` or `@.`). Type `@` in the REPL to interactively autocomplete file and folder paths in the terminal!
 
@@ -335,9 +336,14 @@ langsmith:
 
 When configured, the agent will automatically inject these values into the environment upon startup, enabling deep tracing of tool executions, reasoning steps, and agent workflows. If omitted, no environment variables will be injected and tracing will remain disabled.
 
-## Persistent Memory
+## Persistent Memory & Project Guidelines (`AGENTS.md`)
 
-The agent manages its own long-term memory via a file located at `~/.ollama-agent/MEMORY.md`. The agent uses built-in tools to read, update, and persist facts, preferences, and context across sessions automatically.
+`ollama-agent` incorporates both persistent user memory and repository-level project instructions:
+
+- **Project Guidelines (`AGENTS.md`)**: The open standard for AI coding agent guidelines. When working in any repository, the agent automatically searches for `AGENTS.md` (in the current directory or traversing up to the `.git` project root) and injects project rules, testing workflows, and conventions into its context.
+- **Global Memory (`~/.ollama-agent/MEMORY.md`)**: Long-term persistent memory across sessions. The agent uses built-in tools to read, update, and persist user preferences, notes, and context across sessions automatically.
+- **Global Guidelines (`~/.ollama-agent/AGENTS.md`)**: Optional global default agent rules loaded across all sessions when present.
+
 
 ## RAG (Retrieval Augmented Generation)
 

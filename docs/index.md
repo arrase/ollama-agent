@@ -36,9 +36,10 @@
   </div>
   <div class="feature-card">
     <i class="fa-solid fa-brain feature-icon"></i>
-    <h3>Persistent Memory</h3>
-    <p>Native memory layer backed by <code>MEMORY.md</code>, enabling long-term cross-session knowledge retention and persistent project context.</p>
+    <h3>Memory & AGENTS.md</h3>
+    <p>Native memory layer backed by <code>MEMORY.md</code> and project-level <code>AGENTS.md</code> standard for repository guidelines and persistent context.</p>
   </div>
+
   <div class="feature-card">
     <i class="fa-solid fa-sitemap feature-icon"></i>
     <h3>Custom Subagents</h3>
@@ -85,5 +86,5 @@ Explore the complete technical guides for Ollama Agent:
 - **[CLI & REPL User Guide](cli_repl.md)**: Terminal interface commands, keyboard shortcuts, `@`-file mentions, multiline inputs, and non-interactive usage.
 - **[MCP & Subagents Architecture](mcp_subagents.md)**: Model Context Protocol setup, subagent configuration, and isolated task delegation.
 - **[RAG Engine Guide](rag.md)**: Local vector database creation, document chunking, embeddings setup with Ollama & Qdrant.
-- **[Skills, Tasks & Memory](skills_tasks_memory.md)**: Authoring reusable skills, managing saved task templates, and configuring persistent `MEMORY.md`.
+- **[Skills, Tasks & Memory](skills_tasks_memory.md)**: Authoring reusable skills, managing saved task templates, `AGENTS.md` project rules, and configuring persistent `MEMORY.md`.
 - **[Configuration & Tracing](configuration.md)**: Comprehensive `settings.yaml` reference, context window auto-resolution, and model reasoning effort levels.

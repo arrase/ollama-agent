@@ -8,7 +8,9 @@ from .config import (
     Settings,
     SubAgentMCPServer,
     SubAgentSettings,
+    ensure_agents_file,
     ensure_memory_file,
+    find_agents_file,
     load_instructions,
     load_fs_policy_traversal,
     load_fs_policy_sandboxed,
@@ -17,6 +19,8 @@ from .config import (
     save_settings,
 )
 from .paths import (
+    AGENTS_MD_NAME,
+    AGENTS_PATH,
     APP_DIR,
     HISTORY_DB_PATH,
     INSTRUCTIONS_PATH,
@@ -31,6 +35,8 @@ from .paths import (
 
 __all__ = [
     # Paths
+    "AGENTS_MD_NAME",
+    "AGENTS_PATH",
     "APP_DIR",
     "HISTORY_DB_PATH",
     "INSTRUCTIONS_PATH",
@@ -49,7 +55,9 @@ __all__ = [
     "Settings",
     "SubAgentMCPServer",
     "SubAgentSettings",
+    "ensure_agents_file",
     "ensure_memory_file",
+    "find_agents_file",
     "load_instructions",
     "load_fs_policy_traversal",
     "load_fs_policy_sandboxed",
@@ -57,3 +65,4 @@ __all__ = [
     "reset_config",
     "save_settings",
 ]
+

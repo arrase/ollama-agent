@@ -11,6 +11,8 @@ from typing import Any, Callable, Self
 import yaml  # type: ignore[import-untyped]
 
 from .paths import (
+    AGENTS_MD_NAME,
+    AGENTS_PATH,
     FS_POLICY_SANDBOXED_PATH,
     FS_POLICY_TRAVERSAL_PATH,
     INSTRUCTIONS_PATH,
@@ -270,6 +272,31 @@ def ensure_memory_file(memory_path: Path = MEMORY_PATH) -> Path:
             encoding="utf-8",
         )
     return memory_path
+
+
+def find_agents_file(start_dir: Path | None = None) -> Path | None:
+    """Find AGENTS.md in the given directory or its parent hierarchy up to git root."""
+    current = (start_dir or Path.cwd()).resolve()
+    for parent in [current, *current.parents]:
+        for candidate in ("AGENTS.md", "agents.md", ".agents.md"):
+            target = parent / candidate
+            if target.is_file():
+                return target
+        if (parent / ".git").exists():
+            break
+    return None
+
+
+def ensure_agents_file(agents_path: Path = AGENTS_PATH) -> Path:
+    """Ensure an AGENTS.md file exists, creating it with defaults if needed."""
+    if not agents_path.exists():
+        agents_path.parent.mkdir(parents=True, exist_ok=True)
+        agents_path.write_text(
+            "# Agent Guidelines\n\nProject-specific instructions for AI agents.\n",
+            encoding="utf-8",
+        )
+    return agents_path
+
 
 
 # ---------------------------------------------------------------------------

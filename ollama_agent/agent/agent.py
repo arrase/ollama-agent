@@ -31,6 +31,7 @@ from ..settings import (
     SKILLS_DIR,
     Settings,
     ensure_memory_file,
+    find_agents_file,
     load_instructions,
     load_fs_policy_traversal,
     load_fs_policy_sandboxed,
@@ -126,12 +127,32 @@ class AgentRuntime:
             root_dir=SKILLS_DIR,
             virtual_mode=True,
         )
+        routes: dict[str, Any] = {
+            "/agent/": agent_backend,
+            "/skills/": skills_backend,
+        }
+
+        # Memory sources: global user memory and AGENTS.md (project / global)
+        memory_sources: list[str] = ["/agent/MEMORY.md"]
+        if (MEMORY_PATH.parent / "AGENTS.md").is_file():
+            memory_sources.append("/agent/AGENTS.md")
+
+        project_agents = find_agents_file(Path.cwd())
+        if project_agents is not None:
+            if project_agents.parent == Path.cwd().resolve():
+                memory_sources.append(f"/{project_agents.name}")
+            else:
+                routes["/project/"] = FilesystemBackend(
+                    root_dir=project_agents.parent,
+                    virtual_mode=True,
+                )
+                memory_sources.append(f"/project/{project_agents.name}")
+        else:
+            memory_sources.append("/AGENTS.md")
+
         backend = CompositeBackend(
             default=default_backend,
-            routes={
-                "/agent/": agent_backend,
-                "/skills/": skills_backend,
-            },
+            routes=routes,
         )
 
         # MCP flat tools (for main agent, from mcp_servers.json)
@@ -172,7 +193,7 @@ class AgentRuntime:
             tools=[*BUILTIN_TOOLS, *mcp_tools],
             system_prompt=self._instructions,
             backend=backend,
-            memory=["/agent/MEMORY.md"],
+            memory=memory_sources,
             skills=["/skills/"],
             checkpointer=await self._sqlite_checkpointer(),
             middleware=[

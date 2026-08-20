@@ -15,11 +15,14 @@ from ollama_agent.settings.config import (
     Settings,
     SubAgentMCPServer,
     SubAgentSettings,
+    ensure_agents_file,
     ensure_memory_file,
+    find_agents_file,
     load_instructions,
     load_settings,
     save_settings,
 )
+from ollama_agent.settings.paths import AGENTS_MD_NAME, AGENTS_PATH
 
 
 class TestConfigManagement(unittest.TestCase):
@@ -91,11 +94,30 @@ class TestConfigManagement(unittest.TestCase):
         self.assertTrue(memory_file.exists())
         self.assertIn("Long-Term Memory", memory_file.read_text(encoding="utf-8"))
 
+    def test_ensure_agents_file_creates_file_with_scaffold(self) -> None:
+        agents_file = Path(self.temp_dir.name) / AGENTS_MD_NAME
+        self.assertFalse(agents_file.exists())
+
+        result = ensure_agents_file(agents_file)
+        self.assertEqual(result, agents_file)
+        self.assertTrue(agents_file.exists())
+        self.assertIn("Agent Guidelines", agents_file.read_text(encoding="utf-8"))
+
+    def test_find_agents_file_resolution(self) -> None:
+        proj_dir = Path(self.temp_dir.name) / "my_project"
+        proj_dir.mkdir()
+        agents_file = proj_dir / "AGENTS.md"
+        agents_file.write_text("# Project Guidelines\n", encoding="utf-8")
+
+        found = find_agents_file(proj_dir)
+        self.assertEqual(found, agents_file)
+
     def test_load_instructions_creates_default_if_missing(self) -> None:
         instructions_file = Path(self.temp_dir.name) / "instructions.md"
         content = load_instructions(instructions_file)
         self.assertTrue(instructions_file.exists())
         self.assertTrue(len(content) > 0)
+
 
 
 if __name__ == "__main__":

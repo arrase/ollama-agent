@@ -1,10 +1,12 @@
-# Skills System, Task Automation & Long-term Memory
+# Skills System, Task Automation & Agent Memory (`AGENTS.md` & `MEMORY.md`)
 
-This document covers three core features that enable `ollama-agent` to adapt, automate repetitive routines, and retain long-term persistent context:
+This document covers four core features that enable `ollama-agent` to adapt, automate repetitive routines, and retain project context and long-term persistent memory:
 
 1. **Skills System** (Adhering to the Agent Skills specification)
 2. **Task Automation System** (Pre-configured prompt templates and models)
-3. **Long-Term Persistent Memory** (`MEMORY.md` file integration)
+3. **Project Agent Guidelines** (`AGENTS.md` standard integration)
+4. **Long-Term Persistent Memory** (`MEMORY.md` file integration)
+
 
 ---
 
@@ -111,7 +113,27 @@ When running a task (`task-run <id>`):
 
 ---
 
-## 3. Long-Term Persistent Memory
+## 3. Project Guidelines (`AGENTS.md`)
+
+`ollama-agent` natively supports the open **`AGENTS.md` standard** (governed by the Agentic AI Foundation / Linux Foundation) for repository-level agent guidelines and coding standards.
+
+### Purpose and Placement
+`AGENTS.md` acts as a "README for AI agents", providing operational context such as:
+- **Build & Test Commands**: Exact commands to run tests, linters, and builds (e.g., `pytest`, `cargo test`, `npm test`).
+- **Coding Standards**: Architecture conventions, naming rules, style guidelines, and forbidden patterns.
+- **Workflow Instructions**: Git commit formats, PR requirements, or task execution flows.
+
+### Hierarchical Discovery & Resolution
+When `AgentRuntime` starts or reloads:
+1. It searches the active directory (`Path.cwd()`) for `AGENTS.md` (or `agents.md`, `.agents.md`).
+2. If not found in `cwd`, it traverses upward through parent directories until the repository root (marked by `.git`) or filesystem boundary.
+3. If found in an ancestor directory, `AgentRuntime` mounts the repository root to `/project/` in the virtual composite backend and loads `/project/AGENTS.md`.
+4. If found in `cwd`, it is loaded directly as `/AGENTS.md`.
+5. If a global `~/.ollama-agent/AGENTS.md` exists, it is loaded alongside project guidelines as `/agent/AGENTS.md`.
+
+---
+
+## 4. Long-Term Persistent Memory (`MEMORY.md`)
 
 `ollama-agent` supports persistent memory across sessions using a structured markdown file stored at `~/.ollama-agent/MEMORY.md`.
 
@@ -124,7 +146,7 @@ During startup (`AgentRuntime._build_graph`):
    No persistent memories yet.
    ```
 2. The file's parent directory (`~/.ollama-agent/`) is mounted under the virtual filesystem route `/agent/`.
-3. `create_deep_agent()` is initialized with `memory=["/agent/MEMORY.md"]`.
+3. `create_deep_agent()` is initialized with memory sources containing `/agent/MEMORY.md` and resolved `AGENTS.md` paths.
 
 ### Memory Reading and Updating Workflow
 
@@ -132,7 +154,7 @@ During startup (`AgentRuntime._build_graph`):
 sequenceDiagram
     participant User
     participant Agent as Agent Runtime
-    participant Mem as /agent/MEMORY.md
+    participant Mem as /agent/MEMORY.md & AGENTS.md
     
     User->>Agent: "Remember that I prefer pytest over unittest for Python projects."
     Agent->>Mem: Read current /agent/MEMORY.md
@@ -141,6 +163,7 @@ sequenceDiagram
     Agent-->>User: "Updated long-term memory with your preference."
 ```
 
-- **Reading**: The agent reads `/agent/MEMORY.md` whenever it needs to recall user preferences, architectural rules, or past decisions across sessions.
-- **Writing**: The agent edits `/agent/MEMORY.md` directly using file editing tools when instructed to remember facts, project details, or user preferences.
+- **Reading**: The agent automatically reads memory and project guidelines at the start of each execution turn via `MemoryMiddleware`.
+- **Writing**: The agent edits `/agent/MEMORY.md` or `/AGENTS.md` directly using file editing tools when instructed to record new preferences or architectural patterns.
 - **Persistence**: Memory persists across system restarts, terminal sessions, and model switches.
+
