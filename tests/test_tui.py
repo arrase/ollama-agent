@@ -152,6 +152,54 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(handled_down)
                 self.assertEqual(inp.text, "second message")
 
+    async def test_repl_input_multiline_and_keys(self) -> None:
+        class InputApp(App):
+            def compose(self) -> ComposeResult:
+                yield OptionList(id="autocomplete-list")
+                yield ReplInput(id="repl-input")
+
+            def on_mount(self) -> None:
+                self.query_one("#autocomplete-list", OptionList).display = False
+
+        app = InputApp()
+        async with app.run_test() as pilot:
+            inp = app.query_one(ReplInput)
+            inp.add_history_entry("prev command")
+
+            # 1. Height adjusts on multiline text
+            inp.text = "line 1\nline 2\nline 3"
+            await pilot.pause()
+            self.assertEqual(inp.styles.height.value, 3)
+
+            # 2. Text reset resets height to default minimum (2)
+            inp.text = ""
+            await pilot.pause()
+            self.assertEqual(inp.styles.height.value, 2)
+
+            # 3. Backslash continuation (\ + Enter) inserts newline
+            inp.text = "SELECT * FROM test \\"
+            inp.action_cursor_line_end()
+            inp.on_key(events.Key("enter", "\r"))
+            await pilot.pause()
+            self.assertEqual(inp.text, "SELECT * FROM test \n")
+            self.assertEqual(inp.styles.height.value, 2)
+
+            # 4. Multiline navigation vs history
+            inp.text = "first line\nsecond line"
+            await pilot.pause()
+            inp.cursor_location = (1, 0)
+            # Up on second line should NOT trigger history
+            self.assertFalse(inp._handle_history_key(events.Key("up", "up")))
+
+            # Up on first line but col > 0 should move cursor to (0, 0)
+            inp.cursor_location = (0, 5)
+            self.assertTrue(inp._handle_history_key(events.Key("up", "up")))
+            self.assertEqual(inp.cursor_location, (0, 0))
+
+            # Up on (0, 0) should trigger history
+            self.assertTrue(inp._handle_history_key(events.Key("up", "up")))
+            self.assertEqual(inp.text, "prev command")
+
     async def test_tool_approval_widget_keyboard_and_decisions(self) -> None:
         app_ref_mock = MagicMock()
         app_ref_mock.repl.runtime.auto_approved_tools = set()

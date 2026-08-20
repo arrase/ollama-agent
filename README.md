@@ -4,7 +4,7 @@ Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to i
 
 ## Features
 
-- **Interactive REPL**: A modern, terminal-based chat interface with Markdown rendering and slash commands.
+- **Interactive REPL**: A modern, terminal-based chat interface with Markdown rendering, multiline input support (`\ + Enter`), and slash commands.
 - **Non-Interactive CLI**: Execute single prompts directly from your command line for quick queries.
 - **Native Ollama Integration**: Connects directly to Ollama's native API (via `langchain-ollama`), no OpenAI compatibility layer needed.
 - **Thinking / Reasoning**: Leverages Ollama's native [thinking capability](https://docs.ollama.com/capabilities/thinking) to expose model reasoning traces. Configurable per model via `--effort`.
@@ -92,6 +92,13 @@ The REPL provides a persistent chat session. You can use slash commands to manag
 - `/skill-show <id>`: Show skill details.
 - `/skill-create <id> [--force]`: Create a skill interactively using a modal form.
 - `/skill-delete <id>`: Delete a skill.
+
+#### Multiline Input
+
+To enter multiline text or code blocks:
+- **Add a new line**: End the line with a backslash `\` and press `Enter` (`\ + Enter`). The trailing backslash is automatically removed and a new line is inserted into the prompt editor.
+- **Submit prompt**: Press `Enter` without a trailing backslash to send the message.
+- **Navigation**: Use the `↑` and `↓` arrow keys to move the cursor freely between lines. History navigation is triggered only when pressing `↑` at the beginning `(0, 0)` or `↓` at the end of the text.
 
 ### Non-Interactive Mode
 

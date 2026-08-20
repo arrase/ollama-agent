@@ -69,15 +69,16 @@ class AgentFooter(Static):
     def update_footer(self) -> None:
         if self._is_generating:
             self.update(
-                "[bold #38bdf8]⟡ Generating response...[/bold #38bdf8]  "
-                "[dim]press [bold #f87171]esc[/bold #f87171] to interrupt[/dim]"
+                "[bold #38bdf8]⟡ Generating response...[/bold #38bdf8]   "
+                "[dim]press [bold #f87171]esc[/bold #f87171] or [bold #f87171]^C[/bold #f87171] to interrupt[/dim]"
             )
         else:
             self.update(
-                "[dim]esc[/dim] [bold #8b949e]interrupt[/bold #8b949e]   "
-                "[dim]^C[/dim] [bold #8b949e]quit[/bold #8b949e]   "
+                "[dim]enter[/dim] [bold #8b949e]send[/bold #8b949e]   "
+                "[dim]\\+enter[/dim] [bold #8b949e]newline[/bold #8b949e]   "
                 "[dim]tab[/dim] [bold #8b949e]complete[/bold #8b949e]   "
                 "[dim]↑↓[/dim] [bold #8b949e]history[/bold #8b949e]   "
+                "[dim]esc[/dim] [bold #8b949e]interrupt[/bold #8b949e]   "
                 "[dim]/help[/dim] [bold #8b949e]commands[/bold #8b949e]"
             )
 
@@ -102,7 +103,15 @@ class ReplInput(TextArea):
 
     def on_mount(self) -> None:
         super().on_mount()
+        self._update_height()
         self.run_worker(self._load_history())
+
+    def _update_height(self) -> None:
+        lines = max(2, min(8, self.document.line_count))
+        self.styles.height = lines
+
+    def on_text_area_changed(self, event: TextArea.Changed) -> None:
+        self._update_height()
 
     async def _load_history(self) -> None:
         history_path = APP_DIR / "tui_history.txt"
@@ -184,6 +193,15 @@ class ReplInput(TextArea):
 
     def _handle_history_key(self, event: events.Key) -> bool:
         if event.key == "up":
+            if self.document.line_count > 1:
+                row, col = self.cursor_location
+                if row > 0:
+                    return False
+                if col > 0:
+                    self.action_cursor_line_start()
+                    event.stop()
+                    event.prevent_default()
+                    return True
             event.stop()
             event.prevent_default()
             if self._history:
@@ -193,8 +211,20 @@ class ReplInput(TextArea):
                     self._history_index -= 1
                     self.text = self._history[self._history_index]
                     self.action_cursor_line_end()
+                    self._update_height()
             return True
         elif event.key == "down":
+            if self.document.line_count > 1:
+                row, col = self.cursor_location
+                last_row = self.document.line_count - 1
+                if row < last_row:
+                    return False
+                last_line_len = len(self.document.get_line(last_row))
+                if col < last_line_len:
+                    self.action_cursor_line_end()
+                    event.stop()
+                    event.prevent_default()
+                    return True
             event.stop()
             event.prevent_default()
             if self._history:
@@ -205,6 +235,7 @@ class ReplInput(TextArea):
                     else:
                         self.text = self._history[self._history_index]
                     self.action_cursor_line_end()
+                    self._update_height()
             return True
         return False
 
@@ -218,13 +249,19 @@ class ReplInput(TextArea):
             if self._handle_history_key(event):
                 return
 
-        if event.key in ("shift+enter", "ctrl+j"):
-            event.stop()
-            event.prevent_default()
-            self.insert("\n")
-            return
-
         if event.key == "enter":
+            row, col = self.cursor_location
+            current_line = self.document.get_line(row)
+            line_before_cursor = current_line[:col]
+            if line_before_cursor.rstrip().endswith("\\"):
+                event.stop()
+                event.prevent_default()
+                idx = line_before_cursor.rfind("\\")
+                self.delete((row, idx), (row, col))
+                self.insert("\n")
+                self._update_height()
+                return
+
             event.stop()
             event.prevent_default()
             val = self.text.strip()
@@ -246,7 +283,7 @@ class UserMessage(Container):
             "[bold #38bdf8]❯ you[/bold #38bdf8]",
             classes="msg-role user-role",
         )
-        yield Static(self.text, classes="msg-content user-content")
+        yield Static(self.text, markup=False, classes="msg-content user-content")
 
 
 class AgentResponse(Container):

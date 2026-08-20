@@ -7,31 +7,19 @@ Screen {
 
 /* ── Header ────────────────────────────────────────────────────────────── */
 AgentHeader {
-    dock: top;
     background: #161b22;
     color: #e6edf3;
-    height: auto;
+    height: 3;
     content-align: left middle;
-    padding: 0 1;
+    padding: 0 2;
     border-bottom: solid #21262d;
-}
-
-/* ── Footer ────────────────────────────────────────────────────────────── */
-AgentFooter {
-    dock: bottom;
-    background: #161b22;
-    color: #8b949e;
-    height: auto;
-    content-align: left middle;
-    padding: 0 1;
-    border-top: solid #21262d;
 }
 
 /* ── Chat Scroll Area ──────────────────────────────────────────────────── */
 #chat-scroll {
     background: #0d1117;
     height: 1fr;
-    padding: 1 1;
+    padding: 1 2;
     scrollbar-size: 1 1;
     scrollbar-color: #30363d;
     scrollbar-color-active: #38bdf8;
@@ -42,14 +30,13 @@ AgentFooter {
 #autocomplete-list {
     background: #161b22;
     border: round #30363d;
-    max-height: 10;
+    max-height: 8;
     display: none;
     color: #e6edf3;
     scrollbar-size: 1 1;
     scrollbar-color: #30363d;
-    dock: bottom;
-    width: 65%;
-    margin: 0 0 1 1;
+    width: 70%;
+    margin: 0 2 1 2;
     padding: 0 1;
 }
 
@@ -65,13 +52,12 @@ AgentFooter {
 
 /* ── Input Container & ReplInput ───────────────────────────────────────── */
 #input-container {
-    dock: bottom;
     height: auto;
-    min-height: 3;
-    max-height: 8;
+    min-height: 4;
+    max-height: 10;
     background: #161b22;
     border: round #30363d;
-    margin: 0 1 1 1;
+    margin: 0 2;
     padding: 0 1;
 }
 
@@ -81,7 +67,7 @@ AgentFooter {
 
 #input-bar {
     height: auto;
-    min-height: 1;
+    min-height: 2;
     background: transparent;
     align-vertical: top;
 }
@@ -101,8 +87,8 @@ ReplInput {
     color: #e6edf3 !important;
     width: 1fr;
     height: auto;
-    min-height: 1;
-    max-height: 6;
+    min-height: 2;
+    max-height: 8;
     padding: 0 !important;
     margin: 0 !important;
 }
@@ -132,6 +118,16 @@ ReplInput .text-area--placeholder {
     text-style: italic;
 }
 
+/* ── Footer ────────────────────────────────────────────────────────────── */
+AgentFooter {
+    background: #0d1117;
+    color: #8b949e;
+    height: 1;
+    content-align: left middle;
+    padding: 0 2;
+    margin: 1 0 0 0;
+}
+
 /* ── Message Roles & Containers ────────────────────────────────────────── */
 .msg-role {
     text-style: bold;
@@ -148,7 +144,7 @@ ReplInput .text-area--placeholder {
 
 /* ── User Message ──────────────────────────────────────────────────────── */
 UserMessage {
-    margin: 1 0 0 0;
+    margin: 1 0;
     padding: 0;
     height: auto;
     background: transparent;
@@ -164,7 +160,7 @@ UserMessage {
 
 /* ── Agent Response ────────────────────────────────────────────────────── */
 AgentResponse {
-    margin: 1 0 0 0;
+    margin: 1 0;
     padding: 0;
     height: auto;
     background: transparent;
@@ -222,7 +218,7 @@ CollapsibleTitle:focus {
 
 /* ── Tool Events ───────────────────────────────────────────────────────── */
 ToolCallMessage {
-    margin: 0 0 0 2;
+    margin: 1 0 0 2;
     padding: 0;
     height: auto;
     color: #e6edf3;
@@ -230,7 +226,7 @@ ToolCallMessage {
 }
 
 ToolOutputMessage {
-    margin: 0 0 0 2;
+    margin: 0 0 1 2;
     padding: 0;
     height: auto;
     color: #8b949e;
@@ -239,7 +235,7 @@ ToolOutputMessage {
 
 /* ── System Messages ───────────────────────────────────────────────────── */
 SystemMessage {
-    margin: 1 0 0 2;
+    margin: 1 0 1 2;
     padding: 0;
     color: #e6edf3;
     height: auto;

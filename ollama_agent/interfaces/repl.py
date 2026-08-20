@@ -169,11 +169,11 @@ class OllamaAgentApp(App):
     def compose(self) -> ComposeResult:
         yield AgentHeader(self.repl)
         yield ScrollableContainer(id="chat-scroll")
+        yield OptionList(id="autocomplete-list")
         with Container(id="input-container"):
             with Horizontal(id="input-bar"):
                 yield Static("❯ ", id="prompt-char")
                 yield ReplInput(id="repl-input")
-        yield OptionList(id="autocomplete-list")
         yield AgentFooter()
 
     def on_mount(self) -> None:
