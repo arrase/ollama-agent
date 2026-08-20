@@ -49,6 +49,10 @@ class AgentHeader(Static):
 class ReplInput(TextArea):
     """Interactive input field that captures Tab/arrow keys for autocomplete."""
 
+    BINDINGS = [
+        ("super+v", "paste", "Paste"),
+    ]
+
     def __init__(self, **kwargs: Any):
         kwargs.setdefault("highlight_cursor_line", False)
         super().__init__(**kwargs)
