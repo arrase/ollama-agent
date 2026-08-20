@@ -11,9 +11,9 @@ Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to i
 - **Automatic Context Window**: Resolves the model's effective context window (`num_ctx`) automatically from Ollama metadata, or allows manual override in config.
 - **Per-session Model Switching**: Change the model mid-conversation and continue from that point with the new model (context preserved). The change is not permanent and only affects the current session.
 - **Tool-Powered**: The agent can execute shell commands via an integrated shell backend, allowing it to interact with your local environment to perform tasks.
-- **MCP Integration**: Extend the main agent with [Model Context Protocol](https://modelcontextprotocol.io/) servers (`mcp_servers.json`) that provide additional tools as isolated subagents.
-- **Custom Subagents**: Define specialized subagents in `settings.yaml` with their own model, skills, and MCP servers — each with isolated context for clean delegation.
-- **Session Management**: Conversations are automatically saved and can be reloaded, deleted, or switched between.
+- **MCP Integration**: Extend the main agent with [Model Context Protocol](https://modelcontextprotocol.io/) servers (`mcp_servers.json`) that provide additional tools directly to the agent.
+- **Custom Subagents**: Define specialized subagents in `settings.yaml` with their own model and MCP servers — each with isolated context for clean delegation.
+- **Session Management**: Persistent SQLite-backed session history with the ability to clear context and start fresh sessions (`/new`).
 - **Task Management**: Save frequently used prompts as "tasks" and execute them with a simple command.
 - **Configurable**: Easily configure the model, Ollama host, context window, and reasoning effort.
 - **Persistent Memory & Project Guidelines**: Native memory layer backed by `MEMORY.md` and repository-level `AGENTS.md` standard support, allowing the agent to persist long-term context and follow project-specific conventions.
@@ -71,30 +71,27 @@ ollama-agent
 The REPL provides a persistent chat session. You can use slash commands to manage the session:
 
 - `/help`: Show available commands.
-- `/new`: Start a new chat session (clears context).
+- `/yolo [on|off]`: Toggle YOLO mode or set it explicitly (on/off).
+- `/exit` (or `/quit`): Quit the application.
 - `/clear`: Clear the screen.
+- `/new`: Start a new chat session (clears context).
 - `/models`: List available Ollama models (shows tool support).
 - `/model-set <model>`: Switch to a different model (conversation preserved).
-- `/sessions`: List saved sessions.
-- `/session-load <id>`: Load a saved session.
-- `/session-delete <id>`: Delete a saved session.
 - `/tasks`: List saved tasks.
 - `/task-run <id>`: Run a specific task.
 - `/task-delete <id>`: Delete a specific task.
+- `/task-create <id> [--force]`: Create a task interactively using a modal form.
 - `/rag`: Show current RAG database status.
 - `/rag-list`: List available RAG databases.
 - `/rag-create <name>`: Create a new RAG database.
 - `/rag-load <name>`: Load a RAG database for the session.
 - `/rag-unload`: Unload the current RAG database.
-- `/rag-add <path>`: Add a file to the loaded RAG database.
-- `/rag-add <path> --dir`: Add all files from a directory.
+- `/rag-add <path> [--dir]`: Add file(s) or directory to the loaded RAG database.
 - `/rag-delete <name>`: Delete a RAG database.
 - `/skills`: List all skills.
 - `/skill-show <id>`: Show skill details.
-- `/skill-create <id>`: Create a skill interactively.
+- `/skill-create <id> [--force]`: Create a skill interactively using a modal form.
 - `/skill-delete <id>`: Delete a skill.
-- `/yolo [on|off]`: Toggle YOLO mode or set it explicitly (on/off).
-- `/exit`: Quit the application.
 
 ### Non-Interactive Mode
 
@@ -186,11 +183,13 @@ ollama-agent -t 60 -p "Run a long-running task"
 
 - `-m`, `--model`: Specify the AI model to use
 - `-p`, `--prompt`: Provide a prompt for non-interactive mode
-- `-e`, `--effort`: Set reasoning effort level (low, medium, high, disabled, hide, enabled)
-- `-t`, `--builtin-tool-timeout`: Set tool-call timeout in seconds (applies to tool executions, including shell backend and built-in tools). Overrides `builtin_tool_timeout` from `config.ini` for the current run.
+- `-e`, `--effort`: Set reasoning effort level (`low`, `medium`, `high`, `disabled`, `hide`, `enabled`)
+- `-t`, `--builtin-tool-timeout`: Set tool-call timeout in seconds (applies to tool executions, including shell backend and built-in tools). Overrides `builtin_tool_timeout` from `settings.yaml` for the current run.
 - `-y`, `--yolo`: Enable YOLO mode (bypasses all tool execution confirmation prompts)
 - `--rag <database>`: Load a RAG database for the session
-- `--skills-dir <dir>`: Additional skills directory (can be repeated to add multiple sources)
+- `--allow-traversal`: Allow virtual filesystem traversal to OS directories outside the project root
+- `--no-allow-traversal`: Sandbox agent to project directory (default)
+- `--config-reset <all|system-prompt|config-file>`: Reset configuration or system prompts to defaults
 
 ## Tasks
 
@@ -217,7 +216,7 @@ Inside the REPL:
 /task-create <task_id>
 ```
 
-The REPL will prompt you for title/model/effort and then lets you enter a **multiline** prompt (finish with Esc+Enter).
+The REPL will open an interactive modal dialog with fields for Task ID, Title, Model, Reasoning Effort, and a multiline prompt editor with Cancel/Create buttons.
 
 **Create a Task (manual YAML):**
 
@@ -266,61 +265,67 @@ Example default `settings.yaml`:
 
 ```yaml
 model:
-  name: qwen3.5:9b
+  name: gemma4:26b
   base_url: http://localhost:11434
   temperature: 0.0
   context_window: null
   reasoning_effort: medium
 runtime:
-  allow_traversal: true
+  allow_traversal: false
   builtin_tool_timeout: 30
+  collapse_thinking: true
   inherit_env: false
 rag:
-  rag_dir: /home/arrase/.ollama-agent/rag
+  rag_dir: /home/user/.ollama-agent/rag
   embedder_model: nomic-embed-text:latest
   embedder_base_url: http://localhost:11434
   embedding_dims: 768
   default_top_k: 5
   chunk_size: 500
   chunk_overlap: 50
+mentions:
+  max_file_size: 1048576
+  max_files: 100
+  max_total_size: 10485760
+  max_completions: 200
+subagents: []
 ```
 
 | Key | Description |
 |---|---|
-| `model.name` | Default Ollama model. Must support tool calling. |
+| `model.name` | Default Ollama model. Must support tool calling (default: `gemma4:26b`). |
 | `model.base_url` | Native Ollama host (e.g. `http://localhost:11434`). Must **not** contain an `/v1` path. |
 | `model.reasoning_effort` | Default thinking level: `low`, `medium`, `high`, `disabled`, `hide`, or `enabled`. See [Thinking / Reasoning](#common-options) above. |
 | `model.context_window` | If set, forces the runtime `num_ctx` for the selected model. Leave `null` to let the app resolve it automatically. |
-| `runtime.builtin_tool_timeout` | Timeout in seconds for tool executions. |
+| `runtime.allow_traversal` | If true, permits virtual filesystem traversal outside the working directory (default: `false`). |
+| `runtime.builtin_tool_timeout` | Timeout in seconds for tool executions (default: `30`). |
+| `runtime.collapse_thinking` | If true, collapses model reasoning/thinking blocks in REPL output by default (default: `true`). |
 | `runtime.inherit_env` | If true, local shell commands execute with the parent's full environment variables (e.g. PATH). |
 
 ### Context Window Resolution
 
 Ollama Agent needs to know the effective context window (`num_ctx`) for every model. The runtime resolves it in this order:
 
-1. `context_window` from `config.ini`, if defined.
-2. `PARAMETER num_ctx` from `ollama show <model>` (the model's Modelfile).
-3. The model's reported `*.context_length` metadata from `ollama show <model>`.
+1. `model.context_window` from `settings.yaml` (or CLI override), if defined.
+2. The model's reported `*.context_length` metadata from `ollama show <model>` (e.g. `llama.context_length`, `qwen2.context_length`).
+3. `PARAMETER num_ctx` regex parsed from the model's Modelfile / parameters via `ollama show <model>`.
 
 If none of those sources provides a value, the app exits with a clear error asking you to set `model.context_window` in `settings.yaml`.
 
 ### Configuration Reset
 
-If you need to reset the configuration or system prompt to their default values, you can use the `--config-reset` flag:
+If you need to reset the configuration or system prompt files to their default values, you can use the `--config-reset` flag:
 
 ```bash
-# Reset all configuration files
+# Reset all configuration files and prompt files
 ollama-agent --config-reset all
 
-# Reset only the system prompt (instructions.md)
+# Reset system prompts (instructions.md, fs_policy_traversal.md, fs_policy_sandboxed.md)
 ollama-agent --config-reset system-prompt
 
 # Reset only the settings (settings.yaml)
 ollama-agent --config-reset config-file
 ```
-
-> **Note**: When upgrading from v0.1 to v0.2, it is recommended to reset the system prompt to ensure compatibility with new features:
-> `ollama-agent --config-reset system-prompt`
 
 ## LangSmith Tracing
 
@@ -429,7 +434,7 @@ First load the database, then add files:
 /rag-add /path/to/folder --dir
 ```
 
-Supported file types include: `.txt`, `.md`, `.py`, `.js`, `.ts`, `.json`, `.yaml`, `.yml`, `.html`, `.css`, `.xml`, `.csv`, `.rst`, `.ini`, `.cfg`, `.sh`
+Supported file types include: `.py`, `.js`, `.ts`, `.tsx`, `.jsx`, `.sh`, `.yaml`, `.yml`, `.json`, `.xml`, `.md`, `.txt`, `.toml`, `.c`, `.cpp`, `.h`, `.hpp`, `.go`, `.rs`, `.css`, `.html`, `.sql`, `.ini`, `.cfg`, `.properties`, `.java`, `.kt`, `.gradle`, `.bat`, `.ps1`, `.csv`, `.rst`
 
 ### Searching Documents
 
@@ -472,12 +477,13 @@ rag:
   chunk_overlap: 50
 ```
 
-- `rag_dir`: Directory where RAG databases are stored
-- `embedder_model`: Ollama model used for generating embeddings
-- `embedding_dims`: Dimension of the embedding vectors (must match the model)
-- `default_top_k`: Default number of results to return in searches
-- `chunk_size`: Maximum size of text chunks (in characters)
-- `chunk_overlap`: Overlap between consecutive chunks
+- `rag_dir`: Directory where RAG databases are stored (defaults to `~/.ollama-agent/rag`)
+- `embedder_model`: Ollama model used for generating embeddings (default: `nomic-embed-text:latest`)
+- `embedder_base_url`: Ollama host for generating embeddings (default: `http://localhost:11434`)
+- `embedding_dims`: Dimension of the embedding vectors (must match the model, default: `768`)
+- `default_top_k`: Default number of results to return in searches (default: `5`)
+- `chunk_size`: Maximum size of text chunks in characters (default: `500`)
+- `chunk_overlap`: Overlap between consecutive chunks in characters (default: `50`)
 
 ## Skills
 
@@ -522,18 +528,11 @@ This skill explains how to access LangGraph Python documentation.
 
 Additional files (scripts, templates, docs) can be placed alongside `SKILL.md` — just reference them in the instructions so the agent knows when and how to use them.
 
-### Skill Sources and Precedence
+### Skill Sources
 
-Skills are loaded from multiple directories in order (last wins for same-name skills):
+Skills are loaded from the global skills directory:
 
-1. **Global**: `~/.ollama-agent/skills/` — user-level skills available in every session.
-2. **Project**: `./skills/` — project-specific skills in the current working directory.
-3. **CLI extra**: directories passed via `--skills-dir`.
-
-```bash
-# Load additional skill sources
-ollama-agent --skills-dir /path/to/team-skills --skills-dir /path/to/project-skills -p "Help me with LangGraph"
-```
+- **Global Skills Directory**: `~/.ollama-agent/skills/` — user-level skills available across sessions.
 
 ### Managing Skills (CLI)
 
@@ -577,7 +576,7 @@ Inside the REPL you can create skills interactively:
 /skill-create my-skill
 ```
 
-The REPL will prompt for name, description, and then open a multiline editor for instructions (finish with Esc+Enter).
+The REPL will open an interactive modal dialog with fields for Skill ID, Name, Description, and a multiline markdown instructions editor with Cancel/Create buttons.
 
 ### Creating Skills Manually
 
@@ -608,7 +607,7 @@ EOF
 
 ## Agent Instructions
 
-You can customize the agent's behavior by editing the instructions file at `~/.ollama-agent/instructions.md`. This file is automatically created on first use with default instructions.
+You can customize the agent's behavior by editing the instructions file at `~/.ollama-agent/prompts/instructions.md`. This file is automatically created on first use with default instructions.
 
 ## MCP Servers (Main Agent)
 
@@ -647,7 +646,7 @@ All tools from all configured servers are loaded and made directly available to 
 
 ## 🤖 Custom Subagents
 
-Define specialized subagents that your main agent can delegate tasks to. Each subagent has its own isolated context, model, skills, and MCP servers — keeping the orchestrator's context clean and focused.
+Define specialized subagents that your main agent can delegate tasks to. Each subagent has its own isolated context, model, and MCP servers — keeping the orchestrator's context clean and focused.
 
 Configure them in `~/.ollama-agent/settings.yaml`:
 
@@ -658,8 +657,6 @@ subagents:
     system_prompt: "You are a research specialist. Search thoroughly and return concise summaries."
     model: "gemma4:26b"          # Optional, inherits from main agent
     context_window: 65536        # Optional, inherits from main agent
-    skills_paths:
-      - "./skills/research"
     mcp_servers:
       - name: "brave-search"
         command: "npx"
@@ -670,8 +667,6 @@ subagents:
   - name: "database-agent"
     description: "Delegate here when the user asks about customer or sales data."
     system_prompt: "You are a database analyst. Query the database and summarize results."
-    skills_paths:
-      - "./skills/database"
     mcp_servers:
       - name: "sqlite-server"
         command: "uvx"
@@ -680,7 +675,7 @@ subagents:
 
 - **Context isolation**: Subagent tool calls don't bloat the main agent's context — only the final result is returned.
 - **Environment injection**: Use `${VAR_NAME}` in MCP `env` fields to inject secrets from the host environment.
-- **Skills & MCP per subagent**: Each subagent can have its own skills directories and MCP server connections, completely independent from the main agent.
+- **MCP per subagent**: Each subagent can have its own dedicated stdio MCP servers, completely independent from the main agent.
 - **Graceful failures**: If a subagent's MCP server fails to load (e.g., missing env vars), it is skipped and the agent continues normally.
 
 ## For Developers
