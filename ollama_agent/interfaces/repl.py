@@ -37,10 +37,18 @@ from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager, set_tool_timeout
 from ..rag import RAGContext, RAGManager, load_rag_database
 from ..skills import SkillsContext, create_skill
+from ..core.common import extract_text
 from ..tasks.commands import CLIContext, TaskError, create_task
 from .dispatch import REPLCommand, build_repl_handlers, render_repl_help, safe_call
 from .model_commands import set_model
-from .session_commands import new_session
+from .session_commands import (
+    delete_session,
+    export_session,
+    get_available_sessions,
+    list_sessions,
+    new_session,
+    resume_session,
+)
 from ..streaming import stream_agent_events, StreamingRenderer
 
 # @-mention regex: matches @"quoted", @'quoted', or @bare at word boundaries.
@@ -50,6 +58,7 @@ _AT_MENTION_RE = re.compile(
 
 _ROOT_COMMANDS: list[tuple[str, str]] = [
     ("/model", "Manage models (list, set)"),
+    ("/session", "Manage chat sessions (list, resume, new, export, delete)"),
     ("/task", "Manage saved tasks (list, create, run, delete)"),
     ("/skill", "Manage skills (list, show, create, delete)"),
     ("/rag", "Manage RAG databases (status, list, create, delete, load, unload, add)"),
@@ -64,6 +73,13 @@ _SUBCOMMANDS: dict[str, list[tuple[str, str]]] = {
     "/model": [
         ("list", "List available Ollama models"),
         ("set", "Switch to a different model"),
+    ],
+    "/session": [
+        ("list", "List all past sessions"),
+        ("resume", "Resume a previous session"),
+        ("new", "Start a new session"),
+        ("export", "Export session to Markdown"),
+        ("delete", "Delete a session from history"),
     ],
     "/task": [
         ("list", "List all saved tasks"),
@@ -261,6 +277,7 @@ class OllamaAgentApp(App):
 
     def hide_autocomplete(self) -> None:
         autolist = self.query_one("#autocomplete-list", OptionList)
+        autolist.clear_options()
         autolist.display = False
         autolist.highlighted = None
 
@@ -297,41 +314,53 @@ class OllamaAgentApp(App):
             ]
 
         # Level 2: Arguments / Dynamic entities (e.g., "/task run ")
-        sub_cmd = parts[1]
-        arg_token = parts[2]
+        if num_parts == 3:
+            sub_cmd = parts[1]
+            arg_token = parts[2]
 
-        if root_cmd == "/task" and sub_cmd in ("run", "delete"):
-            tasks = self.repl._task_ctx.task_manager.list()
-            return [
-                (
-                    f"{root_cmd} {sub_cmd} {tid}",
-                    Text.from_markup(f"[bold #e6edf3]{tid:<20}[/bold #e6edf3] [dim #8b949e]{t.title}[/dim #8b949e]"),
-                )
-                for tid, t in tasks.items()
-                if tid.startswith(arg_token)
-            ]
+            if root_cmd == "/task" and sub_cmd in ("run", "delete"):
+                tasks = self.repl._task_ctx.task_manager.list()
+                return [
+                    (
+                        f"{root_cmd} {sub_cmd} {tid}",
+                        Text.from_markup(f"[bold #e6edf3]{tid:<20}[/bold #e6edf3] [dim #8b949e]{t.title}[/dim #8b949e]"),
+                    )
+                    for tid, t in tasks.items()
+                    if tid.startswith(arg_token)
+                ]
 
-        if root_cmd == "/skill" and sub_cmd in ("show", "delete"):
-            skills = self.repl._skills_ctx.skill_manager.list()
-            return [
-                (
-                    f"{root_cmd} {sub_cmd} {sid}",
-                    Text.from_markup(f"[bold #e6edf3]{sid:<20}[/bold #e6edf3] [dim #8b949e]{s.name}[/dim #8b949e]"),
-                )
-                for sid, s in skills.items()
-                if sid.startswith(arg_token)
-            ]
+            if root_cmd == "/skill" and sub_cmd in ("show", "delete"):
+                skills = self.repl._skills_ctx.skill_manager.list()
+                return [
+                    (
+                        f"{root_cmd} {sub_cmd} {sid}",
+                        Text.from_markup(f"[bold #e6edf3]{sid:<20}[/bold #e6edf3] [dim #8b949e]{s.name}[/dim #8b949e]"),
+                    )
+                    for sid, s in skills.items()
+                    if sid.startswith(arg_token)
+                ]
 
-        if root_cmd == "/rag" and sub_cmd in ("load", "delete"):
-            dbs = self.repl._get_rag_ctx().rag_manager.list_databases()
-            return [
-                (
-                    f"{root_cmd} {sub_cmd} {d['name']}",
-                    Text.from_markup(f"[bold #e6edf3]{d['name']:<20}[/bold #e6edf3] [dim #8b949e]{d.get('doc_count', 0)} docs[/dim #8b949e]"),
-                )
-                for d in dbs
-                if d["name"].startswith(arg_token)
-            ]
+            if root_cmd == "/session" and sub_cmd in ("resume", "switch", "delete"):
+                sessions = get_available_sessions()
+                return [
+                    (
+                        f"{root_cmd} {sub_cmd} {s['thread_id']}",
+                        Text.from_markup(f"[bold #e6edf3]{s['thread_id'][:8]:<10}[/bold #e6edf3] [dim #8b949e]{s['steps']} steps[/dim #8b949e]"),
+                    )
+                    for s in sessions
+                    if s["thread_id"].startswith(arg_token)
+                ]
+
+            if root_cmd == "/rag" and sub_cmd in ("load", "delete"):
+                dbs = self.repl._get_rag_ctx().rag_manager.list_databases()
+                return [
+                    (
+                        f"{root_cmd} {sub_cmd} {d['name']}",
+                        Text.from_markup(f"[bold #e6edf3]{d['name']:<20}[/bold #e6edf3] [dim #8b949e]{d.get('doc_count', 0)} docs[/dim #8b949e]"),
+                    )
+                    for d in dbs
+                    if d["name"].startswith(arg_token)
+                ]
 
         return []
 
@@ -485,6 +514,58 @@ class OllamaAgentApp(App):
 
         if cmd == "/clear":
             await scroll.remove_children()
+            return
+
+        if cmd == "/session" and args and args[0] in ("resume", "switch"):
+            if len(args) < 2:
+                scroll.mount(SystemMessage("[bold #f87171]✕ Usage:[/bold #f87171] /session resume <session_id>"))
+                self._deferred_scroll()
+                return
+            resolved = resume_session(self.repl.console, args[1])
+            if resolved:
+                self.repl.runtime.thread_id = resolved
+                await scroll.remove_children()
+                if self.repl.runtime.graph is not None:
+                    config = {"configurable": {"thread_id": resolved}}
+                    state = await self.repl.runtime.graph.aget_state(config)
+                    if state and state.values and "messages" in state.values:
+                        for msg in state.values["messages"]:
+                            role = getattr(msg, "type", None) or getattr(msg, "role", "unknown")
+                            content = extract_text(getattr(msg, "content", ""))
+                            if not content:
+                                continue
+                            if role in ("human", "user"):
+                                scroll.mount(UserMessage(content))
+                            elif role in ("ai", "assistant"):
+                                scroll.mount(AgentResponse(initial_text=content))
+                scroll.mount(SystemMessage(f"[bold #38bdf8]✓ Resumed session:[/bold #38bdf8] [bold #e6edf3]{resolved[:8]}[/bold #e6edf3] [dim]({resolved})[/dim]"))
+                self.query_one(AgentHeader).update_header()
+                self._deferred_scroll()
+            else:
+                scroll.mount(SystemMessage(f"[bold #f87171]✕ Session not found:[/bold #f87171] {args[1]}"))
+                self._deferred_scroll()
+            return
+
+        if cmd == "/session" and args and args[0] == "export":
+            out_file = await export_session(
+                self.repl.console,
+                self.repl.runtime,
+                self.repl.runtime.thread_id,
+                output_path=args[1] if len(args) > 1 else None,
+            )
+            if out_file:
+                scroll.mount(SystemMessage(f"[bold #38bdf8]✓ Session exported to:[/bold #38bdf8] [bold #e6edf3]{out_file}[/bold #e6edf3]"))
+            else:
+                scroll.mount(SystemMessage("[bold #f87171]✕ Failed to export session.[/bold #f87171]"))
+            self._deferred_scroll()
+            return
+
+        if cmd == "/session" and args and args[0] == "new":
+            self.repl.runtime.thread_id = new_session(self.repl.console)
+            await scroll.remove_children()
+            scroll.mount(SystemMessage(f"[bold #38bdf8]✓ New session started:[/bold #38bdf8] [bold #e6edf3]{self.repl.runtime.thread_id[:8]}[/bold #e6edf3]"))
+            self.query_one(AgentHeader).update_header()
+            self._deferred_scroll()
             return
 
         if cmd == "/task" and args and args[0] == "create":
@@ -681,8 +762,20 @@ class OllamaREPL:
                 handle_task_create=lambda _: None,
                 handle_skill_create=lambda _: None,
                 handle_yolo=self._handle_yolo_cmd,
+                current_thread_id=lambda: self.runtime.thread_id,
+                handle_session_resume=self._handle_session_resume,
+                handle_session_export=self._handle_session_export,
             )
         return self._commands
+
+    async def _handle_session_resume(self, session_id: str) -> None:
+        resolved = resume_session(self.console, session_id)
+        if resolved:
+            self.runtime.thread_id = resolved
+
+    async def _handle_session_export(self, args: list[str]) -> None:
+        out_path = args[0] if args else None
+        await export_session(self.console, self.runtime, self.runtime.thread_id, output_path=out_path)
 
     async def cleanup(self) -> None:
         if self._rag_ctx:

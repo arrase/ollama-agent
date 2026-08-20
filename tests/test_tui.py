@@ -42,15 +42,21 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
         self.repl_mock._rag_ctx = None
 
     def test_agent_header_format_default(self) -> None:
+        self.repl_mock.runtime.settings.model.context_window = 16384
+        self.repl_mock.runtime.last_context_tokens = 2048
         header = AgentHeader(self.repl_mock)
         header.update_header()
         rendered = header.render()
         self.assertIn("ollama-agent", str(rendered))
         self.assertIn("qwen2.5-coder:32b", str(rendered))
         self.assertIn("high", str(rendered))
+        self.assertIn("Context:", str(rendered))
+        self.assertIn("2.0k/16.4k", str(rendered))
         self.assertIn("YOLO: OFF", str(rendered))
 
     def test_agent_header_format_yolo_and_rag(self) -> None:
+        self.repl_mock.runtime.settings.model.context_window = 8192
+        self.repl_mock.runtime.last_context_tokens = 7500
         self.repl_mock.runtime.yolo_mode = True
         rag_ctx_mock = MagicMock()
         rag_ctx_mock.rag_manager.current_database = "docs_db"
@@ -61,6 +67,7 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
         rendered = header.render()
         self.assertIn("YOLO", str(rendered))
         self.assertIn("docs_db", str(rendered))
+        self.assertIn("Context:", str(rendered))
 
     def test_agent_footer_idle_and_generating(self) -> None:
         footer = AgentFooter()
@@ -437,6 +444,19 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             app.accept_completion(0)
             self.assertEqual(inp.text, "/rag load docs-db ")
 
+            # 5. Level 2: Dynamic Session IDs for /session resume
+            with patch("ollama_agent.interfaces.repl.get_available_sessions", return_value=[{"thread_id": "session-12345678", "steps": 5}]):
+                app.update_autocomplete("/session resume ")
+                self.assertTrue(autolist.display)
+                self.assertEqual(autolist.option_count, 1)
+                app.accept_completion(0)
+                self.assertEqual(inp.text, "/session resume session-12345678 ")
+
+                # 6. Non-matching entity or extra tokens hides autocomplete
+                app.update_autocomplete("/session resume betybetryj......")
+                self.assertFalse(autolist.display)
+                self.assertEqual(autolist.option_count, 0)
+
     async def test_accept_completion_file_mention(self) -> None:
         repl_mock = MagicMock()
         repl_mock.runtime.settings.model.name = "gemma4:26b"
@@ -488,6 +508,20 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             # 3. /yolo command
             await app._run_slash_command("/yolo")
             self.assertTrue(repl_mock.runtime.yolo_mode)
+
+            # 4. /session resume command (mounting previous conversation)
+            human_msg = MagicMock(type="human", content="Past question")
+            ai_msg = MagicMock(type="ai", content="Past answer")
+            mock_state = MagicMock()
+            mock_state.values = {"messages": [human_msg, ai_msg]}
+            repl_mock.runtime.graph = MagicMock()
+            repl_mock.runtime.graph.aget_state = AsyncMock(return_value=mock_state)
+
+            with patch("ollama_agent.interfaces.repl.resume_session", return_value="sess12345678"):
+                await app._run_slash_command("/session resume sess12345678")
+                await pilot.pause()
+                self.assertEqual(len(list(chat_scroll.query(UserMessage))), 1)
+                self.assertEqual(len(list(chat_scroll.query(AgentResponse))), 1)
 
     async def test_tui_streaming_renderer_events(self) -> None:
         repl_mock = MagicMock()

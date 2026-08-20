@@ -35,6 +35,25 @@ class AgentHeader(Static):
 
     def update_header(self) -> None:
         ms = self.repl.runtime.settings.model
+        tokens = getattr(self.repl.runtime, "last_context_tokens", 0)
+        tokens = tokens if isinstance(tokens, (int, float)) else 0
+        num_ctx = getattr(ms, "context_window", 0)
+        num_ctx = num_ctx if isinstance(num_ctx, (int, float)) else 0
+
+        if num_ctx > 0:
+            pct = int((tokens / num_ctx) * 100)
+            if pct > 90:
+                color = "#f87171"
+            elif pct > 75:
+                color = "#fbbf24"
+            else:
+                color = "#38bdf8"
+            tok_str = f"{tokens / 1000:.1f}k" if tokens >= 1000 else str(int(tokens))
+            ctx_str = f"{num_ctx / 1000:.1f}k" if num_ctx >= 1000 else str(int(num_ctx))
+            ctx_info = f"  [dim]│[/dim]  [bold #8b949e]Context:[/bold #8b949e] [bold {color}]{tok_str}/{ctx_str} ({pct}%)[/bold {color}]"
+        else:
+            ctx_info = ""
+
         rag_ctx = self.repl._rag_ctx
         rag_db = rag_ctx.rag_manager.current_database if rag_ctx else None
         rag_info = f"  [dim]│[/dim]  [bold #8b949e]RAG:[/bold #8b949e] [bold #a78bfa]{rag_db}[/bold #a78bfa]" if rag_db else ""
@@ -45,7 +64,7 @@ class AgentHeader(Static):
         )
         self.update(
             f"[bold #38bdf8]● ollama-agent[/bold #38bdf8]  [dim]│[/dim]  "
-            f"[bold #8b949e]Model:[/bold #8b949e] [bold #e6edf3]{ms.name}[/bold #e6edf3]  [dim]│[/dim]  "
+            f"[bold #8b949e]Model:[/bold #8b949e] [bold #e6edf3]{ms.name}[/bold #e6edf3]{ctx_info}  [dim]│[/dim]  "
             f"[bold #8b949e]Effort:[/bold #8b949e] [#e6edf3]{ms.reasoning_effort}[/#e6edf3]{rag_info}  [dim]│[/dim]  "
             f"{yolo_status}"
         )
@@ -159,6 +178,9 @@ class ReplInput(TextArea):
             self.value = value
 
     def _handle_autocomplete_key(self, event: events.Key, app: Any, autolist: OptionList) -> bool:
+        if not autolist.display or autolist.option_count == 0:
+            return False
+
         if event.key == "down":
             event.stop()
             event.prevent_default()
@@ -185,11 +207,12 @@ class ReplInput(TextArea):
             app.hide_autocomplete()
             return True
         elif event.key == "enter":
-            event.stop()
-            event.prevent_default()
             if autolist.highlighted is not None:
+                event.stop()
+                event.prevent_default()
                 app.accept_completion(autolist.highlighted)
-            return True
+                return True
+            return False
         return False
 
     def _handle_history_key(self, event: events.Key) -> bool:
@@ -293,8 +316,9 @@ class AgentResponse(Container):
     It dynamically hosts thinking, text responses, and tool calls in order.
     """
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(self, initial_text: str | None = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+        self.initial_text = initial_text
         self._header = Static(
             "[bold #34d399]◆ agent[/bold #34d399]",
             classes="msg-role agent-role",
@@ -303,7 +327,7 @@ class AgentResponse(Container):
         self.current_thinking_text: Static | None = None
         self._thinking_chunks: list[str] = []
         self.current_text_widget: Markdown | None = None
-        self._text_chunks: list[str] = []
+        self._text_chunks: list[str] = [initial_text] if initial_text else []
         self.thinking_timer: Timer | None = None
         self._thinking_dots_count = 3
         self._text_update_timer: Timer | None = None
@@ -311,6 +335,9 @@ class AgentResponse(Container):
 
     def compose(self) -> ComposeResult:
         yield self._header
+        if self.initial_text:
+            self.current_text_widget = Markdown(self.initial_text, classes="msg-content agent-content")
+            yield self.current_text_widget
 
     def _animate_thinking(self) -> None:
         if self.current_thinking is not None:

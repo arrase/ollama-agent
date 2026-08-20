@@ -4,16 +4,16 @@ Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to i
 
 ## Features
 
-- **Interactive REPL**: A modern, terminal-based chat interface with Markdown rendering, multiline input support (`\ + Enter`), and slash commands.
+- **Interactive REPL**: A modern, terminal-based chat interface with Markdown rendering, multiline input support (`\ + Enter`), live context token metrics, and slash commands.
 - **Non-Interactive CLI**: Execute single prompts directly from your command line for quick queries.
 - **Native Ollama Integration**: Connects directly to Ollama's native API (via `langchain-ollama`), no OpenAI compatibility layer needed.
 - **Thinking / Reasoning**: Leverages Ollama's native [thinking capability](https://docs.ollama.com/capabilities/thinking) to expose model reasoning traces. Configurable per model via `--effort`.
-- **Automatic Context Window**: Resolves the model's effective context window (`num_ctx`) automatically from Ollama metadata, or allows manual override in config.
+- **Automatic Context Window & Live Monitor**: Resolves effective context window (`num_ctx`) automatically from Ollama metadata and displays real-time token usage and percentage gauge directly in the TUI header.
 - **Per-session Model Switching**: Change the model mid-conversation and continue from that point with the new model (context preserved). The change is not permanent and only affects the current session.
-- **Tool-Powered**: The agent can execute shell commands via an integrated shell backend, allowing it to interact with your local environment to perform tasks.
+- **Tool-Powered**: The agent can execute shell commands via an integrated shell backend, with human-in-the-loop confirmation before running commands and editing files.
 - **MCP Integration**: Extend the main agent with [Model Context Protocol](https://modelcontextprotocol.io/) servers (`mcp_servers.json`) that provide additional tools directly to the agent.
 - **Custom Subagents**: Define specialized subagents in `settings.yaml` with their own model and MCP servers — each with isolated context for clean delegation.
-- **Session Management**: Persistent SQLite-backed session history with the ability to clear context and start fresh sessions (`/new`).
+- **Session Management**: Persistent SQLite-backed session history with full session restoration (`/session resume <id>`), markdown export (`/session export`), listing, and creation of fresh sessions (`/session new`).
 - **Task Management**: Save frequently used prompts as "tasks" and execute them with a simple command.
 - **Configurable**: Easily configure the model, Ollama host, context window, and reasoning effort.
 - **Persistent Memory & Project Guidelines**: Native memory layer backed by `MEMORY.md` and repository-level `AGENTS.md` standard support, allowing the agent to persist long-term context and follow project-specific conventions.
@@ -72,6 +72,7 @@ The REPL provides a persistent chat session. You can use slash commands to manag
 
 - `/help`: Show available commands.
 - `/model [list | set <model>]`: Manage models (list available models, switch active model).
+- `/session [list | resume <id> | new | export [path] | delete <id>]`: Manage chat sessions (list past sessions, resume previous conversation, export to Markdown, delete).
 - `/task [list | create <id> | run <id> | delete <id>]`: Manage saved prompt tasks.
 - `/skill [list | show <id> | create <id> | delete <id>]`: Manage agent skills.
 - `/rag [status | list | create <name> | load <name> | unload | add <path> | delete <name>]`: Manage RAG document databases.
@@ -117,6 +118,20 @@ When YOLO mode is active:
 1. Confirmations are bypassed entirely.
 2. The REPL status bar shows `YOLO: On` (in red).
 3. The prompt symbol changes color to **red** (`❯❯ `) to make it highly visible.
+
+### Live Context Usage & Token Monitoring
+
+The REPL dynamic header displays the current model, active RAG database, YOLO status, and live context window consumption in real-time:
+
+```text
+● ollama-agent │ Model: gemma4:26b │ Context: 2.1k/16.4k (12%) │ Effort: medium │ YOLO: OFF
+```
+
+- **Tokens & Percentage**: Shows current tokens consumed versus effective context window limit (`num_ctx`).
+- **Dynamic Color Alerts**:
+  - 🔵 **Blue/Cyan**: Healthy context usage (<75%).
+  - 🟡 **Yellow**: Elevated context warning (>75%).
+  - 🔴 **Red**: Critical context limit proximity (>90%).
 
 ### File / Directory Context (@-mentions)
 
@@ -184,6 +199,24 @@ ollama-agent -t 60 -p "Run a long-running task"
 - `--allow-traversal`: Allow virtual filesystem traversal to OS directories outside the project root
 - `--no-allow-traversal`: Sandbox agent to project directory (default)
 - `--config-reset <all|system-prompt|config-file>`: Reset configuration or system prompts to defaults
+
+## Session Management
+
+`ollama-agent` features complete SQLite-backed persistent session management across conversations.
+
+### Commands
+
+| Command (REPL) | Command (CLI) | Description |
+| :--- | :--- | :--- |
+| `/session list` (or `/session`) | `ollama-agent session-list` | List all saved chat sessions with step counts and active session indicator. |
+| `/session resume <id>` | — | Resume a past session by ID or prefix, restoring conversation messages directly in the terminal viewport. |
+| `/session new` (or `/new`) | — | Start a clean new session with a new thread ID and fresh context. |
+| `/session export [path]` | `ollama-agent session-export <id> [-o path]` | Export the entire conversation history to a structured Markdown file. |
+| `/session delete <id>` | `ollama-agent session-delete <id>` | Delete a session and its saved checkpoints from history. |
+
+### Interactive Autocompletion
+
+Inside the REPL, typing `/session resume ` or `/session delete ` dynamically lists and autocompletes available session IDs in real-time.
 
 ## Tasks
 

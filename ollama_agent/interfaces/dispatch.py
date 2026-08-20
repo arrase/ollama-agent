@@ -26,6 +26,7 @@ from ..rag import (
 from ..skills import SkillError, SkillsContext, create_skill, delete_skill, list_skills, show_skill
 from ..tasks.commands import CLIContext, TaskError, create_task, delete_task, list_tasks, run_task
 from .model_commands import list_models
+from .session_commands import delete_session, export_session, list_sessions, new_session, resume_session
 
 CLIHandler = Callable[[], object]
 
@@ -104,6 +105,14 @@ def build_cli_handlers(
             instructions=args.instructions,
             force=args.force,
         ),
+        "session-list": lambda: list_sessions(Console()),
+        "session-delete": lambda: delete_session(Console(), args.session_id),
+        "session-export": lambda: export_session(
+            Console(),
+            args._runtime if hasattr(args, "_runtime") else None,  # type: ignore[arg-type]
+            args.session_id,
+            output_path=getattr(args, "output", None),
+        ),
     }
 
 
@@ -122,6 +131,9 @@ def build_repl_handlers(
     handle_task_create: Callable[[list[str]], object],
     handle_skill_create: Callable[[list[str]], object],
     handle_yolo: Callable[[list[str]], object],
+    current_thread_id: Callable[[], str] = lambda: "",
+    handle_session_resume: Callable[[str], Awaitable[None]] | None = None,
+    handle_session_export: Callable[[list[str]], Awaitable[None]] | None = None,
 ) -> dict[str, REPLCommand]:
     """Build the REPL command registry for unified slash commands."""
 
@@ -213,6 +225,32 @@ def build_repl_handlers(
         console.print(f"[red]Unknown rag subcommand '{sub}'. Usage: /rag [status | list | create | delete | load | unload | add][/red]")
         return None
 
+    def handle_session(args: list[str]) -> object:
+        if not args or args[0] == "list":
+            return list_sessions(console, current_thread_id=current_thread_id())
+        sub = args[0]
+        if sub == "new":
+            return handle_new([])
+        if sub in ("resume", "switch"):
+            if len(args) < 2:
+                console.print("[red]Usage: /session resume <session_id>[/red]")
+                return None
+            if handle_session_resume is not None:
+                return handle_session_resume(args[1])
+            return resume_session(console, args[1])
+        if sub == "export":
+            if handle_session_export is not None:
+                return handle_session_export(args[1:])
+            console.print("[red]Export not available in current context.[/red]")
+            return None
+        if sub == "delete":
+            if len(args) < 2:
+                console.print("[red]Usage: /session delete <session_id>[/red]")
+                return None
+            return delete_session(console, args[1])
+        console.print(f"[red]Unknown session subcommand '{sub}'. Usage: /session [list | resume <id> | new | export [path] | delete <id>][/red]")
+        return None
+
     cmds: dict[str, REPLCommand] = {
         "/help": REPLCommand("Show this help message", "General", None, lambda _: render_repl_help(console, cmds)),
         "/yolo": REPLCommand(
@@ -229,6 +267,12 @@ def build_repl_handlers(
             "Session Management",
             None,
             handle_new,
+        ),
+        "/session": REPLCommand(
+            "Manage chat sessions (list, resume, new, export, delete)",
+            "Session Management",
+            "/session [list | resume <id> | new | export [path] | delete <id>]",
+            handle_session,
         ),
         "/model": REPLCommand(
             "Manage models (list, set)",
