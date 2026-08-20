@@ -9,7 +9,7 @@ import inspect
 from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager
 from ..core import ALLOWED_REASONING_EFFORTS
-from ..rag import RAGContext, RAGManager, RAGError
+from ..rag import RAGContext, RAGManager, RAGError, load_rag_database
 from ..settings import Settings
 from ..skills import SkillManager, SkillsContext, SkillError
 from ..streaming import run_non_interactive
@@ -211,11 +211,8 @@ def handle_cli_commands(
                 if args.rag:
                     set_rag_manager(rag_ctx.rag_manager)
                     try:
-                        rag_ctx.rag_manager.load_database(args.rag)
-                    except RAGError as e:
-                        rag_ctx.console.print(
-                            f"[red]Failed to load RAG database '{args.rag}': {e}[/red]"
-                        )
+                        load_rag_database(rag_ctx, args.rag)
+                    except (RAGError, SystemExit):
                         raise SystemExit(1)
                 await runtime.reload()
                 await run_non_interactive(runtime, args.prompt)

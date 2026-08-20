@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +11,9 @@ from textual import events
 from textual.app import App, ComposeResult
 from textual.widgets import Button, Input, Markdown, OptionList, Static, TextArea
 
+from rich.console import Console
+
+from ollama_agent.interfaces.dispatch import REPLCommand
 from ollama_agent.interfaces.repl import OllamaAgentApp, OllamaREPL, _TUIStreamingRenderer
 from ollama_agent.interfaces.tui_components import (
     AgentFooter,
@@ -102,6 +106,7 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
             agent_msg.append_thinking("Thinking step 1...")
             agent_msg.append_thinking(" step 2...")
             self.assertIsNotNone(agent_msg.current_thinking)
+            assert agent_msg.current_thinking is not None
             agent_msg._animate_thinking()
             self.assertIn("Thinking", agent_msg.current_thinking.title)
 
@@ -169,11 +174,13 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
             # 1. Height adjusts on multiline text
             inp.text = "line 1\nline 2\nline 3"
             await pilot.pause()
+            assert inp.styles.height is not None
             self.assertEqual(inp.styles.height.value, 3)
 
             # 2. Text reset resets height to default minimum (2)
             inp.text = ""
             await pilot.pause()
+            assert inp.styles.height is not None
             self.assertEqual(inp.styles.height.value, 2)
 
             # 3. Backslash continuation (\ + Enter) inserts newline
@@ -182,6 +189,7 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
             inp.on_key(events.Key("enter", "\r"))
             await pilot.pause()
             self.assertEqual(inp.text, "SELECT * FROM test \n")
+            assert inp.styles.height is not None
             self.assertEqual(inp.styles.height.value, 2)
 
             # 4. Multiline navigation vs history
@@ -353,4 +361,144 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             # Hide autocomplete
             app.hide_autocomplete()
             self.assertFalse(autolist.display)
+
+    async def test_accept_completion_slash_command(self) -> None:
+        repl_mock = MagicMock()
+        repl_mock.runtime.settings.model.name = "gemma4:26b"
+        repl_mock.runtime.settings.model.reasoning_effort = "medium"
+        repl_mock._rag_ctx = None
+        repl_mock.runtime.yolo_mode = False
+
+        cmd_spec = MagicMock()
+        cmd_spec.summary = "Show help"
+        repl_mock._get_commands.return_value = {"/help": cmd_spec}
+
+        app = OllamaAgentApp(repl_mock)
+        async with app.run_test() as pilot:
+            inp = app.query_one(ReplInput)
+            inp.text = "/he"
+            app.update_autocomplete("/he")
+            app.accept_completion(0)
+            self.assertEqual(inp.text, "/help ")
+
+    async def test_accept_completion_file_mention(self) -> None:
+        repl_mock = MagicMock()
+        repl_mock.runtime.settings.model.name = "gemma4:26b"
+        repl_mock.runtime.settings.model.reasoning_effort = "medium"
+        repl_mock._rag_ctx = None
+        repl_mock.runtime.yolo_mode = False
+        repl_mock._get_commands.return_value = {}
+
+        app = OllamaAgentApp(repl_mock)
+        async with app.run_test() as pilot:
+            inp = app.query_one(ReplInput)
+            inp.text = "Look at @"
+            with patch.object(app, "_file_completions", return_value=[("src/main.py", "1.2 KB")]):
+                app.update_autocomplete("Look at @")
+                app.accept_completion(0)
+                self.assertEqual(inp.text, "Look at @src/main.py ")
+
+    async def test_run_slash_commands_dispatch(self) -> None:
+        repl_mock = MagicMock()
+        repl_mock.console = Console(file=io.StringIO())
+        repl_mock.runtime.settings.model.name = "gemma4:26b"
+        repl_mock.runtime.settings.model.reasoning_effort = "medium"
+        repl_mock._rag_ctx = None
+        repl_mock.runtime.yolo_mode = False
+
+        def _toggle_yolo(args):
+            repl_mock.runtime.yolo_mode = not repl_mock.runtime.yolo_mode
+
+        repl_mock._get_commands.return_value = {
+            "/yolo": REPLCommand(summary="toggle yolo", section="General", usage=None, handler=_toggle_yolo),
+        }
+
+        app = OllamaAgentApp(repl_mock)
+        async with app.run_test() as pilot:
+            # 1. /clear
+            chat_scroll = app.query_one("#chat-scroll")
+            await chat_scroll.mount(UserMessage("clear me"))
+            await pilot.pause()
+            await app._run_slash_command("/clear")
+            await pilot.pause()
+            self.assertEqual(len(list(chat_scroll.query(UserMessage))), 0)
+
+            # 2. Unknown command
+            await app._run_slash_command("/unknown-cmd")
+            sys_msgs = list(chat_scroll.query(SystemMessage))
+            self.assertTrue(len(sys_msgs) > 0)
+            self.assertIn("Unknown command", str(sys_msgs[-1].render()))
+
+            # 3. /yolo command
+            await app._run_slash_command("/yolo")
+            self.assertTrue(repl_mock.runtime.yolo_mode)
+
+    async def test_tui_streaming_renderer_events(self) -> None:
+        repl_mock = MagicMock()
+        repl_mock.runtime.settings.model.name = "gemma4:26b"
+        repl_mock.runtime.settings.model.reasoning_effort = "medium"
+        repl_mock._rag_ctx = None
+        repl_mock.runtime.yolo_mode = False
+        repl_mock._get_commands.return_value = {}
+
+        app = OllamaAgentApp(repl_mock)
+        async with app.run_test() as pilot:
+            chat_scroll = app.query_one("#chat-scroll")
+            agent_msg = AgentResponse()
+            await chat_scroll.mount(agent_msg)
+            await pilot.pause()
+
+            renderer = _TUIStreamingRenderer(app, chat_scroll, agent_msg)
+            renderer.on_reasoning_delta({"type": "reasoning_delta", "content": "Let me think..."})
+            renderer.on_text_delta({"type": "text_delta", "content": "Done response"})
+            renderer.on_tool_call({"type": "tool_call", "name": "file_search", "agent_name": "worker"})
+            renderer.on_tool_output({"type": "tool_output", "agent_name": "worker", "output_len": 64})
+            renderer.on_warning({"type": "warning", "content": "Rate limit warning"})
+            renderer.on_error({"type": "error", "content": "Something failed"})
+            renderer.close()
+
+            tool_calls = agent_msg.query(ToolCallMessage)
+            self.assertEqual(len(tool_calls), 1)
+            tool_outputs = agent_msg.query(ToolOutputMessage)
+            self.assertEqual(len(tool_outputs), 1)
+            sys_msgs = agent_msg.query(SystemMessage)
+            self.assertEqual(len(sys_msgs), 2)
+
+
+class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
+    """Unit tests for OllamaREPL helper methods and lifecycle."""
+
+    async def test_repl_yolo_handler(self) -> None:
+        runtime_mock = MagicMock()
+        runtime_mock.yolo_mode = False
+        runtime_mock.settings.rag = MagicMock()
+        runtime_mock.settings.model.name = "gemma4:26b"
+        runtime_mock.settings.model.base_url = "http://localhost:11434"
+
+        repl = OllamaREPL(runtime=runtime_mock)
+        repl.console = Console(file=io.StringIO())
+
+        # Toggle on
+        repl._handle_yolo_cmd([])
+        self.assertTrue(runtime_mock.yolo_mode)
+
+        # Explicit off
+        repl._handle_yolo_cmd(["off"])
+        self.assertFalse(runtime_mock.yolo_mode)
+
+        # Explicit on
+        repl._handle_yolo_cmd(["on"])
+        self.assertTrue(runtime_mock.yolo_mode)
+
+    async def test_repl_cleanup_unloads_rag(self) -> None:
+        runtime_mock = MagicMock()
+        runtime_mock.aclose = AsyncMock()
+        repl = OllamaREPL(runtime=runtime_mock)
+
+        rag_ctx_mock = MagicMock()
+        repl._rag_ctx = rag_ctx_mock
+
+        await repl.cleanup()
+        rag_ctx_mock.rag_manager.unload.assert_called_once()
+        runtime_mock.aclose.assert_awaited_once()
 

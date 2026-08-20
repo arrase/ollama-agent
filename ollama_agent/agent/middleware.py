@@ -22,12 +22,11 @@ def _extract_tool_name(request: Any) -> str:
     if name := getattr(request, "name", None):
         return str(name)
     if tool_call := getattr(request, "tool_call", None):
-        if isinstance(tool_call, dict) and "name" in tool_call:
-            return str(tool_call["name"])
-        if name := getattr(tool_call, "name", None):
-            return str(name)
+        if isinstance(tool_call, dict):
+            return str(tool_call.get("name", "unknown"))
+        return str(getattr(tool_call, "name", "unknown"))
     if tool := getattr(request, "tool", None):
-        return getattr(tool, "name", getattr(tool, "__name__", "unknown"))
+        return str(getattr(tool, "name", getattr(tool, "__name__", "unknown")))
     return "unknown"
 
 

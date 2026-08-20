@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import io
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from rich.console import Console
 
+from ollama_agent.core.models import ModelCapabilityError
 from ollama_agent.interfaces.cli import handle_cli_commands
 from ollama_agent.interfaces.dispatch import build_repl_handlers, render_repl_help, safe_call
 from ollama_agent.interfaces.model_commands import list_models, set_model
@@ -18,7 +20,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
     """Unit tests for CLI, model, session, and dispatch handlers."""
 
     def test_new_session_generates_uuid_hex(self) -> None:
-        console = Console(record=True)
+        console = Console(file=io.StringIO(), record=True)
         session_id = new_session(console)
         self.assertEqual(len(session_id), 8)
         self.assertIn("New session started", console.export_text())
@@ -50,13 +52,13 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         await safe_call(raise_skill_error)  # Should not raise
 
     async def test_list_models_empty(self) -> None:
-        console = Console(record=True)
+        console = Console(file=io.StringIO(), record=True)
         with patch("ollama_agent.interfaces.model_commands._list_models", AsyncMock(return_value=[])):
             await list_models(console, current_model="gemma4:26b", base_url="http://localhost:11434")
             self.assertIn("No models found", console.export_text())
 
     async def test_list_models_with_models(self) -> None:
-        console = Console(record=True)
+        console = Console(file=io.StringIO(), record=True)
         mock_m1 = MagicMock(model="gemma4:26b", size=1024**3 * 15)
         mock_m2 = MagicMock(model="llama3:8b", size=1024**3 * 5)
         with patch("ollama_agent.interfaces.model_commands._list_models", AsyncMock(return_value=[mock_m1, mock_m2])), \
@@ -67,8 +69,15 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             self.assertIn("llama3:8b", out)
             self.assertIn("current", out)
 
+    async def test_list_models_error_handled(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        with patch("ollama_agent.interfaces.model_commands._list_models", AsyncMock(side_effect=ConnectionError("Cannot connect"))):
+            await list_models(console, current_model="gemma4:26b", base_url="http://localhost:11434")
+            out = console.export_text()
+            self.assertIn("Error listing models", out)
+
     async def test_set_model_not_found(self) -> None:
-        console = Console(record=True)
+        console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
         runtime.settings.model.name = "gemma4:26b"
         runtime.settings.model.base_url = "http://localhost:11434"
@@ -79,7 +88,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             self.assertIn("not found", console.export_text())
 
     async def test_set_model_same_model(self) -> None:
-        console = Console(record=True)
+        console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
         runtime.settings.model.name = "gemma4:26b"
         runtime.settings.model.base_url = "http://localhost:11434"
@@ -91,7 +100,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Already using model", console.export_text())
 
     async def test_set_model_success(self) -> None:
-        console = Console(record=True)
+        console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
         runtime.settings.model.name = "gemma4:26b"
         runtime.settings.model.base_url = "http://localhost:11434"
@@ -107,7 +116,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Switched", console.export_text())
 
     def test_render_repl_help(self) -> None:
-        console = Console(record=True)
+        console = Console(file=io.StringIO(), record=True)
         handlers = build_repl_handlers(
             task_ctx=MagicMock(),
             skills_ctx=MagicMock(),
@@ -137,7 +146,6 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(handled)
             mock_list.assert_called_once()
 
-
     def test_handle_cli_commands_prompt(self) -> None:
         args = argparse.Namespace(command=None, prompt="hello world", yolo=True, rag=None)
         settings = Settings()
@@ -145,6 +153,17 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             with patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()):
                 handled = handle_cli_commands(args, settings)
                 self.assertTrue(handled)
+                mock_run.assert_awaited_once()
+
+    def test_handle_cli_commands_prompt_with_rag(self) -> None:
+        args = argparse.Namespace(command=None, prompt="query with rag", yolo=False, rag="my_db")
+        settings = Settings()
+        with patch("ollama_agent.interfaces.cli.run_non_interactive", AsyncMock()) as mock_run:
+            with patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()), \
+                 patch("ollama_agent.interfaces.cli.load_rag_database") as mock_load_rag:
+                handled = handle_cli_commands(args, settings)
+                self.assertTrue(handled)
+                mock_load_rag.assert_called_once()
                 mock_run.assert_awaited_once()
 
     def test_handle_cli_commands_unhandled(self) -> None:

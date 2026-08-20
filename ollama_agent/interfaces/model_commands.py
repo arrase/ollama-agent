@@ -54,7 +54,7 @@ async def list_models(
             "[dim]─" * 60
             + "[/dim]\n[dim]✓ = supports tools | Use /model-set <model> to switch[/dim]"
         )
-    except (ollama.ResponseError, OSError, ConnectionError, Exception) as exc:
+    except (ollama.ResponseError, OSError) as exc:
         console.print(f"[red]Error listing models: {exc}[/red]")
 
 
@@ -76,7 +76,7 @@ async def set_model(
                 "[dim]Use /models to see available models.[/dim]"
             )
             return runtime.settings.model.name
-    except (ollama.ResponseError, OSError, ConnectionError, Exception) as exc:
+    except (ollama.ResponseError, OSError) as exc:
         console.print(f"[red]Error checking model: {exc}[/red]")
         return runtime.settings.model.name
 
@@ -103,7 +103,7 @@ async def set_model(
             "[dim]Conversation preserved. Continue chatting.[/dim]"
         )
         return model_name
-    except (ollama.ResponseError, OSError, ConnectionError, Exception) as exc:
+    except (ollama.ResponseError, OSError) as exc:
         console.print(f"[red]Failed to switch to model '{model_name}': {exc}[/red]")
         return current
 

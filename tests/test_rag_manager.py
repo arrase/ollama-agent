@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -141,6 +142,27 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(hits[0]["filename"], "doc.txt")
                 self.assertEqual(hits[0]["score"], 0.92)
 
+    async def test_add_directory_and_errors(self) -> None:
+        sub_dir = self.rag_dir / "docs_dir"
+        sub_dir.mkdir()
+        f1 = sub_dir / "file1.md"
+        f1.write_text("# Doc 1\nSome useful content.", encoding="utf-8")
+        f2 = sub_dir / "file2.py"
+        f2.write_text("def hello(): return 'world'", encoding="utf-8")
+
+        mock_client = MagicMock()
+        self.manager._client = mock_client
+        self.manager._current_db = "dir_db"
+
+        with patch.object(RAGManager, "_get_embeddings", AsyncMock(side_effect=lambda chunks: [[0.1, 0.2, 0.3, 0.4]] * len(chunks))):
+            res = await self.manager.add_directory(str(sub_dir))
+            self.assertEqual(res["added"], 2)
+            self.assertEqual(res["failed"], 0)
+
+        # Unloaded database error
+        self.manager.unload()
+        with self.assertRaises(RAGNotLoadedError):
+            await self.manager.add_file(str(f1))
 
     def test_rag_context_find_or_exit(self) -> None:
         mock_mgr = MagicMock()
@@ -149,7 +171,7 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
             {"name": "docs_v2", "active": False, "chunks": 20},
             {"name": "code", "active": False, "chunks": 5},
         ]
-        ctx = RAGContext(rag_manager=mock_mgr, console=Console(record=True))
+        ctx = RAGContext(rag_manager=mock_mgr, console=Console(file=io.StringIO(), record=True))
 
         # Exact match should take priority even if a prefix match exists
         self.assertEqual(ctx._find_or_exit("docs"), "docs")
@@ -169,7 +191,7 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
             ctx._find_or_exit("alpha")
 
     def test_rag_command_handlers(self) -> None:
-        console = Console(record=True)
+        console = Console(file=io.StringIO(), record=True)
         ctx = RAGContext(rag_manager=self.manager, console=console)
 
         # Empty databases

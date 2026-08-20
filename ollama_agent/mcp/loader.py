@@ -99,6 +99,8 @@ async def load_main_mcp_tools(exit_stack: AsyncExitStack | None = None) -> list[
 
     try:
         client = MultiServerMCPClient(connections)  # type: ignore[arg-type]
+        if exit_stack is not None:
+            await exit_stack.enter_async_context(client)  # type: ignore[arg-type]
         tools = await client.get_tools()
         _log.info(
             "Loaded %d MCP tools from %d servers",
@@ -141,6 +143,8 @@ async def load_subagent_mcp_tools(
 
     try:
         client = MultiServerMCPClient(servers)  # type: ignore[arg-type]
+        if exit_stack is not None:
+            await exit_stack.enter_async_context(client)  # type: ignore[arg-type]
         tools = await client.get_tools()
         return tools
     except Exception as exc:

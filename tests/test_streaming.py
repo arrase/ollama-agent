@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import io
 import unittest
 from typing import Any, AsyncGenerator
 from unittest.mock import MagicMock
 
 from rich.console import Console
-
 
 from ollama_agent.streaming.base import StreamingRenderer
 from ollama_agent.streaming.console_renderer import ConsoleStreamingRenderer
@@ -37,17 +37,24 @@ class TestStreamingSystem(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(renderer.events), 1)
 
     def test_console_streaming_renderer_deltas(self) -> None:
-        console = Console(record=True)
+        console = Console(file=io.StringIO(), record=True)
         renderer = ConsoleStreamingRenderer(console=console)
 
         renderer.on_event({"type": "text_delta", "content": "Hello world\n"})
+        renderer.on_event({"type": "reasoning_delta", "content": "Thinking step\n"})
         renderer.on_event({"type": "tool_call", "name": "search"})
         renderer.on_event({"type": "tool_output", "name": "search", "output_len": 42})
+        renderer.on_event({"type": "error", "content": "Network failure"})
+        renderer.on_event({"type": "warning", "content": "Slow connection"})
         renderer.close()
 
         out = console.export_text()
+        self.assertIn("Hello world", out)
+        self.assertIn("Thinking step", out)
         self.assertIn("Calling tool", out)
         self.assertIn("Tool output received", out)
+        self.assertIn("Network failure", out)
+        self.assertIn("Slow connection", out)
 
     async def test_stream_agent_events_pipeline(self) -> None:
         mock_runtime = MagicMock()

@@ -6,15 +6,24 @@ from contextlib import AsyncExitStack
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from langgraph.types import Command
+
 from ollama_agent.agent.agent import AgentRuntime, _process_message_chunk
 from ollama_agent.agent.builtin_tools import get_rag_manager, rag_search, set_rag_manager
 from ollama_agent.agent.middleware import _extract_tool_name, _stream_tool_events
 from ollama_agent.agent.subagents import build_subagents
+from ollama_agent.core.prompt_processor import PromptProcessingError
 from ollama_agent.settings.config import ModelSettings, Settings, SubAgentSettings
 
 
 class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
     """Unit tests for agent helpers, middleware, subagents, and builtin tools."""
+
+    def setUp(self) -> None:
+        set_rag_manager(None)
+
+    def tearDown(self) -> None:
+        set_rag_manager(None)
 
     def test_process_message_chunk_text(self) -> None:
         chunk = MagicMock(type="ai", content="Hello world", additional_kwargs={})
@@ -236,4 +245,65 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(events), 2)
         self.assertEqual(events[0], {"type": "tool_call", "name": "test_tool"})
         self.assertEqual(events[1], {"type": "text_delta", "content": "Hello response"})
+
+    async def test_agent_runtime_run_streamed_interrupt(self) -> None:
+        settings = Settings()
+        runtime = AgentRuntime(settings=settings)
+
+        async def mock_astream(*args: Any, **kwargs: Any):
+            ai_chunk = MagicMock(type="ai", content="Checking...", additional_kwargs={})
+            yield "messages", (ai_chunk,)
+
+        mock_graph = MagicMock()
+        mock_graph.astream = mock_astream
+        mock_state = MagicMock(interrupts=[MagicMock(value={"action_requests": [{"name": "write"}]})])
+        mock_graph.aget_state = AsyncMock(return_value=mock_state)
+        runtime.graph = mock_graph
+
+        events = []
+        async for event in runtime.run_streamed("Do write"):
+            events.append(event)
+
+        self.assertEqual(len(events), 2)
+        self.assertEqual(events[0], {"type": "text_delta", "content": "Checking..."})
+        self.assertEqual(events[1]["type"], "interrupt")
+        self.assertEqual(len(events[1]["interrupts"]), 1)
+
+    async def test_agent_runtime_run_streamed_command_input(self) -> None:
+        settings = Settings()
+        runtime = AgentRuntime(settings=settings)
+
+        async def mock_astream(inputs: Any, *args: Any, **kwargs: Any):
+            self.assertIsInstance(inputs, Command)
+            ai_chunk = MagicMock(type="ai", content="Resumed", additional_kwargs={})
+            yield "messages", (ai_chunk,)
+
+        mock_graph = MagicMock()
+        mock_graph.astream = mock_astream
+        mock_state = MagicMock(interrupts=[])
+        mock_graph.aget_state = AsyncMock(return_value=mock_state)
+        runtime.graph = mock_graph
+
+        cmd = Command(resume={"decisions": [{"type": "approve"}]})
+        events = []
+        async for event in runtime.run_streamed(cmd):
+            events.append(event)
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0], {"type": "text_delta", "content": "Resumed"})
+
+    async def test_agent_runtime_run_streamed_prompt_error(self) -> None:
+        settings = Settings()
+        runtime = AgentRuntime(settings=settings)
+        mock_graph = MagicMock()
+        runtime.graph = mock_graph
+
+        with patch("ollama_agent.agent.agent.process_prompt_mentions", side_effect=PromptProcessingError("Invalid file mention")):
+            events = []
+            async for event in runtime.run_streamed("@nonexistent_mention"):
+                events.append(event)
+
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0]["type"], "error")
+            self.assertIn("Invalid file mention", events[0]["content"])
 

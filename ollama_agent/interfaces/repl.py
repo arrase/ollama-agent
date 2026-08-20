@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -82,7 +83,7 @@ class _TUIStreamingRenderer(StreamingRenderer):
 
     def on_tool_call(self, event: dict[str, Any]) -> None:
         self.widget.add_tool_call(
-            name=event.get("name", "unknown"),
+            name=event["name"],
             agent=event.get("agent_name"),
         )
         self._scroll()
@@ -106,12 +107,6 @@ class _TUIStreamingRenderer(StreamingRenderer):
         self._timer.stop()
         self.widget.finish_generation()
         self._do_scroll()
-
-
-# ─── Header ──────────────────────────────────────────────────────────────────
-
-
-# ─── Custom Widgets and Dialogs imported from .tui_components ─────────────────
 
 
 # ─── Main TUI App ────────────────────────────────────────────────────────────
@@ -160,7 +155,7 @@ class OllamaAgentApp(App):
 
     CSS_PATH = "repl.css"
 
-    def __init__(self, repl: "OllamaREPL"):
+    def __init__(self, repl: OllamaREPL) -> None:
         super().__init__()
         self.repl = repl
         self._is_generating = False
@@ -302,7 +297,7 @@ class OllamaAgentApp(App):
 
     # ── File tree walk ────────────────────────────────────────────────────
 
-    def _file_completions(self, prefix: str):
+    def _file_completions(self, prefix: str) -> Iterator[tuple[str, str]]:
         cwd = Path.cwd()
         show_hidden = prefix.startswith(".")
         count = 0
@@ -314,7 +309,6 @@ class OllamaAgentApp(App):
         for root, dirs, files in tree:
             dirs_visited += 1
             if dirs_visited > max_dirs_visited:
-
                 return
 
             root_path = Path(root)
@@ -366,9 +360,9 @@ class OllamaAgentApp(App):
         scroll = self.query_one("#chat-scroll")
         self.call_after_refresh(scroll.scroll_end, animate=False)
 
-    # ── Slash command dispatch ────────────────────────────────────────────
+    # ── Slash command dispatch ────────────────────────────────────
 
-    async def _run_slash_command(self, cmd_line: str):
+    async def _run_slash_command(self, cmd_line: str) -> None:
         parts = cmd_line.split()
         cmd = parts[0].lower()
         args = parts[1:]
@@ -379,7 +373,7 @@ class OllamaAgentApp(App):
             return
 
         if cmd == "/clear":
-            scroll.query("*").remove()
+            await scroll.remove_children()
             return
 
         if cmd == "/task-create":
@@ -426,7 +420,7 @@ class OllamaAgentApp(App):
             return
 
         spec = commands[cmd]
-        if spec.usage and not args:
+        if spec.usage and "<" in spec.usage and not args:
             scroll.mount(SystemMessage(f"[bold #f87171]✕ Usage:[/bold #f87171] {spec.usage}"))
             self._deferred_scroll()
             return
@@ -445,14 +439,14 @@ class OllamaAgentApp(App):
 
     # ── Modal helpers ─────────────────────────────────────────────────────
 
-    def _push_task_modal(self, task_id: str, force: bool):
-        def on_dismiss(result):
+    def _push_task_modal(self, task_id: str, force: bool) -> None:
+        def on_dismiss(result: tuple[str, str, str, str, str] | None) -> None:
             if result:
                 tid, title, model, effort, prompt = result
                 self.run_worker(self._do_create_task(tid, title, model, effort, prompt, force))
         self.push_screen(TaskCreateModal(self, task_id, force), on_dismiss)
 
-    async def _do_create_task(self, task_id, title, model, effort, prompt, force):
+    async def _do_create_task(self, task_id: str, title: str, model: str, effort: str, prompt: str, force: bool) -> None:
         scroll = self.query_one("#chat-scroll")
         with self.repl.console.capture() as capture:
             await safe_call(
@@ -465,14 +459,14 @@ class OllamaAgentApp(App):
             scroll.mount(SystemMessage(Text.from_ansi(output)))
             self._deferred_scroll()
 
-    def _push_skill_modal(self, skill_id: str, force: bool):
-        def on_dismiss(result):
+    def _push_skill_modal(self, skill_id: str, force: bool) -> None:
+        def on_dismiss(result: tuple[str, str, str, str] | None) -> None:
             if result:
                 sid, name, description, instructions = result
                 self.run_worker(self._do_create_skill(sid, name, description, instructions, force))
         self.push_screen(SkillCreateModal(self, skill_id, force), on_dismiss)
 
-    async def _do_create_skill(self, skill_id, name, description, instructions, force):
+    async def _do_create_skill(self, skill_id: str, name: str, description: str, instructions: str, force: bool) -> None:
         scroll = self.query_one("#chat-scroll")
         with self.repl.console.capture() as capture:
             await safe_call(
@@ -514,13 +508,11 @@ class OllamaAgentApp(App):
 
             # Check if the execution got interrupted
             config = {"configurable": {"thread_id": self.repl.runtime.thread_id}}
-            try:
-                state = await self.repl.runtime.graph.aget_state(config)
-                if state.interrupts:
-                    interrupt_val = state.interrupts[0].value
-                    action_requests = interrupt_val.get("action_requests", [])
-
-                    # Mount approval widget
+            state = await self.repl.runtime.graph.aget_state(config)
+            if state.interrupts:
+                interrupt_val = state.interrupts[0].value
+                action_requests = interrupt_val.get("action_requests", [])
+                if action_requests:
                     approval_widget = ToolApprovalWidget(
                         action_requests=action_requests,
                         app_ref=self,
@@ -529,9 +521,6 @@ class OllamaAgentApp(App):
                     )
                     agent_msg.mount(approval_widget)
                     self._deferred_scroll()
-            except Exception as e:
-                scroll.mount(SystemMessage(f"[bold #f87171]✕ Error checking state:[/bold #f87171] [red]{e}[/red]"))
-                self._deferred_scroll()
         finally:
             self._is_generating = False
             footer.set_generating(False)

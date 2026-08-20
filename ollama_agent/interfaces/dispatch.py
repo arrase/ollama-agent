@@ -30,7 +30,6 @@ from .model_commands import list_models
 CLIHandler = Callable[[], object]
 
 
-
 @dataclass(frozen=True)
 class REPLCommand:
     """Declarative REPL command description."""
@@ -260,7 +259,6 @@ def build_repl_handlers(
         ),
     }
     return cmds
-
 
 
 def render_repl_help(console: Console, commands: dict[str, REPLCommand]) -> None:

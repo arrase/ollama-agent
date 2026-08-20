@@ -11,6 +11,7 @@ from textual.app import ComposeResult
 from textual.containers import Container, Horizontal
 from textual.message import Message
 from textual.screen import ModalScreen
+from textual.timer import Timer
 from textual.widgets import Button, Collapsible, Input, Label, Markdown, OptionList, Static, TextArea
 
 from ..settings.paths import APP_DIR
@@ -24,7 +25,7 @@ if TYPE_CHECKING:
 class AgentHeader(Static):
     """Dynamic TUI Header displaying agent status information."""
 
-    def __init__(self, repl: OllamaREPL, **kwargs: Any):
+    def __init__(self, repl: OllamaREPL, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.repl = repl
 
@@ -92,7 +93,7 @@ class ReplInput(TextArea):
         ("super+v", "paste", "Paste"),
     ]
 
-    def __init__(self, **kwargs: Any):
+    def __init__(self, **kwargs: Any) -> None:
         kwargs.setdefault("highlight_cursor_line", False)
         kwargs.setdefault("show_line_numbers", False)
         kwargs.setdefault("placeholder", "Ask anything, / for commands, @ for files...")
@@ -274,7 +275,7 @@ class ReplInput(TextArea):
 class UserMessage(Container):
     """Rendered user prompt."""
 
-    def __init__(self, text: str, **kwargs: Any):
+    def __init__(self, text: str, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.text = text
 
@@ -303,9 +304,9 @@ class AgentResponse(Container):
         self._thinking_chunks: list[str] = []
         self.current_text_widget: Markdown | None = None
         self._text_chunks: list[str] = []
-        self.thinking_timer: Any = None
+        self.thinking_timer: Timer | None = None
         self._thinking_dots_count = 3
-        self._text_update_timer: Any = None
+        self._text_update_timer: Timer | None = None
         self._last_text_update = 0.0
 
     def compose(self) -> ComposeResult:
@@ -327,11 +328,8 @@ class AgentResponse(Container):
     def append_thinking(self, delta: str) -> None:
         self.current_text_widget = None
         if self.current_thinking is None:
-            collapse_default = True
-            if self.app:
-                app_ref: Any = self.app
-                if hasattr(app_ref, "repl"):
-                    collapse_default = app_ref.repl.runtime.settings.runtime.collapse_thinking
+            app_ref = getattr(self.app, "repl", None)
+            collapse_default = app_ref.runtime.settings.runtime.collapse_thinking if app_ref else True
             self.current_thinking_text = Static("", classes="msg-content thinking-body")
             self._thinking_chunks = []
             self.current_thinking = Collapsible(
@@ -413,7 +411,7 @@ class AgentResponse(Container):
 class ToolCallMessage(Static):
     """One-line tool invocation event."""
 
-    def __init__(self, tool_name: str, agent_name: str | None = None, **kwargs: Any):
+    def __init__(self, tool_name: str, agent_name: str | None = None, **kwargs: Any) -> None:
         prefix = f"[dim]{escape(f'[{agent_name}]')}[/dim] " if agent_name else ""
         super().__init__(
             f"  [#fbbf24]⚙[/#fbbf24] {prefix}[bold #e6edf3]{escape(tool_name)}[/bold #e6edf3]",
@@ -424,7 +422,7 @@ class ToolCallMessage(Static):
 class ToolOutputMessage(Static):
     """One-line tool output acknowledgement."""
 
-    def __init__(self, agent_name: str | None = None, output_len: int | None = None, **kwargs: Any):
+    def __init__(self, agent_name: str | None = None, output_len: int | None = None, **kwargs: Any) -> None:
         prefix = f"[dim]{escape(f'[{agent_name}]')}[/dim] " if agent_name else ""
         suffix = f" [dim]({output_len} chars)[/dim]" if output_len is not None else ""
         super().__init__(
@@ -443,7 +441,7 @@ class SystemMessage(Static):
 class TaskCreateModal(ModalScreen):
     """Modal dialog form for creating a new Task."""
 
-    def __init__(self, app_ref: OllamaAgentApp, task_id: str, force: bool):
+    def __init__(self, app_ref: OllamaAgentApp, task_id: str, force: bool) -> None:
         super().__init__()
         self.app_ref = app_ref
         self.task_id = task_id
@@ -487,7 +485,7 @@ class TaskCreateModal(ModalScreen):
 class SkillCreateModal(ModalScreen):
     """Modal dialog form for creating a new Skill."""
 
-    def __init__(self, app_ref: OllamaAgentApp, skill_id: str, force: bool):
+    def __init__(self, app_ref: OllamaAgentApp, skill_id: str, force: bool) -> None:
         super().__init__()
         self.app_ref = app_ref
         self.skill_id = skill_id
@@ -527,7 +525,7 @@ class SkillCreateModal(ModalScreen):
 class ToolApprovalWidget(Container):
     """Inline widget prompting the user for approval of sensitive tool calls."""
 
-    def __init__(self, action_requests: list[dict[str, Any]], app_ref: OllamaAgentApp, scroll: Any, agent_msg: AgentResponse, **kwargs: Any):
+    def __init__(self, action_requests: list[dict[str, Any]], app_ref: OllamaAgentApp, scroll: Any, agent_msg: AgentResponse, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.action_requests = action_requests
         self.app_ref = app_ref
@@ -538,8 +536,8 @@ class ToolApprovalWidget(Container):
     def compose(self) -> ComposeResult:
         yield Static("[bold #fbbf24]⚠ Action Approval Required[/bold #fbbf24]", classes="approval-title")
         for req in self.action_requests:
-            name = req.get("name", "unknown")
-            args = req.get("args", {})
+            name = req["name"]
+            args = req["args"]
             yield Static(f"Tool: [bold #38bdf8]{name}[/bold #38bdf8]\nArguments: [dim]{args}[/dim]", classes="approval-details")
 
         with Horizontal(classes="approval-buttons") as buttons:
@@ -577,7 +575,7 @@ class ToolApprovalWidget(Container):
 
         decisions = []
         for req in self.action_requests:
-            name = req.get("name", "unknown")
+            name = req["name"]
             if decision_type == "approve-btn":
                 decisions.append({"type": "approve"})
             elif decision_type == "reject-btn":

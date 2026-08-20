@@ -184,12 +184,7 @@ class AgentRuntime:
         )
 
         def should_interrupt_tool(request: Any) -> bool:
-            if self.yolo_mode:
-                return False
-            tool_name = request.tool_call["name"]
-            if tool_name in self.auto_approved_tools:
-                return False
-            return True
+            return not self.yolo_mode and request.tool_call["name"] not in self.auto_approved_tools
 
         interrupt_on = {
             "execute": {
@@ -211,21 +206,21 @@ class AgentRuntime:
         if rag_mgr is not None and rag_mgr.current_database is not None:
             tools.append(rag_search)
 
-        kwargs: dict[str, Any] = dict(
-            model=model,
-            tools=tools,
-            system_prompt=self._instructions,
-            backend=backend,
-            memory=memory_sources,
-            skills=["/skills/"],
-            checkpointer=await self._sqlite_checkpointer(),
-            middleware=[
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "tools": tools,
+            "system_prompt": self._instructions,
+            "backend": backend,
+            "memory": memory_sources,
+            "skills": ["/skills/"],
+            "checkpointer": await self._sqlite_checkpointer(),
+            "middleware": [
                 create_summarization_tool_middleware(model, backend),
                 stream_tool_events_mw,
             ],
-            name="ollama-agent",
-            interrupt_on=interrupt_on,
-        )
+            "name": "ollama-agent",
+            "interrupt_on": interrupt_on,
+        }
         if subagents:
             kwargs["subagents"] = subagents
 
@@ -249,6 +244,7 @@ class AgentRuntime:
         thread = thread_id or self.thread_id
         if self.graph is None:
             await self.reload()
+        assert self.graph is not None
 
         config = {"configurable": {"thread_id": thread}}
         hide_reasoning = self.settings.model.reasoning_effort in ("hide", "disabled")
@@ -281,14 +277,7 @@ class AgentRuntime:
 
             inputs = {"messages": [user_msg]}
 
-        if self.graph is None:
-            await self.reload()
-        if self.graph is None:
-            raise RuntimeError("Agent runtime graph not initialized.")
-
-        graph = self.graph
-
-        async for mode, event in graph.astream(
+        async for mode, event in self.graph.astream(
             inputs,
             config,
             stream_mode=["messages", "custom"],
@@ -306,7 +295,7 @@ class AgentRuntime:
                     yield result
 
         # Check if we were interrupted
-        state = await graph.aget_state(config)
+        state = await self.graph.aget_state(config)
         if state.interrupts:
             yield {"type": "interrupt", "interrupts": state.interrupts, "config": config}
 

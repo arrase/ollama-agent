@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -25,7 +26,7 @@ class TestSkillsCommands(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.mgr = SkillManager(skills_dir=Path(self.temp_dir.name))
-        self.console = Console(record=True)
+        self.console = Console(file=io.StringIO(), record=True)
         self.ctx = SkillsContext(console=self.console, skill_manager=self.mgr)
 
     def tearDown(self) -> None:

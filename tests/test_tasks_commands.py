@@ -1,13 +1,12 @@
 from __future__ import annotations
 
+import io
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from rich.console import Console
-
-
 
 from ollama_agent.tasks.commands import (
     AmbiguousTaskError,
@@ -28,7 +27,7 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.mgr = TaskManager(tasks_dir=Path(self.temp_dir.name))
-        self.console = Console(record=True)
+        self.console = Console(file=io.StringIO(), record=True)
         self.ctx = TasksContext(console=self.console, task_manager=self.mgr)
 
     def tearDown(self) -> None:
