@@ -26,10 +26,12 @@ from ..core import (
 )
 from ..mcp import load_main_mcp_tools
 from ..settings import (
+    AGENTS_PATH,
     HISTORY_DB_PATH,
     MEMORY_PATH,
     SKILLS_DIR,
     Settings,
+    ensure_agents_file,
     ensure_memory_file,
     find_agents_file,
     load_instructions,
@@ -96,6 +98,7 @@ class AgentRuntime:
         self._instructions += os_info
 
         await asyncio.to_thread(ensure_memory_file, MEMORY_PATH)
+        await asyncio.to_thread(ensure_agents_file, AGENTS_PATH)
         self.graph = await self._build_graph()
 
     async def _build_graph(self) -> Any:

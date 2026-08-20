@@ -147,7 +147,11 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         settings = Settings()
         runtime = AgentRuntime(settings=settings)
 
-        with patch.object(AgentRuntime, "_build_graph", AsyncMock(return_value=MagicMock())) as mock_bg:
+        with patch.object(AgentRuntime, "_build_graph", AsyncMock(return_value=MagicMock())) as mock_bg, \
+             patch("ollama_agent.agent.agent.load_instructions", return_value="instructions"), \
+             patch("ollama_agent.agent.agent.load_fs_policy_sandboxed", return_value="policy"), \
+             patch("ollama_agent.agent.agent.ensure_memory_file"), \
+             patch("ollama_agent.agent.agent.ensure_agents_file"):
             await runtime.reload()
             self.assertIsNotNone(runtime.graph)
             mock_bg.assert_awaited_once()

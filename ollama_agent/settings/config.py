@@ -306,7 +306,14 @@ def ensure_agents_file(agents_path: Path = AGENTS_PATH) -> Path:
 VALID_RESET_OPTIONS = {"all", "config-file", "system-prompt"}
 
 
-def reset_config(option: str) -> list[str]:
+def reset_config(
+    option: str,
+    *,
+    settings_path: Path = SETTINGS_PATH,
+    instructions_path: Path = INSTRUCTIONS_PATH,
+    traversal_path: Path = FS_POLICY_TRAVERSAL_PATH,
+    sandboxed_path: Path = FS_POLICY_SANDBOXED_PATH,
+) -> list[str]:
     """Reset configuration or system prompt to defaults."""
     if option not in VALID_RESET_OPTIONS:
         raise ValueError(
@@ -316,24 +323,24 @@ def reset_config(option: str) -> list[str]:
     messages: list[str] = []
 
     if option in ("all", "config-file"):
-        if SETTINGS_PATH.exists():
-            SETTINGS_PATH.unlink()
-        save_settings(Settings())
-        messages.append(f"Reset: Restored default configuration at {SETTINGS_PATH}")
+        if settings_path.exists():
+            settings_path.unlink()
+        save_settings(Settings(), settings_path)
+        messages.append(f"Reset: Restored default configuration at {settings_path}")
 
     if option in ("all", "system-prompt"):
-        if INSTRUCTIONS_PATH.exists():
-            INSTRUCTIONS_PATH.unlink()
-        if FS_POLICY_TRAVERSAL_PATH.exists():
-            FS_POLICY_TRAVERSAL_PATH.unlink()
-        if FS_POLICY_SANDBOXED_PATH.exists():
-            FS_POLICY_SANDBOXED_PATH.unlink()
-        load_instructions()
-        load_fs_policy_traversal()
-        load_fs_policy_sandboxed()
-        messages.append(f"Reset: Restored default system prompt at {INSTRUCTIONS_PATH}")
-        messages.append(f"Reset: Restored default traversal policy at {FS_POLICY_TRAVERSAL_PATH}")
-        messages.append(f"Reset: Restored default sandboxed policy at {FS_POLICY_SANDBOXED_PATH}")
+        if instructions_path.exists():
+            instructions_path.unlink()
+        if traversal_path.exists():
+            traversal_path.unlink()
+        if sandboxed_path.exists():
+            sandboxed_path.unlink()
+        load_instructions(instructions_path)
+        load_fs_policy_traversal(traversal_path)
+        load_fs_policy_sandboxed(sandboxed_path)
+        messages.append(f"Reset: Restored default system prompt at {instructions_path}")
+        messages.append(f"Reset: Restored default traversal policy at {traversal_path}")
+        messages.append(f"Reset: Restored default sandboxed policy at {sandboxed_path}")
 
     return messages
 

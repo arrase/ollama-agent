@@ -134,16 +134,54 @@ class TestConfigManagement(unittest.TestCase):
         self.assertTrue(sandboxed_file.exists())
         self.assertTrue(len(sandboxed_content) > 0)
 
+    def test_load_settings_does_not_overwrite_existing_file(self) -> None:
+        custom_yaml = "model:\n  name: my-custom-model:latest\n  temperature: 0.8\n"
+        self.settings_file.write_text(custom_yaml, encoding="utf-8")
+
+        loaded = load_settings(self.settings_file)
+        self.assertEqual(loaded.model.name, "my-custom-model:latest")
+        self.assertEqual(loaded.model.temperature, 0.8)
+        self.assertEqual(self.settings_file.read_text(encoding="utf-8"), custom_yaml)
+
+    def test_load_instructions_preserves_custom_content(self) -> None:
+        instructions_file = Path(self.temp_dir.name) / "instructions.md"
+        custom_prompt = "# Custom Agent Instructions\nAlways be concise."
+        instructions_file.write_text(custom_prompt, encoding="utf-8")
+
+        loaded = load_instructions(instructions_file)
+        self.assertEqual(loaded, custom_prompt)
+        self.assertEqual(instructions_file.read_text(encoding="utf-8"), custom_prompt)
+
     def test_reset_config_options(self) -> None:
         with self.assertRaises(ValueError):
             reset_config("invalid_option")
 
-        msgs = reset_config("config-file")
+        inst_path = Path(self.temp_dir.name) / "instructions.md"
+        trav_path = Path(self.temp_dir.name) / "fs_traversal.md"
+        sand_path = Path(self.temp_dir.name) / "fs_sandboxed.md"
+
+        msgs = reset_config(
+            "config-file",
+            settings_path=self.settings_file,
+            instructions_path=inst_path,
+            traversal_path=trav_path,
+            sandboxed_path=sand_path,
+        )
         self.assertIsInstance(msgs, list)
         self.assertTrue(len(msgs) > 0)
+        self.assertTrue(self.settings_file.exists())
 
-        msgs_all = reset_config("all")
+        msgs_all = reset_config(
+            "all",
+            settings_path=self.settings_file,
+            instructions_path=inst_path,
+            traversal_path=trav_path,
+            sandboxed_path=sand_path,
+        )
         self.assertTrue(len(msgs_all) >= 2)
+        self.assertTrue(inst_path.exists())
+        self.assertTrue(trav_path.exists())
+        self.assertTrue(sand_path.exists())
 
 
 if __name__ == "__main__":
