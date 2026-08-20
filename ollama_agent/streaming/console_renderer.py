@@ -156,6 +156,8 @@ class ConsoleStreamingRenderer(StreamingRenderer):
                 elif choice == "c":
                     self.console.print("  [red]✗ Cancelled[/red]\n")
                     raise KeyboardInterrupt()
+                else:
+                    self.console.print("  [red]Invalid choice. Please enter 'a', 'r', 's', or 'c'.[/red]")
         except (EOFError, KeyboardInterrupt):
             self.console.print("  [red]✗ Cancelled[/red]\n")
             raise KeyboardInterrupt()

@@ -34,6 +34,24 @@ def _default_instructions() -> str:
     )
 
 
+def _default_traversal() -> str:
+    return (
+        resources.files(__package__)
+        .joinpath("prompts/fs_policy_traversal.md")
+        .read_text(encoding="utf-8")
+        .strip()
+    )
+
+
+def _default_sandboxed() -> str:
+    return (
+        resources.files(__package__)
+        .joinpath("prompts/fs_policy_sandboxed.md")
+        .read_text(encoding="utf-8")
+        .strip()
+    )
+
+
 # ---------------------------------------------------------------------------
 # Settings dataclasses (CUD-inspired)
 # ---------------------------------------------------------------------------
@@ -230,25 +248,11 @@ def load_instructions(instructions_path: Path = INSTRUCTIONS_PATH) -> str:
 
 def load_fs_policy_traversal(policy_path: Path = FS_POLICY_TRAVERSAL_PATH) -> str:
     """Load filesystem traversal policy from file or return defaults."""
-    def _default_traversal() -> str:
-        return (
-            resources.files(__package__)
-            .joinpath("prompts/fs_policy_traversal.md")
-            .read_text(encoding="utf-8")
-            .strip()
-        )
     return _load_prompt_file(policy_path, _default_traversal)
 
 
 def load_fs_policy_sandboxed(policy_path: Path = FS_POLICY_SANDBOXED_PATH) -> str:
     """Load sandboxed filesystem policy from file or return defaults."""
-    def _default_sandboxed() -> str:
-        return (
-            resources.files(__package__)
-            .joinpath("prompts/fs_policy_sandboxed.md")
-            .read_text(encoding="utf-8")
-            .strip()
-        )
     return _load_prompt_file(policy_path, _default_sandboxed)
 
 
@@ -272,9 +276,16 @@ def ensure_memory_file(memory_path: Path = MEMORY_PATH) -> Path:
 # Reset
 # ---------------------------------------------------------------------------
 
+VALID_RESET_OPTIONS = {"all", "config-file", "system-prompt"}
+
 
 def reset_config(option: str) -> None:
     """Reset configuration or system prompt to defaults."""
+    if option not in VALID_RESET_OPTIONS:
+        raise ValueError(
+            f"Invalid reset option '{option}'. Expected one of: {sorted(VALID_RESET_OPTIONS)}"
+        )
+
     if option in ("all", "config-file"):
         if SETTINGS_PATH.exists():
             SETTINGS_PATH.unlink()

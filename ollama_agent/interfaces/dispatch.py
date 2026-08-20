@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, Any
 
 from rich.console import Console
 from rich.markup import escape
@@ -12,6 +12,7 @@ from rich.panel import Panel
 
 from ..rag import (
     RAGContext,
+    RAGError,
     add_rag_directory,
     add_rag_file,
     create_rag_database,
@@ -21,9 +22,10 @@ from ..rag import (
     show_rag_status,
     unload_rag_database,
 )
-from ..skills import SkillsContext, create_skill, delete_skill, list_skills, show_skill
-from ..tasks.commands import CLIContext, create_task, delete_task, list_tasks, run_task
+from ..skills import SkillError, SkillsContext, create_skill, delete_skill, list_skills, show_skill
+from ..tasks.commands import CLIContext, TaskError, create_task, delete_task, list_tasks, run_task
 from .model_commands import list_models
+import inspect
 
 CLIHandler = Callable[[], object]
 
@@ -36,6 +38,16 @@ class REPLCommand:
     section: str
     usage: str | None
     handler: Callable[[list[str]], object]
+
+
+async def safe_call(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
+    """Call *fn*(*args, **kwargs), awaiting if necessary and silencing SystemExit/domain errors."""
+    try:
+        result = fn(*args, **kwargs)
+        if inspect.isawaitable(result):
+            await result
+    except (SystemExit, SkillError, TaskError, RAGError):
+        pass
 
 
 REPL_SECTIONS: tuple[str, ...] = (
@@ -125,8 +137,7 @@ def build_repl_handlers(
             else add_rag_file(get_rag_ctx(), paths[0])
         )
 
-    cmds: dict[str, REPLCommand] = {}
-    cmds.update({
+    cmds: dict[str, REPLCommand] = {
         "/help": REPLCommand("Show this help message", "General", None, lambda _: render_repl_help(console, cmds)),
         "/yolo": REPLCommand(
             "Toggle YOLO mode or set it explicitly (on/off)",
@@ -242,7 +253,7 @@ def build_repl_handlers(
             "/skill-create <id> [--force]",
             handle_skill_create,
         ),
-    })
+    }
     return cmds
 
 

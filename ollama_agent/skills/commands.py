@@ -49,7 +49,7 @@ class SkillsContext:
         raise AmbiguousSkillError(msg)
 
     def _require(self, value: str, name: str) -> str:
-        if not (cleaned := value.strip().strip("\n")):
+        if not (cleaned := value.strip()):
             raise ValidationError(f"{name} cannot be empty.")
         return cleaned
 

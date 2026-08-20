@@ -27,8 +27,11 @@ class RAGContext:
 
     def _find_or_exit(self, name: str) -> str:
         """Find a database by name/prefix or raise RAGError."""
+        target = name.strip()
         names = [d["name"] for d in self.rag_manager.list_databases()]
-        matches = [c for c in names if c.startswith(name.strip())]
+        if target in names:
+            return target
+        matches = [c for c in names if c.startswith(target)]
         if len(matches) == 1:
             return matches[0]
         msg = (

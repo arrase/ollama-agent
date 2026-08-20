@@ -194,7 +194,7 @@ class RAGManager:
         # Generate embeddings in batch and store
         embeddings = await self._get_embeddings(chunks)
         points: list[PointStruct] = []
-        for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=False)):
+        for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=True)):
             point_id = self._generate_point_id(str(path), i)
             points.append(
                 PointStruct(
@@ -299,7 +299,7 @@ class RAGManager:
                 for (
                     (source, fname, chunk, chunk_idx, total_chunks),
                     embedding,
-                ) in zip(batch, embeddings, strict=False):
+                ) in zip(batch, embeddings, strict=True):
                     point_id = self._generate_point_id(source, chunk_idx)
                     points.append(
                         PointStruct(
@@ -367,19 +367,20 @@ class RAGManager:
 
         return [
             {
-                "content": (payload := hit.payload or {}).get("content", ""),
-                "source": payload.get("source", ""),
-                "filename": payload.get("filename", ""),
+                "content": hit.payload["content"],
+                "source": hit.payload["source"],
+                "filename": hit.payload["filename"],
                 "score": hit.score,
-                "chunk_index": payload.get("chunk_index", 0),
+                "chunk_index": hit.payload["chunk_index"],
             }
             for hit in results
+            if hit.payload is not None
         ]
 
     async def _get_embedding(self, text: str) -> list[float]:
         """Generate embedding for text using Ollama."""
         embeddings = await self._get_embeddings([text])
-        return embeddings[0] if embeddings else []
+        return embeddings[0]
 
     async def _get_embeddings(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a batch of texts using Ollama."""
@@ -391,7 +392,7 @@ class RAGManager:
                 model=self.settings.embedder_model,
                 input=texts,
             )
-            embeddings: list[list[float]] = getattr(response, "embeddings", []) or []
+            embeddings: list[list[float]] = [list(vec) for vec in response.embeddings]
 
             if len(embeddings) != len(texts):
                 raise RAGError(
@@ -429,15 +430,17 @@ class RAGManager:
         """Split text into overlapping chunks."""
         chunk_size = self.settings.chunk_size
         overlap = self.settings.chunk_overlap
+        if overlap >= chunk_size:
+            overlap = chunk_size // 2
 
         if len(text) <= chunk_size:
             return [text]
 
-        chunks = []
+        chunks: list[str] = []
         start = 0
 
         while start < len(text):
-            end = start + chunk_size
+            end = min(start + chunk_size, len(text))
             chunk = text[start:end]
 
             # Try to break at a sentence or paragraph boundary
@@ -450,10 +453,14 @@ class RAGManager:
                         end = start + len(chunk)
                         break
 
-            chunks.append(chunk.strip())
-            start = end - overlap
+            stripped = chunk.strip()
+            if stripped:
+                chunks.append(stripped)
 
-        return [c for c in chunks if c]
+            next_start = end - overlap
+            start = next_start if next_start > start else end
+
+        return chunks
 
     def _read_file(self, path: Path) -> str:
         """Read file content, handling different encodings."""
@@ -465,7 +472,7 @@ class RAGManager:
             ):
                 raise RAGError(f"Unsupported file type: {mime_type}")
 
-        for encoding in ["utf-8", "latin-1", "cp1252"]:
+        for encoding in ["utf-8", "cp1252", "latin-1"]:
             try:
                 return path.read_text(encoding=encoding)
             except UnicodeDecodeError:

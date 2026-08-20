@@ -30,7 +30,7 @@ def _extract_tool_name(request: Any) -> str:
         for attr in ("name", "__name__"):
             if name := getattr(tool, attr, None):
                 return str(name)
-    return ""
+    return "unknown"
 
 
 async def _stream_tool_events(request: Any, handler: Any) -> Any:
@@ -45,8 +45,8 @@ async def _stream_tool_events(request: Any, handler: Any) -> Any:
     tool_call = getattr(request, "tool_call", None)
     tool_args: dict[str, Any] | None = None
     if isinstance(tool_call, dict):
-        if not tool_name:
-            tool_name = str(tool_call.get("name") or "")
+        if tool_name == "unknown":
+            tool_name = str(tool_call.get("name") or "unknown")
         maybe_args = tool_call.get("args")
         if isinstance(maybe_args, dict):
             tool_args = maybe_args
@@ -57,14 +57,11 @@ async def _stream_tool_events(request: Any, handler: Any) -> Any:
                 agent_name = maybe_agent
     elif tool_call is not None:
         maybe_name = getattr(tool_call, "name", None)
-        if not tool_name and isinstance(maybe_name, str) and maybe_name:
+        if tool_name == "unknown" and isinstance(maybe_name, str) and maybe_name:
             tool_name = maybe_name
         maybe_args = getattr(tool_call, "args", None)
         if isinstance(maybe_args, dict):
             tool_args = maybe_args
-
-    if not tool_name:
-        tool_name = "unknown"
 
     if (not agent_name) and tool_name == "task" and isinstance(tool_args, dict):
         maybe_task_agent = tool_args.get("name")
@@ -72,46 +69,40 @@ async def _stream_tool_events(request: Any, handler: Any) -> Any:
             agent_name = maybe_task_agent
 
     if runtime is not None:
-        try:
-            event: dict[str, Any] = {"type": "tool_call", "name": tool_name}
-            if agent_name:
-                event["agent_name"] = agent_name
-            runtime.stream_writer(event)
-        except Exception as e:
-            logger.warning("Failed to write tool_call event: %s", e)
+        event: dict[str, Any] = {"type": "tool_call", "name": tool_name}
+        if agent_name:
+            event["agent_name"] = agent_name
+        runtime.stream_writer(event)
 
-    timeout_s = int(get_tool_timeout())
+    timeout_s = float(get_tool_timeout())
     try:
         if timeout_s > 0:
-            result = await asyncio.wait_for(handler(request), timeout=float(timeout_s))
+            result = await asyncio.wait_for(handler(request), timeout=timeout_s)
         else:
             result = await handler(request)
     except asyncio.TimeoutError as exc:
         raise TimeoutError(f"Tool '{tool_name}' timed out after {timeout_s}s") from exc
 
     if runtime is not None:
-        try:
-            content = getattr(result, "content", result)
-            content_str = str(content)
-            if not agent_name:
-                for attr in ("response_metadata", "additional_kwargs", "metadata"):
-                    maybe_meta = getattr(result, attr, None)
-                    if isinstance(maybe_meta, dict):
-                        maybe_agent_name = maybe_meta.get("lc_agent_name")
-                        if isinstance(maybe_agent_name, str) and maybe_agent_name:
-                            agent_name = maybe_agent_name
-                            break
-            # Tool outputs can be large; emit only small metadata for the UI.
-            event = {
-                "type": "tool_output",
-                "output": "",
-                "output_len": len(content_str),
-            }
-            if agent_name:
-                event["agent_name"] = agent_name
-            runtime.stream_writer(event)
-        except Exception as e:
-            logger.warning("Failed to write tool_output event: %s", e)
+        content = getattr(result, "content", result)
+        content_str = str(content)
+        if not agent_name:
+            for attr in ("response_metadata", "additional_kwargs", "metadata"):
+                maybe_meta = getattr(result, attr, None)
+                if isinstance(maybe_meta, dict):
+                    maybe_agent_name = maybe_meta.get("lc_agent_name")
+                    if isinstance(maybe_agent_name, str) and maybe_agent_name:
+                        agent_name = maybe_agent_name
+                        break
+        # Tool outputs can be large; emit only small metadata for the UI.
+        out_event = {
+            "type": "tool_output",
+            "output": "",
+            "output_len": len(content_str),
+        }
+        if agent_name:
+            out_event["agent_name"] = agent_name
+        runtime.stream_writer(out_event)
     return result
 
 

@@ -102,7 +102,7 @@ class SkillManager(BaseFileStoreManager["SkillInfo"]):
         return [
             (d.name, s)
             for d in self.skills_dir.iterdir()
-            if d.is_dir() and d.name.startswith(prefix) and (s := _read_skill(d))
+            if d.is_dir() and d.name.startswith(prefix) and (s := _read_skill(d)) is not None
         ]
 
     def list_all(self) -> list[tuple[str, SkillInfo]]:
@@ -110,7 +110,7 @@ class SkillManager(BaseFileStoreManager["SkillInfo"]):
         skills = [
             (d.name, s)
             for d in sorted(self.skills_dir.iterdir())
-            if d.is_dir() and (s := _read_skill(d))
+            if d.is_dir() and (s := _read_skill(d)) is not None
         ]
         return sorted(skills, key=lambda x: x[1].name.lower())
 

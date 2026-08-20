@@ -14,16 +14,16 @@ class StreamingRenderer(ABC):
 
     def on_event(self, event: dict[str, Any]) -> None:
         """Dispatch event to type-specific handler (on_<type>)."""
-        if handler := getattr(self, f"on_{event.get('type', '')}", None):
+        if (etype := event.get("type")) and (handler := getattr(self, f"on_{etype}", None)):
             handler(event)
 
     def on_error(self, event: dict[str, Any]) -> None:
         """Handle an error event."""
-        print(f"Error: {event.get('content', 'Unknown error')}")
+        print(f"Error: {event['content']}")
 
     def on_warning(self, event: dict[str, Any]) -> None:
         """Handle a warning event."""
-        print(f"Warning: {event.get('content', 'Unknown warning')}")
+        print(f"Warning: {event['content']}")
 
     async def handle_interrupt(self, event: dict[str, Any], runtime: AgentRuntime) -> list[dict[str, Any]] | None:
         """Handle an interrupt event. Default implementation does nothing."""

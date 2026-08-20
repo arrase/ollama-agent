@@ -101,17 +101,14 @@ class AgentRuntime:
         ms = self.settings.model
         await ensure_model_supports_tools(ms.name, ms.base_url)
 
-        warnings: list[str] = []
         model = await create_ollama_chat_model(
             model=ms.name,
             base_url=ms.base_url,
             context_window=ms.context_window,
             reasoning_effort=validate_reasoning_effort(ms.reasoning_effort),
             temperature=ms.temperature,
-            warn_callback=warnings.append,
+            warn_callback=_log.warning,
         )
-        for w in warnings:
-            _log.warning(w)
 
         # Backend: CWD for shell + APP_DIR for agent files (memory, etc.)
         timeout = int(get_tool_timeout())
@@ -208,6 +205,7 @@ class AgentRuntime:
         thread = thread_id or self.thread_id
         if self.graph is None:
             await self.reload()
+        assert self.graph is not None
 
         config = {"configurable": {"thread_id": thread}}
         hide_reasoning = self.settings.model.reasoning_effort in ("hide", "disabled")
@@ -233,38 +231,34 @@ class AgentRuntime:
             if attachments:
                 user_msg = {
                     "role": "user",
-                    "content": [{"type": "text", "text": processed_prompt}] + attachments
+                    "content": [{"type": "text", "text": processed_prompt}] + attachments,
                 }
             else:
                 user_msg = {"role": "user", "content": processed_prompt}
 
             inputs = {"messages": [user_msg]}
 
-        try:
-            async for mode, event in self.graph.astream(
-                inputs,
-                config,
-                stream_mode=["messages", "custom"],
-            ):
-                if mode == "custom" and isinstance(event, dict) and event.get("type"):
-                    yield cast(dict[str, Any], event)
-                    continue
+        async for mode, event in self.graph.astream(
+            inputs,
+            config,
+            stream_mode=["messages", "custom"],
+        ):
+            if mode == "custom" and isinstance(event, dict) and event.get("type"):
+                yield cast(dict[str, Any], event)
+                continue
 
-                if mode == "messages":
-                    chunk = event[0] if isinstance(event, tuple) and event else event
-                    result = _process_message_chunk(
-                        chunk, hide_reasoning=hide_reasoning
-                    )
-                    if result:
-                        yield result
+            if mode == "messages":
+                chunk = event[0] if isinstance(event, tuple) and event else event
+                result = _process_message_chunk(
+                    chunk, hide_reasoning=hide_reasoning
+                )
+                if result:
+                    yield result
 
-            # Check if we were interrupted
-            state = await self.graph.aget_state(config)
-            if state.interrupts:
-                yield {"type": "interrupt", "interrupts": state.interrupts, "config": config}
-        except Exception as exc:
-            _log.error("Streamed agent error: %s", exc)
-            yield {"type": "error", "content": str(exc)}
+        # Check if we were interrupted
+        state = await self.graph.aget_state(config)
+        if state.interrupts:
+            yield {"type": "interrupt", "interrupts": state.interrupts, "config": config}
 
     async def set_model(self, model_name: str) -> str:
         self.settings.model.name = model_name
@@ -286,8 +280,8 @@ def _process_message_chunk(
     hide_reasoning: bool = False,
 ) -> dict[str, Any] | None:
     """Process 'messages' chunk to extract reasoning or text deltas."""
-    chunk_type = str(getattr(chunk, "type", "") or "").lower()
-    chunk_name = getattr(chunk, "__class__", type(chunk)).__name__.lower()
+    chunk_type = getattr(chunk, "type", "").lower()
+    chunk_name = type(chunk).__name__.lower()
     if chunk_type == "tool" or "tool" in chunk_name:
         return None
 

@@ -3,11 +3,8 @@ from __future__ import annotations
 import asyncio
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
 from textual import events
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal
@@ -19,8 +16,6 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from ..settings.paths import APP_DIR, HISTORY_DB_PATH
 
 if TYPE_CHECKING:
-    from textual.worker import Worker
-    from ..agent import AgentRuntime
     from .repl import OllamaREPL, OllamaAgentApp
 
 
@@ -62,9 +57,9 @@ class ReplInput(TextArea):
         self._history_index: int = 0
         self._temp_input: str = ""
 
-    async def on_mount(self) -> None:
+    def on_mount(self) -> None:
         super().on_mount()
-        await self._load_history()
+        self.run_worker(self._load_history())
 
     async def _load_history(self) -> None:
         history_path = APP_DIR / "tui_history.txt"
@@ -189,7 +184,7 @@ class ReplInput(TextArea):
             return True
         return False
 
-    async def on_key(self, event: events.Key) -> None:
+    def on_key(self, event: events.Key) -> None:
         app: Any = self.app
         autolist = app.query_one("#autocomplete-list", OptionList)
         if autolist.display:
@@ -251,13 +246,12 @@ class AgentResponse(Container):
 
     def _animate_thinking(self) -> None:
         if self.current_thinking is not None:
-            num_dots = (getattr(self, "_thinking_dots_count", 2) % 6) + 1
-            self._thinking_dots_count = num_dots
-            dots = "." * num_dots
+            self._thinking_dots_count = (self._thinking_dots_count % 6) + 1
+            dots = "." * self._thinking_dots_count
             self.current_thinking.title = f"🧠 Thinking{dots}"
 
     def _stop_thinking_animation(self) -> None:
-        if getattr(self, "thinking_timer", None) is not None:
+        if self.thinking_timer is not None:
             self.thinking_timer.stop()
             self.thinking_timer = None
         if self.current_thinking is not None:
@@ -269,11 +263,7 @@ class AgentResponse(Container):
             collapse_default = True
             if self.app and hasattr(self.app, "repl"):
                 app_ref: Any = self.app
-                collapse_default = getattr(
-                    app_ref.repl.runtime.settings.runtime,
-                    "collapse_thinking",
-                    True,
-                )
+                collapse_default = app_ref.repl.runtime.settings.runtime.collapse_thinking
             self.current_thinking_text = Static("", classes="msg-content thinking-body")
             self._thinking_chunks = []
             self.current_thinking = Collapsible(
@@ -308,10 +298,10 @@ class AgentResponse(Container):
             self._text_update_timer = self.set_timer(0.1, self.flush_text)
 
     def flush_text(self) -> None:
-        if getattr(self, "_text_update_timer", None) is not None:
+        if self._text_update_timer is not None:
             self._text_update_timer.stop()
             self._text_update_timer = None
-        if getattr(self, "current_text_widget", None) is not None and self.current_text_widget is not None:
+        if self.current_text_widget is not None:
             self.current_text_widget.update("".join(self._text_chunks))
         self._last_text_update = time.monotonic()
 

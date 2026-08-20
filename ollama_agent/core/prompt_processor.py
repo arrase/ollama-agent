@@ -68,12 +68,9 @@ def classify_multimodal_file(file_path: Path) -> str | None:
 
 def is_binary_file(file_path: Path) -> bool:
     """Check if a file is binary by searching for null bytes in the first block."""
-    try:
-        with file_path.open("rb") as f:
-            chunk = f.read(1024)
-            return b"\x00" in chunk
-    except OSError:
-        return True
+    with file_path.open("rb") as f:
+        chunk = f.read(1024)
+        return b"\x00" in chunk
 
 
 def read_file_content(file_path: Path, max_file_size: int = 1024 * 1024) -> str:
@@ -277,11 +274,7 @@ def process_prompt_mentions(
     # Perform placeholder replacements in the original prompt (in reverse order to preserve offsets)
     processed_prompt = prompt
     for start, end, placeholder in sorted(replacements, key=lambda x: x[0], reverse=True):
-        match_str = processed_prompt[start:end]
-        leading_char = ""
-        if match_str.startswith(" "):
-            leading_char = " "
-        processed_prompt = processed_prompt[:start] + leading_char + placeholder + processed_prompt[end:]
+        processed_prompt = processed_prompt[:start] + placeholder + processed_prompt[end:]
 
     if not all_context_contents:
         return processed_prompt, all_binary_attachments

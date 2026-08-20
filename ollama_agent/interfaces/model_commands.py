@@ -18,7 +18,7 @@ async def _list_models(base_url: str) -> list[Any]:
     """Fetch the list of available Ollama models asynchronously."""
     client = ollama.AsyncClient(host=base_url)
     response = await client.list()
-    return getattr(response, "models", [])
+    return list(response.models)
 
 
 async def list_models(
@@ -50,7 +50,7 @@ async def list_models(
         for item, tool_icon in zip(valid_models, tool_icons):
             name = item.model
             marker = " [green]◀ current[/green]" if name == current_model else ""
-            size_gb = getattr(item, "size", 0) / (1024**3)
+            size_gb = (item.size or 0) / (1024**3)
             size_str = f"{size_gb:.1f}GB" if size_gb else ""
             console.print(f"  {tool_icon} [cyan]{name}[/cyan] {size_str}{marker}")
         console.print(

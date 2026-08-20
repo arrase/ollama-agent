@@ -26,8 +26,7 @@ async def build_subagents(
         _build_spec(sa, model_settings=model_settings, exit_stack=exit_stack)
         for sa in subagent_settings
     ]
-    results = await asyncio.gather(*tasks)
-    return [spec for spec in results if spec is not None]
+    return await asyncio.gather(*tasks)
 
 
 async def _build_spec(
@@ -35,14 +34,12 @@ async def _build_spec(
     *,
     model_settings: ModelSettings,
     exit_stack: AsyncExitStack,
-) -> dict[str, Any] | None:
+) -> dict[str, Any]:
     """Build a single subagent spec dict."""
     if not sa.name:
-        _log.warning("Skipping subagent with empty name")
-        return None
+        raise ValueError("Subagent configuration error: name cannot be empty")
     if not sa.description:
-        _log.warning("Skipping subagent '%s': missing description", sa.name)
-        return None
+        raise ValueError(f"Subagent '{sa.name}' configuration error: description cannot be empty")
 
     base_prompt = sa.system_prompt or sa.description
     os_info = f"\n\n# ENVIRONMENT\nOperating System: {platform.system()} ({platform.release()})\n"
@@ -58,7 +55,7 @@ async def _build_spec(
     spec["model"] = await create_ollama_chat_model(
         model=name,
         base_url=model_settings.base_url,
-        context_window=num_ctx if (num_ctx is not None and num_ctx > 0) else None,
+        context_window=num_ctx,
         reasoning_effort=validate_reasoning_effort(model_settings.reasoning_effort),
     )
 

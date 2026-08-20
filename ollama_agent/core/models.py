@@ -100,7 +100,7 @@ async def resolve_context_window(
     response = await _show_model(model, base_url)
 
     # 1. Structured info is the most reliable (modern Ollama)
-    model_info = getattr(response, "model_info", getattr(response, "modelinfo", {}))
+    model_info = getattr(response, "model_info", None) or getattr(response, "modelinfo", None)
     if isinstance(model_info, dict) and (resolved := _model_context_length(model_info)):
         return resolved
 
@@ -123,20 +123,21 @@ async def resolve_ollama_reasoning(
 ) -> bool | str | None:
     """Translate reasoning_effort to Ollama's native reasoning setting."""
     lower_name = model.lower()
-    if lower_name.startswith("gpt-oss"):
-        if effort in ("disabled", "hide"):
-            if effort == "disabled":
-                warning = (
-                    "GPT-OSS does not support disabling thinking completely in Ollama; "
-                    "continuing with the model default thinking behavior, but it will be hidden."
-                )
-                warn_callback(warning)
+    if "gpt-oss" in lower_name:
+        if effort == "disabled":
+            warn_callback(
+                f"Model '{model}' is a thinking-only model. "
+                "reasoning_effort='disabled' is not supported; thinking will remain enabled."
+            )
+            return None
+        if effort == "hide":
             return None
         if effort == "enabled":
             return DEFAULT_REASONING_EFFORT
         return effort
 
-    if not await model_supports_thinking(model, base_url):
+    caps = await get_model_capabilities(model, base_url)
+    if "thinking" not in caps:
         return None
 
     if effort in ("hide", "enabled"):
@@ -176,7 +177,6 @@ def validate_reasoning_effort(effort: str) -> ReasoningEffortValue:
     """Validate and normalize reasoning effort value."""
     if effort in ALLOWED_REASONING_EFFORTS:
         return cast(ReasoningEffortValue, effort)
-    logger.warning(
-        "Invalid reasoning effort '%s', using '%s'", effort, DEFAULT_REASONING_EFFORT
+    raise ValueError(
+        f"Invalid reasoning effort '{effort}'. Allowed values are: {sorted(ALLOWED_REASONING_EFFORTS)}"
     )
-    return DEFAULT_REASONING_EFFORT

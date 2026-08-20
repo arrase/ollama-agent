@@ -65,17 +65,7 @@ def _build_mcp_connection(cfg: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-def _register_mcp_cleanup(client: MultiServerMCPClient, exit_stack: AsyncExitStack, label: str = "") -> None:
-    async def _cleanup() -> None:
-        try:
-            if hasattr(client, "close"):
-                await client.close()
-        except Exception:
-            _log.warning("MCP client cleanup failed%s", f" for {label}" if label else "", exc_info=True)
-    exit_stack.push_async_callback(_cleanup)
-
-
-async def load_main_mcp_tools(exit_stack: AsyncExitStack) -> list[Any]:
+async def load_main_mcp_tools(exit_stack: AsyncExitStack | None = None) -> list[Any]:
     """Load flat MCP tools for the main agent from mcp_servers.json."""
     if not MCP_SERVERS_PATH.exists():
         return []
@@ -109,8 +99,6 @@ async def load_main_mcp_tools(exit_stack: AsyncExitStack) -> list[Any]:
 
     try:
         client = MultiServerMCPClient(connections)  # type: ignore[arg-type]
-
-        _register_mcp_cleanup(client, exit_stack)
         tools = await client.get_tools()
         _log.info(
             "Loaded %d MCP tools from %d servers",
@@ -126,7 +114,7 @@ async def load_main_mcp_tools(exit_stack: AsyncExitStack) -> list[Any]:
 async def load_subagent_mcp_tools(
     subagent_name: str,
     mcp_servers: list[SubAgentMCPServer],
-    exit_stack: AsyncExitStack,
+    exit_stack: AsyncExitStack | None = None,
 ) -> list[Any]:
     """Load MCP tools for a subagent's MCP servers."""
     servers: dict[str, dict[str, Any]] = {}
@@ -153,8 +141,6 @@ async def load_subagent_mcp_tools(
 
     try:
         client = MultiServerMCPClient(servers)  # type: ignore[arg-type]
-
-        _register_mcp_cleanup(client, exit_stack, label=f"subagent '{subagent_name}'")
         tools = await client.get_tools()
         return tools
     except Exception as exc:

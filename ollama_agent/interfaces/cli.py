@@ -9,7 +9,7 @@ import inspect
 from ..agent import AgentRuntime
 from ..core import ALLOWED_REASONING_EFFORTS
 from ..rag import RAGContext, RAGManager, RAGError
-from ..settings import Settings, load_settings
+from ..settings import Settings
 from ..skills import SkillManager, SkillsContext, SkillError
 from ..streaming import run_non_interactive
 from ..tasks.commands import CLIContext, TaskError
@@ -205,18 +205,18 @@ def handle_cli_commands(
             settings.model.reasoning_effort = args.effort
         if args.builtin_tool_timeout is not None:
             settings.runtime.builtin_tool_timeout = args.builtin_tool_timeout
-        if getattr(args, "allow_traversal", None) is not None:
+        if args.allow_traversal is not None:
             settings.runtime.allow_traversal = args.allow_traversal
 
-        runtime = AgentRuntime(settings=settings, yolo_mode=getattr(args, "yolo", False))
+        runtime = AgentRuntime(settings=settings, yolo_mode=args.yolo)
 
         async def _run():
             async with runtime:
                 await runtime.reload()
-                if getattr(args, "rag", None):
+                if args.rag:
                     try:
                         rag_ctx.rag_manager.load_database(args.rag)
-                    except Exception as e:
+                    except RAGError as e:
                         rag_ctx.console.print(
                             f"[red]Failed to load RAG database '{args.rag}': {e}[/red]"
                         )

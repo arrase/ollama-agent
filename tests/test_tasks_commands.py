@@ -1,0 +1,75 @@
+from __future__ import annotations
+
+import tempfile
+import unittest
+from pathlib import Path
+
+from rich.console import Console
+
+from ollama_agent.tasks.commands import (
+    AmbiguousTaskError,
+    CLIContext,
+    TaskNotFoundError,
+    ValidationError,
+    create_task,
+    delete_task,
+    list_tasks,
+)
+from ollama_agent.tasks.manager import TaskManager
+
+
+class TestTasksCommands(unittest.TestCase):
+    """Unit tests for tasks command operations and resolution."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.mgr = TaskManager(tasks_dir=Path(self.temp_dir.name))
+        self.console = Console(record=True)
+        self.ctx = CLIContext(console=self.console, task_manager=self.mgr)
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_require_validation(self) -> None:
+        self.assertEqual(self.ctx._require("  valid title  ", "Title"), "valid title")
+        with self.assertRaises(ValidationError):
+            self.ctx._require("   ", "Title")
+
+    def test_create_and_list_task(self) -> None:
+        create_task(
+            self.ctx,
+            "run-tests",
+            title="Run Unit Tests",
+            prompt="pytest -v",
+            model="gemma4:26b",
+            reasoning_effort="high",
+        )
+        task = self.mgr.get("run-tests")
+        self.assertIsNotNone(task)
+        assert task is not None
+        self.assertEqual(task.title, "Run Unit Tests")
+
+        list_tasks(self.ctx)
+        out = self.console.export_text()
+        self.assertIn("Run Unit Tests", out)
+
+    def test_delete_task(self) -> None:
+        create_task(
+            self.ctx,
+            "cleanup-task",
+            title="Cleanup",
+            prompt="rm -rf /tmp/test",
+            model="gemma4:26b",
+        )
+        delete_task(self.ctx, "cleanup-task")
+        self.assertIsNone(self.mgr.get("cleanup-task"))
+
+    def test_find_or_exit_errors(self) -> None:
+        with self.assertRaises(TaskNotFoundError):
+            self.ctx._find_or_exit("missing_task")
+
+        create_task(self.ctx, "deploy-prod", title="Prod Deploy", prompt="deploy", model="gemma4:26b")
+        create_task(self.ctx, "deploy-staging", title="Staging Deploy", prompt="deploy", model="gemma4:26b")
+
+        with self.assertRaises(AmbiguousTaskError):
+            self.ctx._find_or_exit("deploy")

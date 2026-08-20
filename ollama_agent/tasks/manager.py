@@ -84,7 +84,7 @@ class TaskManager(BaseFileStoreManager["Task"]):
         return [
             (p.stem, t)
             for p in self.tasks_dir.iterdir()
-            if p.is_file() and p.suffix == ".yaml" and p.stem.startswith(prefix) and (t := self.get(p.stem))
+            if p.is_file() and p.suffix == ".yaml" and p.stem.startswith(prefix) and (t := self.get(p.stem)) is not None
         ]
 
     def get(self, item_id: str) -> Task | None:
@@ -93,10 +93,11 @@ class TaskManager(BaseFileStoreManager["Task"]):
         if not path.exists():
             return None
         try:
-            return Task.from_dict(
-                yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-            )
-        except Exception as e:
+            raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                return None
+            return Task.from_dict(raw)
+        except (yaml.YAMLError, KeyError, TypeError, OSError) as e:
             logger.error("Error loading task %s: %s", item_id, e)
             return None
 

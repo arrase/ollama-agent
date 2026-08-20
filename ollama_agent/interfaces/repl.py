@@ -1,11 +1,8 @@
-"""REPL interface for Ollama Agent using Textual TUI."""
-
 from __future__ import annotations
 
 import asyncio
 import os
 import re
-import time
 from pathlib import Path
 from typing import Any
 
@@ -13,15 +10,11 @@ from rich.console import Console
 from rich.text import Text
 
 from textual.app import App, ComposeResult
-from textual import events
-from textual.message import Message
 from textual.worker import Worker
-from textual.containers import Grid, Container, ScrollableContainer, Horizontal
+from textual.containers import ScrollableContainer, Horizontal
 from textual.widgets import Static, OptionList, TextArea
 from textual.widgets.option_list import Option
-from textual.screen import ModalScreen
 from langgraph.types import Command
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from .tui_components import (
     AgentHeader,
@@ -31,7 +24,6 @@ from .tui_components import (
     ToolCallMessage,
     ToolOutputMessage,
     SystemMessage,
-    Label,
     TaskCreateModal,
     SkillCreateModal,
     ToolApprovalWidget,
@@ -40,13 +32,11 @@ from .tui_components import (
 from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager, set_tool_timeout
 from ..rag import RAGContext, RAGManager, load_rag_database
-from ..settings.paths import APP_DIR, HISTORY_DB_PATH
 from ..skills import SkillsContext, create_skill
 from ..tasks.commands import CLIContext, create_task
-from .dispatch import build_repl_handlers, render_repl_help
+from .dispatch import REPLCommand, build_repl_handlers, render_repl_help, safe_call
 from .model_commands import set_model
 from .session_commands import new_session
-from .repl_wizards import safe_call
 from ..streaming import stream_agent_events, StreamingRenderer
 
 # @-mention regex: matches @"quoted", @'quoted', or @bare at word boundaries.
@@ -181,7 +171,7 @@ class OllamaAgentApp(App):
     def on_repl_input_submitted(self, event: ReplInput.Submitted) -> None:
         if event.input.id != "repl-input":
             return
-        if getattr(self, "_is_generating", False):
+        if self._is_generating:
             return
         val = event.value.strip()
         if not val:
@@ -521,7 +511,7 @@ class OllamaREPL:
         self._skills_ctx = SkillsContext(console=self.console)
         self._initial_rag_database = rag_database
         self._rag_ctx: RAGContext | None = None
-        self._commands: dict | None = None
+        self._commands: dict[str, REPLCommand] | None = None
 
     def _get_rag_ctx(self) -> RAGContext:
         if self._rag_ctx is None:
@@ -530,7 +520,7 @@ class OllamaREPL:
             set_rag_manager(mgr)
         return self._rag_ctx
 
-    def _get_commands(self) -> dict:
+    def _get_commands(self) -> dict[str, REPLCommand]:
         """Lazily build and cache REPL command handlers."""
         if self._commands is None:
             self._commands = build_repl_handlers(
