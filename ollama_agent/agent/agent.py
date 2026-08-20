@@ -13,7 +13,12 @@ from typing import Any, AsyncGenerator, Self, cast
 
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
-from deepagents.middleware.summarization import create_summarization_tool_middleware
+from deepagents.middleware.summarization import (
+    count_tokens_approximately,
+    create_summarization_middleware,
+    create_summarization_tool_middleware,
+)
+from langchain_core.runnables.config import var_child_runnable_config
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
 
@@ -72,6 +77,8 @@ class AgentRuntime:
     auto_approved_tools: set[str] = field(default_factory=set)
     last_context_tokens: int = field(default=0, init=False)
     graph: Any = field(default=None, init=False, repr=False)
+    _backend: Any = field(default=None, init=False, repr=False)
+    _summarization_mw: Any = field(default=None, init=False, repr=False)
     _instructions: str = field(default="", init=False)
     _exit_stack: contextlib.AsyncExitStack = field(
         default_factory=contextlib.AsyncExitStack, init=False, repr=False
@@ -208,6 +215,10 @@ class AgentRuntime:
         if rag_mgr is not None and rag_mgr.current_database is not None:
             tools.append(rag_search)
 
+        summarization_tool_mw = create_summarization_tool_middleware(model, backend)
+        self._backend = backend
+        self._summarization_mw = getattr(summarization_tool_mw, "_summarization", None)
+
         kwargs: dict[str, Any] = {
             "model": model,
             "tools": tools,
@@ -217,7 +228,7 @@ class AgentRuntime:
             "skills": ["/skills/"],
             "checkpointer": await self._sqlite_checkpointer(),
             "middleware": [
-                create_summarization_tool_middleware(model, backend),
+                summarization_tool_mw,
                 stream_tool_events_mw,
             ],
             "name": "ollama-agent",
@@ -309,6 +320,81 @@ class AgentRuntime:
                 self.last_context_tokens = max(1, total_chars // 4)
         if state.interrupts:
             yield {"type": "interrupt", "interrupts": state.interrupts, "config": config}
+
+    async def compact_context(self, thread_id: str = "") -> dict[str, Any]:
+        """Compact conversation history for the specified thread into a summary."""
+        thread = thread_id or self.thread_id
+        if self.graph is None or self._summarization_mw is None or self._backend is None:
+            await self.reload()
+        assert self.graph is not None
+
+        config = {"configurable": {"thread_id": thread}}
+        state = await self.graph.aget_state(config)
+        if not state or not state.values or "messages" not in state.values:
+            return {"success": False, "message": "No messages in session to compact."}
+
+        messages = state.values.get("messages", [])
+        event = state.values.get("_summarization_event")
+        effective = self._summarization_mw._apply_event_to_messages(messages, event)
+
+        if len(effective) < 2:
+            return {
+                "success": False,
+                "message": "Not enough messages in session to compact (at least 2 messages required).",
+            }
+
+        cutoff = self._summarization_mw._determine_cutoff_index(effective)
+        if cutoff <= 0:
+            cutoff = self._summarization_mw._lc_helper._find_safe_cutoff(
+                effective, min(2, len(effective) - 1)
+            )
+            if cutoff <= 0:
+                cutoff = max(1, len(effective) - 1)
+
+        to_summarize, preserved = self._summarization_mw._partition_messages(
+            effective, cutoff
+        )
+        if not to_summarize:
+            return {
+                "success": False,
+                "message": "No messages eligible for summarization.",
+            }
+
+        token = var_child_runnable_config.set(config)
+        try:
+            file_path, summary = await asyncio.gather(
+                self._summarization_mw._aoffload_to_backend(self._backend, to_summarize),
+                self._summarization_mw._acreate_summary(to_summarize),
+            )
+        finally:
+            var_child_runnable_config.reset(token)
+
+        new_messages = self._summarization_mw._build_new_messages_with_path(
+            summary, file_path
+        )
+        state_cutoff_index = self._summarization_mw._compute_state_cutoff(
+            event, cutoff
+        )
+
+        new_event: dict[str, Any] = {
+            "cutoff_index": state_cutoff_index,
+            "summary_message": new_messages[0],
+            "file_path": file_path,
+        }
+
+        await self.graph.aupdate_state(config, {"_summarization_event": new_event})
+
+        self.last_context_tokens = count_tokens_approximately(
+            [new_messages[0], *preserved]
+        )
+
+        return {
+            "success": True,
+            "messages_summarized": len(to_summarize),
+            "messages_preserved": len(preserved),
+            "file_path": file_path,
+            "summary": summary,
+        }
 
 
     async def set_model(self, model_name: str) -> str:

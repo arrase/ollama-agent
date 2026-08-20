@@ -9,6 +9,7 @@ Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to i
 - **Native Ollama Integration**: Connects directly to Ollama's native API (via `langchain-ollama`), no OpenAI compatibility layer needed.
 - **Thinking / Reasoning**: Leverages Ollama's native [thinking capability](https://docs.ollama.com/capabilities/thinking) to expose model reasoning traces. Configurable per model via `--effort`.
 - **Automatic Context Window & Live Monitor**: Resolves effective context window (`num_ctx`) automatically from Ollama metadata and displays real-time token usage and percentage gauge directly in the TUI header.
+- **Context Compression & Compaction**: Built-in automatic summarization and history offloading at 85% of `num_ctx`, plus on-demand context compaction anytime via `/compact`.
 - **Per-session Model Switching**: Change the model mid-conversation and continue from that point with the new model (context preserved). The change is not permanent and only affects the current session.
 - **Tool-Powered**: The agent can execute shell commands via an integrated shell backend, with human-in-the-loop confirmation before running commands and editing files.
 - **MCP Integration**: Extend the main agent with [Model Context Protocol](https://modelcontextprotocol.io/) servers (`mcp_servers.json`) that provide additional tools directly to the agent.
@@ -73,6 +74,7 @@ The REPL provides a persistent chat session. You can use slash commands to manag
 - `/help`: Show available commands.
 - `/model [list | set <model>]`: Manage models (list available models, switch active model).
 - `/session [list | resume <id> | new | export [path] | delete <id>]`: Manage chat sessions (list past sessions, resume previous conversation, export to Markdown, delete).
+- `/compact` (or `/compress`): Compact conversation history into a structured summary to reclaim context window tokens.
 - `/task [list | create <id> | run <id> | delete <id>]`: Manage saved prompt tasks.
 - `/skill [list | show <id> | create <id> | delete <id>]`: Manage agent skills.
 - `/rag [status | list | create <name> | load <name> | unload | add <path> | delete <name>]`: Manage RAG document databases.
@@ -132,6 +134,39 @@ The REPL dynamic header displays the current model, active RAG database, YOLO st
   - 🔵 **Blue/Cyan**: Healthy context usage (<75%).
   - 🟡 **Yellow**: Elevated context warning (>75%).
   - 🔴 **Red**: Critical context limit proximity (>90%).
+
+### Context Compression & Compaction (`/compact`)
+
+Local models running on Ollama often have bounded context windows (e.g. 8k–32k tokens) and can suffer from attention degradation ("lost-in-the-middle") as conversations grow. `ollama-agent` provides built-in context engineering and compaction mechanisms:
+
+```mermaid
+flowchart LR
+    A[Full Conversation History] -->|Auto at 85% num_ctx OR /compact| B[Summarization Engine]
+    B --> C[Structured In-Context Summary]
+    B --> D[History Saved to /conversation_history/thread_id.md]
+    C --> E[Active Context Reclaimed]
+```
+
+1. **Automatic Context Summarization**:
+   - **Threshold**: When conversation tokens cross **85%** of the model's configured context window (`num_ctx`), the summarization engine triggers automatically.
+   - **Retention**: Older turns are compressed into a structured summary (capturing session intent, key decisions, artifacts created, and next steps) while keeping the most recent conversation turns intact.
+   - **History Preservation**: Older messages are never lost; they are appended to `/conversation_history/{thread_id}.md` in the agent backend for durable recovery.
+   - **Tool Argument Truncation**: Large arguments from previous file operations (such as `write_file` or `edit_file`) in older turns are pruned to reclaim context.
+   - **Overflow Resilience**: If a model call encounters a context overflow error, the engine automatically catches it, triggers summarization, and retries the turn seamlessly.
+
+2. **On-Demand Compaction (`/compact` or `/compress`)**:
+   - You can trigger context compaction at any point during a conversation by typing `/compact` (or `/compress`) in the REPL.
+   - Unlike `/new` (which wipes the entire session and starts over), `/compact` preserves the memory of what was done by replacing earlier message turns with a concise summary.
+   - The TUI displays detailed compaction metrics and immediately updates the token gauge in the header:
+
+```text
+❯ /compact
+⚡ Compacting conversation context...
+✓ Context compacted successfully:
+  • Messages summarized: 12
+  • Recent messages preserved: 2
+  • History offloaded to: /conversation_history/a1b2c3d4.md
+```
 
 ### File / Directory Context (@-mentions)
 

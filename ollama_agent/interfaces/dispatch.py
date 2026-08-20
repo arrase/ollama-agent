@@ -26,7 +26,14 @@ from ..rag import (
 from ..skills import SkillError, SkillsContext, create_skill, delete_skill, list_skills, show_skill
 from ..tasks.commands import CLIContext, TaskError, create_task, delete_task, list_tasks, run_task
 from .model_commands import list_models
-from .session_commands import delete_session, export_session, list_sessions, new_session, resume_session
+from .session_commands import (
+    compact_session,
+    delete_session,
+    export_session,
+    list_sessions,
+    new_session,
+    resume_session,
+)
 
 CLIHandler = Callable[[], object]
 
@@ -134,6 +141,7 @@ def build_repl_handlers(
     current_thread_id: Callable[[], str] = lambda: "",
     handle_session_resume: Callable[[str], Awaitable[None]] | None = None,
     handle_session_export: Callable[[list[str]], Awaitable[None]] | None = None,
+    handle_compact: Callable[[list[str]], Awaitable[None]] | None = None,
 ) -> dict[str, REPLCommand]:
     """Build the REPL command registry for unified slash commands."""
 
@@ -267,6 +275,16 @@ def build_repl_handlers(
             "Session Management",
             None,
             handle_new,
+        ),
+        "/compact": REPLCommand(
+            "Compact conversation history into a summary",
+            "Session Management",
+            None,
+            (
+                handle_compact
+                if handle_compact is not None
+                else (lambda _: None)
+            ),
         ),
         "/session": REPLCommand(
             "Manage chat sessions (list, resume, new, export, delete)",

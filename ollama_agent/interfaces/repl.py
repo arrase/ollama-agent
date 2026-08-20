@@ -16,6 +16,7 @@ from textual.worker import Worker
 from textual.containers import Container, Horizontal, ScrollableContainer
 from textual.widgets import Static, OptionList, TextArea
 from textual.widgets.option_list import Option
+from deepagents.middleware.summarization import count_tokens_approximately
 from langgraph.types import Command
 
 from .clipboard import copy_to_system_clipboard, get_system_clipboard
@@ -42,6 +43,7 @@ from ..tasks.commands import CLIContext, TaskError, create_task
 from .dispatch import REPLCommand, build_repl_handlers, render_repl_help, safe_call
 from .model_commands import set_model
 from .session_commands import (
+    compact_session,
     delete_session,
     export_session,
     get_available_sessions,
@@ -59,6 +61,7 @@ _AT_MENTION_RE = re.compile(
 _ROOT_COMMANDS: list[tuple[str, str]] = [
     ("/model", "Manage models (list, set)"),
     ("/session", "Manage chat sessions (list, resume, new, export, delete)"),
+    ("/compact", "Compact conversation history into a summary"),
     ("/task", "Manage saved tasks (list, create, run, delete)"),
     ("/skill", "Manage skills (list, show, create, delete)"),
     ("/rag", "Manage RAG databases (status, list, create, delete, load, unload, add)"),
@@ -516,6 +519,25 @@ class OllamaAgentApp(App):
             await scroll.remove_children()
             return
 
+        if cmd in ("/compact", "/compress"):
+            scroll.mount(SystemMessage("[dim]⚡ Compacting conversation context...[/dim]"))
+            self._deferred_scroll()
+            res = await self.repl.runtime.compact_context()
+            if res["success"]:
+                msg_text = (
+                    f"[bold #38bdf8]✓ Context compacted successfully:[/bold #38bdf8]\n"
+                    f"  • [dim]Messages summarized:[/dim] {res['messages_summarized']}\n"
+                    f"  • [dim]Recent messages preserved:[/dim] {res['messages_preserved']}"
+                )
+                if res.get("file_path"):
+                    msg_text += f"\n  • [dim]History offloaded to:[/dim] [cyan]{res['file_path']}[/cyan]"
+                scroll.mount(SystemMessage(msg_text))
+                self.query_one(AgentHeader).update_header()
+            else:
+                scroll.mount(SystemMessage(f"[bold #f87171]✕ Compaction skipped:[/bold #f87171] {res.get('message', 'Failed to compact.')}"))
+            self._deferred_scroll()
+            return
+
         if cmd == "/session" and args and args[0] in ("resume", "switch"):
             if len(args) < 2:
                 scroll.mount(SystemMessage("[bold #f87171]✕ Usage:[/bold #f87171] /session resume <session_id>"))
@@ -529,7 +551,19 @@ class OllamaAgentApp(App):
                     config = {"configurable": {"thread_id": resolved}}
                     state = await self.repl.runtime.graph.aget_state(config)
                     if state and state.values and "messages" in state.values:
-                        for msg in state.values["messages"]:
+                        messages = state.values["messages"]
+                        event = state.values.get("_summarization_event")
+                        effective = (
+                            self.repl.runtime._summarization_mw._apply_event_to_messages(
+                                messages, event
+                            )
+                            if self.repl.runtime._summarization_mw
+                            else messages
+                        )
+                        self.repl.runtime.last_context_tokens = (
+                            count_tokens_approximately(effective)
+                        )
+                        for msg in messages:
                             role = getattr(msg, "type", None) or getattr(msg, "role", "unknown")
                             content = extract_text(getattr(msg, "content", ""))
                             if not content:
@@ -765,8 +799,13 @@ class OllamaREPL:
                 current_thread_id=lambda: self.runtime.thread_id,
                 handle_session_resume=self._handle_session_resume,
                 handle_session_export=self._handle_session_export,
+                handle_compact=self._handle_compact,
             )
         return self._commands
+
+    async def _handle_compact(self, args: list[str]) -> None:
+        target_id = args[0] if args else self.runtime.thread_id
+        await compact_session(self.console, self.runtime, target_id)
 
     async def _handle_session_resume(self, session_id: str) -> None:
         resolved = resume_session(self.console, session_id)
