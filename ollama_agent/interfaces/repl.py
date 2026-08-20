@@ -9,14 +9,17 @@ from typing import Any
 from rich.console import Console
 from rich.text import Text
 
+from textual import events
 from textual.app import App, ComposeResult
 from textual.worker import Worker
-from textual.containers import ScrollableContainer, Horizontal
+from textual.containers import Container, Horizontal, ScrollableContainer
 from textual.widgets import Static, OptionList, TextArea
 from textual.widgets.option_list import Option
 from langgraph.types import Command
 
+from .clipboard import copy_to_system_clipboard, get_system_clipboard
 from .tui_components import (
+    AgentFooter,
     AgentHeader,
     ReplInput,
     UserMessage,
@@ -101,7 +104,7 @@ class _TUIStreamingRenderer(StreamingRenderer):
 
     def close(self) -> None:
         self._timer.stop()
-        self.widget.flush_text()
+        self.widget.finish_generation()
         self._do_scroll()
 
 
@@ -118,8 +121,10 @@ class OllamaAgentApp(App):
     BINDINGS = [
         ("escape", "cancel_generation", "Interrupt"),
         ("ctrl+c", "cancel_or_quit", "Interrupt/Quit"),
+        ("super+c", "copy_selection", "Copy"),
+        ("ctrl+shift+c", "copy_selection", "Copy"),
+        ("ctrl+insert", "copy_selection", "Copy"),
     ]
-
 
     def action_cancel_generation(self) -> None:
         if self._is_generating and self._current_worker is not None:
@@ -132,6 +137,27 @@ class OllamaAgentApp(App):
         else:
             self.exit()
 
+    def action_copy_selection(self) -> None:
+        selected_text = self.screen.get_selected_text()
+        if selected_text:
+            self.copy_to_clipboard(selected_text)
+
+    def copy_to_clipboard(self, text: str) -> None:
+        super().copy_to_clipboard(text)
+        copy_to_system_clipboard(text)
+
+    @property
+    def clipboard(self) -> str:
+        sys_clip = get_system_clipboard()
+        if sys_clip:
+            return sys_clip
+        return super().clipboard
+
+    def on_text_selected(self, event: events.TextSelected) -> None:
+        selected_text = self.screen.get_selected_text()
+        if selected_text:
+            self.copy_to_clipboard(selected_text)
+
     CSS_PATH = "repl.css"
 
     def __init__(self, repl: "OllamaREPL"):
@@ -143,10 +169,12 @@ class OllamaAgentApp(App):
     def compose(self) -> ComposeResult:
         yield AgentHeader(self.repl)
         yield ScrollableContainer(id="chat-scroll")
-        with Horizontal(id="input-bar"):
-            yield Static("❯❯ ", id="prompt-char")
-            yield ReplInput(id="repl-input")
+        with Container(id="input-container"):
+            with Horizontal(id="input-bar"):
+                yield Static("❯ ", id="prompt-char")
+                yield ReplInput(id="repl-input")
         yield OptionList(id="autocomplete-list")
+        yield AgentFooter()
 
     def on_mount(self) -> None:
         self.query_one(ReplInput).focus()
@@ -155,9 +183,9 @@ class OllamaAgentApp(App):
     def update_yolo_ui(self) -> None:
         prompt_char = self.query_one("#prompt-char")
         if self.repl.runtime.yolo_mode:
-            prompt_char.styles.color = "#f38ba8"  # Red
+            prompt_char.styles.color = "#f87171"  # Red / Coral
         else:
-            prompt_char.styles.color = "#89b4fa"  # Blue
+            prompt_char.styles.color = "#38bdf8"  # Sky Blue
 
         # Update the header immediately
         header = self.query_one(AgentHeader)
@@ -211,7 +239,12 @@ class OllamaAgentApp(App):
             if candidates:
                 autolist.clear_options()
                 for name, summary in candidates:
-                    autolist.add_option(Option(prompt=f"{name:<16}{summary}", id=name))
+                    autolist.add_option(
+                        Option(
+                            prompt=Text.from_markup(f"[bold #38bdf8]{name:<16}[/bold #38bdf8] [dim #8b949e]{summary}[/dim #8b949e]"),
+                            id=name,
+                        )
+                    )
                 autolist.highlighted = 0
                 autolist.display = True
                 return
@@ -224,7 +257,12 @@ class OllamaAgentApp(App):
             if completions:
                 autolist.clear_options()
                 for rel_path, meta in completions[:20]:
-                    autolist.add_option(Option(prompt=f"{rel_path:<42}{meta}", id=rel_path))
+                    autolist.add_option(
+                        Option(
+                            prompt=Text.from_markup(f"[bold #e6edf3]{rel_path:<40}[/bold #e6edf3] [dim #8b949e]{meta}[/dim #8b949e]"),
+                            id=rel_path,
+                        )
+                    )
                 autolist.highlighted = 0
                 autolist.display = True
                 return
@@ -355,7 +393,7 @@ class OllamaAgentApp(App):
         if cmd == "/task-run":
             target_id = next((a for a in args if not a.startswith("-")), "")
             if not target_id:
-                scroll.mount(SystemMessage("[red]Usage: /task-run <id> [-y][/red]"))
+                scroll.mount(SystemMessage("[bold #f87171]✕ Usage:[/bold #f87171] /task-run <id> [-y]"))
                 self._deferred_scroll()
                 return
             try:
@@ -365,9 +403,9 @@ class OllamaAgentApp(App):
                 self._deferred_scroll()
                 return
 
-            scroll.mount(SystemMessage(Text.from_ansi(
-                f"[bold cyan]▶ Executing:[/bold cyan] {t.title} ({tid})\n"
-                f"  Model: {t.model} │ Effort: {t.reasoning_effort}"
+            scroll.mount(SystemMessage(Text.from_markup(
+                f"[bold #38bdf8]▶ Executing Task:[/bold #38bdf8] [bold #e6edf3]{t.title}[/bold #e6edf3] [dim]({tid})[/dim]\n"
+                f"  [dim]model:[/dim] {t.model} [dim]·[/dim] [dim]effort:[/dim] {t.reasoning_effort}"
             )))
             agent_msg = AgentResponse()
             scroll.mount(agent_msg)
@@ -383,13 +421,13 @@ class OllamaAgentApp(App):
 
         commands = self.repl._get_commands()
         if cmd not in commands:
-            scroll.mount(SystemMessage(f"[red]Unknown command: {cmd}[/red]"))
+            scroll.mount(SystemMessage(f"[bold #f87171]✕ Unknown command:[/bold #f87171] {cmd}"))
             self._deferred_scroll()
             return
 
         spec = commands[cmd]
         if spec.usage and not args:
-            scroll.mount(SystemMessage(f"[red]Usage: {spec.usage}[/red]"))
+            scroll.mount(SystemMessage(f"[bold #f87171]✕ Usage:[/bold #f87171] {spec.usage}"))
             self._deferred_scroll()
             return
 
@@ -456,17 +494,19 @@ class OllamaAgentApp(App):
 
     async def _run_stream(self, prompt: str | Command[Any], scroll: Any, agent_msg: AgentResponse) -> None:
         self._is_generating = True
+        footer = self.query_one(AgentFooter)
+        footer.set_generating(True)
 
         try:
             try:
                 await stream_agent_events(self.repl.runtime, prompt, _TUIStreamingRenderer(self, scroll, agent_msg), auto_close=True)
             except asyncio.CancelledError:
-                scroll.mount(SystemMessage("[red]🛑 Execution interrupted by user.[/red]"))
+                scroll.mount(SystemMessage("[bold #f87171]🛑 Execution interrupted by user.[/bold #f87171]"))
                 self._deferred_scroll()
                 self.query_one(ReplInput).focus()
                 raise
             except Exception as e:
-                scroll.mount(SystemMessage(f"[red]Error: {e}[/red]"))
+                scroll.mount(SystemMessage(f"[bold #f87171]✕ Error:[/bold #f87171] [red]{e}[/red]"))
                 self._deferred_scroll()
                 return
 
@@ -488,10 +528,12 @@ class OllamaAgentApp(App):
                     agent_msg.mount(approval_widget)
                     self._deferred_scroll()
             except Exception as e:
-                scroll.mount(SystemMessage(f"[red]Error checking state: {e}[/red]"))
+                scroll.mount(SystemMessage(f"[bold #f87171]✕ Error checking state:[/bold #f87171] [red]{e}[/red]"))
                 self._deferred_scroll()
         finally:
             self._is_generating = False
+            footer.set_generating(False)
+
 
 
 # ─── OllamaREPL entry-point (unchanged public API) ───────────────────────────
