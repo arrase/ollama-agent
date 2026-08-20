@@ -45,7 +45,6 @@ from ..settings import (
 from ..streaming.parsers import streaming_reasoning, streaming_text
 from .builtin_tools import BUILTIN_TOOLS, get_rag_manager, get_tool_timeout, rag_search
 from .middleware import stream_tool_events_mw
-from .security import is_safe_command
 from .subagents import build_subagents
 
 _log = logging.getLogger(__name__)
@@ -187,17 +186,7 @@ class AgentRuntime:
         )
 
         def should_interrupt_tool(request: Any) -> bool:
-            if self.yolo_mode:
-                return False
-            name = request.tool_call["name"]
-            if name in self.auto_approved_tools:
-                return False
-            if name == "execute" and self.settings.runtime.auto_approve_safe_commands:
-                args = request.tool_call.get("args") or {}
-                command = args.get("command", "") if isinstance(args, dict) else ""
-                if is_safe_command(command):
-                    return False
-            return True
+            return not self.yolo_mode and request.tool_call["name"] not in self.auto_approved_tools
 
         interrupt_on = {
             "execute": {

@@ -10,12 +10,12 @@ Ollama Agent is a powerful command-line tool (CLI and REPL) that allows you to i
 - **Thinking / Reasoning**: Leverages Ollama's native [thinking capability](https://docs.ollama.com/capabilities/thinking) to expose model reasoning traces. Configurable per model via `--effort`.
 - **Automatic Context Window & Live Monitor**: Resolves effective context window (`num_ctx`) automatically from Ollama metadata and displays real-time token usage and percentage gauge directly in the TUI header.
 - **Per-session Model Switching**: Change the model mid-conversation and continue from that point with the new model (context preserved). The change is not permanent and only affects the current session.
-- **Tool-Powered & Smart Whitelist**: The agent can execute shell commands via an integrated shell backend. Safe, read-only commands (`git status`, `ls`, `grep`, `pytest`, `ruff check`, etc.) are auto-approved seamlessly, while writes and destructive commands prompt for human confirmation.
+- **Tool-Powered**: The agent can execute shell commands via an integrated shell backend, with human-in-the-loop confirmation before running commands and editing files.
 - **MCP Integration**: Extend the main agent with [Model Context Protocol](https://modelcontextprotocol.io/) servers (`mcp_servers.json`) that provide additional tools directly to the agent.
 - **Custom Subagents**: Define specialized subagents in `settings.yaml` with their own model and MCP servers — each with isolated context for clean delegation.
 - **Session Management**: Persistent SQLite-backed session history with full session restoration (`/session resume <id>`), markdown export (`/session export`), listing, and creation of fresh sessions (`/session new`).
 - **Task Management**: Save frequently used prompts as "tasks" and execute them with a simple command.
-- **Configurable**: Easily configure the model, Ollama host, context window, auto-approval whitelist, and reasoning effort.
+- **Configurable**: Easily configure the model, Ollama host, context window, and reasoning effort.
 - **Persistent Memory & Project Guidelines**: Native memory layer backed by `MEMORY.md` and repository-level `AGENTS.md` standard support, allowing the agent to persist long-term context and follow project-specific conventions.
 - **RAG (Retrieval Augmented Generation)**: Create and manage document databases for context-aware responses using local embeddings and Qdrant.
 
@@ -98,16 +98,14 @@ ollama-agent --prompt "List all files in the current directory as JSON."
 ollama-agent -p "List all files in the current directory as JSON."
 ```
 
-### Human-in-the-Loop & Smart Whitelist
+### Human-in-the-Loop & YOLO Mode
 
-For security and control, Ollama Agent includes a **Human-in-the-Loop (HITL)** approval flow with an intelligent safe-command whitelist:
+For security and control, Ollama Agent includes a **Human-in-the-Loop (HITL)** approval flow. By default, before running shell commands (`execute`) or writing/modifying local files (`write_file`, `edit_file`), the agent pauses execution and displays an inline confirmation widget in the terminal:
 
-- **Smart Safe-Command Auto-Approval**: Read-only inspection commands (`git status`, `git diff`, `git log`, `ls`, `pwd`, `cat`, `head`, `tail`, `grep`, `find`, `pytest`, `python -m unittest`, `ruff check`, `mypy`, etc.) execute automatically without interrupting the conversation.
-- **Confirmation Prompts for Writes & Destructive Actions**: By default, file modifications (`write_file`, `edit_file`) and potentially destructive or state-changing shell commands (`rm`, `mv`, `chmod`, `git push`, `>`, `>>`, `pip install`, etc.) pause execution and display an inline confirmation widget in the terminal:
-  - **Approve**: Authorize this single tool execution.
-  - **Reject**: Block the tool execution and send feedback to the agent so it can attempt an alternative approach.
-  - **Allow Session**: Authorize this execution and automatically approve all future calls for this specific tool type for the remainder of the current session.
-  - **Cancel**: Completely abort the tool call and stop agent execution, returning control to the REPL input.
+- **Approve**: Authorize this single tool execution.
+- **Reject**: Block the tool execution and send feedback to the agent so it can attempt an alternative approach.
+- **Allow Session**: Authorize this execution and automatically approve all future calls for this specific tool type (e.g., all file writes) for the remainder of the current session.
+- **Cancel**: Completely abort the tool call and stop agent execution, returning control to the REPL input so you can type new instructions.
 
 #### YOLO Mode
 
@@ -304,7 +302,6 @@ runtime:
   builtin_tool_timeout: 30
   collapse_thinking: true
   inherit_env: false
-  auto_approve_safe_commands: true
 rag:
   rag_dir: /home/user/.ollama-agent/rag
   embedder_model: nomic-embed-text:latest
@@ -331,7 +328,6 @@ subagents: []
 | `runtime.builtin_tool_timeout` | Timeout in seconds for tool executions (default: `30`). |
 | `runtime.collapse_thinking` | If true, collapses model reasoning/thinking blocks in REPL output by default (default: `true`). |
 | `runtime.inherit_env` | If true, local shell commands execute with the parent's full environment variables (e.g. PATH). |
-| `runtime.auto_approve_safe_commands` | If true, safe read-only commands (`git status`, `ls`, `grep`, `cat`, `pytest`, `ruff`, etc.) run without confirmation prompts (default: `true`). |
 
 ### Context Window Resolution
 
