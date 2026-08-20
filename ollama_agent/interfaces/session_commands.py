@@ -203,3 +203,21 @@ async def export_session(
     except OSError as exc:
         console.print(f"[red]Failed to export session: {exc}[/red]")
         return None
+
+
+async def compact_session(
+    console: Console,
+    runtime: AgentRuntime,
+    target_id: str = "",
+) -> dict[str, Any]:
+    """Compact conversation context for a session into a structured summary."""
+    res = await runtime.compact_context(target_id)
+    if res["success"]:
+        console.print("[green]✓ Context compacted successfully:[/green]")
+        console.print(f"  [dim]• Messages summarized:[/dim] {res['messages_summarized']}")
+        console.print(f"  [dim]• Recent messages preserved:[/dim] {res['messages_preserved']}")
+        if res.get("file_path"):
+            console.print(f"  [dim]• History offloaded to:[/dim] [cyan]{res['file_path']}[/cyan]")
+    else:
+        console.print(f"[yellow]{res.get('message', 'Compaction failed.')}[/yellow]")
+    return res
