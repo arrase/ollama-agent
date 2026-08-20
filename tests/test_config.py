@@ -21,6 +21,7 @@ from ollama_agent.settings.config import (
     load_fs_policy_sandboxed,
     load_fs_policy_traversal,
     load_instructions,
+    load_rag_policy,
     load_settings,
     reset_config,
     save_settings,
@@ -134,6 +135,19 @@ class TestConfigManagement(unittest.TestCase):
         self.assertTrue(sandboxed_file.exists())
         self.assertTrue(len(sandboxed_content) > 0)
 
+    def test_load_rag_policy(self) -> None:
+        rag_policy_file = Path(self.temp_dir.name) / "rag_policy.md"
+        rag_content = load_rag_policy(rag_policy_file)
+        self.assertTrue(rag_policy_file.exists())
+        self.assertTrue(len(rag_content) > 0)
+        self.assertIn("rag_search", rag_content)
+
+        # Preserves custom content
+        custom_rag = "# Custom RAG\nUse search."
+        rag_policy_file.write_text(custom_rag, encoding="utf-8")
+        loaded = load_rag_policy(rag_policy_file)
+        self.assertEqual(loaded, custom_rag)
+
     def test_load_settings_does_not_overwrite_existing_file(self) -> None:
         custom_yaml = "model:\n  name: my-custom-model:latest\n  temperature: 0.8\n"
         self.settings_file.write_text(custom_yaml, encoding="utf-8")
@@ -159,6 +173,7 @@ class TestConfigManagement(unittest.TestCase):
         inst_path = Path(self.temp_dir.name) / "instructions.md"
         trav_path = Path(self.temp_dir.name) / "fs_traversal.md"
         sand_path = Path(self.temp_dir.name) / "fs_sandboxed.md"
+        rag_path = Path(self.temp_dir.name) / "rag_policy.md"
 
         msgs = reset_config(
             "config-file",
@@ -166,6 +181,7 @@ class TestConfigManagement(unittest.TestCase):
             instructions_path=inst_path,
             traversal_path=trav_path,
             sandboxed_path=sand_path,
+            rag_policy_path=rag_path,
         )
         self.assertIsInstance(msgs, list)
         self.assertTrue(len(msgs) > 0)
@@ -177,11 +193,13 @@ class TestConfigManagement(unittest.TestCase):
             instructions_path=inst_path,
             traversal_path=trav_path,
             sandboxed_path=sand_path,
+            rag_policy_path=rag_path,
         )
         self.assertTrue(len(msgs_all) >= 2)
         self.assertTrue(inst_path.exists())
         self.assertTrue(trav_path.exists())
         self.assertTrue(sand_path.exists())
+        self.assertTrue(rag_path.exists())
 
 
 if __name__ == "__main__":

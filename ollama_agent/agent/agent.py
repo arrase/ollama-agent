@@ -37,10 +37,11 @@ from ..settings import (
     load_instructions,
     load_fs_policy_traversal,
     load_fs_policy_sandboxed,
+    load_rag_policy,
     save_settings,
 )
 from ..streaming.parsers import streaming_reasoning, streaming_text
-from .builtin_tools import BUILTIN_TOOLS, get_tool_timeout
+from .builtin_tools import BUILTIN_TOOLS, get_rag_manager, get_tool_timeout, rag_search
 from .middleware import stream_tool_events_mw
 from .subagents import build_subagents
 
@@ -90,12 +91,24 @@ class AgentRuntime:
             fs_policy = await asyncio.to_thread(load_fs_policy_sandboxed)
         
         if "{FILESYSTEM_POLICY}" in base_instructions:
-            self._instructions = base_instructions.replace("{FILESYSTEM_POLICY}", fs_policy)
+            instructions = base_instructions.replace("{FILESYSTEM_POLICY}", fs_policy)
         else:
-            self._instructions = f"{base_instructions}\n\n{fs_policy}"
-            
+            instructions = f"{base_instructions}\n\n{fs_policy}"
+
+        rag_mgr = get_rag_manager()
+        rag_active = rag_mgr is not None and rag_mgr.current_database is not None
+        if rag_active:
+            rag_policy = await asyncio.to_thread(load_rag_policy)
+            if "{RAG_POLICY}" in instructions:
+                instructions = instructions.replace("{RAG_POLICY}", rag_policy)
+            else:
+                instructions = f"{instructions}\n\n{rag_policy}"
+        else:
+            if "{RAG_POLICY}" in instructions:
+                instructions = instructions.replace("{RAG_POLICY}", "")
+
         os_info = f"\n\n# ENVIRONMENT\nOperating System: {platform.system()} ({platform.release()})\n"
-        self._instructions += os_info
+        self._instructions = instructions + os_info
 
         await asyncio.to_thread(ensure_memory_file, MEMORY_PATH)
         await asyncio.to_thread(ensure_agents_file, AGENTS_PATH)
@@ -191,9 +204,14 @@ class AgentRuntime:
             },
         }
 
+        tools: list[Any] = [*BUILTIN_TOOLS, *mcp_tools]
+        rag_mgr = get_rag_manager()
+        if rag_mgr is not None and rag_mgr.current_database is not None:
+            tools.append(rag_search)
+
         kwargs: dict[str, Any] = dict(
             model=model,
-            tools=[*BUILTIN_TOOLS, *mcp_tools],
+            tools=tools,
             system_prompt=self._instructions,
             backend=backend,
             memory=memory_sources,

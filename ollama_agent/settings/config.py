@@ -18,6 +18,7 @@ from .paths import (
     INSTRUCTIONS_PATH,
     MEMORY_PATH,
     RAG_DIR,
+    RAG_POLICY_PATH,
     SETTINGS_PATH,
 )
 
@@ -49,6 +50,15 @@ def _default_sandboxed() -> str:
     return (
         resources.files(__package__)
         .joinpath("prompts/fs_policy_sandboxed.md")
+        .read_text(encoding="utf-8")
+        .strip()
+    )
+
+
+def _default_rag_policy() -> str:
+    return (
+        resources.files(__package__)
+        .joinpath("prompts/rag_policy.md")
         .read_text(encoding="utf-8")
         .strip()
     )
@@ -258,6 +268,11 @@ def load_fs_policy_sandboxed(policy_path: Path = FS_POLICY_SANDBOXED_PATH) -> st
     return _load_prompt_file(policy_path, _default_sandboxed)
 
 
+def load_rag_policy(policy_path: Path = RAG_POLICY_PATH) -> str:
+    """Load RAG policy from file or return defaults."""
+    return _load_prompt_file(policy_path, _default_rag_policy)
+
+
 # ---------------------------------------------------------------------------
 # Memory scaffold
 # ---------------------------------------------------------------------------
@@ -313,6 +328,7 @@ def reset_config(
     instructions_path: Path = INSTRUCTIONS_PATH,
     traversal_path: Path = FS_POLICY_TRAVERSAL_PATH,
     sandboxed_path: Path = FS_POLICY_SANDBOXED_PATH,
+    rag_policy_path: Path = RAG_POLICY_PATH,
 ) -> list[str]:
     """Reset configuration or system prompt to defaults."""
     if option not in VALID_RESET_OPTIONS:
@@ -335,12 +351,16 @@ def reset_config(
             traversal_path.unlink()
         if sandboxed_path.exists():
             sandboxed_path.unlink()
+        if rag_policy_path.exists():
+            rag_policy_path.unlink()
         load_instructions(instructions_path)
         load_fs_policy_traversal(traversal_path)
         load_fs_policy_sandboxed(sandboxed_path)
+        load_rag_policy(rag_policy_path)
         messages.append(f"Reset: Restored default system prompt at {instructions_path}")
         messages.append(f"Reset: Restored default traversal policy at {traversal_path}")
         messages.append(f"Reset: Restored default sandboxed policy at {sandboxed_path}")
+        messages.append(f"Reset: Restored default RAG policy at {rag_policy_path}")
 
     return messages
 

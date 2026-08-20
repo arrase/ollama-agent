@@ -440,6 +440,8 @@ class OllamaAgentApp(App):
 
         if cmd == "/yolo":
             self.update_yolo_ui()
+        elif cmd in ("/rag-load", "/rag-unload", "/rag-delete"):
+            await self.repl.runtime.reload()
 
     # ── Modal helpers ─────────────────────────────────────────────────────
 

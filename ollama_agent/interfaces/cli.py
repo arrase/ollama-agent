@@ -7,6 +7,7 @@ import asyncio
 import inspect
 
 from ..agent import AgentRuntime
+from ..agent.builtin_tools import set_rag_manager
 from ..core import ALLOWED_REASONING_EFFORTS
 from ..rag import RAGContext, RAGManager, RAGError
 from ..settings import Settings
@@ -207,8 +208,8 @@ def handle_cli_commands(
 
         async def _run():
             async with runtime:
-                await runtime.reload()
                 if args.rag:
+                    set_rag_manager(rag_ctx.rag_manager)
                     try:
                         rag_ctx.rag_manager.load_database(args.rag)
                     except RAGError as e:
@@ -216,6 +217,7 @@ def handle_cli_commands(
                             f"[red]Failed to load RAG database '{args.rag}': {e}[/red]"
                         )
                         raise SystemExit(1)
+                await runtime.reload()
                 await run_non_interactive(runtime, args.prompt)
 
         asyncio.run(_run())

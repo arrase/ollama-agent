@@ -54,5 +54,5 @@ async def rag_search(query: str, top_k: int | None = None) -> RAGToolResult:
         return {"success": False, "error": str(exc)}
 
 
-BUILTIN_TOOLS: list[Any] = [rag_search]
+BUILTIN_TOOLS: list[Any] = []
 

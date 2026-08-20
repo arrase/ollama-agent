@@ -148,19 +148,69 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         runtime = AgentRuntime(settings=settings)
 
         with patch.object(AgentRuntime, "_build_graph", AsyncMock(return_value=MagicMock())) as mock_bg, \
-             patch("ollama_agent.agent.agent.load_instructions", return_value="instructions"), \
-             patch("ollama_agent.agent.agent.load_fs_policy_sandboxed", return_value="policy"), \
+             patch("ollama_agent.agent.agent.load_instructions", return_value="instructions\n{FILESYSTEM_POLICY}\n{RAG_POLICY}"), \
+             patch("ollama_agent.agent.agent.load_fs_policy_sandboxed", return_value="fs_policy"), \
              patch("ollama_agent.agent.agent.ensure_memory_file"), \
              patch("ollama_agent.agent.agent.ensure_agents_file"):
+            set_rag_manager(None)
             await runtime.reload()
             self.assertIsNotNone(runtime.graph)
             mock_bg.assert_awaited_once()
+            self.assertIn("fs_policy", runtime._instructions)
+            self.assertNotIn("{FILESYSTEM_POLICY}", runtime._instructions)
+            self.assertNotIn("{RAG_POLICY}", runtime._instructions)
 
         with patch("ollama_agent.agent.agent.save_settings"), patch.object(AgentRuntime, "reload", AsyncMock()):
             msg = await runtime.set_model("qwen3:32b")
             self.assertEqual(runtime.settings.model.name, "qwen3:32b")
             self.assertIn("qwen3:32b", msg)
 
+        await runtime.aclose()
+
+    async def test_agent_runtime_rag_active_instructions_and_tools(self) -> None:
+        settings = Settings()
+        runtime = AgentRuntime(settings=settings)
+
+        mock_mgr = MagicMock()
+        mock_mgr.current_database = "active_docs"
+        set_rag_manager(mock_mgr)
+
+        with patch.object(AgentRuntime, "_build_graph", AsyncMock(return_value=MagicMock())) as mock_bg, \
+             patch("ollama_agent.agent.agent.load_instructions", return_value="base\n{FILESYSTEM_POLICY}\n{RAG_POLICY}"), \
+             patch("ollama_agent.agent.agent.load_fs_policy_sandboxed", return_value="fs_sandbox"), \
+             patch("ollama_agent.agent.agent.load_rag_policy", return_value="rag_policy_content"), \
+             patch("ollama_agent.agent.agent.ensure_memory_file"), \
+             patch("ollama_agent.agent.agent.ensure_agents_file"):
+            await runtime.reload()
+            self.assertIn("rag_policy_content", runtime._instructions)
+            self.assertIn("fs_sandbox", runtime._instructions)
+            self.assertNotIn("{RAG_POLICY}", runtime._instructions)
+            mock_bg.assert_awaited_once()
+
+        # Test tool injection in _build_graph
+        with patch("ollama_agent.agent.agent.ensure_model_supports_tools", AsyncMock()), \
+             patch("ollama_agent.agent.agent.create_ollama_chat_model", AsyncMock(return_value=MagicMock())), \
+             patch("ollama_agent.agent.agent.create_summarization_tool_middleware", return_value=MagicMock()), \
+             patch("ollama_agent.agent.agent.load_main_mcp_tools", AsyncMock(return_value=[])), \
+             patch("ollama_agent.agent.agent.create_deep_agent") as mock_cda, \
+             patch.object(AgentRuntime, "_sqlite_checkpointer", AsyncMock(return_value=MagicMock())):
+            await runtime._build_graph()
+            kwargs = mock_cda.call_args.kwargs
+            self.assertIn(rag_search, kwargs["tools"])
+
+        # When RAG is inactive
+        mock_mgr.current_database = None
+        with patch("ollama_agent.agent.agent.ensure_model_supports_tools", AsyncMock()), \
+             patch("ollama_agent.agent.agent.create_ollama_chat_model", AsyncMock(return_value=MagicMock())), \
+             patch("ollama_agent.agent.agent.create_summarization_tool_middleware", return_value=MagicMock()), \
+             patch("ollama_agent.agent.agent.load_main_mcp_tools", AsyncMock(return_value=[])), \
+             patch("ollama_agent.agent.agent.create_deep_agent") as mock_cda, \
+             patch.object(AgentRuntime, "_sqlite_checkpointer", AsyncMock(return_value=MagicMock())):
+            await runtime._build_graph()
+            kwargs = mock_cda.call_args.kwargs
+            self.assertNotIn(rag_search, kwargs["tools"])
+
+        set_rag_manager(None)
         await runtime.aclose()
 
 
