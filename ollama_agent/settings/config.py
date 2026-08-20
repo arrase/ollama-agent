@@ -273,6 +273,20 @@ def load_rag_policy(policy_path: Path = RAG_POLICY_PATH) -> str:
     return _load_prompt_file(policy_path, _default_rag_policy)
 
 
+def ensure_prompt_files(
+    *,
+    instructions_path: Path = INSTRUCTIONS_PATH,
+    traversal_path: Path = FS_POLICY_TRAVERSAL_PATH,
+    sandboxed_path: Path = FS_POLICY_SANDBOXED_PATH,
+    rag_policy_path: Path = RAG_POLICY_PATH,
+) -> None:
+    """Ensure all default prompt files exist in the user prompts directory."""
+    load_instructions(instructions_path)
+    load_fs_policy_traversal(traversal_path)
+    load_fs_policy_sandboxed(sandboxed_path)
+    load_rag_policy(rag_policy_path)
+
+
 # ---------------------------------------------------------------------------
 # Memory scaffold
 # ---------------------------------------------------------------------------
