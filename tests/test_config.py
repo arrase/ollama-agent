@@ -41,6 +41,7 @@ class TestConfigManagement(unittest.TestCase):
     def test_default_settings_instantiation(self) -> None:
         s = Settings()
         self.assertEqual(s.model.name, "gemma4:26b")
+        self.assertEqual(s.model.context_window, 10000)
         self.assertEqual(s.runtime.builtin_tool_timeout, 30)
         self.assertEqual(s.mentions.max_files, 100)
         self.assertEqual(s.rag.default_top_k, 5)

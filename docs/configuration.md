@@ -17,7 +17,7 @@ model:
   name: "gemma4:26b"                     # Default Ollama model tag
   base_url: "http://localhost:11434"     # Ollama API server endpoint
   temperature: 0.0                       # Sampling temperature (0.0 for deterministic outputs)
-  context_window: null                   # Manual num_ctx override in tokens (null for auto-resolution)
+  context_window: 10000                  # Context window size in tokens (num_ctx)
   reasoning_effort: "medium"             # Default thinking effort: low, medium, high, disabled, hide, enabled
 
 # Agent Runtime Behavior & Security Policies

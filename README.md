@@ -268,7 +268,7 @@ model:
   name: gemma4:26b
   base_url: http://localhost:11434
   temperature: 0.0
-  context_window: null
+  context_window: 10000
   reasoning_effort: medium
 runtime:
   allow_traversal: false
@@ -296,7 +296,7 @@ subagents: []
 | `model.name` | Default Ollama model. Must support tool calling (default: `gemma4:26b`). |
 | `model.base_url` | Native Ollama host (e.g. `http://localhost:11434`). Must **not** contain an `/v1` path. |
 | `model.reasoning_effort` | Default thinking level: `low`, `medium`, `high`, `disabled`, `hide`, or `enabled`. See [Thinking / Reasoning](#common-options) above. |
-| `model.context_window` | If set, forces the runtime `num_ctx` for the selected model. Leave `null` to let the app resolve it automatically. |
+| `model.context_window` | Context window size in tokens (`num_ctx`) (default: `10000`). |
 | `runtime.allow_traversal` | If true, permits virtual filesystem traversal outside the working directory (default: `false`). |
 | `runtime.builtin_tool_timeout` | Timeout in seconds for tool executions (default: `30`). |
 | `runtime.collapse_thinking` | If true, collapses model reasoning/thinking blocks in REPL output by default (default: `true`). |

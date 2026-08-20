@@ -64,7 +64,7 @@ class ModelSettings:
     name: str = "gemma4:26b"
     base_url: str = "http://localhost:11434"
     temperature: float = 0.0
-    context_window: int | None = None
+    context_window: int = 10000
     reasoning_effort: str = "medium"
 
 
