@@ -37,8 +37,8 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
             meta = yaml.safe_load(text[3:end])
             if isinstance(meta, dict):
                 return meta, text[end + 3 :].lstrip("\n")
-        except yaml.YAMLError:
-            pass
+        except yaml.YAMLError as exc:
+            logger.warning("Invalid YAML frontmatter in skill: %s", exc)
     return {}, text
 
 
@@ -65,20 +65,17 @@ def _read_skill(skill_dir: Path) -> SkillInfo | None:
     )
 
 
-class SkillManager(BaseFileStoreManager["SkillInfo"]):
+class SkillManager(BaseFileStoreManager[SkillInfo]):
     """Manages skills persisted as subdirectories with SKILL.md files."""
 
     DEFAULT_DIR = SKILLS_DIR
-
-    _ext: str = ""  # skills are directories, no file extension
-    _id_label: str = "skill_id"
+    _ext: str = ""
 
     def __init__(self, skills_dir: Path = SKILLS_DIR) -> None:
         super().__init__(skills_dir)
 
     @property
     def skills_dir(self) -> Path:
-        """Alias for :attr:`base_dir` for backward compatibility."""
         return self.base_dir
 
     @staticmethod
@@ -101,7 +98,7 @@ class SkillManager(BaseFileStoreManager["SkillInfo"]):
             return [(prefix, skill)]
         return [
             (d.name, s)
-            for d in self.skills_dir.iterdir()
+            for d in self.base_dir.iterdir()
             if d.is_dir() and d.name.startswith(prefix) and (s := _read_skill(d)) is not None
         ]
 
@@ -109,7 +106,7 @@ class SkillManager(BaseFileStoreManager["SkillInfo"]):
         """List all skills sorted by name."""
         skills = [
             (d.name, s)
-            for d in sorted(self.skills_dir.iterdir())
+            for d in sorted(self.base_dir.iterdir())
             if d.is_dir() and (s := _read_skill(d)) is not None
         ]
         return sorted(skills, key=lambda x: x[1].name.lower())

@@ -45,10 +45,10 @@ from .subagents import build_subagents
 _log = logging.getLogger(__name__)
 
 
-
 # ---------------------------------------------------------------------------
 # Agent Runtime (CUD-inspired)
 # ---------------------------------------------------------------------------
+
 
 
 @dataclass(slots=True)
@@ -226,7 +226,6 @@ class AgentRuntime:
         thread = thread_id or self.thread_id
         if self.graph is None:
             await self.reload()
-        assert self.graph is not None
 
         config = {"configurable": {"thread_id": thread}}
         hide_reasoning = self.settings.model.reasoning_effort in ("hide", "disabled")
@@ -259,7 +258,14 @@ class AgentRuntime:
 
             inputs = {"messages": [user_msg]}
 
-        async for mode, event in self.graph.astream(
+        if self.graph is None:
+            await self.reload()
+        if self.graph is None:
+            raise RuntimeError("Agent runtime graph not initialized.")
+
+        graph = self.graph
+
+        async for mode, event in graph.astream(
             inputs,
             config,
             stream_mode=["messages", "custom"],
@@ -277,9 +283,10 @@ class AgentRuntime:
                     yield result
 
         # Check if we were interrupted
-        state = await self.graph.aget_state(config)
+        state = await graph.aget_state(config)
         if state.interrupts:
             yield {"type": "interrupt", "interrupts": state.interrupts, "config": config}
+
 
     async def set_model(self, model_name: str) -> str:
         self.settings.model.name = model_name
@@ -301,9 +308,7 @@ def _process_message_chunk(
     hide_reasoning: bool = False,
 ) -> dict[str, Any] | None:
     """Process 'messages' chunk to extract reasoning or text deltas."""
-    chunk_type = getattr(chunk, "type", "").lower()
-    chunk_name = type(chunk).__name__.lower()
-    if chunk_type == "tool" or "tool" in chunk_name:
+    if getattr(chunk, "type", None) == "tool":
         return None
 
     content = getattr(chunk, "content", None)
@@ -319,3 +324,4 @@ def _process_message_chunk(
     if text:
         return {"type": "text_delta", "content": text}
     return None
+

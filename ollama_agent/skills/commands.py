@@ -113,9 +113,8 @@ def create_skill(
 def delete_skill(ctx: SkillsContext, skill_id: str) -> None:
     """Delete an existing skill."""
     sid, info = ctx._find_or_exit(skill_id)
-    msg = (
-        f"[green]Skill deleted:[/green] {info.name} ({sid})"
-        if ctx.skill_manager.delete(sid)
-        else f"[red]Error deleting skill: {sid}[/red]"
-    )
-    ctx.console.print(msg)
+    if not ctx.skill_manager.delete(sid):
+        ctx.console.print(f"[red]Error deleting skill: {sid}[/red]")
+        raise SkillError(f"Error deleting skill: {sid}")
+    ctx.console.print(f"[green]Skill deleted:[/green] {info.name} ({sid})")
+

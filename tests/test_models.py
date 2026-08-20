@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from ollama_agent.core.models import (
     ModelCapabilityError,
     ModelContextWindowError,
     _model_context_length,
     _parse_num_ctx,
+    create_ollama_chat_model,
     ensure_model_supports_tools,
     get_model_capabilities,
+    model_supports_thinking,
     model_supports_tools,
     resolve_context_window,
     resolve_ollama_reasoning,
@@ -52,7 +54,7 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
 
     @patch("ollama_agent.core.models._show_model")
     async def test_get_model_capabilities(self, mock_show: AsyncMock) -> None:
-        mock_show.return_value = type("Resp", (), {"capabilities": ["tools", "thinking"]})()
+        mock_show.return_value = MagicMock(capabilities=["tools", "thinking"])
         caps = await get_model_capabilities("test-model", "http://localhost:11434")
         self.assertEqual(caps, {"tools", "thinking"})
 
@@ -63,6 +65,27 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
 
         mock_caps.return_value = set()
         self.assertFalse(await model_supports_tools("test-model", "http://localhost:11434"))
+
+    @patch("ollama_agent.core.models.get_model_capabilities")
+    async def test_model_supports_thinking(self, mock_caps: AsyncMock) -> None:
+        mock_caps.return_value = {"thinking"}
+        self.assertTrue(await model_supports_thinking("test-model", "http://localhost:11434"))
+
+    @patch("ollama_agent.core.models.ensure_model_supports_tools")
+    @patch("ollama_agent.core.models.get_model_capabilities")
+    async def test_resolve_ollama_reasoning(self, mock_caps: AsyncMock, mock_ensure: AsyncMock) -> None:
+        mock_caps.return_value = {"thinking"}
+        res = await resolve_ollama_reasoning("qwen:32b", "high", "http://localhost:11434")
+        self.assertTrue(res)
+
+        # Non-thinking model
+        mock_caps.return_value = set()
+        res = await resolve_ollama_reasoning("llama3:8b", "high", "http://localhost:11434")
+        self.assertIsNone(res)
+
+        # gpt-oss special model
+        res = await resolve_ollama_reasoning("gpt-oss:latest", "high", "http://localhost:11434")
+        self.assertEqual(res, "high")
 
     @patch("ollama_agent.core.models.model_supports_tools")
     async def test_ensure_model_supports_tools_raises(self, mock_supports: AsyncMock) -> None:
@@ -78,6 +101,19 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ModelContextWindowError):
             await resolve_context_window("test-model", 0, "http://localhost:11434")
 
+    @patch("ollama_agent.core.models.resolve_context_window", AsyncMock(return_value=8192))
+    @patch("ollama_agent.core.models.resolve_ollama_reasoning", AsyncMock(return_value=True))
+    async def test_create_ollama_chat_model(self) -> None:
+        model = await create_ollama_chat_model(
+            model="gemma4:26b",
+            base_url="http://localhost:11434",
+            context_window=8192,
+            reasoning_effort="high",
+        )
+        self.assertIsNotNone(model)
+        self.assertEqual(model.model, "gemma4:26b")
+
 
 if __name__ == "__main__":
     unittest.main()
+

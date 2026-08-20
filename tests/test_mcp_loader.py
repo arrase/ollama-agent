@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
-from contextlib import AsyncExitStack
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+
 
 from ollama_agent.mcp.loader import (
     _build_mcp_connection,
@@ -67,14 +67,14 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(conn["headers"], {"Authorization": "Bearer 123"})
         self.assertEqual(conn["timeout"], 10)
 
+
     def test_build_mcp_connection_invalid_returns_none(self) -> None:
         self.assertIsNone(_build_mcp_connection({"unknown": "value"}))
 
     async def test_load_main_mcp_tools_missing_file_returns_empty(self) -> None:
-        async with AsyncExitStack() as stack:
-            with patch("ollama_agent.mcp.loader.MCP_SERVERS_PATH", Path("/tmp/nonexistent_mcp_path.json")):
-                tools = await load_main_mcp_tools(stack)
-                self.assertEqual(tools, [])
+        with patch("ollama_agent.mcp.loader.MCP_SERVERS_PATH", Path("/tmp/nonexistent_mcp_path.json")):
+            tools = await load_main_mcp_tools()
+            self.assertEqual(tools, [])
 
     async def test_load_main_mcp_tools_invalid_json_returns_empty(self) -> None:
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as tmp:
@@ -82,10 +82,9 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             tmp_path = Path(tmp.name)
 
         try:
-            async with AsyncExitStack() as stack:
-                with patch("ollama_agent.mcp.loader.MCP_SERVERS_PATH", tmp_path):
-                    tools = await load_main_mcp_tools(stack)
-                    self.assertEqual(tools, [])
+            with patch("ollama_agent.mcp.loader.MCP_SERVERS_PATH", tmp_path):
+                tools = await load_main_mcp_tools()
+                self.assertEqual(tools, [])
         finally:
             tmp_path.unlink(missing_ok=True)
 
@@ -107,18 +106,16 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             mock_client = MagicMock()
             mock_client.get_tools = AsyncMock(return_value=[mock_tool])
 
-            async with AsyncExitStack() as stack:
-                with patch("ollama_agent.mcp.loader.MCP_SERVERS_PATH", tmp_path), \
-                     patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client):
-                    tools = await load_main_mcp_tools(stack)
-                    self.assertEqual(tools, [mock_tool])
+            with patch("ollama_agent.mcp.loader.MCP_SERVERS_PATH", tmp_path), \
+                 patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client):
+                tools = await load_main_mcp_tools()
+                self.assertEqual(tools, [mock_tool])
         finally:
             tmp_path.unlink(missing_ok=True)
 
     async def test_load_subagent_mcp_tools_empty_servers(self) -> None:
-        async with AsyncExitStack() as stack:
-            tools = await load_subagent_mcp_tools("test-agent", [], stack)
-            self.assertEqual(tools, [])
+        tools = await load_subagent_mcp_tools("test-agent", [])
+        self.assertEqual(tools, [])
 
     async def test_load_subagent_mcp_tools_success(self) -> None:
         servers = [
@@ -133,7 +130,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         mock_client = MagicMock()
         mock_client.get_tools = AsyncMock(return_value=[mock_tool])
 
-        async with AsyncExitStack() as stack:
-            with patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client):
-                tools = await load_subagent_mcp_tools("coder", servers, stack)
-                self.assertEqual(tools, [mock_tool])
+        with patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client):
+            tools = await load_subagent_mcp_tools("coder", servers)
+            self.assertEqual(tools, [mock_tool])
+

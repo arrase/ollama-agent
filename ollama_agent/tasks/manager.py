@@ -43,20 +43,17 @@ class Task:
         )
 
 
-class TaskManager(BaseFileStoreManager["Task"]):
+class TaskManager(BaseFileStoreManager[Task]):
     """Manages task persistence using YAML files."""
 
     DEFAULT_DIR = TASKS_DIR
-
-    _ext: str = ".yaml"  # tasks are stored as <id>.yaml files
-    _id_label: str = "task_id"
+    _ext: str = ".yaml"
 
     def __init__(self, tasks_dir: Path = TASKS_DIR) -> None:
         super().__init__(tasks_dir)
 
     @property
     def tasks_dir(self) -> Path:
-        """Alias for :attr:`base_dir` for backward compatibility."""
         return self.base_dir
 
     @staticmethod
@@ -83,7 +80,7 @@ class TaskManager(BaseFileStoreManager["Task"]):
             return [(prefix, task)]
         return [
             (p.stem, t)
-            for p in self.tasks_dir.iterdir()
+            for p in self.base_dir.iterdir()
             if p.is_file() and p.suffix == ".yaml" and p.stem.startswith(prefix) and (t := self.get(p.stem)) is not None
         ]
 
@@ -116,7 +113,8 @@ class TaskManager(BaseFileStoreManager["Task"]):
         """List all tasks sorted by title."""
         tasks = [
             (p.stem, t)
-            for p in self.tasks_dir.glob("*.yaml")
+            for p in self.base_dir.glob("*.yaml")
             if (t := self.get(p.stem))
         ]
         return sorted(tasks, key=lambda x: x[1].title.lower())
+

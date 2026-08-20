@@ -6,11 +6,11 @@ from contextlib import AsyncExitStack
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from ollama_agent.agent.agent import _process_message_chunk
+from ollama_agent.agent.agent import AgentRuntime, _process_message_chunk
 from ollama_agent.agent.builtin_tools import get_rag_manager, rag_search, set_rag_manager
 from ollama_agent.agent.middleware import _extract_tool_name, _stream_tool_events
-from ollama_agent.agent.subagents import _build_spec, build_subagents
-from ollama_agent.settings.config import ModelSettings, SubAgentSettings
+from ollama_agent.agent.subagents import build_subagents
+from ollama_agent.settings.config import ModelSettings, Settings, SubAgentSettings
 
 
 class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
@@ -142,3 +142,44 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(res["success"])
         self.assertIn("Python is a programming language.", res["context"])
         self.assertIn("guide.md", res["context"])
+
+    async def test_agent_runtime_lifecycle(self) -> None:
+        settings = Settings()
+        runtime = AgentRuntime(settings=settings)
+
+        with patch.object(AgentRuntime, "_build_graph", AsyncMock(return_value=MagicMock())) as mock_bg:
+            await runtime.reload()
+            self.assertIsNotNone(runtime.graph)
+            mock_bg.assert_awaited_once()
+
+        with patch("ollama_agent.agent.agent.save_settings"), patch.object(AgentRuntime, "reload", AsyncMock()):
+            msg = await runtime.set_model("qwen3:32b")
+            self.assertEqual(runtime.settings.model.name, "qwen3:32b")
+            self.assertIn("qwen3:32b", msg)
+
+        await runtime.aclose()
+
+
+    async def test_agent_runtime_run_streamed(self) -> None:
+        settings = Settings()
+        runtime = AgentRuntime(settings=settings)
+
+        async def mock_astream(*args: Any, **kwargs: Any):
+            yield "custom", {"type": "tool_call", "name": "test_tool"}
+            ai_chunk = MagicMock(type="ai", content="Hello response", additional_kwargs={})
+            yield "messages", (ai_chunk,)
+
+        mock_graph = MagicMock()
+        mock_graph.astream = mock_astream
+        mock_state = MagicMock(interrupts=[])
+        mock_graph.aget_state = AsyncMock(return_value=mock_state)
+        runtime.graph = mock_graph
+
+        events = []
+        async for event in runtime.run_streamed("Hello agent"):
+            events.append(event)
+
+        self.assertEqual(len(events), 2)
+        self.assertEqual(events[0], {"type": "tool_call", "name": "test_tool"})
+        self.assertEqual(events[1], {"type": "text_delta", "content": "Hello response"})
+

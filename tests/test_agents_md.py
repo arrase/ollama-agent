@@ -3,7 +3,9 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
+
 
 from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
 from deepagents.middleware.memory import MemoryMiddleware
@@ -13,12 +15,12 @@ from langchain_core.messages import SystemMessage
 from ollama_agent.agent import AgentRuntime
 from ollama_agent.settings import (
     AGENTS_MD_NAME,
-    AGENTS_PATH,
     MEMORY_PATH,
     Settings,
     ensure_agents_file,
     find_agents_file,
 )
+
 
 
 class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
@@ -115,9 +117,10 @@ class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
 
         state: dict[str, Any] = {}
         runtime_mock = MagicMock()
-        update = middleware.before_agent(state, runtime_mock, {})
+        update = middleware.before_agent(state, runtime_mock, {})  # type: ignore[arg-type]
         self.assertIsNotNone(update)
-        state.update(update)
+        if update:
+            state.update(update)  # type: ignore[arg-type]
 
         contents = state.get("memory_contents", {})
         self.assertIn("/agent/MEMORY.md", contents)
@@ -134,8 +137,9 @@ class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
                 return kwargs
 
         req = DummyRequest(state)
-        modified = middleware.modify_request(req)
-        rendered = modified["system_message"].content
+        modified = middleware.modify_request(req)  # type: ignore[arg-type]
+        rendered = modified["system_message"].content  # type: ignore[index]
+
         if isinstance(rendered, list):
             combined_text = "".join(b.get("text", "") for b in rendered if isinstance(b, dict))
         else:

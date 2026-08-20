@@ -19,11 +19,12 @@ class StreamingRenderer(ABC):
 
     def on_error(self, event: dict[str, Any]) -> None:
         """Handle an error event."""
-        print(f"Error: {event['content']}")
+        pass
 
     def on_warning(self, event: dict[str, Any]) -> None:
         """Handle a warning event."""
-        print(f"Warning: {event['content']}")
+        pass
+
 
     async def handle_interrupt(self, event: dict[str, Any], runtime: AgentRuntime) -> list[dict[str, Any]] | None:
         """Handle an interrupt event. Default implementation does nothing."""

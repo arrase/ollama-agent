@@ -11,7 +11,13 @@ from ollama_agent.rag.commands import (
     AmbiguousRAGDatabaseError,
     RAGContext,
     RAGDatabaseNotFoundError,
+    add_rag_file,
+    create_rag_database,
+    delete_rag_database,
     list_rag_databases,
+    load_rag_database,
+    show_rag_status,
+    unload_rag_database,
 )
 from ollama_agent.rag.manager import (
     RAGDatabaseExistsError,
@@ -45,7 +51,6 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(chunks, [text])
 
     def test_chunk_text_monotonic_forward_progress(self) -> None:
-        # Edge case where overlap >= chunk_size
         self.settings.chunk_size = 50
         self.settings.chunk_overlap = 60
         text = "Paragraph one with some detailed words.\n\nParagraph two with more details here."
@@ -106,6 +111,37 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(deleted)
             self.assertFalse((self.rag_dir / "knowledge").exists())
 
+    async def test_add_file_and_search(self) -> None:
+        doc = self.rag_dir / "doc.txt"
+        doc.write_text("LangChain and LangGraph are framework libraries for building agents.", encoding="utf-8")
+
+        mock_client = MagicMock()
+        mock_hit = MagicMock()
+        mock_hit.payload = {
+            "content": "LangChain and LangGraph are framework libraries",
+            "source": str(doc),
+            "filename": "doc.txt",
+            "chunk_index": 0,
+        }
+        mock_hit.score = 0.92
+        mock_resp = MagicMock(points=[mock_hit])
+        mock_client.query_points.return_value = mock_resp
+
+        self.manager._client = mock_client
+        self.manager._current_db = "test_db"
+
+        with patch.object(RAGManager, "_get_embeddings", AsyncMock(return_value=[[0.1, 0.2, 0.3, 0.4]])):
+            with patch.object(RAGManager, "_get_embedding", AsyncMock(return_value=[0.1, 0.2, 0.3, 0.4])):
+                res = await self.manager.add_file(str(doc))
+                self.assertEqual(res["chunks"], 1)
+                mock_client.upsert.assert_called_once()
+
+                hits = await self.manager.search("LangGraph")
+                self.assertEqual(len(hits), 1)
+                self.assertEqual(hits[0]["filename"], "doc.txt")
+                self.assertEqual(hits[0]["score"], 0.92)
+
+
     def test_rag_context_find_or_exit(self) -> None:
         mock_mgr = MagicMock()
         mock_mgr.list_databases.return_value = [
@@ -131,3 +167,31 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
         ]
         with self.assertRaises(AmbiguousRAGDatabaseError):
             ctx._find_or_exit("alpha")
+
+    def test_rag_command_handlers(self) -> None:
+        console = Console(record=True)
+        ctx = RAGContext(rag_manager=self.manager, console=console)
+
+        # Empty databases
+        list_rag_databases(ctx)
+        self.assertIn("No RAG databases found", console.export_text())
+
+        # Status not loaded
+        show_rag_status(ctx)
+        self.assertIn("No RAG database is currently loaded", console.export_text())
+
+        # Create, Load, Show, Unload, Delete
+        with patch("ollama_agent.rag.manager.QdrantClient"):
+            create_rag_database(ctx, "manual_db")
+            load_rag_database(ctx, "manual_db")
+            self.assertEqual(self.manager.current_database, "manual_db")
+
+            show_rag_status(ctx)
+            self.assertIn("Active RAG database", console.export_text())
+
+            unload_rag_database(ctx)
+            self.assertIsNone(self.manager.current_database)
+
+            delete_rag_database(ctx, "manual_db")
+            self.assertFalse((self.rag_dir / "manual_db").exists())
+

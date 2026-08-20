@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Any
 
@@ -25,9 +26,9 @@ from ..rag import (
 from ..skills import SkillError, SkillsContext, create_skill, delete_skill, list_skills, show_skill
 from ..tasks.commands import CLIContext, TaskError, create_task, delete_task, list_tasks, run_task
 from .model_commands import list_models
-import inspect
 
 CLIHandler = Callable[[], object]
+
 
 
 @dataclass(frozen=True)

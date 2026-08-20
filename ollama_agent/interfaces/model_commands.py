@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import ollama
 from rich.console import Console
 
+from ..agent import AgentRuntime
 from ..core import ModelCapabilityError, model_supports_tools
-
-if TYPE_CHECKING:
-    from ..agent import AgentRuntime
 
 
 async def _list_models(base_url: str) -> list[Any]:
@@ -32,9 +30,9 @@ async def list_models(
         if not models:
             console.print("[yellow]No models found in Ollama.[/yellow]")
             return
-        
+
         valid_models = [m for m in models if m.model]
-        
+
         async def get_tool_icon(model_name: str) -> str:
             try:
                 supported = await model_supports_tools(model_name, base_url)
@@ -50,14 +48,13 @@ async def list_models(
         for item, tool_icon in zip(valid_models, tool_icons):
             name = item.model
             marker = " [green]◀ current[/green]" if name == current_model else ""
-            size_gb = (item.size or 0) / (1024**3)
-            size_str = f"{size_gb:.1f}GB" if size_gb else ""
+            size_str = f"{(item.size / (1024**3)):.1f}GB" if item.size else ""
             console.print(f"  {tool_icon} [cyan]{name}[/cyan] {size_str}{marker}")
         console.print(
             "[dim]─" * 60
             + "[/dim]\n[dim]✓ = supports tools | Use /model-set <model> to switch[/dim]"
         )
-    except Exception as exc:
+    except (ollama.ResponseError, OSError, ConnectionError, Exception) as exc:
         console.print(f"[red]Error listing models: {exc}[/red]")
 
 
@@ -65,7 +62,7 @@ async def set_model(
     console: Console,
     model_name: str,
     *,
-    runtime: "AgentRuntime",
+    runtime: AgentRuntime,
 ) -> str:
     """Switch to model_name, returning the new model name."""
     try:
@@ -79,7 +76,7 @@ async def set_model(
                 "[dim]Use /models to see available models.[/dim]"
             )
             return runtime.settings.model.name
-    except Exception as exc:
+    except (ollama.ResponseError, OSError, ConnectionError, Exception) as exc:
         console.print(f"[red]Error checking model: {exc}[/red]")
         return runtime.settings.model.name
 
@@ -106,6 +103,7 @@ async def set_model(
             "[dim]Conversation preserved. Continue chatting.[/dim]"
         )
         return model_name
-    except Exception as exc:
+    except (ollama.ResponseError, OSError, ConnectionError, Exception) as exc:
         console.print(f"[red]Failed to switch to model '{model_name}': {exc}[/red]")
         return current
+

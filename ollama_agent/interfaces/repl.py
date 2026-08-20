@@ -70,11 +70,11 @@ class _TUIStreamingRenderer(StreamingRenderer):
         self._last_max_scroll_y = self.scroll.max_scroll_y
 
     def on_text_delta(self, event: dict[str, Any]) -> None:
-        self.widget.append_text(event.get("content", ""))
+        self.widget.append_text(event["content"])
         self._scroll()
 
     def on_reasoning_delta(self, event: dict[str, Any]) -> None:
-        self.widget.append_thinking(event.get("content", ""))
+        self.widget.append_thinking(event["content"])
         self._scroll()
 
     def on_tool_call(self, event: dict[str, Any]) -> None:
@@ -92,11 +92,11 @@ class _TUIStreamingRenderer(StreamingRenderer):
         self._scroll()
 
     def on_error(self, event: dict[str, Any]) -> None:
-        self.widget.add_error(event.get("content", "Unknown error"))
+        self.widget.add_error(event["content"])
         self._scroll()
 
     def on_warning(self, event: dict[str, Any]) -> None:
-        self.widget.add_warning(event.get("content", "Unknown warning"))
+        self.widget.add_warning(event["content"])
         self._scroll()
 
     def close(self) -> None:
@@ -116,9 +116,10 @@ class OllamaAgentApp(App):
     """Main Textual Application representing the Agent's interactive TUI."""
 
     BINDINGS = [
-        ("escape", "cancel_generation", "Interrumpir"),
-        ("ctrl+c", "cancel_or_quit", "Interrumpir/Salir"),
+        ("escape", "cancel_generation", "Interrupt"),
+        ("ctrl+c", "cancel_or_quit", "Interrupt/Quit"),
     ]
+
 
     def action_cancel_generation(self) -> None:
         if self._is_generating and self._current_worker is not None:
@@ -218,9 +219,7 @@ class OllamaAgentApp(App):
         # 2. File @-mention candidates
         match = _AT_MENTION_RE.search(value)
         if match:
-            prefix = match.group(1) if match.group(1) is not None else (
-                match.group(2) if match.group(2) is not None else match.group(3)
-            )
+            prefix = match.group(1) or match.group(2) or match.group(3) or ""
             completions = list(self._file_completions(prefix))
             if completions:
                 autolist.clear_options()
@@ -233,7 +232,7 @@ class OllamaAgentApp(App):
         self.hide_autocomplete()
 
     def accept_completion(self, option_index: int) -> None:
-        if option_index is None or option_index < 0:
+        if option_index < 0:
             return
 
         autolist = self.query_one("#autocomplete-list", OptionList)
@@ -270,18 +269,14 @@ class OllamaAgentApp(App):
         show_hidden = prefix.startswith(".")
         count = 0
         max_completions = 100
-
-        try:
-            tree = os.walk(cwd)
-        except OSError:
-            return
-
+        tree = os.walk(cwd)
         max_dirs_visited = 50
         dirs_visited = 0
 
         for root, dirs, files in tree:
             dirs_visited += 1
             if dirs_visited > max_dirs_visited:
+
                 return
 
             root_path = Path(root)

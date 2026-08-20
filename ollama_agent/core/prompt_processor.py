@@ -14,55 +14,61 @@ class PromptProcessingError(Exception):
     """Exception raised when prompt processing fails, e.g., referenced file not found."""
 
 
+_MIME_EXTENSIONS: dict[str, str] = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".bmp": "image/bmp",
+    ".svg": "image/svg+xml",
+    ".heic": "image/heic",
+    ".heif": "image/heif",
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".ogg": "audio/ogg",
+    ".flac": "audio/flac",
+    ".m4a": "audio/m4a",
+    ".aac": "audio/aac",
+    ".aiff": "audio/aiff",
+    ".mp4": "video/mp4",
+    ".mpeg": "video/mpeg",
+    ".mov": "video/quicktime",
+    ".avi": "video/x-msvideo",
+    ".flv": "video/x-flv",
+    ".mpg": "video/mpeg",
+    ".webm": "video/webm",
+    ".wmv": "video/x-ms-wmv",
+    ".3gpp": "video/3gpp",
+    ".pdf": "application/pdf",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+}
+
+
 def get_file_type(file_path: Path) -> str:
     """Guess the MIME type of a file using mimetypes, with custom extension fallback."""
     mime, _ = mimetypes.guess_type(str(file_path))
     if mime:
         return mime
-
-    # Fallback extension matching
-    ext = file_path.suffix.lower()
-    if ext in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"):
-        return "image/" + (ext[1:] if ext != ".jpg" else "jpeg")
-    if ext in (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac"):
-        return "audio/" + (ext[1:] if ext != ".mp3" else "mpeg")
-    if ext in (".mp4", ".mpeg", ".mov", ".avi", ".flv", ".mpg", ".webm", ".wmv", ".3gpp"):
-        return "video/" + (ext[1:] if ext != ".mov" else "quicktime")
-    if ext == ".pdf":
-        return "application/pdf"
-    if ext == ".ppt":
-        return "application/vnd.ms-powerpoint"
-    if ext == ".pptx":
-        return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-    return ""
+    return _MIME_EXTENSIONS.get(file_path.suffix.lower(), "")
 
 
 def classify_multimodal_file(file_path: Path) -> str | None:
     """Classify a file into a LangChain multimodal type, or None if it should be treated as text."""
-    suffix = file_path.suffix.lower()
-    if suffix in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg", ".heic", ".heif"):
-        return "image"
-    if suffix in (".mp4", ".mpeg", ".mov", ".avi", ".flv", ".mpg", ".webm", ".wmv", ".3gpp"):
-        return "video"
-    if suffix in (".wav", ".mp3", ".aiff", ".aac", ".ogg", ".flac", ".m4a"):
-        return "audio"
-    if suffix in (".pdf", ".ppt", ".pptx"):
-        return "file"
-
     mime = get_file_type(file_path)
-    if mime:
-        if mime.startswith("image/"):
-            return "image"
-        if mime.startswith("audio/"):
-            return "audio"
-        if mime.startswith("video/"):
-            return "video"
-        if (
-            mime == "application/pdf"
-            or mime.startswith("application/vnd.ms-powerpoint")
-            or mime.startswith("application/vnd.openxmlformats-officedocument.presentationml")
-        ):
-            return "file"
+    if mime.startswith("image/"):
+        return "image"
+    if mime.startswith("video/"):
+        return "video"
+    if mime.startswith("audio/"):
+        return "audio"
+    if (
+        mime == "application/pdf"
+        or mime.startswith("application/vnd.ms-powerpoint")
+        or mime.startswith("application/vnd.openxmlformats-officedocument.presentationml")
+    ):
+        return "file"
     return None
 
 
@@ -123,13 +129,7 @@ def resolve_context_files(
     max_files: int = 100,
     max_total_size: int = 10 * 1024 * 1024,
 ) -> tuple[dict[Path, str], list[dict[str, Any]]]:
-    """Resolve a target file or directory into context data.
-
-    Returns:
-        tuple containing:
-        - dict mapping Path to text content.
-        - list of attachment dictionaries for binary files.
-    """
+    """Resolve a target file or directory into context data."""
     text_contents: dict[Path, str] = {}
     binary_attachments: list[dict[str, Any]] = []
     total_size = 0
@@ -139,8 +139,10 @@ def resolve_context_files(
 
         try:
             size = file_path.stat().st_size
-        except OSError:
-            return
+        except OSError as e:
+            if ignore_errors:
+                return
+            raise PromptProcessingError(f"Failed to get file stats for {file_path}: {e}") from e
 
         attachment_type = classify_multimodal_file(file_path)
         if attachment_type is None and is_binary_file(file_path):
@@ -165,13 +167,17 @@ def resolve_context_files(
                 binary_attachments.append({
                     "type": attachment_type,
                     "base64": b64_data,
-                    "mime_type": mime
+                    "mime_type": mime,
                 })
             else:
                 content = read_file_content(file_path, max_file_size)
                 text_contents[file_path] = content
             total_size += size
-        except Exception as e:
+        except PromptProcessingError:
+            if ignore_errors:
+                return
+            raise
+        except OSError as e:
             if ignore_errors:
                 return
             raise PromptProcessingError(f"Failed to add file {file_path}: {e}") from e
@@ -183,7 +189,7 @@ def resolve_context_files(
     if not target_path.is_dir():
         return text_contents, binary_attachments
 
-    for root, dirs, files in os.walk(target_path):
+    for root, _, files in os.walk(target_path):
         for file_name in files:
             add_file(Path(root) / file_name, ignore_errors=True)
 

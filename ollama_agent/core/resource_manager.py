@@ -10,7 +10,6 @@ Subclasses must supply:
 
 * ``_ext`` – file extension including the dot (``".yaml"``) or ``""`` for
   directory-based items.
-* ``_id_label`` – human-readable label used in validation error messages.
 * Abstract ``find_matches``, ``list_all`` and ``delete`` methods.
 """
 
@@ -29,9 +28,6 @@ class BaseFileStoreManager(ABC, Generic[T]):
     #: File extension used when building item paths. Set to ``""`` for
     #: directory-based resources (e.g. skills) or ``".yaml"`` for files.
     _ext: str = ""
-
-    #: Label included in validation error messages, e.g. ``"skill_id"``.
-    _id_label: str = "id"
 
     def __init__(self, base_dir: Path) -> None:
         self.base_dir = base_dir

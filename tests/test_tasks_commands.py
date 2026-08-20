@@ -3,29 +3,33 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 from rich.console import Console
 
+
+
 from ollama_agent.tasks.commands import (
     AmbiguousTaskError,
-    CLIContext,
+    TasksContext,
     TaskNotFoundError,
     ValidationError,
     create_task,
     delete_task,
     list_tasks,
+    run_task,
 )
 from ollama_agent.tasks.manager import TaskManager
 
 
-class TestTasksCommands(unittest.TestCase):
+class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
     """Unit tests for tasks command operations and resolution."""
 
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.mgr = TaskManager(tasks_dir=Path(self.temp_dir.name))
         self.console = Console(record=True)
-        self.ctx = CLIContext(console=self.console, task_manager=self.mgr)
+        self.ctx = TasksContext(console=self.console, task_manager=self.mgr)
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
@@ -49,6 +53,7 @@ class TestTasksCommands(unittest.TestCase):
         assert task is not None
         self.assertEqual(task.title, "Run Unit Tests")
 
+
         list_tasks(self.ctx)
         out = self.console.export_text()
         self.assertIn("Run Unit Tests", out)
@@ -64,6 +69,19 @@ class TestTasksCommands(unittest.TestCase):
         delete_task(self.ctx, "cleanup-task")
         self.assertIsNone(self.mgr.get("cleanup-task"))
 
+    async def test_run_task(self) -> None:
+        create_task(
+            self.ctx,
+            "quick-task",
+            title="Quick Task",
+            prompt="summarize file",
+            model="gemma4:26b",
+        )
+        with patch("ollama_agent.tasks.commands.run_non_interactive", AsyncMock()) as mock_run:
+            with patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()):
+                await run_task(self.ctx, "quick-task")
+                mock_run.assert_awaited_once()
+
     def test_find_or_exit_errors(self) -> None:
         with self.assertRaises(TaskNotFoundError):
             self.ctx._find_or_exit("missing_task")
@@ -73,3 +91,4 @@ class TestTasksCommands(unittest.TestCase):
 
         with self.assertRaises(AmbiguousTaskError):
             self.ctx._find_or_exit("deploy")
+

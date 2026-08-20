@@ -8,7 +8,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ..agent import AgentRuntime
-from ..core import validate_reasoning_effort
+from ..core import DEFAULT_REASONING_EFFORT, validate_reasoning_effort
 from ..settings import load_settings
 from ..streaming import run_non_interactive
 from .manager import Task, TaskManager
@@ -31,7 +31,7 @@ class ValidationError(TaskError):
 
 
 @dataclass
-class CLIContext:
+class TasksContext:
     """Holds shared resources for task-related commands."""
 
     console: Console = field(default_factory=Console)
@@ -56,7 +56,11 @@ class CLIContext:
         return cleaned
 
 
-def list_tasks(ctx: CLIContext) -> None:
+# Backward-compatible alias
+CLIContext = TasksContext
+
+
+def list_tasks(ctx: TasksContext) -> None:
     if not (tasks := ctx.task_manager.list_all()):
         ctx.console.print("[yellow]No tasks found.[/yellow]")
         return
@@ -73,7 +77,7 @@ def list_tasks(ctx: CLIContext) -> None:
     ctx.console.print(table)
 
 
-async def run_task(ctx: CLIContext, task_id: str) -> None:
+async def run_task(ctx: TasksContext, task_id: str) -> None:
     tid, t = ctx._find_or_exit(task_id)
     ctx.console.print(
         f"[bold cyan]Executing:[/bold cyan] {t.title} ({tid})\n"
@@ -89,18 +93,16 @@ async def run_task(ctx: CLIContext, task_id: str) -> None:
         await run_non_interactive(runtime, t.prompt)
 
 
-def delete_task(ctx: CLIContext, task_id: str) -> None:
+def delete_task(ctx: TasksContext, task_id: str) -> None:
     tid, t = ctx._find_or_exit(task_id)
-    msg = (
-        f"[green]Task deleted:[/green] {t.title} ({tid})"
-        if ctx.task_manager.delete(tid)
-        else f"[red]Error deleting task: {tid}[/red]"
-    )
-    ctx.console.print(msg)
+    if not ctx.task_manager.delete(tid):
+        ctx.console.print(f"[red]Error deleting task: {tid}[/red]")
+        raise TaskError(f"Error deleting task: {tid}")
+    ctx.console.print(f"[green]Task deleted:[/green] {t.title} ({tid})")
 
 
 def create_task(
-    ctx: CLIContext,
+    ctx: TasksContext,
     task_id: str,
     *,
     title: str,
@@ -113,7 +115,7 @@ def create_task(
         ctx._require(title, "Title"),
         ctx._require(prompt, "Prompt"),
         ctx._require(model, "Model"),
-        validate_reasoning_effort(reasoning_effort or "medium"),
+        validate_reasoning_effort(reasoning_effort or DEFAULT_REASONING_EFFORT),
     )
     try:
         ctx.console.print(
@@ -127,3 +129,4 @@ def create_task(
     except ValueError as e:
         ctx.console.print(f"[red]{e}[/red]")
         raise ValidationError(str(e)) from e
+

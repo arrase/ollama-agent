@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from rich.console import Console
 
 from ollama_agent.interfaces.cli import handle_cli_commands
-from ollama_agent.interfaces.dispatch import build_cli_handlers, build_repl_handlers, render_repl_help, safe_call
+from ollama_agent.interfaces.dispatch import build_repl_handlers, render_repl_help, safe_call
 from ollama_agent.interfaces.model_commands import list_models, set_model
 from ollama_agent.interfaces.session_commands import new_session
 from ollama_agent.settings.config import Settings
@@ -128,3 +128,27 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Available Commands", out)
         self.assertIn("/help", out)
         self.assertIn("/yolo", out)
+
+    def test_handle_cli_commands_subcommand(self) -> None:
+        args = argparse.Namespace(command="task-list", prompt=None, yolo=False, rag=None)
+        settings = Settings()
+        with patch("ollama_agent.interfaces.dispatch.list_tasks") as mock_list:
+            handled = handle_cli_commands(args, settings)
+            self.assertTrue(handled)
+            mock_list.assert_called_once()
+
+
+    def test_handle_cli_commands_prompt(self) -> None:
+        args = argparse.Namespace(command=None, prompt="hello world", yolo=True, rag=None)
+        settings = Settings()
+        with patch("ollama_agent.interfaces.cli.run_non_interactive", AsyncMock()) as mock_run:
+            with patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()):
+                handled = handle_cli_commands(args, settings)
+                self.assertTrue(handled)
+                mock_run.assert_awaited_once()
+
+    def test_handle_cli_commands_unhandled(self) -> None:
+        args = argparse.Namespace(command=None, prompt=None)
+        settings = Settings()
+        self.assertFalse(handle_cli_commands(args, settings))
+

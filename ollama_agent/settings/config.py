@@ -306,18 +306,20 @@ def ensure_agents_file(agents_path: Path = AGENTS_PATH) -> Path:
 VALID_RESET_OPTIONS = {"all", "config-file", "system-prompt"}
 
 
-def reset_config(option: str) -> None:
+def reset_config(option: str) -> list[str]:
     """Reset configuration or system prompt to defaults."""
     if option not in VALID_RESET_OPTIONS:
         raise ValueError(
             f"Invalid reset option '{option}'. Expected one of: {sorted(VALID_RESET_OPTIONS)}"
         )
 
+    messages: list[str] = []
+
     if option in ("all", "config-file"):
         if SETTINGS_PATH.exists():
             SETTINGS_PATH.unlink()
         save_settings(Settings())
-        print(f"Reset: Restored default configuration at {SETTINGS_PATH}")
+        messages.append(f"Reset: Restored default configuration at {SETTINGS_PATH}")
 
     if option in ("all", "system-prompt"):
         if INSTRUCTIONS_PATH.exists():
@@ -329,6 +331,9 @@ def reset_config(option: str) -> None:
         load_instructions()
         load_fs_policy_traversal()
         load_fs_policy_sandboxed()
-        print(f"Reset: Restored default system prompt at {INSTRUCTIONS_PATH}")
-        print(f"Reset: Restored default traversal policy at {FS_POLICY_TRAVERSAL_PATH}")
-        print(f"Reset: Restored default sandboxed policy at {FS_POLICY_SANDBOXED_PATH}")
+        messages.append(f"Reset: Restored default system prompt at {INSTRUCTIONS_PATH}")
+        messages.append(f"Reset: Restored default traversal policy at {FS_POLICY_TRAVERSAL_PATH}")
+        messages.append(f"Reset: Restored default sandboxed policy at {FS_POLICY_SANDBOXED_PATH}")
+
+    return messages
+

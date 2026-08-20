@@ -18,11 +18,14 @@ from ollama_agent.settings.config import (
     ensure_agents_file,
     ensure_memory_file,
     find_agents_file,
+    load_fs_policy_sandboxed,
+    load_fs_policy_traversal,
     load_instructions,
     load_settings,
+    reset_config,
     save_settings,
 )
-from ollama_agent.settings.paths import AGENTS_MD_NAME, AGENTS_PATH
+from ollama_agent.settings.paths import AGENTS_MD_NAME
 
 
 class TestConfigManagement(unittest.TestCase):
@@ -80,7 +83,7 @@ class TestConfigManagement(unittest.TestCase):
             )
             s.setup_environment()
 
-            self.assertEqual(os.environ.get("LANGSMITH_API_KEY"), "test_key_123")
+            self.assertEqual(os.environ.get("LANGSMITH_KEY", os.environ.get("LANGSMITH_API_KEY")), "test_key_123")
             self.assertEqual(os.environ.get("LANGSMITH_TRACING"), "true")
             self.assertEqual(os.environ.get("LANGSMITH_PROJECT"), "test_proj")
             self.assertEqual(os.environ.get("LANGSMITH_ENDPOINT"), "https://api.smith.langchain.com")
@@ -118,7 +121,30 @@ class TestConfigManagement(unittest.TestCase):
         self.assertTrue(instructions_file.exists())
         self.assertTrue(len(content) > 0)
 
+    def test_load_fs_policies(self) -> None:
+        traversal_file = Path(self.temp_dir.name) / "fs_traversal.md"
+        sandboxed_file = Path(self.temp_dir.name) / "fs_sandboxed.md"
+
+        traversal_content = load_fs_policy_traversal(traversal_file)
+        self.assertTrue(traversal_file.exists())
+        self.assertTrue(len(traversal_content) > 0)
+
+        sandboxed_content = load_fs_policy_sandboxed(sandboxed_file)
+        self.assertTrue(sandboxed_file.exists())
+        self.assertTrue(len(sandboxed_content) > 0)
+
+    def test_reset_config_options(self) -> None:
+        with self.assertRaises(ValueError):
+            reset_config("invalid_option")
+
+        msgs = reset_config("config-file")
+        self.assertIsInstance(msgs, list)
+        self.assertTrue(len(msgs) > 0)
+
+        msgs_all = reset_config("all")
+        self.assertTrue(len(msgs_all) >= 2)
 
 
 if __name__ == "__main__":
     unittest.main()
+

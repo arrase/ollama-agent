@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import MagicMock
 
 from rich.console import Console
+
 
 from ollama_agent.interfaces.cli import create_argument_parser
 from ollama_agent.interfaces.dispatch import (

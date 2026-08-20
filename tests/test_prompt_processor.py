@@ -7,13 +7,13 @@ from pathlib import Path
 from ollama_agent.core.prompt_processor import (
     PromptProcessingError,
     classify_multimodal_file,
-    get_file_type,
     is_binary_file,
     process_prompt_mentions,
     read_binary_file_b64,
     read_file_content,
     resolve_context_files,
 )
+
 
 
 class TestPromptProcessor(unittest.TestCase):

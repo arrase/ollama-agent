@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import mimetypes
 import shutil
@@ -91,8 +90,8 @@ class RAGManager:
                 try:
                     info = self._client.get_collection(self.COLLECTION_NAME)
                     chunks = info.points_count
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Could not get points count for collection: %s", e)
             dbs.append(
                 {
                     "name": path.name,
@@ -102,6 +101,7 @@ class RAGManager:
                 }
             )
         return dbs
+
 
     def create_database(self, name: str) -> str:
         """Create a new RAG database."""
@@ -277,6 +277,7 @@ class RAGManager:
             logger.warning(
                 "Failed to delete existing points for directory batch: %s", e
             )
+            raise RAGError(f"Failed to clear existing points for directory batch: {e}") from e
 
         # Prepare a flat list of chunk data
         flat_chunks_data = []
@@ -351,7 +352,7 @@ class RAGManager:
     ) -> list[dict[str, Any]]:
         """Search the RAG database for relevant documents."""
         client = self._ensure_loaded()
-        top_k = top_k or self.settings.default_top_k
+        limit = self.settings.default_top_k if top_k is None else top_k
 
         # Get query embedding
         query_embedding = await self._get_embedding(query)
@@ -360,7 +361,7 @@ class RAGManager:
         response = client.query_points(
             collection_name=self.COLLECTION_NAME,
             query=query_embedding,
-            limit=top_k,
+            limit=limit,
             with_payload=True,
         )
         results = response.points
@@ -403,14 +404,15 @@ class RAGManager:
             for idx, vec in enumerate(embeddings):
                 if expected and len(vec) != expected:
                     raise RAGError(
-                        f"Embedding dims mismatch at index {idx}: expected {expected}, got {len(vec)}"
+                        f"Embedding dimension mismatch for text {idx}: "
+                        f"got {len(vec)}, expected {expected}"
                     )
 
             return embeddings
         except RAGError:
             raise
         except Exception as e:
-            raise RAGError(f"Embedding generation failed: {e}") from e
+            raise RAGError(f"Failed to generate embeddings: {e}") from e
 
     def _delete_source_points(self, client: QdrantClient, source: str) -> None:
         """Delete all points previously indexed for a given source path."""
@@ -427,36 +429,33 @@ class RAGManager:
             ) from e
 
     def _chunk_text(self, text: str) -> list[str]:
-        """Split text into overlapping chunks."""
+        """Split text into chunks with overlap."""
         chunk_size = self.settings.chunk_size
         overlap = self.settings.chunk_overlap
-        if overlap >= chunk_size:
-            overlap = chunk_size // 2
 
         if len(text) <= chunk_size:
             return [text]
 
-        chunks: list[str] = []
+        chunks = []
         start = 0
 
         while start < len(text):
-            end = min(start + chunk_size, len(text))
-            chunk = text[start:end]
+            end = start + chunk_size
 
-            # Try to break at a sentence or paragraph boundary
+            # If not at the end of text, try to find a good break point
             if end < len(text):
-                # Look for natural break points
-                for sep in ["\n\n", "\n", ". ", "! ", "? "]:
-                    last_sep = chunk.rfind(sep)
-                    if last_sep > chunk_size // 2:
-                        chunk = chunk[: last_sep + len(sep)]
-                        end = start + len(chunk)
+                # Look for paragraph break, then line break, then sentence, then word
+                for sep in ["\n\n", "\n", ". ", " "]:
+                    pos = text.rfind(sep, start, end)
+                    if pos != -1 and pos > start + (chunk_size // 2):
+                        end = pos + len(sep)
                         break
 
-            stripped = chunk.strip()
-            if stripped:
-                chunks.append(stripped)
+            chunk = text[start:end].strip()
+            if chunk:
+                chunks.append(chunk)
 
+            # Move start forward, accounting for overlap
             next_start = end - overlap
             start = next_start if next_start > start else end
 
@@ -491,6 +490,4 @@ class RAGManager:
     @staticmethod
     def _generate_point_id(source: str, chunk_index: int) -> str:
         """Generate a unique point ID as a UUID string from source and chunk index."""
-        combined = f"{source}:{chunk_index}"
-        hasher = hashlib.md5(combined.encode())
-        return str(uuid.UUID(hasher.hexdigest()))
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, f"{source}:{chunk_index}"))

@@ -47,11 +47,11 @@ class ConsoleStreamingRenderer(StreamingRenderer):
             self.console.print("  [bold green]🤖 Agent[/bold green]")
             self._banner_shown = True
         self._toggle_live(True)
-        self._text.append(event.get("content", ""))
+        self._text.append(event["content"])
         self.live.update(Padding(Markdown("".join(self._text)), (0, 0, 0, 4)))
 
     def on_reasoning_delta(self, event: dict[str, Any]) -> None:
-        content = event.get("content", "")
+        content = event["content"]
         if not content:
             return
         if not self._reasoning:
@@ -84,8 +84,9 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         self._toggle_live(False)
         agent = event.get("agent_name")
         prefix = f"[{agent}] " if isinstance(agent, str) and agent else ""
+        tool_name = event["name"]
         self.console.print(
-            f"  [yellow]✦ {prefix}Calling tool:[/yellow] [bold yellow]{event.get('name', 'unknown')}[/bold yellow]"
+            f"  [yellow]✦ {prefix}Calling tool:[/yellow] [bold yellow]{tool_name}[/bold yellow]"
         )
 
     def on_tool_output(self, event: dict[str, Any]) -> None:
@@ -103,14 +104,15 @@ class ConsoleStreamingRenderer(StreamingRenderer):
     def on_error(self, event: dict[str, Any]) -> None:
         self._toggle_live(False)
         self.console.print(
-            f"  [red]❌ Error: {event.get('content', 'Unknown error')}[/red]"
+            f"  [red]❌ Error: {event['content']}[/red]"
         )
 
     def on_warning(self, event: dict[str, Any]) -> None:
         self._toggle_live(False)
         self.console.print(
-            f"  [yellow]⚠ Warning: {event.get('content', 'Unknown warning')}[/yellow]"
+            f"  [yellow]⚠ Warning: {event['content']}[/yellow]"
         )
+
 
     async def handle_interrupt(
         self, event: dict[str, Any], runtime: AgentRuntime

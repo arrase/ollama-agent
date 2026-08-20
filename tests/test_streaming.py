@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import asyncio
 import unittest
 from typing import Any, AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 from rich.console import Console
+
 
 from ollama_agent.streaming.base import StreamingRenderer
 from ollama_agent.streaming.console_renderer import ConsoleStreamingRenderer

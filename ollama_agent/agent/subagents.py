@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import platform
 from contextlib import AsyncExitStack
 from typing import Any
@@ -11,8 +10,6 @@ from typing import Any
 from ..core import create_ollama_chat_model, validate_reasoning_effort
 from ..mcp import load_subagent_mcp_tools
 from ..settings import ModelSettings, SubAgentSettings
-
-_log = logging.getLogger(__name__)
 
 
 async def build_subagents(

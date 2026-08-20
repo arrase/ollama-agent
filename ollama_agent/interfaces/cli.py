@@ -72,10 +72,8 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
 def _add_subparser(
     subparsers: argparse._SubParsersAction, name: str, help_msg: str
 ) -> argparse.ArgumentParser:
-    """Helper to add a subparser with a default handler."""
-    parser = subparsers.add_parser(name, help=help_msg)
-    parser.set_defaults(_handler=name)
-    return parser
+    """Helper to add a subparser."""
+    return subparsers.add_parser(name, help=help_msg)
 
 
 def _add_task_subcommands(parser: argparse.ArgumentParser) -> None:
@@ -184,7 +182,7 @@ def handle_cli_commands(
     rag_ctx = RAGContext(rag_manager=RAGManager(settings.rag))
     skills_ctx = SkillsContext(skill_manager=SkillManager())
 
-    cmd = getattr(args, "_handler", None) or args.command
+    cmd = args.command
     handlers = build_cli_handlers(
         args, task_ctx=ctx, rag_ctx=rag_ctx, skills_ctx=skills_ctx
     )
@@ -198,16 +196,6 @@ def handle_cli_commands(
         return True
 
     if args.prompt:
-        # Apply CLI overrides
-        if args.model:
-            settings.model.name = args.model
-        if args.effort:
-            settings.model.reasoning_effort = args.effort
-        if args.builtin_tool_timeout is not None:
-            settings.runtime.builtin_tool_timeout = args.builtin_tool_timeout
-        if args.allow_traversal is not None:
-            settings.runtime.allow_traversal = args.allow_traversal
-
         runtime = AgentRuntime(settings=settings, yolo_mode=args.yolo)
 
         async def _run():
@@ -227,3 +215,4 @@ def handle_cli_commands(
         return True
 
     return False
+

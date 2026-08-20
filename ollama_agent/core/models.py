@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import re
 from typing import Any, Callable, cast
 
@@ -15,12 +14,9 @@ from .common import (
     ReasoningEffortValue,
 )
 
-logger = logging.getLogger(__name__)
-
-DEFAULT_BASE_URL = "http://localhost:11434"
-
 
 class ModelCapabilityError(RuntimeError):
+
     """Raised when the selected model cannot run tool calls."""
 
 
@@ -61,7 +57,7 @@ def _model_context_length(model_info: dict[str, Any]) -> int | None:
 async def get_model_capabilities(model: str, base_url: str) -> set[str]:
     """Extract capabilities for a model."""
     response = await _show_model(model, base_url)
-    caps = getattr(response, "capabilities", {})
+    caps = getattr(response, "capabilities", None)
     if isinstance(caps, dict):
         caps = caps.get("capabilities", [])
     if isinstance(caps, list):
@@ -81,7 +77,7 @@ async def ensure_model_supports_tools(model: str, base_url: str) -> None:
 
 
 async def model_supports_thinking(model: str, base_url: str) -> bool:
-    """Best-effort detection of Ollama thinking support for a model."""
+    """Detection of Ollama thinking support for a model."""
     capabilities = await get_model_capabilities(model, base_url)
     return "thinking" in capabilities
 
@@ -100,7 +96,7 @@ async def resolve_context_window(
     response = await _show_model(model, base_url)
 
     # 1. Structured info is the most reliable (modern Ollama)
-    model_info = getattr(response, "model_info", None) or getattr(response, "modelinfo", None)
+    model_info = getattr(response, "model_info", None)
     if isinstance(model_info, dict) and (resolved := _model_context_length(model_info)):
         return resolved
 

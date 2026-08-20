@@ -10,10 +10,9 @@ from textual.app import ComposeResult
 from textual.containers import Container, Horizontal
 from textual.message import Message
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Static, TextArea, Collapsible, Markdown, OptionList
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from textual.widgets import Button, Collapsible, Input, Label, Markdown, OptionList, Static, TextArea
 
-from ..settings.paths import APP_DIR, HISTORY_DB_PATH
+from ..settings.paths import APP_DIR
 
 if TYPE_CHECKING:
     from .repl import OllamaREPL, OllamaAgentApp
@@ -63,11 +62,11 @@ class ReplInput(TextArea):
 
     async def _load_history(self) -> None:
         history_path = APP_DIR / "tui_history.txt"
-        loaded_set = set()
+        loaded_set: set[str] = set()
         self._history = []
 
         def _read_history() -> list[str]:
-            res = []
+            res: list[str] = []
             if history_path.exists():
                 with open(history_path, "r", encoding="utf-8") as f:
                     for line in f:
@@ -79,27 +78,9 @@ class ReplInput(TextArea):
 
         file_entries = await asyncio.to_thread(_read_history)
         self._history.extend(file_entries)
-
-        # If the history is short or empty, try to populate it with previous user prompts from the DB checkpointer
-        if len(self._history) < 50 and HISTORY_DB_PATH.exists():
-            async with AsyncSqliteSaver.from_conn_string(str(HISTORY_DB_PATH)) as saver:
-                async for checkpoint_tuple in saver.alist(None):
-                    checkpoint = checkpoint_tuple.checkpoint
-                    values = checkpoint.get("channel_values", {})
-                    for key, val in values.items():
-                        if isinstance(val, list):
-                            for msg in val:
-                                msg_type = getattr(msg, "type", None) or type(msg).__name__.lower()
-                                if "human" in msg_type or "user" in msg_type:
-                                    content = getattr(msg, "content", None)
-                                    if content and isinstance(content, str):
-                                        entry = content.strip()
-                                        if entry and not entry.startswith("/") and entry not in loaded_set:
-                                            self._history.insert(0, entry)
-                                            loaded_set.add(entry)
-
         self._history_index = len(self._history)
         self._temp_input = ""
+
 
     def add_history_entry(self, entry: str) -> None:
         if not entry or entry.startswith("/"):
@@ -261,9 +242,10 @@ class AgentResponse(Container):
         self.current_text_widget = None
         if self.current_thinking is None:
             collapse_default = True
-            if self.app and hasattr(self.app, "repl"):
+            if self.app:
                 app_ref: Any = self.app
-                collapse_default = app_ref.repl.runtime.settings.runtime.collapse_thinking
+                if hasattr(app_ref, "repl"):
+                    collapse_default = app_ref.repl.runtime.settings.runtime.collapse_thinking
             self.current_thinking_text = Static("", classes="msg-content thinking-body")
             self._thinking_chunks = []
             self.current_thinking = Collapsible(
@@ -365,10 +347,6 @@ class SystemMessage(Static):
     """Command output or system-level notice."""
     pass
 
-
-class Label(Static):
-    """Simple wrapper used inside modals."""
-    pass
 
 
 # ─── Modals ───────────────────────────────────────────────────────────────────

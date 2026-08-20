@@ -18,18 +18,21 @@ warnings.filterwarnings(
     category=LangChainPendingDeprecationWarning,
     message=".*allowed_objects.*",
 )
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 def main() -> None:
     """Main entry point."""
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 
     parser = create_argument_parser()
     args = parser.parse_args()
 
     if args.config_reset:
-        reset_config(args.config_reset)
+        for msg in reset_config(args.config_reset):
+            print(msg)
         return
+
 
     settings = load_settings()
     settings.setup_environment()
