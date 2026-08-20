@@ -84,6 +84,7 @@ class RuntimeSettings:
     builtin_tool_timeout: int = 30
     collapse_thinking: bool = True
     inherit_env: bool = False
+    auto_approve_safe_commands: bool = True
 
 
 @dataclass(slots=True)

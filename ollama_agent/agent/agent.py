@@ -21,6 +21,7 @@ from ..core import (
     PromptProcessingError,
     create_ollama_chat_model,
     ensure_model_supports_tools,
+    extract_text,
     process_prompt_mentions,
     validate_reasoning_effort,
 )
@@ -44,6 +45,7 @@ from ..settings import (
 from ..streaming.parsers import streaming_reasoning, streaming_text
 from .builtin_tools import BUILTIN_TOOLS, get_rag_manager, get_tool_timeout, rag_search
 from .middleware import stream_tool_events_mw
+from .security import is_safe_command
 from .subagents import build_subagents
 
 _log = logging.getLogger(__name__)
@@ -69,6 +71,7 @@ class AgentRuntime:
     thread_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     yolo_mode: bool = field(default=False)
     auto_approved_tools: set[str] = field(default_factory=set)
+    last_context_tokens: int = field(default=0, init=False)
     graph: Any = field(default=None, init=False, repr=False)
     _instructions: str = field(default="", init=False)
     _exit_stack: contextlib.AsyncExitStack = field(
@@ -184,7 +187,17 @@ class AgentRuntime:
         )
 
         def should_interrupt_tool(request: Any) -> bool:
-            return not self.yolo_mode and request.tool_call["name"] not in self.auto_approved_tools
+            if self.yolo_mode:
+                return False
+            name = request.tool_call["name"]
+            if name in self.auto_approved_tools:
+                return False
+            if name == "execute" and self.settings.runtime.auto_approve_safe_commands:
+                args = request.tool_call.get("args") or {}
+                command = args.get("command", "") if isinstance(args, dict) else ""
+                if is_safe_command(command):
+                    return False
+            return True
 
         interrupt_on = {
             "execute": {
@@ -288,6 +301,11 @@ class AgentRuntime:
 
             if mode == "messages":
                 chunk = event[0] if isinstance(event, tuple) and event else event
+                meta = getattr(chunk, "response_metadata", None)
+                if isinstance(meta, dict) and "prompt_eval_count" in meta:
+                    eval_cnt = meta.get("eval_count") or 0
+                    prompt_cnt = meta.get("prompt_eval_count") or 0
+                    self.last_context_tokens = prompt_cnt + eval_cnt
                 result = _process_message_chunk(
                     chunk, hide_reasoning=hide_reasoning
                 )
@@ -296,6 +314,10 @@ class AgentRuntime:
 
         # Check if we were interrupted
         state = await self.graph.aget_state(config)
+        if state and state.values and "messages" in state.values:
+            total_chars = sum(len(extract_text(getattr(m, "content", ""))) for m in state.values["messages"])
+            if total_chars > 0 and self.last_context_tokens == 0:
+                self.last_context_tokens = max(1, total_chars // 4)
         if state.interrupts:
             yield {"type": "interrupt", "interrupts": state.interrupts, "config": config}
 

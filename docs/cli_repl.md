@@ -45,6 +45,7 @@ Slash commands provide session management, model control, task execution, docume
 | :--- | :--- | :--- |
 | `/help` | `/help` | Displays help message listing all available slash commands categorized by section. |
 | `/model` | `/model [list \| set <model>]` | Lists available local Ollama models or switches the active model dynamically. |
+| `/session` | `/session [list \| resume <id> \| new \| export [path] \| delete <id>]` | Manages chat sessions (listing, resuming past sessions, export to markdown, deletion). |
 | `/task` | `/task [list \| create <id> \| run <id> [-y] \| delete <id>]` | Manages saved prompt tasks (listing, modal creation, execution, deletion). |
 | `/skill` | `/skill [list \| show <id> \| create <id> \| delete <id>]` | Manages agent skills (listing, detail inspection, modal creation, deletion). |
 | `/rag` | `/rag [status \| list \| create <name> \| delete <name> \| load <name> \| unload \| add <path> [--dir]]` | Manages RAG vector stores (database creation, ingestion, loading/unloading, status). |

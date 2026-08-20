@@ -169,6 +169,16 @@ def _add_task_subcommands(parser: argparse.ArgumentParser) -> None:
     skill_delete = _add_subparser(subparsers, "skill-delete", "Delete a skill")
     skill_delete.add_argument("skill_id", type=str, help="Skill ID or prefix to delete")
 
+    # Session subcommands
+    _add_subparser(subparsers, "session-list", "List all past chat sessions")
+
+    session_del = _add_subparser(subparsers, "session-delete", "Delete a chat session from history")
+    session_del.add_argument("session_id", type=str, help="Session ID or prefix to delete")
+
+    session_exp = _add_subparser(subparsers, "session-export", "Export a chat session to Markdown")
+    session_exp.add_argument("session_id", type=str, help="Session ID or prefix to export")
+    session_exp.add_argument("--output", "-o", type=str, required=False, help="Target markdown file path")
+
 
 def create_argument_parser() -> argparse.ArgumentParser:
     """Create and configure argument parser."""
@@ -191,6 +201,8 @@ def handle_cli_commands(
     skills_ctx = SkillsContext(skill_manager=SkillManager())
 
     cmd = args.command
+    if cmd == "session-export":
+        args._runtime = AgentRuntime(settings=settings)
     handlers = build_cli_handlers(
         args, task_ctx=ctx, rag_ctx=rag_ctx, skills_ctx=skills_ctx
     )
