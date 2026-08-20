@@ -142,6 +142,7 @@ Agent prompt instructions are managed via Markdown files located in `~/.ollama-a
 * `instructions.md`: Main system instructions governing agent identity, tone, tool usage guidelines, and operational constraints.
 * `fs_policy_traversal.md`: Operational policy injected when `--allow-traversal` is enabled (unrestricted filesystem access).
 * `fs_policy_sandboxed.md`: Operational policy injected when sandboxed to project boundaries (`--no-allow-traversal`).
+* `rag_policy.md`: Operational policy injected dynamically when a RAG database is loaded and active.
 
 If any of these files do not exist during application startup, `ollama-agent` automatically creates them pre-populated with built-in default templates.
 
@@ -156,5 +157,5 @@ ollama-agent --config-reset <option>
 | Reset Option | Actions Performed |
 | :--- | :--- |
 | `config-file` | Unlinks `~/.ollama-agent/settings.yaml` and re-initializes it with default settings. |
-| `system-prompt` | Unlinks `instructions.md`, `fs_policy_traversal.md`, and `fs_policy_sandboxed.md` and restores default system prompt templates. |
+| `system-prompt` | Unlinks `instructions.md`, `fs_policy_traversal.md`, `fs_policy_sandboxed.md`, and `rag_policy.md` and restores default system prompt templates. |
 | `all` | Performs a complete factory reset of both `settings.yaml` and all system prompt policy files. |
