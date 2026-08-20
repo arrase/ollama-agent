@@ -33,6 +33,7 @@ from ..settings import (
     Settings,
     ensure_agents_file,
     ensure_memory_file,
+    ensure_prompt_files,
     find_agents_file,
     load_instructions,
     load_fs_policy_traversal,
@@ -84,6 +85,7 @@ class AgentRuntime:
         """Tear down existing resources and rebuild the agent graph."""
         await self._exit_stack.aclose()
         self._exit_stack = contextlib.AsyncExitStack()
+        await asyncio.to_thread(ensure_prompt_files)
         base_instructions = await asyncio.to_thread(load_instructions)
         if self.settings.runtime.allow_traversal:
             fs_policy = await asyncio.to_thread(load_fs_policy_traversal)

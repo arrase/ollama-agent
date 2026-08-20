@@ -17,6 +17,7 @@ from ollama_agent.settings.config import (
     SubAgentSettings,
     ensure_agents_file,
     ensure_memory_file,
+    ensure_prompt_files,
     find_agents_file,
     load_fs_policy_sandboxed,
     load_fs_policy_traversal,
@@ -147,6 +148,27 @@ class TestConfigManagement(unittest.TestCase):
         rag_policy_file.write_text(custom_rag, encoding="utf-8")
         loaded = load_rag_policy(rag_policy_file)
         self.assertEqual(loaded, custom_rag)
+
+    def test_ensure_prompt_files_creates_all_templates(self) -> None:
+        prompts_dir = Path(self.temp_dir.name) / "prompts_test"
+        inst = prompts_dir / "instructions.md"
+        trav = prompts_dir / "fs_traversal.md"
+        sand = prompts_dir / "fs_sandboxed.md"
+        rag = prompts_dir / "rag_policy.md"
+
+        ensure_prompt_files(
+            instructions_path=inst,
+            traversal_path=trav,
+            sandboxed_path=sand,
+            rag_policy_path=rag,
+        )
+
+        self.assertTrue(inst.exists())
+        self.assertTrue(trav.exists())
+        self.assertTrue(sand.exists())
+        self.assertTrue(rag.exists())
+        self.assertIn("{RAG_POLICY}", inst.read_text(encoding="utf-8"))
+        self.assertIn("rag_search", rag.read_text(encoding="utf-8"))
 
     def test_load_settings_does_not_overwrite_existing_file(self) -> None:
         custom_yaml = "model:\n  name: my-custom-model:latest\n  temperature: 0.8\n"
