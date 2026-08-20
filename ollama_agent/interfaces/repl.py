@@ -9,6 +9,7 @@ from typing import Any
 from rich.console import Console
 from rich.text import Text
 
+from textual import events
 from textual.app import App, ComposeResult
 from textual.worker import Worker
 from textual.containers import Container, Horizontal, ScrollableContainer
@@ -16,6 +17,7 @@ from textual.widgets import Static, OptionList, TextArea
 from textual.widgets.option_list import Option
 from langgraph.types import Command
 
+from .clipboard import copy_to_system_clipboard, get_system_clipboard
 from .tui_components import (
     AgentFooter,
     AgentHeader,
@@ -119,8 +121,10 @@ class OllamaAgentApp(App):
     BINDINGS = [
         ("escape", "cancel_generation", "Interrupt"),
         ("ctrl+c", "cancel_or_quit", "Interrupt/Quit"),
+        ("super+c", "copy_selection", "Copy"),
+        ("ctrl+shift+c", "copy_selection", "Copy"),
+        ("ctrl+insert", "copy_selection", "Copy"),
     ]
-
 
     def action_cancel_generation(self) -> None:
         if self._is_generating and self._current_worker is not None:
@@ -132,6 +136,27 @@ class OllamaAgentApp(App):
                 self._current_worker.cancel()
         else:
             self.exit()
+
+    def action_copy_selection(self) -> None:
+        selected_text = self.screen.get_selected_text()
+        if selected_text:
+            self.copy_to_clipboard(selected_text)
+
+    def copy_to_clipboard(self, text: str) -> None:
+        super().copy_to_clipboard(text)
+        copy_to_system_clipboard(text)
+
+    @property
+    def clipboard(self) -> str:
+        sys_clip = get_system_clipboard()
+        if sys_clip:
+            return sys_clip
+        return super().clipboard
+
+    def on_text_selected(self, event: events.TextSelected) -> None:
+        selected_text = self.screen.get_selected_text()
+        if selected_text:
+            self.copy_to_clipboard(selected_text)
 
     CSS_PATH = "repl.css"
 
