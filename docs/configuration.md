@@ -1,4 +1,4 @@
-# Configuration Reference
+# Configuration & Tracing Reference
 
 `ollama-agent` uses a centralized YAML configuration file stored at `~/.ollama-agent/settings.yaml` to manage model parameters, runtime security policies, document retrieval settings, context loading limits, telemetry tracing, and subagent declarations.
 
@@ -14,11 +14,11 @@
 
 # Primary LLM Model Settings
 model:
-  name: "gemma4:26b"                     # Default Ollama model tag
+  name: "gemma4:26b"                     # Default Ollama model tag (must support tools)
   base_url: "http://localhost:11434"     # Ollama API server endpoint
   temperature: 0.0                       # Sampling temperature (0.0 for deterministic outputs)
   context_window: 10000                  # Context window size in tokens (num_ctx)
-  reasoning_effort: "medium"             # Default thinking effort: low, medium, high, disabled, hide, enabled
+  reasoning_effort: "medium"             # Reasoning effort: low, medium, high, disabled, hide, enabled
 
 # Agent Runtime Behavior & Security Policies
 runtime:
@@ -53,18 +53,49 @@ langsmith:
 
 # Specialized Subagents Configuration
 subagents:
-  - name: "code_reviewer"
+  - name: "code-reviewer"
     description: "Specialized subagent for code review and security auditing"
     system_prompt: "You are an expert code reviewer focused on security and clean architecture."
-    model: "qwen2.5-coder:32b"
-    context_window: 32768
+    model: "gemma4:26b"
+    context_window: 16384
     mcp_servers:
-      - name: "git_mcp"
-        command: "npx"
-        args: ["-y", "@modelcontextprotocol/server-git"]
+      - name: "git"
+        command: "uvx"
+        args: ["mcp-server-git"]
         env:
-          PATH: "/usr/bin:/bin"
+          GIT_PYTHON_REFRESH: "quiet"
 ```
+
+---
+
+## Settings Reference Table
+
+| Section & Key | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `model.name` | `str` | `gemma4:26b` | Default Ollama model name (must support tool calling). |
+| `model.base_url` | `str` | `http://localhost:11434` | Ollama native API endpoint. |
+| `model.temperature` | `float` | `0.0` | Sampling temperature for model responses. |
+| `model.context_window` | `int` | `10000` | Fallback context window token limit (`num_ctx`). |
+| `model.reasoning_effort` | `str` | `medium` | Default reasoning effort (`low`, `medium`, `high`, `disabled`, `hide`, `enabled`). |
+| `runtime.allow_traversal` | `bool` | `false` | If true, permits filesystem operations outside project working directory. |
+| `runtime.builtin_tool_timeout` | `int` | `30` | Execution timeout in seconds for tool and shell commands. |
+| `runtime.collapse_thinking` | `bool` | `true` | If true, collapses reasoning blocks by default in REPL output. |
+| `runtime.inherit_env` | `bool` | `false` | If true, tool executions inherit the full parent environment. |
+| `rag.rag_dir` | `str` | `~/.ollama-agent/rag` | Directory storing local Qdrant vector database collections. |
+| `rag.embedder_model` | `str` | `nomic-embed-text:latest` | Ollama model used to generate vector embeddings. |
+| `rag.embedder_base_url` | `str` | `http://localhost:11434` | Endpoint for Ollama embeddings inference. |
+| `rag.embedding_dims` | `int` | `768` | Vector embedding dimension size. |
+| `rag.default_top_k` | `int` | `5` | Default number of relevant chunks retrieved per query. |
+| `rag.chunk_size` | `int` | `500` | Document chunk size in characters. |
+| `rag.chunk_overlap` | `int` | `50` | Character overlap between adjacent chunks. |
+| `mentions.max_file_size` | `int` | `1048576` | Maximum allowed individual file size for `@-mentions` (1 MB). |
+| `mentions.max_files` | `int` | `100` | Maximum number of files processed during directory mentions. |
+| `mentions.max_total_size` | `int` | `10485760` | Maximum total context size for prompt attachments (10 MB). |
+| `mentions.max_completions` | `int` | `200` | Maximum autocomplete suggestions displayed in REPL dropdown. |
+| `langsmith.api_key` | `str` | `""` | API key for LangSmith tracing platform. |
+| `langsmith.tracing` | `str` | `""` | Enable tracing (`"true"` / `"false"`). |
+| `langsmith.project` | `str` | `""` | LangSmith project name for traces. |
+| `langsmith.endpoint` | `str` | `""` | API endpoint for LangSmith telemetry. |
 
 ---
 
@@ -75,8 +106,8 @@ To guarantee optimal context utilization without exceeding model memory boundari
 ```mermaid
 flowchart TD
     A[Start Context Resolution] --> B{Explicit Config Override?}
-    B -- Yes (`model.context_window`) --> C[Use Configured Value]
-    B -- No (`null`) --> D[Fetch Model Metadata via `ollama.show()`]
+    B -- Yes (`model.context_window` > 0) --> C[Use Configured Value]
+    B -- No / Unset --> D[Fetch Model Metadata via `ollama.show()`]
     D --> E{Structured `model_info` Key?}
     E -- Found `*.context_length` --> F[Use `context_length` Metadata]
     E -- Not Found --> G{Modelfile / Parameter `num_ctx`?}
@@ -84,7 +115,7 @@ flowchart TD
     G -- Not Found --> I[Raise `ModelContextWindowError`]
 ```
 
-1. **Explicit Configuration Override**: If `model.context_window` in `settings.yaml` (or CLI argument) is explicitly defined, its value is used directly.
+1. **Explicit Configuration Override**: If `model.context_window` in `settings.yaml` (or CLI argument) is explicitly defined (> 0), its value is used directly.
 2. **Structured Model Metadata (`model_info`)**: Queries Ollama's `AsyncClient.show()` endpoint for modern model metadata keys ending in `.context_length` (e.g., `llama.context_length`, `qwen2.context_length`).
 3. **Modelfile Parameter Parsing**: Scans raw Modelfile `parameters` or string fields using regex matching (`^\s*(?:PARAMETER\s+)?num_ctx\s+(\d+)\s*$`) to extract declared `num_ctx` values.
 4. **Error Handling**: If resolution fails across all stages, `ollama-agent` halts startup and raises a `ModelContextWindowError`, prompting the user to specify `context_window` in `settings.yaml`.
@@ -98,9 +129,25 @@ flowchart TD
 1. Asynchronously queries `ollama.AsyncClient.show(model)`.
 2. Inspects returned model capabilities payload for the `"tools"` tag.
 3. If `"tools"` is missing from the capability list, startup terminates immediately with a `ModelCapabilityError`:
-   ```
+   ```text
    ModelCapabilityError: Model 'llama2:latest' does not support tools.
    ```
+
+---
+
+## Reasoning Effort Controls & API Mapping
+
+The `--effort` flag and `model.reasoning_effort` setting control model reasoning traces:
+
+| Model Family | `--effort` Value | Ollama API Parameter | Behavior |
+| :--- | :--- | :--- | :--- |
+| **GPT-OSS** | `low` / `medium` / `high` | `"low"` / `"medium"` / `"high"` | Sets thinking trace depth string. |
+| **GPT-OSS** | `disabled` / `hide` | *(omitted)* | GPT-OSS cannot disable thinking; emits warning, uses default effort, and hides reasoning trace in UI. |
+| **GPT-OSS** | `enabled` | `"medium"` | Enables thinking with default `medium` level. |
+| **Other Reasoning Models**<br>*(Qwen 3, DeepSeek R1, DeepSeek-v3.1)* | `low` / `medium` / `high` / `enabled` | `true` | Enables native reasoning generation. |
+| **Other Reasoning Models** | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
+| **Other Reasoning Models** | `disabled` | `false` | Disables reasoning trace generation at the model level. |
+| **Non-Thinking Models** | *(any)* | *(omitted)* | Setting is ignored gracefully. |
 
 ---
 
@@ -109,7 +156,6 @@ flowchart TD
 `ollama-agent` natively supports LangSmith tracing for monitoring agent workflows, tool execution paths, and LLM latency.
 
 ### Setup
-
 Add your credentials to the `langsmith` section in `~/.ollama-agent/settings.yaml`:
 
 ```yaml
@@ -121,7 +167,6 @@ langsmith:
 ```
 
 ### Environment Injection
-
 At runtime, `Settings.setup_environment()` automatically injects non-empty LangSmith settings directly into standard system environment variables:
 
 * `LANGSMITH_API_KEY`
@@ -136,8 +181,7 @@ LangChain and LangGraph automatically pick up these environment variables to sen
 ## System Prompt Customization & Configuration Reset
 
 ### System Prompt Files
-
-Agent prompt instructions are managed via Markdown files located in `~/.ollama-agent/`:
+Agent prompt instructions are managed via Markdown files located in `~/.ollama-agent/prompts/`:
 
 * `instructions.md`: Main system instructions governing agent identity, tone, tool usage guidelines, and operational constraints.
 * `fs_policy_traversal.md`: Operational policy injected when `--allow-traversal` is enabled (unrestricted filesystem access).

@@ -46,7 +46,7 @@ body, .md-typeset {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
 }
 
-/* Hide Search Element */
+/* Hide Search Element if not used */
 .md-search {
   display: none !important;
 }
@@ -68,11 +68,9 @@ body, .md-typeset {
   padding-top: 1rem !important;
 }
 
-/* Hero Section - Compact */
+/* Hero Section */
 .md-typeset h1#ollama-agent,
-.md-typeset h1#ollama-agent-architectural-overview,
-.md-typeset h1#geotify,
-.md-typeset h1#life-is-the-ultimate-side-project {
+.md-typeset h1#ollama-agent-architectural-overview {
   font-size: 2.4rem;
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -85,22 +83,18 @@ body, .md-typeset {
 }
 
 [data-md-color-scheme="default"] .md-typeset h1#ollama-agent,
-[data-md-color-scheme="default"] .md-typeset h1#ollama-agent-architectural-overview,
-[data-md-color-scheme="default"] .md-typeset h1#geotify,
-[data-md-color-scheme="default"] .md-typeset h1#life-is-the-ultimate-side-project {
+[data-md-color-scheme="default"] .md-typeset h1#ollama-agent-architectural-overview {
   background: linear-gradient(135deg, #2d3436 0%, #6c5ce7 50%, #00b894 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .md-typeset h1#ollama-agent + p,
-.md-typeset h1#ollama-agent-architectural-overview + p,
-.md-typeset h1#geotify + p,
-.md-typeset h1#life-is-the-ultimate-side-project + p {
+.md-typeset h1#ollama-agent-architectural-overview + p {
   text-align: center;
   font-size: 1.1rem;
   color: var(--text-muted);
-  max-width: 600px;
+  max-width: 650px;
   margin: 0 auto 1.75rem auto;
 }
 
@@ -113,7 +107,7 @@ body, .md-typeset {
   margin-bottom: 2.5rem;
 }
 
-/* Feature Card Styling - Compact & Dense */
+/* Feature Card Styling */
 .feature-card {
   display: flex;
   flex-direction: column;
@@ -201,9 +195,7 @@ body, .md-typeset {
     grid-template-columns: 1fr;
   }
   .md-typeset h1#ollama-agent,
-  .md-typeset h1#ollama-agent-architectural-overview,
-  .md-typeset h1#geotify,
-  .md-typeset h1#life-is-the-ultimate-side-project {
+  .md-typeset h1#ollama-agent-architectural-overview {
     font-size: 1.9rem;
   }
 }

@@ -14,6 +14,7 @@ nav:
   - RAG Engine: rag.md
   - Skills, Tasks & Memory: skills_tasks_memory.md
   - Configuration & Tracing: configuration.md
+  - Developer Guide: developer_guide.md
 
 theme:
   name: material

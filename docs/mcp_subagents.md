@@ -1,12 +1,20 @@
 # MCP Integration & Custom Subagents
 
-This document details the **Model Context Protocol (MCP)** integration and the **Custom Subagents System** in `ollama-agent`. These features extend the core capabilities of the agent by enabling integration with external tool servers and delegating complex tasks to specialized, isolated sub-agent graphs.
+This document details the **Model Context Protocol (MCP)** integration and the **Custom Subagents System** in `ollama-agent`. These features extend the core capabilities of the agent by enabling integration with external tool servers and delegating complex tasks to specialized, isolated subagent graphs.
 
 ---
 
 ## 1. Model Context Protocol (MCP) Integration
 
-The Model Context Protocol (MCP) provides a standardized standard for exposing external tools, resources, and prompts to AI models. `ollama-agent` leverages `langchain-mcp-adapters` to seamlessly bridge MCP servers with standard LangChain/LangGraph tools.
+The Model Context Protocol (MCP) is an open standard that enables AI agents to securely interact with external data sources, developer tools, and services. `ollama-agent` leverages `langchain-mcp-adapters` to bridge MCP servers with standard LangChain/LangGraph tools.
+
+```mermaid
+flowchart LR
+    A["ollama-agent Orchestrator"] --> B["MultiServerMCPClient"]
+    B -->|stdio subprocess| C["Filesystem / Git MCP Server"]
+    B -->|stdio subprocess| D["Brave Search MCP Server"]
+    B -->|http / SSE endpoint| E["Remote Enterprise API MCP Server"]
+```
 
 ### Configuration File: `~/.ollama-agent/mcp_servers.json`
 
@@ -19,8 +27,14 @@ Global MCP servers for the main agent are declared in JSON format at `~/.ollama-
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/documents"],
       "env": {
-        "DEBUG": "true",
-        "API_KEY": "${MY_API_KEY}"
+        "DEBUG": "true"
+      }
+    },
+    "brave-search": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "env": {
+        "BRAVE_API_KEY": "${BRAVE_API_KEY}"
       }
     },
     "remote_api": {
@@ -37,14 +51,14 @@ Global MCP servers for the main agent are declared in JSON format at `~/.ollama-
 
 ### Supported Transports
 
-#### Standard I/O (stdio) Subprocess Transport
+#### 1. Standard I/O (`stdio`) Subprocess Transport
 Executes an external command as a child process and communicates via standard input/output streams.
 
-- **`command`** (*string*, required): Executable command (e.g., `npx`, `python`, `uvx`).
+- **`command`** (*string*, required): Executable command (e.g., `npx`, `uvx`, `python`, `docker`).
 - **`args`** (*array of strings*, optional): Command-line arguments passed to the process.
 - **`env`** (*object*, optional): Environment variables passed to the subprocess.
 
-#### HTTP Remote Transport
+#### 2. HTTP Remote Transport
 Connects to a remote HTTP/SSE-based MCP endpoint.
 
 - **`url`** or **`httpUrl`** (*string*, required): HTTP URL endpoint of the remote server.
@@ -53,10 +67,10 @@ Connects to a remote HTTP/SSE-based MCP endpoint.
 - **`sse_read_timeout`** (*integer*, optional): SSE stream read timeout in seconds.
 
 ### Environment Variable Expansion
-Environment variables defined within `"env"` blocks can reference host system variables using the `${VAR_NAME}` syntax.
+Environment variables defined within `"env"` blocks can reference host system variables using the `${VAR_NAME}` syntax:
 
 - Before launching the MCP subprocess, `ollama-agent` resolves all `${VAR_NAME}` placeholders against `os.environ`.
-- If any required environment variable is missing from the host OS environment, initialization logs a warning and gracefully skips the server connection.
+- If any required environment variable is missing from the host OS environment, initialization logs a warning and gracefully skips the server connection, preventing application crashes.
 
 ### Tool Registration via `langchain-mcp-adapters`
 
@@ -68,16 +82,28 @@ tools = await client.get_tools()
 ```
 
 1. **Async Cleanup & Lifecycle**: The client connection is bound to the runtime's internal `AsyncExitStack`. When the runtime closes or reloads (`runtime.reload()`), all active subprocesses and streams are safely terminated.
-2. **Tool Injection**: Retrieved MCP tools are merged into the main agent's tool set alongside `BUILTIN_TOOLS` (such as `rag_search`).
+2. **Tool Injection**: Retrieved MCP tools are merged into the main agent's tool set alongside `BUILTIN_TOOLS` and `rag_search`.
 
-> [!NOTE]
-> **Dependency Compatibility Requirement**: `ollama-agent` explicitly constrains `mcp>=1.24.0,<2.0.0` in `pyproject.toml`. This constraint is mandatory because `langchain-mcp-adapters` (v0.3.1) relies on internal `mcp.shared.context.RequestContext` imports that were refactored out in `mcp` 2.0.0.
+!!! note "Dependency Compatibility Note"
+    `ollama-agent` explicitly constrains `mcp>=1.24.0,<2.0.0` in `pyproject.toml`. This constraint is mandatory because `langchain-mcp-adapters` (v0.3.1) relies on internal `mcp.shared.context.RequestContext` imports that were refactored out in `mcp` 2.0.0.
 
 ---
 
 ## 2. Custom Subagents System
 
-Subagents are auxiliary AI agent instances configured to handle specialized subtasks (e.g., code reviewer, terminal operator, researcher). They run in isolated contexts, can use different Ollama models, and can be equipped with dedicated MCP tool servers.
+Subagents are auxiliary AI agent instances configured to handle specialized subtasks (e.g., code reviewer, terminal operator, web researcher, SQL analyst). They run in isolated contexts, can use different Ollama models, and can be equipped with dedicated MCP tool servers.
+
+```mermaid
+flowchart TD
+    MainAgent["Main Agent (ollama-agent)"] -->|Delegates Task| SubagentGraph["Subagent Graph"]
+    
+    subgraph SubagentGraph ["Subagent Execution Environment"]
+        SubModel["Custom Ollama Model Instance"]
+        SubPrompt["Isolated System Prompt + OS Info"]
+        SubSkills["Mounted Skills (/skills/)"]
+        SubMCP["Dedicated MCP Tools (load_subagent_mcp_tools)"]
+    end
+```
 
 ### Configuration in `settings.yaml`
 
@@ -88,7 +114,7 @@ subagents:
   - name: "code-reviewer"
     description: "Specialist in analyzing code quality, design patterns, and potential security bugs."
     system_prompt: "You are an expert software reviewer. Analyze code changes carefully and provide actionable feedback."
-    model: "deepseek-coder:33b"
+    model: "gemma4:26b"
     context_window: 16384
     mcp_servers:
       - name: "git"
@@ -96,6 +122,14 @@ subagents:
         args: ["mcp-server-git"]
         env:
           GIT_PYTHON_REFRESH: "quiet"
+
+  - name: "sql-analyst"
+    description: "Specialist for querying customer databases and generating analytics reports."
+    system_prompt: "You are a database engineer. Execute SQL queries and interpret results."
+    mcp_servers:
+      - name: "sqlite-server"
+        command: "uvx"
+        args: ["mcp-server-sqlite", "--db-path", "./data/analytics.db"]
 ```
 
 ### Configuration Fields Reference
@@ -119,28 +153,18 @@ subagents:
 
 Subagents are instantiated using DeepAgents' `create_deep_agent(subagents=...)` framework:
 
-```mermaid
-flowchart TD
-    MainAgent["Main Agent (ollama-agent)"] -->|Delegates Task| SubagentGraph["Subagent Graph"]
-    
-    subgraph SubagentGraph ["Subagent Execution Environment"]
-        SubModel["Custom Ollama Model Instance"]
-        SubPrompt["Isolated System Prompt + OS Info"]
-        SubTools["Mounted Skills (/skills/) + Subagent MCP Tools"]
-    end
-```
-
-1. **State Isolation**: Subagents run on dedicated graph nodes. Their intermediate reasoning, memory state, and message streams do not pollute the main conversation context.
+1. **State & Context Isolation**: Subagents run on dedicated graph nodes. Their intermediate reasoning traces, memory modifications, and message turns do not pollute the main orchestrator's context window.
 2. **Resource Scoping**: Subagent MCP servers are loaded independently via `load_subagent_mcp_tools()` and registered only within that subagent's toolset.
-3. **Skills Access**: Every subagent is automatically provisioned with access to `/skills/` for execution of custom capabilities.
+3. **Skills Access**: Every subagent is automatically provisioned with access to `/skills/` for execution of modular capabilities.
+4. **Live UI Attribution**: When a subagent invokes a tool, the middleware captures `agent_name` and displays it in the terminal output (e.g. `[code-reviewer] ⚙ git_diff`).
 
 ---
 
-## 3. Practical Setup Example
+## 3. Practical Setup & Multi-Agent Architecture
 
 ### Complete Configuration Walkthrough
 
-1. **Configure MCP Server (`~/.ollama-agent/mcp_servers.json`)**:
+1. **Configure Global MCP Servers (`~/.ollama-agent/mcp_servers.json`)**:
    ```json
    {
      "mcpServers": {
@@ -163,7 +187,7 @@ flowchart TD
 
    subagents:
      - name: "database-expert"
-       description: "Expert in SQL query optimization, indexing, and PostgreSQL schemas."
+       description: "Expert in SQL query optimization, schema migrations, and PostgreSQL."
        system_prompt: "You are a database administrator. Analyze schema designs and optimize queries."
        model: "qwen2.5-coder:32b"
        context_window: 32768
@@ -174,4 +198,6 @@ flowchart TD
    ```
 
 3. **Runtime Execution**:
-   When launching `ollama-agent`, the main agent initializes with `web-search` tools. If a user prompt requests database analysis, the main agent delegates to `database-expert`, which executes using `qwen2.5-coder:32b` and the `postgres` MCP toolset.
+   - When launching `ollama-agent`, the main agent initializes with `web-search` tools.
+   - If a user prompt requests database analysis, the orchestrator delegates to `database-expert`.
+   - `database-expert` executes using `qwen2.5-coder:32b` and its isolated `postgres` MCP toolset, returning a synthesized summary to the main conversation.
