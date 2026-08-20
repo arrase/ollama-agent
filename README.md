@@ -340,9 +340,33 @@ When configured, the agent will automatically inject these values into the envir
 
 `ollama-agent` incorporates both persistent user memory and repository-level project instructions:
 
-- **Project Guidelines (`AGENTS.md`)**: The open standard for AI coding agent guidelines. When working in any repository, the agent automatically searches for `AGENTS.md` (in the current directory or traversing up to the `.git` project root) and injects project rules, testing workflows, and conventions into its context.
-- **Global Memory (`~/.ollama-agent/MEMORY.md`)**: Long-term persistent memory across sessions. The agent uses built-in tools to read, update, and persist user preferences, notes, and context across sessions automatically.
-- **Global Guidelines (`~/.ollama-agent/AGENTS.md`)**: Optional global default agent rules loaded across all sessions when present.
+### 1. Project Guidelines (`AGENTS.md`)
+The open **`AGENTS.md`** standard provides repository-specific guidelines, testing commands, and coding conventions directly to AI coding agents without manual prompt repetition.
+
+- **Automatic Discovery**: When starting a session or executing commands, `ollama-agent` searches for `AGENTS.md` (or `agents.md`, `.agents.md`) in the current working directory. If not found, it ascends through parent directories up to the repository root (marked by `.git`).
+- **Native Context Injection**: Discovered guidelines are automatically injected into the agent's memory context at session startup.
+- **Example `AGENTS.md`**:
+
+```markdown
+# Project Guidelines
+
+## Development & Test Commands
+- Run unit tests: `pytest`
+- Run linter: `flake8`
+
+## Coding Conventions
+- Strictly follow PEP 8 standards with top-level imports.
+- Keep functions small and focused on a single responsibility.
+- Do not use fallback chains to hide missing state.
+```
+
+### 2. Long-Term User Memory (`~/.ollama-agent/MEMORY.md`)
+The agent manages its own cross-session memory file at `~/.ollama-agent/MEMORY.md`. The agent reads and updates this file automatically to persist user preferences, architectural decisions, and context across sessions.
+
+### 3. Global Agent Guidelines (`~/.ollama-agent/AGENTS.md`)
+You can optionally place an `AGENTS.md` file in `~/.ollama-agent/AGENTS.md` to define user-level global guidelines that are loaded across all repositories.
+
+
 
 
 ## RAG (Retrieval Augmented Generation)
