@@ -136,7 +136,101 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         out = console.export_text()
         self.assertIn("Available Commands", out)
         self.assertIn("/help", out)
+        self.assertIn("/model", out)
+        self.assertIn("/task", out)
+        self.assertIn("/skill", out)
+        self.assertIn("/rag", out)
         self.assertIn("/yolo", out)
+
+    async def test_unified_repl_handlers(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        task_ctx = MagicMock()
+        skills_ctx = MagicMock()
+        rag_ctx = MagicMock()
+        switch_model = AsyncMock()
+        handle_task_create = MagicMock()
+        handle_skill_create = MagicMock()
+
+        handlers = build_repl_handlers(
+            task_ctx=task_ctx,
+            skills_ctx=skills_ctx,
+            get_rag_ctx=lambda: rag_ctx,
+            console=console,
+            current_model=lambda: "gemma4:26b",
+            base_url=lambda: "http://localhost:11434",
+            switch_model=switch_model,
+            handle_exit=lambda _: None,
+            handle_clear=lambda _: None,
+            handle_new=AsyncMock(),
+            handle_task_create=handle_task_create,
+            handle_skill_create=handle_skill_create,
+            handle_yolo=lambda _: None,
+        )
+
+        # 1. /model handler
+        with patch("ollama_agent.interfaces.dispatch.list_models", AsyncMock()) as mock_list_models:
+            await safe_call(handlers["/model"].handler, ["list"])
+            mock_list_models.assert_awaited_once()
+
+        await safe_call(handlers["/model"].handler, ["set", "llama3:8b"])
+        switch_model.assert_awaited_with("llama3:8b")
+
+        # 2. /task handler
+        with patch("ollama_agent.interfaces.dispatch.list_tasks") as mock_list_tasks:
+            handlers["/task"].handler([])
+            mock_list_tasks.assert_called_once()
+
+        handlers["/task"].handler(["create", "my-task"])
+        handle_task_create.assert_called_once_with(["my-task"])
+
+        with patch("ollama_agent.interfaces.dispatch.run_task", MagicMock(return_value=None)) as mock_run_task:
+            handlers["/task"].handler(["run", "my-task", "-y"])
+            mock_run_task.assert_called_once_with(task_ctx, "my-task", yolo=True)
+
+        with patch("ollama_agent.interfaces.dispatch.delete_task") as mock_del_task:
+            handlers["/task"].handler(["delete", "my-task"])
+            mock_del_task.assert_called_once_with(task_ctx, "my-task")
+
+        # 3. /skill handler
+        with patch("ollama_agent.interfaces.dispatch.list_skills") as mock_list_skills:
+            handlers["/skill"].handler([])
+            mock_list_skills.assert_called_once()
+
+        with patch("ollama_agent.interfaces.dispatch.show_skill") as mock_show_skill:
+            handlers["/skill"].handler(["show", "my-skill"])
+            mock_show_skill.assert_called_once_with(skills_ctx, "my-skill")
+
+        handlers["/skill"].handler(["create", "my-skill"])
+        handle_skill_create.assert_called_once_with(["my-skill"])
+
+        with patch("ollama_agent.interfaces.dispatch.delete_skill") as mock_del_skill:
+            handlers["/skill"].handler(["delete", "my-skill"])
+            mock_del_skill.assert_called_once_with(skills_ctx, "my-skill")
+
+        # 4. /rag handler
+        with patch("ollama_agent.interfaces.dispatch.show_rag_status") as mock_show_status:
+            handlers["/rag"].handler(["status"])
+            mock_show_status.assert_called_once_with(rag_ctx)
+
+        with patch("ollama_agent.interfaces.dispatch.list_rag_databases") as mock_list_dbs:
+            handlers["/rag"].handler(["list"])
+            mock_list_dbs.assert_called_once_with(rag_ctx)
+
+        with patch("ollama_agent.interfaces.dispatch.create_rag_database") as mock_create_db:
+            handlers["/rag"].handler(["create", "my-db"])
+            mock_create_db.assert_called_once_with(rag_ctx, "my-db")
+
+        with patch("ollama_agent.interfaces.dispatch.load_rag_database") as mock_load_db:
+            handlers["/rag"].handler(["load", "my-db"])
+            mock_load_db.assert_called_once_with(rag_ctx, "my-db")
+
+        with patch("ollama_agent.interfaces.dispatch.unload_rag_database") as mock_unload_db:
+            handlers["/rag"].handler(["unload"])
+            mock_unload_db.assert_called_once_with(rag_ctx)
+
+        with patch("ollama_agent.interfaces.dispatch.delete_rag_database") as mock_del_db:
+            handlers["/rag"].handler(["delete", "my-db"])
+            mock_del_db.assert_called_once_with(rag_ctx, "my-db")
 
     def test_handle_cli_commands_subcommand(self) -> None:
         args = argparse.Namespace(command="task-list", prompt=None, yolo=False, rag=None)

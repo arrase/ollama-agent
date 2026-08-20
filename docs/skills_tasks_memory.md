@@ -68,10 +68,10 @@ Skills can be managed via the CLI, REPL slash commands, or through interactive T
 
 | CLI Command | REPL Slash Command | Description |
 | :--- | :--- | :--- |
-| `ollama-agent skill-list` | `/skill-list` | List all available skills. |
-| `ollama-agent skill-show <id>` | `/skill-show <id>` | View raw contents of `SKILL.md`. |
-| `ollama-agent skill-create <id> --name <n> --description <d> --instructions <i>` | `/skill-create <id>` | Create a new skill directory and `SKILL.md`. Launches modal dialog in TUI. |
-| `ollama-agent skill-delete <id>` | `/skill-delete <id>` | Delete a skill directory. |
+| `ollama-agent skill-list` | `/skill list` (or `/skill`) | List all available skills. |
+| `ollama-agent skill-show <id>` | `/skill show <id>` | View raw contents of `SKILL.md`. |
+| `ollama-agent skill-create <id> --name <n> --description <d> --instructions <i>` | `/skill create <id>` | Create a new skill directory and `SKILL.md`. Launches modal dialog in TUI. |
+| `ollama-agent skill-delete <id>` | `/skill delete <id>` | Delete a skill directory. |
 
 ---
 
@@ -100,10 +100,10 @@ reasoning_effort: "high"
 
 | CLI Command | REPL Slash Command | Description |
 | :--- | :--- | :--- |
-| `ollama-agent task-list` | `/task-list` | List all saved tasks. |
-| `ollama-agent task-create <id> --title <t> --task-prompt <p> [-m <model>] [-e <effort>]` | `/task-create <id>` | Save a new task template. Launches modal dialog in TUI. |
-| `ollama-agent task-run <id>` | `/task-run <id>` | Execute a saved task non-interactively or within REPL. |
-| `ollama-agent task-delete <id>` | `/task-delete <id>` | Delete a saved task definition. |
+| `ollama-agent task-list` | `/task list` (or `/task`) | List all saved tasks. |
+| `ollama-agent task-create <id> --title <t> --task-prompt <p> [-m <model>] [-e <effort>]` | `/task create <id>` | Save a new task template. Launches modal dialog in TUI. |
+| `ollama-agent task-run <id>` | `/task run <id>` | Execute a saved task non-interactively or within REPL. |
+| `ollama-agent task-delete <id>` | `/task delete <id>` | Delete a saved task definition. |
 
 ### Task Execution Behavior
 When running a task (`task-run <id>`):

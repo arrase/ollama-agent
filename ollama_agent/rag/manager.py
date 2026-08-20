@@ -74,7 +74,7 @@ class RAGManager:
         """Ensure a database is loaded and return the client."""
         if self._client is None or self._current_db is None:
             raise RAGNotLoadedError(
-                "No RAG database loaded. Use /rag-load <name> first."
+                "No RAG database loaded. Use /rag load <name> first."
             )
         return self._client
 

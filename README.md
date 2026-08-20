@@ -71,27 +71,14 @@ ollama-agent
 The REPL provides a persistent chat session. You can use slash commands to manage the session:
 
 - `/help`: Show available commands.
+- `/model [list | set <model>]`: Manage models (list available models, switch active model).
+- `/task [list | create <id> | run <id> | delete <id>]`: Manage saved prompt tasks.
+- `/skill [list | show <id> | create <id> | delete <id>]`: Manage agent skills.
+- `/rag [status | list | create <name> | load <name> | unload | add <path> | delete <name>]`: Manage RAG document databases.
 - `/yolo [on|off]`: Toggle YOLO mode or set it explicitly (on/off).
-- `/exit` (or `/quit`): Quit the application.
-- `/clear`: Clear the screen.
 - `/new`: Start a new chat session (clears context).
-- `/models`: List available Ollama models (shows tool support).
-- `/model-set <model>`: Switch to a different model (conversation preserved).
-- `/tasks`: List saved tasks.
-- `/task-run <id>`: Run a specific task.
-- `/task-delete <id>`: Delete a specific task.
-- `/task-create <id> [--force]`: Create a task interactively using a modal form.
-- `/rag`: Show current RAG database status.
-- `/rag-list`: List available RAG databases.
-- `/rag-create <name>`: Create a new RAG database.
-- `/rag-load <name>`: Load a RAG database for the session.
-- `/rag-unload`: Unload the current RAG database.
-- `/rag-add <path> [--dir]`: Add file(s) or directory to the loaded RAG database.
-- `/rag-delete <name>`: Delete a RAG database.
-- `/skills`: List all skills.
-- `/skill-show <id>`: Show skill details.
-- `/skill-create <id> [--force]`: Create a skill interactively using a modal form.
-- `/skill-delete <id>`: Delete a skill.
+- `/clear`: Clear the screen.
+- `/exit` (or `/quit`): Quit the application.
 
 #### Multiline Input
 
@@ -220,7 +207,7 @@ ollama-agent task-create <task_id> \
 Inside the REPL:
 
 ```text
-/task-create <task_id>
+/task create <task_id>
 ```
 
 The REPL will open an interactive modal dialog with fields for Task ID, Title, Model, Reasoning Effort, and a multiline prompt editor with Cancel/Create buttons.
@@ -245,7 +232,7 @@ reasoning_effort: "medium"  # low|medium|high|disabled|hide|enabled
 
 ```bash
 ollama-agent task-list
-# or inside REPL: /tasks
+# or inside REPL: /task list (or /task)
 ```
 
 **Run a Task:**
@@ -254,14 +241,14 @@ Use the task ID (or a unique prefix) from the list to run it.
 
 ```bash
 ollama-agent task-run <task_id>
-# or inside REPL: /task-run <task_id>
+# or inside REPL: /task run <task_id>
 ```
 
 **Delete a Task:**
 
 ```bash
 ollama-agent task-delete <task_id>
-# or inside REPL: /task-delete <task_id>
+# or inside REPL: /task delete <task_id>
 ```
 
 ## Configuration
@@ -398,21 +385,21 @@ ollama-agent rag-create my-docs
 **Create a Database (REPL):**
 
 ```text
-/rag-create my-docs
+/rag create my-docs
 ```
 
 **List Databases:**
 
 ```bash
 ollama-agent rag-list
-# or inside REPL: /rag-list
+# or inside REPL: /rag list
 ```
 
 **Delete a Database:**
 
 ```bash
 ollama-agent rag-delete my-docs
-# or inside REPL: /rag-delete my-docs
+# or inside REPL: /rag delete my-docs
 ```
 
 ### Adding Documents
@@ -436,9 +423,9 @@ ollama-agent rag-add my-docs /path/to/folder --dir
 First load the database, then add files:
 
 ```text
-/rag-load my-docs
-/rag-add /path/to/document.md
-/rag-add /path/to/folder --dir
+/rag load my-docs
+/rag add /path/to/document.md
+/rag add /path/to/folder --dir
 ```
 
 Supported file types include: `.py`, `.js`, `.ts`, `.tsx`, `.jsx`, `.sh`, `.yaml`, `.yml`, `.json`, `.xml`, `.md`, `.txt`, `.toml`, `.c`, `.cpp`, `.h`, `.hpp`, `.go`, `.rs`, `.css`, `.html`, `.sql`, `.ini`, `.cfg`, `.properties`, `.java`, `.kt`, `.gradle`, `.bat`, `.ps1`, `.csv`, `.rst`
@@ -466,7 +453,7 @@ ollama-agent --rag my-docs -p "What does the documentation say about configurati
 **Switch RAG Database (REPL):**
 
 ```text
-/rag-load another-db
+/rag load another-db
 ```
 
 ### Configure RAG
@@ -558,21 +545,21 @@ Use `--force` to overwrite an existing skill.
 
 ```bash
 ollama-agent skill-list
-# or inside REPL: /skills
+# or inside REPL: /skill list (or /skill)
 ```
 
 **Show Skill Details:**
 
 ```bash
 ollama-agent skill-show langgraph-docs
-# or inside REPL: /skill-show langgraph-docs
+# or inside REPL: /skill show langgraph-docs
 ```
 
 **Delete a Skill:**
 
 ```bash
 ollama-agent skill-delete langgraph-docs
-# or inside REPL: /skill-delete langgraph-docs
+# or inside REPL: /skill delete langgraph-docs
 ```
 
 ### Managing Skills (REPL)
@@ -580,7 +567,7 @@ ollama-agent skill-delete langgraph-docs
 Inside the REPL you can create skills interactively:
 
 ```text
-/skill-create my-skill
+/skill create my-skill
 ```
 
 The REPL will open an interactive modal dialog with fields for Skill ID, Name, Description, and a multiline markdown instructions editor with Cancel/Create buttons.

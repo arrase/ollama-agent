@@ -48,6 +48,50 @@ _AT_MENTION_RE = re.compile(
     r"""(?:^|[\s\(\[\{<])@(?:"([^"]*)|'([^']*)|([^\s"'\(\[\{<>,;]*))$"""
 )
 
+_ROOT_COMMANDS: list[tuple[str, str]] = [
+    ("/model", "Manage models (list, set)"),
+    ("/task", "Manage saved tasks (list, create, run, delete)"),
+    ("/skill", "Manage skills (list, show, create, delete)"),
+    ("/rag", "Manage RAG databases (status, list, create, delete, load, unload, add)"),
+    ("/yolo", "Toggle YOLO mode (on/off)"),
+    ("/new", "Start a new chat session"),
+    ("/clear", "Clear the screen"),
+    ("/help", "Show help message"),
+    ("/exit", "Exit the REPL"),
+]
+
+_SUBCOMMANDS: dict[str, list[tuple[str, str]]] = {
+    "/model": [
+        ("list", "List available Ollama models"),
+        ("set", "Switch to a different model"),
+    ],
+    "/task": [
+        ("list", "List all saved tasks"),
+        ("create", "Create a task using interactive modal"),
+        ("run", "Run a saved task prompt"),
+        ("delete", "Delete a saved task"),
+    ],
+    "/skill": [
+        ("list", "List all available skills"),
+        ("show", "Show skill details and instructions"),
+        ("create", "Create a skill using interactive modal"),
+        ("delete", "Delete a skill"),
+    ],
+    "/rag": [
+        ("status", "Show current RAG database status"),
+        ("list", "List all RAG databases"),
+        ("create", "Create a new RAG database"),
+        ("delete", "Delete a RAG database"),
+        ("load", "Load a RAG database"),
+        ("unload", "Unload active RAG database"),
+        ("add", "Add file or directory to RAG"),
+    ],
+    "/yolo": [
+        ("on", "Enable YOLO mode (bypasses confirmations)"),
+        ("off", "Disable YOLO mode"),
+    ],
+}
+
 class _TUIStreamingRenderer(StreamingRenderer):
     def __init__(self, app: OllamaAgentApp, scroll: Any, widget: AgentResponse):
         self.app = app
@@ -220,31 +264,81 @@ class OllamaAgentApp(App):
         autolist.display = False
         autolist.highlighted = None
 
+    def _slash_completions(self, text: str) -> list[tuple[str, Text]]:
+        parts = text.split(" ")
+        num_parts = len(parts)
+
+        # Level 0: Root commands (e.g., "/" or "/mo")
+        if num_parts == 1:
+            token = parts[0]
+            return [
+                (
+                    cmd,
+                    Text.from_markup(f"[bold #38bdf8]{cmd:<12}[/bold #38bdf8] [dim #8b949e]{desc}[/dim #8b949e]"),
+                )
+                for cmd, desc in _ROOT_COMMANDS
+                if cmd.startswith(token)
+            ]
+
+        root_cmd = parts[0]
+        if root_cmd not in _SUBCOMMANDS:
+            return []
+
+        # Level 1: Subcommands (e.g., "/task " or "/task r")
+        if num_parts == 2:
+            sub_token = parts[1]
+            return [
+                (
+                    f"{root_cmd} {sub}",
+                    Text.from_markup(f"[bold #38bdf8]{sub:<12}[/bold #38bdf8] [dim #8b949e]{desc}[/dim #8b949e]"),
+                )
+                for sub, desc in _SUBCOMMANDS[root_cmd]
+                if sub.startswith(sub_token)
+            ]
+
+        # Level 2: Arguments / Dynamic entities (e.g., "/task run ")
+        sub_cmd = parts[1]
+        arg_token = parts[2]
+
+        if root_cmd == "/task" and sub_cmd in ("run", "delete"):
+            tasks = self.repl._task_ctx.task_manager.list()
+            return [
+                (
+                    f"{root_cmd} {sub_cmd} {tid}",
+                    Text.from_markup(f"[bold #e6edf3]{tid:<20}[/bold #e6edf3] [dim #8b949e]{t.title}[/dim #8b949e]"),
+                )
+                for tid, t in tasks.items()
+                if tid.startswith(arg_token)
+            ]
+
+        if root_cmd == "/skill" and sub_cmd in ("show", "delete"):
+            skills = self.repl._skills_ctx.skill_manager.list()
+            return [
+                (
+                    f"{root_cmd} {sub_cmd} {sid}",
+                    Text.from_markup(f"[bold #e6edf3]{sid:<20}[/bold #e6edf3] [dim #8b949e]{s.name}[/dim #8b949e]"),
+                )
+                for sid, s in skills.items()
+                if sid.startswith(arg_token)
+            ]
+
+        if root_cmd == "/rag" and sub_cmd in ("load", "delete"):
+            dbs = self.repl._get_rag_ctx().rag_manager.list_databases()
+            return [
+                (
+                    f"{root_cmd} {sub_cmd} {d['name']}",
+                    Text.from_markup(f"[bold #e6edf3]{d['name']:<20}[/bold #e6edf3] [dim #8b949e]{d.get('doc_count', 0)} docs[/dim #8b949e]"),
+                )
+                for d in dbs
+                if d["name"].startswith(arg_token)
+            ]
+
+        return []
+
     def update_autocomplete(self, value: str) -> None:
         autolist = self.query_one("#autocomplete-list", OptionList)
-        text = value.lstrip()
 
-        # 1. Slash-command candidates
-        if text.startswith("/") and " " not in text:
-            candidates = [
-                (name, spec.summary)
-                for name, spec in self.repl._get_commands().items()
-                if name.startswith(text)
-            ]
-            if candidates:
-                autolist.clear_options()
-                for name, summary in candidates:
-                    autolist.add_option(
-                        Option(
-                            prompt=Text.from_markup(f"[bold #38bdf8]{name:<16}[/bold #38bdf8] [dim #8b949e]{summary}[/dim #8b949e]"),
-                            id=name,
-                        )
-                    )
-                autolist.highlighted = 0
-                autolist.display = True
-                return
-
-        # 2. File @-mention candidates
+        # 1. File @-mention candidates
         match = _AT_MENTION_RE.search(value)
         if match:
             prefix = match.group(1) or match.group(2) or match.group(3) or ""
@@ -256,6 +350,23 @@ class OllamaAgentApp(App):
                         Option(
                             prompt=Text.from_markup(f"[bold #e6edf3]{rel_path:<40}[/bold #e6edf3] [dim #8b949e]{meta}[/dim #8b949e]"),
                             id=rel_path,
+                        )
+                    )
+                autolist.highlighted = 0
+                autolist.display = True
+                return
+
+        # 2. Slash-command candidates
+        text = value.lstrip()
+        if text.startswith("/"):
+            slash_candidates = self._slash_completions(text)
+            if slash_candidates:
+                autolist.clear_options()
+                for item_id, prompt_text in slash_candidates:
+                    autolist.add_option(
+                        Option(
+                            prompt=prompt_text,
+                            id=item_id,
                         )
                     )
                 autolist.highlighted = 0
@@ -277,7 +388,7 @@ class OllamaAgentApp(App):
         inp = self.query_one(ReplInput)
         val = inp.text
 
-        if val.lstrip().startswith("/"):
+        if completed_text.startswith("/"):
             new_val = completed_text + " "
         else:
             at_idx = val.rfind("@")
@@ -376,18 +487,23 @@ class OllamaAgentApp(App):
             await scroll.remove_children()
             return
 
-        if cmd == "/task-create":
-            self._push_task_modal(args[0] if args else "", "--force" in args)
+        if cmd == "/task" and args and args[0] == "create":
+            sub_args = args[1:]
+            task_id = sub_args[0] if sub_args and not sub_args[0].startswith("-") else ""
+            self._push_task_modal(task_id, "--force" in sub_args or "-f" in sub_args)
             return
 
-        if cmd == "/skill-create":
-            self._push_skill_modal(args[0] if args else "", "--force" in args)
+        if cmd == "/skill" and args and args[0] == "create":
+            sub_args = args[1:]
+            skill_id = sub_args[0] if sub_args and not sub_args[0].startswith("-") else ""
+            self._push_skill_modal(skill_id, "--force" in sub_args or "-f" in sub_args)
             return
 
-        if cmd == "/task-run":
-            target_id = next((a for a in args if not a.startswith("-")), "")
+        if cmd == "/task" and args and args[0] == "run":
+            sub_args = args[1:]
+            target_id = next((a for a in sub_args if not a.startswith("-")), "")
             if not target_id:
-                scroll.mount(SystemMessage("[bold #f87171]✕ Usage:[/bold #f87171] /task-run <id> [-y]"))
+                scroll.mount(SystemMessage("[bold #f87171]✕ Usage:[/bold #f87171] /task run <id> [-y]"))
                 self._deferred_scroll()
                 return
             try:
@@ -407,7 +523,7 @@ class OllamaAgentApp(App):
 
             self.repl.runtime.settings.model.name = t.model
             self.repl.runtime.settings.model.reasoning_effort = t.reasoning_effort
-            if "-y" in args or "--yolo" in args:
+            if "-y" in sub_args or "--yolo" in sub_args:
                 self.repl.runtime.yolo_mode = True
             await self.repl.runtime.reload()
             await self._stream_chat(t.prompt, scroll, agent_msg)
@@ -420,11 +536,6 @@ class OllamaAgentApp(App):
             return
 
         spec = commands[cmd]
-        if spec.usage and "<" in spec.usage and not args:
-            scroll.mount(SystemMessage(f"[bold #f87171]✕ Usage:[/bold #f87171] {spec.usage}"))
-            self._deferred_scroll()
-            return
-
         with self.repl.console.capture() as capture:
             await safe_call(spec.handler, args)
         output = capture.get()
@@ -434,7 +545,7 @@ class OllamaAgentApp(App):
 
         if cmd == "/yolo":
             self.update_yolo_ui()
-        elif cmd in ("/rag-load", "/rag-unload", "/rag-delete"):
+        elif cmd == "/rag" and args and args[0] in ("load", "unload", "delete"):
             await self.repl.runtime.reload()
 
     # ── Modal helpers ─────────────────────────────────────────────────────

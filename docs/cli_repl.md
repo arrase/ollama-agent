@@ -44,26 +44,13 @@ Slash commands provide session management, model control, task execution, docume
 | Command | Usage | Description |
 | :--- | :--- | :--- |
 | `/help` | `/help` | Displays help message listing all available slash commands categorized by section. |
+| `/model` | `/model [list \| set <model>]` | Lists available local Ollama models or switches the active model dynamically. |
+| `/task` | `/task [list \| create <id> \| run <id> [-y] \| delete <id>]` | Manages saved prompt tasks (listing, modal creation, execution, deletion). |
+| `/skill` | `/skill [list \| show <id> \| create <id> \| delete <id>]` | Manages agent skills (listing, detail inspection, modal creation, deletion). |
+| `/rag` | `/rag [status \| list \| create <name> \| delete <name> \| load <name> \| unload \| add <path> [--dir]]` | Manages RAG vector stores (database creation, ingestion, loading/unloading, status). |
+| `/yolo` | `/yolo [on\|off]` | Toggles YOLO mode or sets it explicitly (`on` or `off`). |
 | `/new` | `/new` | Starts a new chat session (clears current conversation state and context). |
 | `/clear` | `/clear` | Clears all rendered messages from the terminal screen viewport. |
-| `/models` | `/models` | Lists local Ollama models fetched from the server along with tool capability indicators. |
-| `/model-set` | `/model-set <model>` | Dynamically switches the active LLM for the current session without losing context. |
-| `/tasks` | `/tasks` | Lists all stored prompt tasks available for execution. |
-| `/task-run` | `/task-run <id>` | Executes a saved task prompt using its configured model and reasoning effort. |
-| `/task-create` | `/task-create <id> [--force]` | Opens an interactive task builder modal in REPL to create a new task. |
-| `/task-delete` | `/task-delete <id>` | Deletes a saved task from storage. |
-| `/rag` | `/rag` | Displays the status of the currently loaded RAG vector database. |
-| `/rag-list` | `/rag-list` | Lists all available RAG databases stored in `~/.ollama-agent/rag/`. |
-| `/rag-create` | `/rag-create <name>` | Creates a new empty RAG vector store with the specified name. |
-| `/rag-load` | `/rag-load <name>` | Loads a RAG database into the current agent session context. |
-| `/rag-unload` | `/rag-unload` | Unloads the currently active RAG database from memory. |
-| `/rag-add` | `/rag-add <path> [--dir]` | Ingests a single file or an entire directory (`--dir`) into the active RAG store. |
-| `/rag-delete` | `/rag-delete <name>` | Deletes a RAG database and its associated index files from disk. |
-| `/skills` | `/skills` | Lists all available skills discovered in system and user skill directories. |
-| `/skill-show` | `/skill-show <id>` | Displays full details, metadata, and instructions for a specific skill. |
-| `/skill-create` | `/skill-create <id> [--force]` | Opens an interactive skill builder modal in REPL to create a new skill. |
-| `/skill-delete` | `/skill-delete <id>` | Deletes a skill directory from `~/.ollama-agent/skills/`. |
-| `/yolo` | `/yolo [on\|off]` | Toggles YOLO mode or sets it explicitly (`on` or `off`). |
 | `/exit` / `/quit` | `/exit` or `/quit` | Gracefully closes connections and terminates the REPL application. |
 
 ---

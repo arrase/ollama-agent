@@ -78,13 +78,13 @@ RAG databases can be managed via the CLI or directly within the interactive REPL
 
 | CLI Command | REPL Command | Description |
 | :--- | :--- | :--- |
-| `ollama-agent rag-list` | `/rag-list` | List all available RAG databases and active status. |
-| `ollama-agent rag-create <name>` | `/rag-create <name>` | Create a new empty vector database. |
-| `ollama-agent rag-load <name>` | `/rag-load <name>` | Load a database into active memory for the session. |
-| `ollama-agent rag-unload` | `/rag-unload` | Unload the currently active database. |
-| `ollama-agent rag-add <db> <path> [--dir]` | `/rag-add <path>` | Add a single file or directory (`--dir`) to a database. |
-| `ollama-agent rag-delete <name>` | `/rag-delete <name>` | Delete a RAG database directory permanently. |
-| N/A | `/rag-status` | Display current loaded database status. |
+| `ollama-agent rag-list` | `/rag list` | List all available RAG databases and active status. |
+| `ollama-agent rag-create <name>` | `/rag create <name>` | Create a new empty vector database. |
+| `ollama-agent rag-load <name>` | `/rag load <name>` | Load a database into active memory for the session. |
+| `ollama-agent rag-unload` | `/rag unload` | Unload the currently active database. |
+| `ollama-agent rag-add <db> <path> [--dir]` | `/rag add <path> [--dir]` | Add a single file or directory (`--dir`) to a database. |
+| `ollama-agent rag-delete <name>` | `/rag delete <name>` | Delete a RAG database directory permanently. |
+| N/A | `/rag status` (or `/rag`) | Display current loaded database status. |
 
 ### CLI Auto-Load Flag
 You can auto-load a RAG database at startup when running single prompts or starting the REPL:
