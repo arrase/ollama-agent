@@ -77,7 +77,7 @@ def list_tasks(ctx: TasksContext) -> None:
     ctx.console.print(table)
 
 
-async def run_task(ctx: TasksContext, task_id: str) -> None:
+async def run_task(ctx: TasksContext, task_id: str, *, yolo: bool = False) -> None:
     tid, t = ctx._find_or_exit(task_id)
     ctx.console.print(
         f"[bold cyan]Executing:[/bold cyan] {t.title} ({tid})\n"
@@ -87,7 +87,7 @@ async def run_task(ctx: TasksContext, task_id: str) -> None:
     settings = load_settings()
     settings.model.name = t.model
     settings.model.reasoning_effort = t.reasoning_effort
-    runtime = AgentRuntime(settings=settings)
+    runtime = AgentRuntime(settings=settings, yolo_mode=yolo)
     async with runtime:
         await runtime.reload()
         await run_non_interactive(runtime, t.prompt)
