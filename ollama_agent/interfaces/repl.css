@@ -11,7 +11,7 @@ AgentHeader {
     color: #e6edf3;
     height: 3;
     content-align: left middle;
-    padding: 0 2;
+    padding: 1 2 0 2;
     border-bottom: solid #21262d;
 }
 
