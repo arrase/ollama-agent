@@ -29,6 +29,20 @@ class TestDispatchAndCLI(unittest.TestCase):
         self.assertTrue(args.yolo)
         self.assertEqual(args.prompt, "hello")
 
+    def test_task_run_yolo_flag_parsing(self) -> None:
+        parser = create_argument_parser()
+        args1 = parser.parse_args(["task-run", "my-task", "-y"])
+        self.assertEqual(args1.task_id, "my-task")
+        self.assertTrue(args1.yolo)
+
+        args2 = parser.parse_args(["-y", "task-run", "my-task"])
+        self.assertEqual(args2.task_id, "my-task")
+        self.assertTrue(args2.yolo)
+
+        args3 = parser.parse_args(["task-run", "my-task"])
+        self.assertEqual(args3.task_id, "my-task")
+        self.assertFalse(args3.yolo)
+
     def test_build_cli_handlers_registry(self) -> None:
         parser = create_argument_parser()
         args = parser.parse_args(["task-list"])

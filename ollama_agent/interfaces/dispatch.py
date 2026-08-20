@@ -80,7 +80,7 @@ def build_cli_handlers(
     return {
         "task-list": lambda: list_tasks(task_ctx),
         "task-delete": lambda: delete_task(task_ctx, args.task_id),
-        "task-run": lambda: run_task(task_ctx, args.task_id),
+        "task-run": lambda: run_task(task_ctx, args.task_id, yolo=args.yolo),
         "task-create": lambda: create_task(
             task_ctx,
             args.task_id,
@@ -173,8 +173,12 @@ def build_repl_handlers(
         "/task-run": REPLCommand(
             "Run a saved task",
             "Task Management",
-            "/task-run <id>",
-            lambda args: run_task(task_ctx, args[0]),
+            "/task-run <id> [-y]",
+            lambda args: run_task(
+                task_ctx,
+                next((a for a in args if not a.startswith("-")), ""),
+                yolo=("-y" in args or "--yolo" in args),
+            ),
         ),
         "/task-delete": REPLCommand(
             "Delete a saved task",

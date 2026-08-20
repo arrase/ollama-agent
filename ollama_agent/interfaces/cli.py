@@ -112,6 +112,13 @@ def _add_task_subcommands(parser: argparse.ArgumentParser) -> None:
 
     task_run = _add_subparser(subparsers, "task-run", "Execute a saved task")
     task_run.add_argument("task_id", type=str, help="Task ID or prefix to execute")
+    task_run.add_argument(
+        "-y",
+        "--yolo",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Enable YOLO mode (bypasses all tool execution confirmation prompts)",
+    )
 
     task_delete = _add_subparser(subparsers, "task-delete", "Delete a saved task")
     task_delete.add_argument("task_id", type=str, help="Task ID or prefix to delete")

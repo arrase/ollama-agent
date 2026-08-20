@@ -79,8 +79,16 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
         )
         with patch("ollama_agent.tasks.commands.run_non_interactive", AsyncMock()) as mock_run:
             with patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()):
-                await run_task(self.ctx, "quick-task")
-                mock_run.assert_awaited_once()
+                with patch("ollama_agent.tasks.commands.AgentRuntime") as mock_runtime_cls:
+                    mock_instance = AsyncMock()
+                    mock_runtime_cls.return_value = mock_instance
+                    mock_instance.__aenter__.return_value = mock_instance
+                    mock_instance.__aexit__.return_value = None
+
+                    await run_task(self.ctx, "quick-task", yolo=True)
+                    mock_runtime_cls.assert_called_once()
+                    self.assertTrue(mock_runtime_cls.call_args.kwargs.get("yolo_mode"))
+                    mock_run.assert_awaited_once()
 
     def test_find_or_exit_errors(self) -> None:
         with self.assertRaises(TaskNotFoundError):

@@ -36,7 +36,7 @@ from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager, set_tool_timeout
 from ..rag import RAGContext, RAGManager, load_rag_database
 from ..skills import SkillsContext, create_skill
-from ..tasks.commands import CLIContext, create_task
+from ..tasks.commands import CLIContext, TaskError, create_task
 from .dispatch import REPLCommand, build_repl_handlers, render_repl_help, safe_call
 from .model_commands import set_model
 from .session_commands import new_session
@@ -391,13 +391,16 @@ class OllamaAgentApp(App):
             return
 
         if cmd == "/task-run":
-            if not args:
-                scroll.mount(SystemMessage("[bold #f87171]✕ Usage:[/bold #f87171] /task-run <id>"))
+            target_id = next((a for a in args if not a.startswith("-")), "")
+            if not target_id:
+                scroll.mount(SystemMessage("[bold #f87171]✕ Usage:[/bold #f87171] /task-run <id> [-y]"))
                 self._deferred_scroll()
                 return
             try:
-                tid, t = self.repl._task_ctx._find_or_exit(args[0])
-            except SystemExit:
+                tid, t = self.repl._task_ctx._find_or_exit(target_id)
+            except (TaskError, SystemExit) as exc:
+                scroll.mount(SystemMessage(f"[red]{exc}[/red]"))
+                self._deferred_scroll()
                 return
 
             scroll.mount(SystemMessage(Text.from_markup(
@@ -410,6 +413,8 @@ class OllamaAgentApp(App):
 
             self.repl.runtime.settings.model.name = t.model
             self.repl.runtime.settings.model.reasoning_effort = t.reasoning_effort
+            if "-y" in args or "--yolo" in args:
+                self.repl.runtime.yolo_mode = True
             await self.repl.runtime.reload()
             await self._stream_chat(t.prompt, scroll, agent_msg)
             return
