@@ -381,6 +381,62 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             app.accept_completion(0)
             self.assertEqual(inp.text, "/help ")
 
+    async def test_autocomplete_subcommands_and_entities(self) -> None:
+        repl_mock = MagicMock()
+        repl_mock.runtime.settings.model.name = "gemma4:26b"
+        repl_mock.runtime.settings.model.reasoning_effort = "medium"
+        repl_mock._rag_ctx = None
+        repl_mock.runtime.yolo_mode = False
+
+        # Mock tasks and skills
+        mock_task = MagicMock(title="My Test Task")
+        repl_mock._task_ctx.task_manager.list.return_value = {"test-task": mock_task}
+
+        mock_skill = MagicMock()
+        mock_skill.name = "My Test Skill"
+        repl_mock._skills_ctx.skill_manager.list.return_value = {"test-skill": mock_skill}
+
+        mock_rag_mgr = MagicMock()
+        mock_rag_mgr.list_databases.return_value = [{"name": "docs-db", "doc_count": 5}]
+        repl_mock._get_rag_ctx.return_value.rag_manager = mock_rag_mgr
+
+        app = OllamaAgentApp(repl_mock)
+        async with app.run_test() as pilot:
+            autolist = app.query_one("#autocomplete-list", OptionList)
+
+            # 1. Level 1: Subcommands for /task
+            app.update_autocomplete("/task ")
+            self.assertTrue(autolist.display)
+            self.assertEqual(autolist.option_count, 4)  # list, create, run, delete
+
+            # Filter subcommands
+            app.update_autocomplete("/task r")
+            self.assertEqual(autolist.option_count, 1)
+            app.accept_completion(0)
+            inp = app.query_one(ReplInput)
+            self.assertEqual(inp.text, "/task run ")
+
+            # 2. Level 2: Dynamic Task IDs for /task run
+            app.update_autocomplete("/task run ")
+            self.assertTrue(autolist.display)
+            self.assertEqual(autolist.option_count, 1)
+            app.accept_completion(0)
+            self.assertEqual(inp.text, "/task run test-task ")
+
+            # 3. Level 2: Dynamic Skill IDs for /skill show
+            app.update_autocomplete("/skill show ")
+            self.assertTrue(autolist.display)
+            self.assertEqual(autolist.option_count, 1)
+            app.accept_completion(0)
+            self.assertEqual(inp.text, "/skill show test-skill ")
+
+            # 4. Level 2: Dynamic RAG DBs for /rag load
+            app.update_autocomplete("/rag load ")
+            self.assertTrue(autolist.display)
+            self.assertEqual(autolist.option_count, 1)
+            app.accept_completion(0)
+            self.assertEqual(inp.text, "/rag load docs-db ")
+
     async def test_accept_completion_file_mention(self) -> None:
         repl_mock = MagicMock()
         repl_mock.runtime.settings.model.name = "gemma4:26b"

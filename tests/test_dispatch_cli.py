@@ -98,12 +98,14 @@ class TestDispatchAndCLI(unittest.TestCase):
         )
 
         self.assertIn("/help", handlers)
-        self.assertIn("/models", handlers)
+        self.assertIn("/model", handlers)
         self.assertIn("/yolo", handlers)
         self.assertIn("/new", handlers)
-        self.assertIn("/tasks", handlers)
-        self.assertIn("/skills", handlers)
+        self.assertIn("/task", handlers)
+        self.assertIn("/skill", handlers)
         self.assertIn("/rag", handlers)
+        self.assertIn("/clear", handlers)
+        self.assertIn("/exit", handlers)
 
         for cmd in handlers.values():
             self.assertIn(cmd.section, REPL_SECTIONS)

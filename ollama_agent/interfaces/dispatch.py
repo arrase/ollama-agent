@@ -123,19 +123,95 @@ def build_repl_handlers(
     handle_skill_create: Callable[[list[str]], object],
     handle_yolo: Callable[[list[str]], object],
 ) -> dict[str, REPLCommand]:
-    """Build the REPL command registry for slash commands."""
+    """Build the REPL command registry for unified slash commands."""
 
-    def handle_rag_add(args: list[str]) -> object:
-        is_dir = "--dir" in args
-        paths = [a for a in args if a != "--dir"]
-        if not paths:
-            get_rag_ctx().console.print("[red]Error: Missing file or directory path.[/red]")
-            return None
-        return (
-            add_rag_directory(get_rag_ctx(), paths[0])
-            if is_dir
-            else add_rag_file(get_rag_ctx(), paths[0])
-        )
+    def handle_model(args: list[str]) -> object:
+        if not args or args[0] == "list":
+            return list_models(console, current_model(), base_url())
+        if args[0] in ("set", "use", "switch") and len(args) > 1:
+            return switch_model(args[1])
+        if len(args) == 1 and args[0] != "list":
+            return switch_model(args[0])
+        console.print("[red]Usage: /model [list | set <model>][/red]")
+        return None
+
+    def handle_task(args: list[str]) -> object:
+        if not args or args[0] == "list":
+            return list_tasks(task_ctx)
+        sub = args[0]
+        if sub == "create":
+            return handle_task_create(args[1:])
+        if sub == "run":
+            sub_args = args[1:]
+            task_id = next((a for a in sub_args if not a.startswith("-")), "")
+            if not task_id:
+                console.print("[red]Usage: /task run <id> [-y][/red]")
+                return None
+            return run_task(task_ctx, task_id, yolo=("-y" in sub_args or "--yolo" in sub_args))
+        if sub == "delete":
+            if len(args) < 2:
+                console.print("[red]Usage: /task delete <id>[/red]")
+                return None
+            return delete_task(task_ctx, args[1])
+        console.print(f"[red]Unknown task subcommand '{sub}'. Usage: /task [list | create | run <id> | delete <id>][/red]")
+        return None
+
+    def handle_skill(args: list[str]) -> object:
+        if not args or args[0] == "list":
+            return list_skills(skills_ctx)
+        sub = args[0]
+        if sub == "show":
+            if len(args) < 2:
+                console.print("[red]Usage: /skill show <id>[/red]")
+                return None
+            return show_skill(skills_ctx, args[1])
+        if sub == "create":
+            return handle_skill_create(args[1:])
+        if sub == "delete":
+            if len(args) < 2:
+                console.print("[red]Usage: /skill delete <id>[/red]")
+                return None
+            return delete_skill(skills_ctx, args[1])
+        console.print(f"[red]Unknown skill subcommand '{sub}'. Usage: /skill [list | show <id> | create | delete <id>][/red]")
+        return None
+
+    def handle_rag(args: list[str]) -> object:
+        if not args or args[0] == "status":
+            return show_rag_status(get_rag_ctx())
+        sub = args[0]
+        if sub == "list":
+            return list_rag_databases(get_rag_ctx())
+        if sub == "create":
+            if len(args) < 2:
+                console.print("[red]Usage: /rag create <name>[/red]")
+                return None
+            return create_rag_database(get_rag_ctx(), args[1])
+        if sub == "delete":
+            if len(args) < 2:
+                console.print("[red]Usage: /rag delete <name>[/red]")
+                return None
+            return delete_rag_database(get_rag_ctx(), args[1])
+        if sub == "load":
+            if len(args) < 2:
+                console.print("[red]Usage: /rag load <name>[/red]")
+                return None
+            return load_rag_database(get_rag_ctx(), args[1])
+        if sub == "unload":
+            return unload_rag_database(get_rag_ctx())
+        if sub == "add":
+            sub_args = args[1:]
+            is_dir = "--dir" in sub_args
+            paths = [a for a in sub_args if a != "--dir"]
+            if not paths:
+                console.print("[red]Usage: /rag add <path> [--dir][/red]")
+                return None
+            return (
+                add_rag_directory(get_rag_ctx(), paths[0])
+                if is_dir
+                else add_rag_file(get_rag_ctx(), paths[0])
+            )
+        console.print(f"[red]Unknown rag subcommand '{sub}'. Usage: /rag [status | list | create | delete | load | unload | add][/red]")
+        return None
 
     cmds: dict[str, REPLCommand] = {
         "/help": REPLCommand("Show this help message", "General", None, lambda _: render_repl_help(console, cmds)),
@@ -154,108 +230,29 @@ def build_repl_handlers(
             None,
             handle_new,
         ),
-        "/models": REPLCommand(
-            "List available Ollama models",
+        "/model": REPLCommand(
+            "Manage models (list, set)",
             "Model Management",
-            None,
-            lambda _: list_models(console, current_model(), base_url()),
+            "/model [list | set <model>]",
+            handle_model,
         ),
-        "/model-set": REPLCommand(
-            "Switch to a different model",
-            "Model Management",
-            "/model-set <model>",
-            lambda args: switch_model(args[0]),
-        ),
-        "/tasks": REPLCommand(
-            "List saved tasks", "Task Management", None, lambda _: list_tasks(task_ctx)
-        ),
-        "/task-run": REPLCommand(
-            "Run a saved task",
+        "/task": REPLCommand(
+            "Manage saved tasks (list, create, run, delete)",
             "Task Management",
-            "/task-run <id> [-y]",
-            lambda args: run_task(
-                task_ctx,
-                next((a for a in args if not a.startswith("-")), ""),
-                yolo=("-y" in args or "--yolo" in args),
-            ),
+            "/task [list | create | run <id> | delete <id>]",
+            handle_task,
         ),
-        "/task-delete": REPLCommand(
-            "Delete a saved task",
-            "Task Management",
-            "/task-delete <id>",
-            lambda args: delete_task(task_ctx, args[0]),
+        "/skill": REPLCommand(
+            "Manage skills (list, show, create, delete)",
+            "Skills Management",
+            "/skill [list | show <id> | create | delete <id>]",
+            handle_skill,
         ),
         "/rag": REPLCommand(
-            "Show current RAG status",
+            "Manage RAG databases (status, list, create, delete, load, unload, add)",
             "RAG (Document Retrieval)",
-            None,
-            lambda _: show_rag_status(get_rag_ctx()),
-        ),
-        "/rag-list": REPLCommand(
-            "List all RAG databases",
-            "RAG (Document Retrieval)",
-            None,
-            lambda _: list_rag_databases(get_rag_ctx()),
-        ),
-        "/rag-create": REPLCommand(
-            "Create a new RAG database",
-            "RAG (Document Retrieval)",
-            "/rag-create <name>",
-            lambda args: create_rag_database(get_rag_ctx(), args[0]),
-        ),
-        "/rag-delete": REPLCommand(
-            "Delete a RAG database",
-            "RAG (Document Retrieval)",
-            "/rag-delete <name>",
-            lambda args: delete_rag_database(get_rag_ctx(), args[0]),
-        ),
-        "/rag-load": REPLCommand(
-            "Load a RAG database",
-            "RAG (Document Retrieval)",
-            "/rag-load <name>",
-            lambda args: load_rag_database(get_rag_ctx(), args[0]),
-        ),
-        "/rag-unload": REPLCommand(
-            "Unload the current RAG database",
-            "RAG (Document Retrieval)",
-            None,
-            lambda _: unload_rag_database(get_rag_ctx()),
-        ),
-        "/rag-add": REPLCommand(
-            "Add file(s) to RAG",
-            "RAG (Document Retrieval)",
-            "/rag-add <path> [--dir]",
-            handle_rag_add,
-        ),
-        "/skills": REPLCommand(
-            "List all skills",
-            "Skills Management",
-            None,
-            lambda _: list_skills(skills_ctx),
-        ),
-        "/skill-show": REPLCommand(
-            "Show skill details",
-            "Skills Management",
-            "/skill-show <id>",
-            lambda args: show_skill(skills_ctx, args[0]),
-        ),
-        "/skill-delete": REPLCommand(
-            "Delete a skill",
-            "Skills Management",
-            "/skill-delete <id>",
-            lambda args: delete_skill(skills_ctx, args[0]),
-        ),
-        "/task-create": REPLCommand(
-            "Create a task",
-            "Task Management",
-            "/task-create <id> [--force]",
-            handle_task_create,
-        ),
-        "/skill-create": REPLCommand(
-            "Create a skill",
-            "Skills Management",
-            "/skill-create <id> [--force]",
-            handle_skill_create,
+            "/rag [status | list | create | delete | load | unload | add]",
+            handle_rag,
         ),
     }
     return cmds

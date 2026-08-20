@@ -49,7 +49,7 @@ def list_rag_databases(ctx: RAGContext) -> None:
     dbs = ctx.rag_manager.list_databases()
     if not dbs:
         ctx.console.print("[yellow]No RAG databases found.[/yellow]")
-        ctx.console.print("[dim]Create one with /rag-create <name>[/dim]")
+        ctx.console.print("[dim]Create one with /rag create <name>[/dim]")
         return
 
     table = Table(title="RAG Databases", show_header=True, header_style="bold magenta")
@@ -70,7 +70,7 @@ def create_rag_database(ctx: RAGContext, name: str) -> None:
         ctx.console.print(
             f"[green]RAG database created:[/green] [cyan]{created}[/cyan]"
         )
-        ctx.console.print(f"[dim]Load it with /rag-load {created}[/dim]")
+        ctx.console.print(f"[dim]Load it with /rag load {created}[/dim]")
     except RAGDatabaseExistsError:
         ctx.console.print(f"[red]Database already exists:[/red] {name}")
         raise
@@ -124,7 +124,7 @@ async def add_rag_file(ctx: RAGContext, file_path: str) -> None:
         )
     except RAGNotLoadedError:
         ctx.console.print(
-            "[red]No RAG database loaded.[/red] Use /rag-load <name> first."
+            "[red]No RAG database loaded.[/red] Use /rag load <name> first."
         )
         raise
     except RAGError as e:
@@ -142,7 +142,7 @@ async def add_rag_directory(ctx: RAGContext, dir_path: str) -> None:
         )
     except RAGNotLoadedError:
         ctx.console.print(
-            "[red]No RAG database loaded.[/red] Use /rag-load <name> first."
+            "[red]No RAG database loaded.[/red] Use /rag load <name> first."
         )
         raise
     except RAGError as e:
@@ -157,4 +157,4 @@ def show_rag_status(ctx: RAGContext) -> None:
         ctx.console.print(f"[bold]Active RAG database:[/bold] [cyan]{current}[/cyan]")
     else:
         ctx.console.print("[yellow]No RAG database is currently loaded.[/yellow]")
-        ctx.console.print("[dim]Use /rag-list to see available databases[/dim]")
+        ctx.console.print("[dim]Use /rag list to see available databases[/dim]")

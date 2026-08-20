@@ -115,7 +115,7 @@ flowchart LR
 ```
 
 - **Thread Tracking**: Each chat session is assigned a unique `thread_id`. State snapshots are written to SQLite after every node execution step in the graph.
-- **Mid-Session Continuation**: When changing models mid-conversation via `/model-set`, the thread configuration (`{"configurable": {"thread_id": thread}}`) is passed to `astream()`, preserving conversation state without losing context.
+- **Mid-Session Continuation**: When changing models mid-conversation via `/model set <model>`, the thread configuration (`{"configurable": {"thread_id": thread}}`) is passed to `astream()`, preserving conversation state without losing context.
 - **HITL Checkpoints**: When execution is paused for user confirmation (`interrupt_on`), the graph state is snapshotted in SQLite. Resuming execution sends a `Command(resume=decision)` payload back to the same thread ID.
 
 ---

@@ -52,7 +52,7 @@ async def list_models(
             console.print(f"  {tool_icon} [cyan]{name}[/cyan] {size_str}{marker}")
         console.print(
             "[dim]─" * 60
-            + "[/dim]\n[dim]✓ = supports tools | Use /model-set <model> to switch[/dim]"
+            + "[/dim]\n[dim]✓ = supports tools | Use /model set <model> to switch[/dim]"
         )
     except (ollama.ResponseError, OSError) as exc:
         console.print(f"[red]Error listing models: {exc}[/red]")
@@ -73,7 +73,7 @@ async def set_model(
         if model_name not in available:
             console.print(
                 f"[red]Model '{model_name}' not found.[/red]\n"
-                "[dim]Use /models to see available models.[/dim]"
+                "[dim]Use /model to see available models.[/dim]"
             )
             return runtime.settings.model.name
     except (ollama.ResponseError, OSError) as exc:

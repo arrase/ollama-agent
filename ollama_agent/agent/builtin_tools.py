@@ -40,7 +40,7 @@ async def rag_search(query: str, top_k: int | None = None) -> RAGToolResult:
     if mgr.current_database is None:
         return {
             "success": False,
-            "error": "No RAG database loaded. Use /rag-load <name> first.",
+            "error": "No RAG database loaded. Use /rag load <name> first.",
         }
     try:
         results = await mgr.search(query, top_k)
