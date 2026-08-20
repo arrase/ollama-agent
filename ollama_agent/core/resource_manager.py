@@ -30,7 +30,7 @@ class BaseFileStoreManager(ABC, Generic[T]):
     _ext: str = ""
 
     def __init__(self, base_dir: Path) -> None:
-        self.base_dir = base_dir
+        self.base_dir = base_dir.resolve()
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
     # ------------------------------------------------------------------
@@ -40,7 +40,7 @@ class BaseFileStoreManager(ABC, Generic[T]):
     def _path(self, item_id: str) -> Path:
         """Return the filesystem path for *item_id*."""
         resolved = (self.base_dir / f"{item_id}{self._ext}").resolve()
-        if not resolved.is_relative_to(self.base_dir.resolve()):
+        if not resolved.is_relative_to(self.base_dir):
             raise ValueError(f"Path traversal detected: {item_id}")
         return resolved
 

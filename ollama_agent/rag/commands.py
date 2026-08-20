@@ -32,6 +32,8 @@ class RAGContext:
         if target in names:
             return target
         matches = [c for c in names if c.startswith(target)]
+        if not matches:
+            matches = [c for c in names if c.lower().startswith(target.lower())]
         if len(matches) == 1:
             return matches[0]
         msg = (

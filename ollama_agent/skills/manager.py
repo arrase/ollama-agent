@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -46,7 +47,9 @@ def _read_skill(skill_dir: Path) -> SkillInfo | None:
     """Read and parse a SKILL.md inside *skill_dir*."""
     skill_file = skill_dir / "SKILL.md"
     if not skill_file.is_file():
-        return None
+        skill_file = skill_dir / "skill.md"
+        if not skill_file.is_file():
+            return None
     if skill_file.stat().st_size > _MAX_SKILL_SIZE:
         logger.warning("Skipping skill %s: SKILL.md exceeds 10 MB", skill_dir.name)
         return None
@@ -148,7 +151,11 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
         if not skill_dir.is_dir():
             return False
         try:
-            shutil.rmtree(skill_dir)
+            def _remove_readonly(func: Any, path: str, exc: Any) -> None:
+                os.chmod(path, 0o777)
+                func(path)
+
+            shutil.rmtree(skill_dir, onexc=_remove_readonly)
             return True
         except OSError as exc:
             logger.error("Error deleting skill %s: %s", item_id, exc)

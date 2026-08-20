@@ -35,6 +35,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         elif not start and self._live_active:
             self.live.stop()
             self._live_active = False
+            self._text.clear()
 
     def _end_reasoning(self) -> None:
         if self._reasoning:
@@ -143,6 +144,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
                     "allow ([bold]s[/bold])ession / ([bold]c[/bold])ancel: "
                 )
                 self.console.print(prompt_msg, end="")
+                self.console.file.flush()
                 choice = (await asyncio.to_thread(input)).strip().lower()
                 if choice == "a":
                     return [{"type": "approve"} for _ in action_requests]

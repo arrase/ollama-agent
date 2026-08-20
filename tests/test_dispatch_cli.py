@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import argparse
 import io
 import unittest
@@ -150,6 +151,61 @@ class TestDispatchAndCLI(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:
                 main()
             self.assertEqual(cm.exception.code, 1)
+
+    def test_cli_rag_add_file_and_directory(self) -> None:
+        parser = create_argument_parser()
+        args_file = parser.parse_args(["rag-add", "docs_db", "file.md"])
+        mock_load = MagicMock()
+        mock_add_file = AsyncMock()
+        mock_add_dir = AsyncMock()
+
+        with patch("ollama_agent.interfaces.dispatch.load_rag_database", mock_load), \
+             patch("ollama_agent.interfaces.dispatch.add_rag_file", mock_add_file), \
+             patch("ollama_agent.interfaces.dispatch.add_rag_directory", mock_add_dir):
+            handlers = build_cli_handlers(
+                args_file,
+                task_ctx=CLIContext(console=Console(file=io.StringIO())),
+                rag_ctx=RAGContext(rag_manager=RAGManager(RAGSettings()), console=Console(file=io.StringIO())),
+                skills_ctx=SkillsContext(console=Console(file=io.StringIO())),
+            )
+            asyncio.run(handlers["rag-add"]())
+            mock_load.assert_called_once()
+            mock_add_file.assert_called_once()
+            mock_add_dir.assert_not_called()
+
+        mock_load.reset_mock()
+        mock_add_file.reset_mock()
+        mock_add_dir.reset_mock()
+
+        args_dir = parser.parse_args(["rag-add", "docs_db", "./docs", "--dir"])
+        with patch("ollama_agent.interfaces.dispatch.load_rag_database", mock_load), \
+             patch("ollama_agent.interfaces.dispatch.add_rag_file", mock_add_file), \
+             patch("ollama_agent.interfaces.dispatch.add_rag_directory", mock_add_dir):
+            handlers = build_cli_handlers(
+                args_dir,
+                task_ctx=CLIContext(console=Console(file=io.StringIO())),
+                rag_ctx=RAGContext(rag_manager=RAGManager(RAGSettings()), console=Console(file=io.StringIO())),
+                skills_ctx=SkillsContext(console=Console(file=io.StringIO())),
+            )
+            asyncio.run(handlers["rag-add"]())
+            mock_load.assert_called_once()
+            mock_add_file.assert_not_called()
+            mock_add_dir.assert_called_once()
+
+    def test_cli_session_export(self) -> None:
+        parser = create_argument_parser()
+        args = parser.parse_args(["session-export", "sess-123", "-o", "export.md"])
+        args._runtime = AsyncMock()
+
+        with patch("ollama_agent.interfaces.dispatch.export_session", AsyncMock()) as mock_export:
+            handlers = build_cli_handlers(
+                args,
+                task_ctx=CLIContext(console=Console(file=io.StringIO())),
+                rag_ctx=RAGContext(rag_manager=RAGManager(RAGSettings()), console=Console(file=io.StringIO())),
+                skills_ctx=SkillsContext(console=Console(file=io.StringIO())),
+            )
+            asyncio.run(handlers["session-export"]())
+            mock_export.assert_called_once()
 
 
 if __name__ == "__main__":

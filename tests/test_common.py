@@ -63,7 +63,21 @@ class TestCommonUtilities(unittest.TestCase):
         self.assertEqual(validate_identifier("  spaced_name  "), "spaced_name")
 
     def test_validate_identifier_invalid_names_raise_value_error(self) -> None:
-        invalid_cases = ["", "   ", "name with spaces", "name/slash", "name.dot", "name@special"]
+        invalid_cases = [
+            "",
+            "   ",
+            "name with spaces",
+            "name/slash",
+            "name.dot",
+            "name@special",
+            "con",
+            "CON",
+            "nul",
+            "aux",
+            "prn",
+            "com1",
+            "lpt9",
+        ]
         for invalid_name in invalid_cases:
             with self.subTest(name=invalid_name):
                 with self.assertRaises(ValueError):

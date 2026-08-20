@@ -1,4 +1,4 @@
 # FILESYSTEM
-- `/` is the OS root, NOT the project.
-- To access project files, run `execute(command="pwd")` to get the project's absolute path, then use it with your file tools (`ls`, `read_file`).
+- In traversal mode, you have access to the entire host filesystem.
+- To discover the absolute project path, run `execute(command="pwd")` (Unix/macOS) or `execute(command="cd")` (Windows), or inspect project files directly with `ls`.
 - `/agent/` (memory) and `/skills/` are special virtual folders just for you.

@@ -23,15 +23,28 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(_resolve_env({}), {})
 
     def test_resolve_env_success(self) -> None:
-        with patch.dict("os.environ", {"API_KEY": "secret123", "PORT": "8080"}):
-            env = {"AUTH": "${API_KEY}", "URL": "http://localhost:${PORT}"}
+        with patch.dict("os.environ", {"API_KEY": "secret123", "PORT": "8080", "USERPROFILE": "C:\\Users\\Test"}):
+            env = {
+                "AUTH": "${API_KEY}",
+                "URL": "http://localhost:${PORT}",
+                "HOME_DIR": "%USERPROFILE%",
+            }
             resolved = _resolve_env(env)
-            self.assertEqual(resolved, {"AUTH": "secret123", "URL": "http://localhost:8080"})
+            self.assertEqual(
+                resolved,
+                {
+                    "AUTH": "secret123",
+                    "URL": "http://localhost:8080",
+                    "HOME_DIR": "C:\\Users\\Test",
+                },
+            )
 
     def test_resolve_env_missing_returns_none(self) -> None:
         with patch.dict("os.environ", {}, clear=True):
             env = {"AUTH": "${NONEXISTENT_KEY_XYZ}"}
             self.assertIsNone(_resolve_env(env))
+            env_win = {"AUTH": "%NONEXISTENT_KEY_XYZ%"}
+            self.assertIsNone(_resolve_env(env_win))
 
     def test_build_mcp_connection_stdio(self) -> None:
         with patch.dict("os.environ", {"TOKEN": "mytoken"}):

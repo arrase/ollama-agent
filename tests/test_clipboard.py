@@ -45,13 +45,39 @@ class TestClipboard(unittest.TestCase):
         self.assertEqual(kwargs["input"], b"hello xclip")
 
     @patch("sys.platform", "win32")
-    @patch("subprocess.run")
-    def test_copy_win32(self, mock_run: MagicMock) -> None:
+    @patch("ctypes.windll", create=True)
+    def test_copy_win32(self, mock_windll: MagicMock) -> None:
+        mock_u32 = MagicMock()
+        mock_k32 = MagicMock()
+        mock_windll.user32 = mock_u32
+        mock_windll.kernel32 = mock_k32
+        mock_u32.OpenClipboard.return_value = 1
+        mock_k32.GlobalAlloc.return_value = 12345
+        mock_k32.GlobalLock.return_value = 67890
+
         copy_to_system_clipboard("hello windows")
-        mock_run.assert_called_once()
-        args, kwargs = mock_run.call_args
-        self.assertEqual(args[0], ["clip"])
-        self.assertEqual(kwargs["input"], "hello windows".encode("utf-16"))
+        mock_u32.OpenClipboard.assert_called_once_with(None)
+        mock_u32.EmptyClipboard.assert_called_once()
+        mock_u32.SetClipboardData.assert_called_once_with(13, 12345)
+        mock_u32.CloseClipboard.assert_called_once()
+
+    @patch("sys.platform", "win32")
+    @patch("ctypes.windll", create=True)
+    def test_get_clipboard_win32(self, mock_windll: MagicMock) -> None:
+        mock_u32 = MagicMock()
+        mock_k32 = MagicMock()
+        mock_windll.user32 = mock_u32
+        mock_windll.kernel32 = mock_k32
+        mock_u32.OpenClipboard.return_value = 1
+        mock_u32.GetClipboardData.return_value = 12345
+        mock_k32.GlobalLock.return_value = 67890
+
+        with patch("ctypes.c_wchar_p") as mock_wchar:
+            mock_wchar.return_value.value = "windows clipboard text"
+            res = get_system_clipboard()
+            self.assertEqual(res, "windows clipboard text")
+        mock_u32.OpenClipboard.assert_called_once_with(None)
+        mock_u32.CloseClipboard.assert_called_once()
 
     @patch("sys.platform", "darwin")
     @patch("subprocess.run")
@@ -60,8 +86,9 @@ class TestClipboard(unittest.TestCase):
         res = get_system_clipboard()
         self.assertEqual(res, "mac clipboard content")
         mock_run.assert_called_once()
-        args, _ = mock_run.call_args
+        args, kwargs = mock_run.call_args
         self.assertEqual(args[0], ["pbpaste"])
+        self.assertEqual(kwargs["encoding"], "utf-8")
 
 
 class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):

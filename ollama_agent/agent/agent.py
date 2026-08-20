@@ -141,7 +141,7 @@ class AgentRuntime:
         # Backend: CWD for shell + APP_DIR for agent files (memory, etc.)
         timeout = int(get_tool_timeout())
         default_backend = LocalShellBackend(
-            root_dir=Path.cwd(),
+            root_dir=Path.cwd().resolve(),
             timeout=timeout,
             virtual_mode=not self.settings.runtime.allow_traversal,
             inherit_env=self.settings.runtime.inherit_env,

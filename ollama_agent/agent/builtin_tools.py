@@ -11,17 +11,16 @@ from ..core import RAGToolResult
 from ..rag import RAGError, RAGManager
 
 
-_tool_timeout: int = 30
+_tool_timeout: ContextVar[int] = ContextVar("tool_timeout", default=30)
 _rag_manager: ContextVar[RAGManager | None] = ContextVar("rag_manager", default=None)
 
 
 def set_tool_timeout(timeout: int) -> None:
-    global _tool_timeout
-    _tool_timeout = timeout
+    _tool_timeout.set(timeout)
 
 
 def get_tool_timeout() -> int:
-    return _tool_timeout
+    return _tool_timeout.get()
 
 
 def set_rag_manager(mgr: RAGManager | None) -> None:

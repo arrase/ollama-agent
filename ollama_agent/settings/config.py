@@ -83,7 +83,7 @@ class RuntimeSettings:
     allow_traversal: bool = False
     builtin_tool_timeout: int = 30
     collapse_thinking: bool = True
-    inherit_env: bool = False
+    inherit_env: bool = True
 
 
 @dataclass(slots=True)
@@ -231,10 +231,12 @@ def load_settings(settings_path: Path = SETTINGS_PATH) -> Settings:
 
 
 def save_settings(settings: Settings, settings_path: Path = SETTINGS_PATH) -> None:
-    """Save settings to YAML file."""
+    """Save settings to YAML file atomically."""
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     text = yaml.safe_dump(settings.to_dict(), sort_keys=False, allow_unicode=True)
-    settings_path.write_text(text, encoding="utf-8")
+    tmp_path = settings_path.with_suffix(".tmp")
+    tmp_path.write_text(text, encoding="utf-8")
+    os.replace(tmp_path, settings_path)
 
 
 # ---------------------------------------------------------------------------
