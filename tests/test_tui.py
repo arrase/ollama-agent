@@ -419,6 +419,17 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(autolist.display)
             self.assertEqual(autolist.option_count, 4)  # list, create, run, delete
 
+            # 1b. Level 1: Subcommands for /session including search
+            app.update_autocomplete("/session ")
+            self.assertTrue(autolist.display)
+            self.assertEqual(autolist.option_count, 6)  # list, search, resume, new, export, delete
+
+            app.update_autocomplete("/session sea")
+            self.assertEqual(autolist.option_count, 1)
+            app.accept_completion(0)
+            inp = app.query_one(ReplInput)
+            self.assertEqual(inp.text, "/session search ")
+
             # Filter subcommands
             app.update_autocomplete("/task r")
             self.assertEqual(autolist.option_count, 1)

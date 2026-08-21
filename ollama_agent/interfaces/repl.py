@@ -60,7 +60,7 @@ _AT_MENTION_RE = re.compile(
 
 _ROOT_COMMANDS: list[tuple[str, str]] = [
     ("/model", "Manage models (list, set)"),
-    ("/session", "Manage chat sessions (list, resume, new, export, delete)"),
+    ("/session", "Manage chat sessions (list, search, resume, new, export, delete)"),
     ("/compact", "Compact conversation history into a summary"),
     ("/task", "Manage saved tasks (list, create, run, delete)"),
     ("/skill", "Manage skills (list, show, create, delete)"),
@@ -79,6 +79,7 @@ _SUBCOMMANDS: dict[str, list[tuple[str, str]]] = {
     ],
     "/session": [
         ("list", "List all past sessions"),
+        ("search", "Search past sessions by keyword"),
         ("resume", "Resume a previous session"),
         ("new", "Start a new session"),
         ("export", "Export session to Markdown"),
