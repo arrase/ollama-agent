@@ -130,17 +130,6 @@ async def resolve_ollama_reasoning(
             return None
         if effort == "enabled":
             return DEFAULT_REASONING_EFFORT
-        if effort == "xhigh":
-            return "high"
-        return effort
-
-    if bool(re.search(r"qwen[-_.:]?3\.8", lower_name)):
-        if effort == "disabled":
-            return False
-        if effort == "hide":
-            return "xhigh"
-        if effort in ("high", "xhigh", "enabled"):
-            return "xhigh"
         return effort
 
     caps = await get_model_capabilities(model, base_url)
