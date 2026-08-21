@@ -338,11 +338,14 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             repl_mock.runtime.yolo_mode = True
             app.update_yolo_ui()
             prompt_char = app.query_one("#prompt-char")
+            input_container = app.query_one("#input-container")
             self.assertEqual(prompt_char.styles.color.hex, "#F87171")
+            self.assertTrue(input_container.has_class("yolo-mode"))
 
             repl_mock.runtime.yolo_mode = False
             app.update_yolo_ui()
             self.assertEqual(prompt_char.styles.color.hex, "#38BDF8")
+            self.assertFalse(input_container.has_class("yolo-mode"))
 
     async def test_autocomplete_trigger(self) -> None:
         repl_mock = MagicMock()
