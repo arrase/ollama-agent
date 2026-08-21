@@ -271,7 +271,7 @@ When you want autonomous execution without confirmation pauses:
 When YOLO mode is active:
 1. Tool approval prompts are bypassed automatically.
 2. The header displays `YOLO: ON` with a highlighted badge.
-3. The prompt chevron changes color to **red** (`❯ `) for clear visual status.
+3. The prompt chevron (`❯ `) and input box border change color to **red** for clear visual status.
 
 ---
 

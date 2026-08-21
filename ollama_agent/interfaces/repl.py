@@ -240,6 +240,8 @@ class OllamaAgentApp(App):
 
     def update_yolo_ui(self) -> None:
         prompt_char = self.query_one("#prompt-char")
+        input_container = self.query_one("#input-container")
+        input_container.set_class(self.repl.runtime.yolo_mode, "yolo-mode")
         if self.repl.runtime.yolo_mode:
             prompt_char.styles.color = "#f87171"  # Red / Coral
         else:

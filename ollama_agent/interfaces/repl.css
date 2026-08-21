@@ -65,6 +65,10 @@ AgentHeader {
     border: round #38bdf8;
 }
 
+#input-container.yolo-mode:focus-within {
+    border: round #f87171;
+}
+
 #input-bar {
     height: auto;
     min-height: 2;
