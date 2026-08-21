@@ -1,11 +1,12 @@
 # Skills, Tasks & Persistent Memory (`AGENTS.md` & `MEMORY.md`)
 
-This document covers four core capabilities that enable `ollama-agent` to adapt, automate repetitive routines, retain project context, and preserve long-term user memory:
+This document covers core capabilities that enable `ollama-agent` to adapt, automate repetitive routines, retain project context, preserve long-term user memory, and recall past experiences:
 
 1. **Agent Skills System** (Adhering to the Agent Skills specification)
 2. **Task Automation System** (Pre-configured prompt templates and models)
 3. **Project Agent Guidelines** (`AGENTS.md` standard integration)
 4. **Long-Term Persistent Memory** (`MEMORY.md` cross-session integration)
+5. **Episodic Memory & Past Conversations** (`search_past_conversations` tool and `/session search`)
 
 ---
 
@@ -169,3 +170,28 @@ sequenceDiagram
 - **Reading**: The agent automatically reads memory and project guidelines at the start of each execution turn via `MemoryMiddleware`.
 - **Writing**: The agent edits `/agent/MEMORY.md` or `/AGENTS.md` directly using file editing tools when instructed to record new preferences or architectural patterns.
 - **Persistence**: Memory persists across system restarts, terminal sessions, and model switches.
+
+---
+
+## 5. Episodic Memory & Past Conversations
+
+Episodic memory captures records of past experiences, decisions, and troubleshooting dialogues across conversation threads. Unlike semantic memory (which distills preferences into files like `MEMORY.md`), episodic memory preserves conversation turns and actions so the agent can look back at *how* problems were solved previously.
+
+### Autonomous Episodic Tool: `search_past_conversations`
+
+The agent is equipped with the built-in tool `search_past_conversations(query: str, limit: int = 3)`.
+
+- **Mechanism**: Reads serialized message checkpoints directly from `~/.ollama-agent/history.db` (`writes` table) using `JsonPlusSerializer`.
+- **Active Thread Exclusion**: Automatically skips the current active session to avoid duplicating short-term memory.
+- **Keyword & Topic Matching**: Analyzes user prompts and assistant actions across past threads, ranking matches by relevance score.
+- **Structured Context**: Formats the matched sessions into clean Markdown excerpts for the LLM.
+
+### User Search Commands (CLI & REPL)
+
+Users can search conversation history directly from the terminal:
+
+| Interface | Command | Description |
+| :--- | :--- | :--- |
+| **REPL Slash Command** | `/session search <query>` | Search all saved chat sessions and display matching snippets in a Rich table. |
+| **CLI Command** | `ollama-agent session-search <query>` | Query past sessions non-interactively from the shell. |
+| **Resume Matched Session** | `/session resume <id>` | Resume a discovered session by thread ID. |

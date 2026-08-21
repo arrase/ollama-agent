@@ -33,6 +33,7 @@ from .session_commands import (
     list_sessions,
     new_session,
     resume_session,
+    search_sessions,
 )
 
 CLIHandler = Callable[[], object]
@@ -123,6 +124,7 @@ def build_cli_handlers(
             force=args.force,
         ),
         "session-list": lambda: list_sessions(Console()),
+        "session-search": lambda: search_sessions(Console(), args.query),
         "session-delete": lambda: delete_session(Console(), args.session_id),
         "session-export": lambda: _cli_export_session(
             Console(),
@@ -261,12 +263,21 @@ def build_repl_handlers(
                 return handle_session_export(args[1:])
             console.print("[red]Export not available in current context.[/red]")
             return None
+        if sub == "search":
+            if len(args) < 2:
+                console.print("[red]Usage: /session search <query>[/red]")
+                return None
+            return search_sessions(
+                console,
+                " ".join(args[1:]),
+                current_thread_id=current_thread_id(),
+            )
         if sub == "delete":
             if len(args) < 2:
                 console.print("[red]Usage: /session delete <session_id>[/red]")
                 return None
             return delete_session(console, args[1])
-        console.print(f"[red]Unknown session subcommand '{sub}'. Usage: /session [list | resume <id> | new | export [path] | delete <id>][/red]")
+        console.print(f"[red]Unknown session subcommand '{sub}'. Usage: /session [list | search <query> | resume <id> | new | export [path] | delete <id>][/red]")
         return None
 
     cmds: dict[str, REPLCommand] = {

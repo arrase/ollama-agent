@@ -18,6 +18,7 @@ from ollama_agent.interfaces.session_commands import (
     new_session,
     resolve_session_id,
     resume_session,
+    search_sessions,
 )
 
 
@@ -166,6 +167,18 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(res["success"])
         out = console.export_text()
         self.assertIn("Not enough messages in session to compact", out)
+
+    def test_search_sessions(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+
+        # Empty query
+        res_empty = search_sessions(console, "", db_path=self.db_path)
+        self.assertEqual(res_empty, [])
+        self.assertIn("Please provide a search query", console.export_text())
+
+        # No database
+        res_nodb = search_sessions(console, "python", db_path=self.db_path)
+        self.assertEqual(res_nodb, [])
 
 
 if __name__ == "__main__":

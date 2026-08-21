@@ -172,6 +172,11 @@ def _add_task_subcommands(parser: argparse.ArgumentParser) -> None:
     # Session subcommands
     _add_subparser(subparsers, "session-list", "List all past chat sessions")
 
+    session_search = _add_subparser(
+        subparsers, "session-search", "Search past chat sessions by query keyword"
+    )
+    session_search.add_argument("query", type=str, help="Search query string")
+
     session_del = _add_subparser(subparsers, "session-delete", "Delete a chat session from history")
     session_del.add_argument("session_id", type=str, help="Session ID or prefix to delete")
 

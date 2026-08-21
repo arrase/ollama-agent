@@ -122,6 +122,9 @@ ollama-agent skill-delete api-design
 # List all saved chat sessions with step counts
 ollama-agent session-list
 
+# Search past sessions by keyword
+ollama-agent session-search "dockerize fastapi"
+
 # Export a session to a Markdown document
 ollama-agent session-export 4d7e2a1b -o ./exports/session_summary.md
 
@@ -147,7 +150,7 @@ Slash commands provide full application control directly within the REPL:
 | :--- | :--- | :--- |
 | `/help` | `/help` | Display interactive help panel categorized by feature. |
 | `/model` | `/model [list \| set <model>]` | List available Ollama models (with tool support indicators) or switch model mid-session. |
-| `/session` | `/session [list \| resume <id> \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Resume conversations, export to Markdown, or delete history. |
+| `/session` | `/session [list \| search <query> \| resume <id> \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume threads, export to Markdown, or delete history. |
 | `/compact` | `/compact` (alias: `/compress`) | Manually compact conversation history into a structured summary to reclaim context window tokens. |
 | `/task` | `/task [list \| create <id> \| run <id> [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` launches an interactive modal dialog. |
 | `/skill` | `/skill [list \| show <id> \| create <id> \| delete <id>]` | Manage agent skills. `/skill create` launches an interactive modal dialog. |

@@ -61,7 +61,7 @@
 - 📋 **Saved Tasks**: Save reusable prompts as YAML templates and execute them on demand via CLI (`task-run`) or interactive REPL modals (`/task run`).
 - 🧩 **Agent Skills Standard**: Extend the agent with modular skills following the [Agent Skills specification](https://agentskills.io/specification) using progressive disclosure.
 - 📚 **Local RAG Engine**: Embed and index documents into local Qdrant vector collections with automated semantic retrieval via the agent's `rag_search` tool.
-- 🧠 **Persistent Memory & `AGENTS.md`**: Cross-session user memory (`MEMORY.md`) and automatic discovery of project-level guidelines (`AGENTS.md`) up to the repository root.
+- 🧠 **Persistent Memory & Guidelines**: Cross-session user memory (`MEMORY.md`), automatic discovery of project-level guidelines (`AGENTS.md`), and **Episodic Memory** to search past conversations and solutions (`search_past_conversations` tool and `/session search`).
 - 🔌 **Model Context Protocol (MCP)**: Attach MCP servers (`mcp_servers.json`) directly to the main agent across `stdio` and `http` transports.
 - 🤖 **Specialized Subagents**: Configure isolated subagents in `settings.yaml` with their own model, system prompt, and dedicated MCP tool servers.
 
@@ -140,7 +140,7 @@ The REPL provides built-in slash commands for managing models, sessions, tasks, 
 | :--- | :--- | :--- |
 | `/help` | `/help` | Display the interactive help panel with command categories. |
 | `/model` | `/model [list \| set <model>]` | List available Ollama models (with tool support indicators) or switch the active model for the current session. |
-| `/session` | `/session [list \| resume <id> \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Resume previous conversations, export to Markdown, or delete history. |
+| `/session` | `/session [list \| search <query> \| resume <id> \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume previous threads, export to Markdown, or delete history. |
 | `/compact` | `/compact` (alias: `/compress`) | Manually compact conversation history into a structured summary to reclaim context window tokens. |
 | `/task` | `/task [list \| create <id> \| run <id> [-y] \| delete <id>]` | Manage saved prompt tasks. Opens interactive modal dialogs for task creation. |
 | `/skill` | `/skill [list \| show <id> \| create <id> \| delete <id>]` | Manage agent skills. Opens interactive modal dialogs for skill creation. |
@@ -327,6 +327,7 @@ All conversations are saved to a local SQLite database at `~/.ollama-agent/histo
 | Action | REPL Command | CLI Command | Description |
 | :--- | :--- | :--- | :--- |
 | **List Sessions** | `/session list` | `ollama-agent session-list` | Display saved sessions with thread IDs, message counts, and active status. |
+| **Search Sessions** | `/session search <query>` | `ollama-agent session-search <query>` | Search across past chat sessions and conversations by keyword. |
 | **Resume Session** | `/session resume <id>` | — | Resume a past conversation by exact ID or prefix, restoring message history into the viewport. |
 | **New Session** | `/session new` (or `/new`) | — | Initialize a fresh conversation session with a new thread ID. |
 | **Export Session** | `/session export [path]` | `ollama-agent session-export <id> [-o path]` | Export conversation history to a structured Markdown document. |
@@ -500,6 +501,11 @@ Initialized automatically by the runtime to maintain user-wide coding standards 
 
 ### 3. Cross-Session Memory (`~/.ollama-agent/MEMORY.md`)
 Maintained by the agent across sessions to record user preferences, persistent architectural decisions, and project notes.
+
+### 4. Episodic Memory (`search_past_conversations`)
+Allows the AI agent to search and recall past conversation sessions, past troubleshooting steps, and previous architectural decisions stored in `~/.ollama-agent/history.db`:
+- **Autonomous Agent Tool**: The `search_past_conversations` tool is available to the agent so it can query prior sessions on demand when asked about past context.
+- **User Discovery**: Users can also search past sessions manually via `/session search <query>` in the REPL or `ollama-agent session-search <query>` in the CLI.
 
 ---
 
