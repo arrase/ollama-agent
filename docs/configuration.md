@@ -18,7 +18,7 @@ model:
   base_url: "http://localhost:11434"     # Ollama API server endpoint
   temperature: 0.0                       # Sampling temperature (0.0 for deterministic outputs)
   context_window: 10000                  # Context window size in tokens (num_ctx)
-  reasoning_effort: "medium"             # Reasoning effort: low, medium, high, disabled, hide, enabled
+  reasoning_effort: "medium"             # Reasoning effort: low, medium, high, xhigh, disabled, hide, enabled
 
 # Agent Runtime Behavior & Security Policies
 runtime:
@@ -76,7 +76,7 @@ subagents:
 | `model.base_url` | `str` | `http://localhost:11434` | Ollama native API endpoint. |
 | `model.temperature` | `float` | `0.0` | Sampling temperature for model responses. |
 | `model.context_window` | `int` | `10000` | Fallback context window token limit (`num_ctx`). |
-| `model.reasoning_effort` | `str` | `medium` | Default reasoning effort (`low`, `medium`, `high`, `disabled`, `hide`, `enabled`). |
+| `model.reasoning_effort` | `str` | `medium` | Default reasoning effort (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
 | `runtime.allow_traversal` | `bool` | `false` | If true, permits filesystem operations outside project working directory. |
 | `runtime.builtin_tool_timeout` | `int` | `30` | Execution timeout in seconds for tool and shell commands. |
 | `runtime.collapse_thinking` | `bool` | `true` | If true, collapses reasoning blocks by default in REPL output. |
@@ -141,10 +141,14 @@ The `--effort` flag and `model.reasoning_effort` setting control model reasoning
 
 | Model Family | `--effort` Value | Ollama API Parameter | Behavior |
 | :--- | :--- | :--- | :--- |
+| **Qwen 3.8** | `xhigh` / `medium` / `low` | `"xhigh"` / `"medium"` / `"low"` | Sets reasoning depth and controls cost (`xhigh` [default]: complex tasks demanding thorough analysis; `medium`: balancing accuracy and speed; `low`: efficient reasoning optimizing for speed and cost). |
+| **Qwen 3.8** | `high` / `enabled` | `"xhigh"` | Enables reasoning with default `xhigh` level. |
+| **Qwen 3.8** | `hide` | `"xhigh"` | Generates reasoning trace at default level but collapses/hides it from the UI. |
+| **Qwen 3.8** | `disabled` | `false` | Disables reasoning trace generation at the model level. |
 | **GPT-OSS** | `low` / `medium` / `high` | `"low"` / `"medium"` / `"high"` | Sets thinking trace depth string. |
 | **GPT-OSS** | `disabled` / `hide` | *(omitted)* | GPT-OSS cannot disable thinking; emits warning, uses default effort, and hides reasoning trace in UI. |
 | **GPT-OSS** | `enabled` | `"medium"` | Enables thinking with default `medium` level. |
-| **Other Reasoning Models**<br>*(Qwen 3, DeepSeek R1, DeepSeek-v3.1)* | `low` / `medium` / `high` / `enabled` | `true` | Enables native reasoning generation. |
+| **Other Reasoning Models**<br>*(Qwen 3, DeepSeek R1, DeepSeek-v3.1)* | `low` / `medium` / `high` / `xhigh` / `enabled` | `true` | Enables native reasoning generation. |
 | **Other Reasoning Models** | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
 | **Other Reasoning Models** | `disabled` | `false` | Disables reasoning trace generation at the model level. |
 | **Non-Thinking Models** | *(any)* | *(omitted)* | Setting is ignored gracefully. |

@@ -45,6 +45,7 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
 
     def test_validate_reasoning_effort_valid(self) -> None:
         self.assertEqual(validate_reasoning_effort("high"), "high")
+        self.assertEqual(validate_reasoning_effort("xhigh"), "xhigh")
         self.assertEqual(validate_reasoning_effort("low"), "low")
         self.assertEqual(validate_reasoning_effort("disabled"), "disabled")
 
@@ -86,6 +87,38 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         # gpt-oss special model
         res = await resolve_ollama_reasoning("gpt-oss:latest", "high", "http://localhost:11434")
         self.assertEqual(res, "high")
+        res_xhigh = await resolve_ollama_reasoning("gpt-oss:latest", "xhigh", "http://localhost:11434")
+        self.assertEqual(res_xhigh, "high")
+
+        # Qwen 3.8 models
+        for qwen_model in ("qwen3.8:latest", "qwen3.8:32b", "qwen-3.8:7b", "qwen:3.8"):
+            self.assertEqual(
+                await resolve_ollama_reasoning(qwen_model, "xhigh", "http://localhost:11434"),
+                "xhigh",
+            )
+            self.assertEqual(
+                await resolve_ollama_reasoning(qwen_model, "medium", "http://localhost:11434"),
+                "medium",
+            )
+            self.assertEqual(
+                await resolve_ollama_reasoning(qwen_model, "low", "http://localhost:11434"),
+                "low",
+            )
+            self.assertEqual(
+                await resolve_ollama_reasoning(qwen_model, "high", "http://localhost:11434"),
+                "xhigh",
+            )
+            self.assertEqual(
+                await resolve_ollama_reasoning(qwen_model, "enabled", "http://localhost:11434"),
+                "xhigh",
+            )
+            self.assertEqual(
+                await resolve_ollama_reasoning(qwen_model, "hide", "http://localhost:11434"),
+                "xhigh",
+            )
+            self.assertFalse(
+                await resolve_ollama_reasoning(qwen_model, "disabled", "http://localhost:11434"),
+            )
 
     @patch("ollama_agent.core.models.model_supports_tools")
     async def test_ensure_model_supports_tools_raises(self, mock_supports: AsyncMock) -> None:

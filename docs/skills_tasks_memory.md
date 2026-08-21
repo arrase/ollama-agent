@@ -86,7 +86,7 @@ reasoning_effort: "medium"
 - **`title`**: Descriptive title of the task.
 - **`prompt`**: Instruction prompt to execute.
 - **`model`**: Ollama model designated for this task.
-- **`reasoning_effort`**: Reasoning effort setting (`low`, `medium`, `high`, `disabled`, `hide`, `enabled`).
+- **`reasoning_effort`**: Reasoning effort setting (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`).
 
 ### Task Management Commands
 

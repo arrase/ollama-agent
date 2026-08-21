@@ -86,6 +86,7 @@ class TestCommonUtilities(unittest.TestCase):
     def test_allowed_reasoning_efforts_contains_defaults(self) -> None:
         self.assertIn(DEFAULT_REASONING_EFFORT, ALLOWED_REASONING_EFFORTS)
         self.assertIn("high", ALLOWED_REASONING_EFFORTS)
+        self.assertIn("xhigh", ALLOWED_REASONING_EFFORTS)
         self.assertIn("low", ALLOWED_REASONING_EFFORTS)
 
 

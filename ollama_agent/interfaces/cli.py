@@ -30,7 +30,7 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         "--effort",
         type=str,
         choices=list(ALLOWED_REASONING_EFFORTS),
-        help="Set reasoning effort level (low, medium, high, disabled, hide, enabled)",
+        help="Set reasoning effort level (low, medium, high, xhigh, disabled, hide, enabled)",
     )
     parser.add_argument(
         "-t",
@@ -105,7 +105,7 @@ def _add_task_subcommands(parser: argparse.ArgumentParser) -> None:
         type=str,
         choices=list(ALLOWED_REASONING_EFFORTS),
         required=False,
-        help="Reasoning effort to save with the task (low, medium, high, disabled, hide, enabled)",
+        help="Reasoning effort to save with the task (low, medium, high, xhigh, disabled, hide, enabled)",
     )
     task_create.add_argument(
         "--force", action="store_true", help="Overwrite task if it already exists"
