@@ -10,12 +10,16 @@ from typing import TYPE_CHECKING, Any
 from rich.console import Console
 from rich.table import Table
 
-from ..agent.episodic_memory import search_past_conversations_in_db
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+
+from ..agent.episodic_memory import format_iso_timestamp, search_past_conversations_in_db
 from ..core.common import extract_text
 from ..settings.paths import HISTORY_DB_PATH
 
 if TYPE_CHECKING:
     from ..agent import AgentRuntime
+
+_serializer = JsonPlusSerializer()
 
 
 def new_session(console: Console) -> str:
@@ -30,7 +34,7 @@ def new_session(console: Console) -> str:
 
 
 def get_available_sessions(db_path: Path = HISTORY_DB_PATH) -> list[dict[str, Any]]:
-    """Retrieve unique sessions stored in the SQLite history database."""
+    """Retrieve unique sessions stored in the SQLite history database with timestamps and step counts."""
     if not db_path.exists():
         return []
 
@@ -38,10 +42,26 @@ def get_available_sessions(db_path: Path = HISTORY_DB_PATH) -> list[dict[str, An
         with sqlite3.connect(str(db_path)) as conn:
             cursor = conn.cursor()
             cursor.execute(
+                "SELECT thread_id, type, checkpoint FROM checkpoints ORDER BY rowid ASC"
+            )
+            timestamps: dict[str, str] = {}
+            for tid, typ, chk in cursor.fetchall():
+                c = _serializer.loads_typed((typ, chk))
+                if isinstance(c, dict) and "ts" in c:
+                    timestamps[tid] = str(c["ts"])
+
+            cursor.execute(
                 "SELECT thread_id, COUNT(*) as steps FROM checkpoints GROUP BY thread_id ORDER BY MAX(rowid) DESC"
             )
             rows = cursor.fetchall()
-            return [{"thread_id": row[0], "steps": row[1]} for row in rows]
+            return [
+                {
+                    "thread_id": row[0],
+                    "steps": row[1],
+                    "timestamp": format_iso_timestamp(timestamps.get(row[0], "")),
+                }
+                for row in rows
+            ]
     except (sqlite3.Error, OSError):
         return []
 
@@ -51,7 +71,7 @@ def list_sessions(
     db_path: Path = HISTORY_DB_PATH,
     current_thread_id: str = "",
 ) -> list[dict[str, Any]]:
-    """List available chat sessions with step counts and current session indicator."""
+    """List available chat sessions with step counts, timestamps, and current session indicator."""
     sessions = get_available_sessions(db_path)
     if not sessions:
         console.print("[yellow]No saved sessions found in history.[/yellow]")
@@ -59,15 +79,17 @@ def list_sessions(
 
     table = Table(title="Saved Sessions", header_style="bold cyan")
     table.add_column("Session ID", style="bold")
+    table.add_column("Date / Time", style="cyan", justify="left")
     table.add_column("Steps", justify="right", style="dim")
     table.add_column("Status", justify="left")
 
     for s in sessions:
         tid = s["thread_id"]
+        ts = s["timestamp"]
         steps = str(s["steps"])
         is_current = tid == current_thread_id or (current_thread_id and tid.startswith(current_thread_id))
         marker = "[green]◀ current[/green]" if is_current else ""
-        table.add_row(tid, steps, marker)
+        table.add_row(tid, ts, steps, marker)
 
     console.print(table)
     console.print("[dim]Use /session resume <id> to switch to a previous session.[/dim]")
@@ -247,6 +269,7 @@ def search_sessions(
 
     table = Table(title=f"Search Results for '{clean_query}'", header_style="bold cyan")
     table.add_column("Session ID", style="bold", width=14)
+    table.add_column("Date / Time", style="cyan", width=17)
     table.add_column("Score", justify="right", width=6)
     table.add_column("Snippet Preview", justify="left")
 
@@ -254,9 +277,10 @@ def search_sessions(
         tid = item["thread_id"]
         is_current = tid == current_thread_id or (current_thread_id and tid.startswith(current_thread_id))
         tid_display = f"{tid[:8]}" + (" [green]◀ current[/green]" if is_current else "")
+        ts_display = item["formatted_date"]
         score_display = str(item["score"])
         snippets_display = "\n".join(item["snippets"][:2])
-        table.add_row(tid_display, score_display, snippets_display)
+        table.add_row(tid_display, ts_display, score_display, snippets_display)
 
     console.print(table)
     console.print("[dim]Use /session resume <id> to switch to a matched session.[/dim]")

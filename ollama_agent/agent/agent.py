@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from datetime import datetime
 import logging
 import platform
 import uuid
@@ -124,7 +125,8 @@ class AgentRuntime:
             if "{RAG_POLICY}" in instructions:
                 instructions = instructions.replace("{RAG_POLICY}", "")
 
-        os_info = f"\n\n# ENVIRONMENT\nOperating System: {platform.system()} ({platform.release()})\n"
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+        os_info = f"\n\n# ENVIRONMENT\nOperating System: {platform.system()} ({platform.release()})\nCurrent Date & Time: {now_str}\n"
         self._instructions = instructions + os_info
 
         await asyncio.to_thread(ensure_memory_file, MEMORY_PATH)

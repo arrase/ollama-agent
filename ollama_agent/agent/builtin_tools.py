@@ -68,7 +68,7 @@ async def rag_search(query: str, top_k: int | None = None) -> RAGToolResult:
 
 @tool
 async def search_past_conversations(query: str, limit: int = 3) -> str:
-    """Search past conversation sessions and episodic memory for relevant solutions, decisions, or context."""
+    """Search past conversation sessions and episodic memory by keywords, topics, or dates (e.g. 'yesterday', 'auth', 'database'). Returns timestamped excerpts of previous sessions."""
     results = search_past_conversations_in_db(
         query=query,
         exclude_thread_id=get_active_thread_id(),
