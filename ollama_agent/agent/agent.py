@@ -48,7 +48,13 @@ from ..settings import (
     save_settings,
 )
 from ..streaming.parsers import streaming_reasoning, streaming_text
-from .builtin_tools import BUILTIN_TOOLS, get_rag_manager, get_tool_timeout, rag_search
+from .builtin_tools import (
+    BUILTIN_TOOLS,
+    get_rag_manager,
+    get_tool_timeout,
+    rag_search,
+    set_active_thread_id,
+)
 from .middleware import stream_tool_events_mw
 from .subagents import build_subagents
 
@@ -255,6 +261,7 @@ class AgentRuntime:
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream agent events for the given prompt."""
         thread = thread_id or self.thread_id
+        set_active_thread_id(thread)
         if self.graph is None:
             await self.reload()
         assert self.graph is not None

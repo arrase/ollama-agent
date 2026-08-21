@@ -9,10 +9,15 @@ from langchain.tools import tool
 
 from ..core import RAGToolResult
 from ..rag import RAGError, RAGManager
+from .episodic_memory import (
+    format_past_conversations_context,
+    search_past_conversations_in_db,
+)
 
 
 _tool_timeout: ContextVar[int] = ContextVar("tool_timeout", default=30)
 _rag_manager: ContextVar[RAGManager | None] = ContextVar("rag_manager", default=None)
+_active_thread_id: ContextVar[str] = ContextVar("active_thread_id", default="")
 
 
 def set_tool_timeout(timeout: int) -> None:
@@ -29,6 +34,14 @@ def set_rag_manager(mgr: RAGManager | None) -> None:
 
 def get_rag_manager() -> RAGManager | None:
     return _rag_manager.get()
+
+
+def set_active_thread_id(thread_id: str) -> None:
+    _active_thread_id.set(thread_id)
+
+
+def get_active_thread_id() -> str:
+    return _active_thread_id.get()
 
 
 @tool
@@ -53,5 +66,17 @@ async def rag_search(query: str, top_k: int | None = None) -> RAGToolResult:
         return {"success": False, "error": str(exc)}
 
 
-BUILTIN_TOOLS: list[Any] = []
+@tool
+async def search_past_conversations(query: str, limit: int = 3) -> str:
+    """Search past conversation sessions and episodic memory for relevant solutions, decisions, or context."""
+    results = search_past_conversations_in_db(
+        query=query,
+        exclude_thread_id=get_active_thread_id(),
+        limit=limit,
+    )
+    return format_past_conversations_context(results)
+
+
+BUILTIN_TOOLS: list[Any] = [search_past_conversations]
+
 

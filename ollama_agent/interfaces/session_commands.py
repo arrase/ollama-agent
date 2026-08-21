@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from rich.console import Console
 from rich.table import Table
 
+from ..agent.episodic_memory import search_past_conversations_in_db
 from ..core.common import extract_text
 from ..settings.paths import HISTORY_DB_PATH
 
@@ -219,3 +220,45 @@ async def compact_session(
     else:
         console.print(f"[yellow]{res.get('message', 'Compaction failed.')}[/yellow]")
     return res
+
+
+def search_sessions(
+    console: Console,
+    query: str,
+    db_path: Path = HISTORY_DB_PATH,
+    current_thread_id: str = "",
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Search chat sessions matching query keywords and display formatted results."""
+    clean_query = query.strip()
+    if not clean_query:
+        console.print("[yellow]Please provide a search query.[/yellow]")
+        return []
+
+    results = search_past_conversations_in_db(
+        query=clean_query,
+        db_path=db_path,
+        exclude_thread_id="",
+        limit=limit,
+    )
+    if not results:
+        console.print(f"[yellow]No sessions found matching '[bold]{clean_query}[/bold]'.[/yellow]")
+        return []
+
+    table = Table(title=f"Search Results for '{clean_query}'", header_style="bold cyan")
+    table.add_column("Session ID", style="bold", width=14)
+    table.add_column("Score", justify="right", width=6)
+    table.add_column("Snippet Preview", justify="left")
+
+    for item in results:
+        tid = item["thread_id"]
+        is_current = tid == current_thread_id or (current_thread_id and tid.startswith(current_thread_id))
+        tid_display = f"{tid[:8]}" + (" [green]◀ current[/green]" if is_current else "")
+        score_display = str(item["score"])
+        snippets_display = "\n".join(item["snippets"][:2])
+        table.add_row(tid_display, score_display, snippets_display)
+
+    console.print(table)
+    console.print("[dim]Use /session resume <id> to switch to a matched session.[/dim]")
+    return results
+

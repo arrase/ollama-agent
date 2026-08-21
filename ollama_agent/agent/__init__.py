@@ -6,6 +6,7 @@ from .builtin_tools import (
     get_rag_manager,
     get_tool_timeout,
     rag_search,
+    search_past_conversations,
     set_rag_manager,
     set_tool_timeout,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "get_rag_manager",
     "get_tool_timeout",
     "rag_search",
+    "search_past_conversations",
     "set_rag_manager",
     "set_tool_timeout",
 ]

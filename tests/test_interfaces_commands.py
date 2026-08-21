@@ -236,6 +236,10 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         await safe_call(handlers["/session"].handler, ["new"])
         await safe_call(handlers["/session"].handler, ["resume", "session-1234"])
 
+        with patch("ollama_agent.interfaces.dispatch.search_sessions") as mock_search_sess:
+            handlers["/session"].handler(["search", "my-query"])
+            mock_search_sess.assert_called_once()
+
         with patch("ollama_agent.interfaces.dispatch.delete_session") as mock_del_sess:
             handlers["/session"].handler(["delete", "session-1234"])
             mock_del_sess.assert_called_once_with(console, "session-1234")
@@ -255,6 +259,14 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             handled = handle_cli_commands(args, settings)
             self.assertTrue(handled)
             mock_list.assert_called_once()
+
+    def test_handle_cli_commands_session_search(self) -> None:
+        args = argparse.Namespace(command="session-search", query="fastapi", prompt=None, yolo=False, rag=None)
+        settings = Settings()
+        with patch("ollama_agent.interfaces.dispatch.search_sessions") as mock_search:
+            handled = handle_cli_commands(args, settings)
+            self.assertTrue(handled)
+            mock_search.assert_called_once()
 
     def test_handle_cli_commands_session_delete(self) -> None:
         args = argparse.Namespace(command="session-delete", session_id="session-123", prompt=None, yolo=False, rag=None)

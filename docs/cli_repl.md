@@ -122,6 +122,9 @@ ollama-agent skill-delete api-design
 # List all saved chat sessions with step counts
 ollama-agent session-list
 
+# Search past sessions by keyword
+ollama-agent session-search "dockerize fastapi"
+
 # Export a session to a Markdown document
 ollama-agent session-export 4d7e2a1b -o ./exports/session_summary.md
 
@@ -147,7 +150,7 @@ Slash commands provide full application control directly within the REPL:
 | :--- | :--- | :--- |
 | `/help` | `/help` | Display interactive help panel categorized by feature. |
 | `/model` | `/model [list \| set <model>]` | List available Ollama models (with tool support indicators) or switch model mid-session. |
-| `/session` | `/session [list \| resume <id> \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Resume conversations, export to Markdown, or delete history. |
+| `/session` | `/session [list \| search <query> \| resume <id> \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume threads, export to Markdown, or delete history. |
 | `/compact` | `/compact` (alias: `/compress`) | Manually compact conversation history into a structured summary to reclaim context window tokens. |
 | `/task` | `/task [list \| create <id> \| run <id> [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` launches an interactive modal dialog. |
 | `/skill` | `/skill [list \| show <id> \| create <id> \| delete <id>]` | Manage agent skills. `/skill create` launches an interactive modal dialog. |
@@ -291,14 +294,11 @@ The `--effort` flag (and `model.reasoning_effort` in `settings.yaml`) controls m
 
 | Model Family | `--effort` Value | Ollama API Parameter | Behavior |
 | :--- | :--- | :--- | :--- |
-| **Qwen 3.8** | `xhigh` / `medium` / `low` | `"xhigh"` / `"medium"` / `"low"` | Sets reasoning depth and controls cost (`xhigh` [default]: complex tasks demanding thorough analysis; `medium`: balancing accuracy and speed; `low`: efficient reasoning optimizing for speed and cost). |
-| **Qwen 3.8** | `high` / `enabled` | `"xhigh"` | Enables reasoning with default `xhigh` level. |
-| **Qwen 3.8** | `hide` | `"xhigh"` | Generates reasoning trace at default level but collapses/hides it from the UI. |
-| **Qwen 3.8** | `disabled` | `false` | Disables reasoning trace generation at the model level. |
-| **GPT-OSS** | `low` / `medium` / `high` | `"low"` / `"medium"` / `"high"` | Sets thinking trace depth. GPT-OSS accepts string effort levels. |
-| **GPT-OSS** | `disabled` / `hide` | *(omitted)* | GPT-OSS cannot disable thinking; emits warning, uses default effort, and hides reasoning trace in UI. |
+| **GPT-OSS** | `low` / `medium` / `high` / `xhigh` | `"low"` / `"medium"` / `"high"` / `"xhigh"` | Sets thinking trace depth. GPT-OSS accepts string effort levels. |
 | **GPT-OSS** | `enabled` | `"medium"` | Enables thinking with default `medium` level. |
-| **Other Reasoning Models**<br>*(Qwen 3, DeepSeek R1, DeepSeek-v3.1)* | `low` / `medium` / `high` / `xhigh` / `enabled` | `true` | Enables native reasoning generation. |
-| **Other Reasoning Models** | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
-| **Other Reasoning Models** | `disabled` | `false` | Disables reasoning trace generation at the model level. |
+| **GPT-OSS** | `hide` | *(omitted)* | Uses model default effort and hides reasoning trace in UI. |
+| **GPT-OSS** | `disabled` | *(omitted)* | GPT-OSS cannot disable thinking; emits warning, uses default effort, and hides reasoning trace in UI. |
+| **Reasoning Models**<br>*(Qwen 2.5/3, DeepSeek R1, DeepSeek-v3.1)* | `low` / `medium` / `high` / `xhigh` / `enabled` | `true` | Enables native reasoning generation. |
+| **Reasoning Models** | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
+| **Reasoning Models** | `disabled` | `false` | Disables reasoning trace generation at the model level. |
 | **Non-Thinking Models** | *(any)* | *(omitted)* | Setting is ignored gracefully. |
