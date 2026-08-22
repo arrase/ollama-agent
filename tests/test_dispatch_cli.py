@@ -91,7 +91,6 @@ class TestDispatchAndCLI(unittest.TestCase):
             base_url=lambda: "http://localhost:11434",
             switch_model=dummy_async_str,
             handle_exit=lambda _: None,
-            handle_clear=lambda _: None,
             handle_new=dummy_async_list,
             handle_task_create=lambda _: None,
             handle_skill_create=lambda _: None,

@@ -509,9 +509,20 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             chat_scroll = app.query_one("#chat-scroll")
             await chat_scroll.mount(UserMessage("clear me"))
             await pilot.pause()
-            await app._run_slash_command("/clear")
+            with patch("ollama_agent.interfaces.repl.new_session", return_value="newsess12345678"):
+                await app._run_slash_command("/clear")
+                await pilot.pause()
+                self.assertEqual(len(list(chat_scroll.query(UserMessage))), 0)
+                self.assertEqual(repl_mock.runtime.thread_id, "newsess12345678")
+
+            # 1b. /new
+            await chat_scroll.mount(UserMessage("new me"))
             await pilot.pause()
-            self.assertEqual(len(list(chat_scroll.query(UserMessage))), 0)
+            with patch("ollama_agent.interfaces.repl.new_session", return_value="newsess87654321"):
+                await app._run_slash_command("/new")
+                await pilot.pause()
+                self.assertEqual(len(list(chat_scroll.query(UserMessage))), 0)
+                self.assertEqual(repl_mock.runtime.thread_id, "newsess87654321")
 
             # 2. Unknown command
             await app._run_slash_command("/unknown-cmd")
