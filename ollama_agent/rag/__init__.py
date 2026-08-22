@@ -17,11 +17,10 @@ from .manager import (
     RAGManager,
     RAGNotLoadedError,
 )
-from .settings import DEFAULT_RAG_DIR, RAGSettings
+from .settings import RAGSettings
 
 __all__ = [
     # Settings
-    "DEFAULT_RAG_DIR",
     "RAGSettings",
     # Manager
     "RAGError",

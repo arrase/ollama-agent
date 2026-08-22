@@ -37,13 +37,17 @@ async def _show_model(model: str, base_url: str) -> Any:
         ) from exc
 
 
-def _parse_num_ctx(text: str | None) -> int | None:
+def _parse_modelfile_param(text: str | None, param_name: str) -> str | None:
     if not text:
         return None
-    match = re.search(
-        r"^\s*(?:PARAMETER\s+)?num_ctx\s+(\d+)\s*$", text, re.IGNORECASE | re.MULTILINE
-    )
-    return int(match.group(1)) if match else None
+    pattern = rf"^\s*(?:PARAMETER\s+)?{re.escape(param_name)}\s+([^\s\n]+)"
+    match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def _parse_num_ctx(text: str | None) -> int | None:
+    val = _parse_modelfile_param(text, "num_ctx")
+    return int(val) if val and val.isdigit() else None
 
 
 def _model_context_length(model_info: dict[str, Any]) -> int | None:
@@ -133,8 +137,7 @@ async def resolve_ollama_reasoning(
             return DEFAULT_REASONING_EFFORT
         return effort
 
-    caps = await get_model_capabilities(model, base_url)
-    if "thinking" not in caps:
+    if not await model_supports_thinking(model, base_url):
         return None
 
     if effort in ("hide", "enabled"):
@@ -150,14 +153,6 @@ OLLAMA_PARAM_DEFAULTS: dict[str, Any] = {
     "presence_penalty": 0.0,
     "repeat_penalty": 1.1,
 }
-
-
-def _parse_modelfile_param(text: str | None, param_name: str) -> str | None:
-    if not text:
-        return None
-    pattern = rf"^\s*(?:PARAMETER\s+)?{re.escape(param_name)}\s+([^\s\n]+)"
-    match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
-    return match.group(1) if match else None
 
 
 async def resolve_model_parameters(
@@ -250,7 +245,7 @@ async def create_ollama_chat_model(
     presence_penalty: float | None = None,
     repeat_penalty: float | None = None,
     warn_callback: Callable[[str], None] = lambda _: None,
-) -> ChatOllama:
+) -> OllamaChatModel:
     """Create a native ChatOllama model with resolved runtime settings."""
     host = base_url.rstrip("/")
     reasoning = await resolve_ollama_reasoning(

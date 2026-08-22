@@ -80,11 +80,14 @@ class ConsoleStreamingRenderer(StreamingRenderer):
             if part:
                 self.console.print(part, end="", style="dim italic magenta")
 
+    def _agent_prefix(self, event: dict[str, Any]) -> str:
+        agent = event.get("agent_name")
+        return f"[{agent}] " if isinstance(agent, str) and agent else ""
+
     def on_tool_call(self, event: dict[str, Any]) -> None:
         self._end_reasoning()
         self._toggle_live(False)
-        agent = event.get("agent_name")
-        prefix = f"[{agent}] " if isinstance(agent, str) and agent else ""
+        prefix = self._agent_prefix(event)
         tool_name = event["name"]
         self.console.print(
             f"  [yellow]✦ {prefix}Calling tool:[/yellow] [bold yellow]{tool_name}[/bold yellow]"
@@ -95,8 +98,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         # Tool outputs are meant for the model; printing them makes the CLI noisy
         # and can interleave with streamed assistant output.
         out_len = event.get("output_len")
-        agent = event.get("agent_name")
-        prefix = f"[{agent}] " if isinstance(agent, str) and agent else ""
+        prefix = self._agent_prefix(event)
         suffix = f" ({out_len} chars)" if isinstance(out_len, int) else ""
         self.console.print(
             f"  [dim cyan]✓ {prefix}Tool output received{suffix}[/dim cyan]\n"
@@ -114,7 +116,6 @@ class ConsoleStreamingRenderer(StreamingRenderer):
             f"  [yellow]⚠ Warning: {event['content']}[/yellow]"
         )
 
-
     async def handle_interrupt(
         self, event: dict[str, Any], runtime: AgentRuntime
     ) -> list[dict[str, Any]] | None:
@@ -131,7 +132,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         action_requests = interrupt_val.get("action_requests", [])
 
         for req in action_requests:
-            name = req.get("name", "unknown")
+            name = req["name"]
             args = req.get("args", {})
             self.console.print(f"  Tool: [bold]{name}[/bold]")
             self.console.print(f"  Arguments: {args}")
@@ -151,11 +152,11 @@ class ConsoleStreamingRenderer(StreamingRenderer):
                 elif choice == "r":
                     return [{
                         "type": "reject",
-                        "message": f"User rejected executing tool '{r.get('name')}'."
+                        "message": f"User rejected executing tool '{r['name']}'."
                     } for r in action_requests]
                 elif choice == "s":
                     for req in action_requests:
-                        runtime.auto_approved_tools.add(req.get("name", ""))
+                        runtime.auto_approved_tools.add(req["name"])
                     return [{"type": "approve"} for _ in action_requests]
                 elif choice == "c":
                     self.console.print("  [red]✗ Cancelled[/red]\n")

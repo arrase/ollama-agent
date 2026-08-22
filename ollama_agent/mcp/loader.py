@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import re
-from contextlib import AsyncExitStack
 from typing import Any
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -26,14 +25,15 @@ def _resolve_env(env: dict[str, str]) -> dict[str, str] | None:
     """
     if not env:
         return {}
+
+    def _replace(match: re.Match[str]) -> str:
+        var_name = match.group(1) or match.group(2)
+        if var_name not in os.environ:
+            raise KeyError(var_name)
+        return os.environ[var_name]
+
     resolved: dict[str, str] = {}
     for key, value in env.items():
-        def _replace(match: re.Match[str]) -> str:
-            var_name = match.group(1) or match.group(2)
-            if var_name not in os.environ:
-                raise KeyError(var_name)
-            return os.environ[var_name]
-
         try:
             resolved[key] = _ENV_RE.sub(_replace, value)
         except KeyError as exc:
@@ -57,7 +57,7 @@ def _build_mcp_connection(cfg: dict[str, Any]) -> dict[str, Any] | None:
                 return None
             if resolved:
                 out["env"] = resolved
-        return out
+            return out
 
     url = cfg.get("url") or cfg.get("httpUrl")
     if url:
@@ -70,7 +70,7 @@ def _build_mcp_connection(cfg: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-async def load_main_mcp_tools(exit_stack: AsyncExitStack | None = None) -> list[Any]:
+async def load_main_mcp_tools() -> list[Any]:
     """Load flat MCP tools for the main agent from mcp_servers.json."""
     if not MCP_SERVERS_PATH.exists():
         return []
@@ -119,7 +119,6 @@ async def load_main_mcp_tools(exit_stack: AsyncExitStack | None = None) -> list[
 async def load_subagent_mcp_tools(
     subagent_name: str,
     mcp_servers: list[SubAgentMCPServer],
-    exit_stack: AsyncExitStack | None = None,
 ) -> list[Any]:
     """Load MCP tools for a subagent's MCP servers."""
     servers: dict[str, dict[str, Any]] = {}

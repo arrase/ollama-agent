@@ -35,20 +35,19 @@ class AgentHeader(Static):
 
     def update_header(self) -> None:
         ms = self.repl.runtime.settings.model
-        tokens = getattr(self.repl.runtime, "last_context_tokens", 0)
-        tokens = tokens if isinstance(tokens, (int, float)) else 0
-        num_ctx = getattr(ms, "context_window", 0)
-        num_ctx = num_ctx if isinstance(num_ctx, (int, float)) else 0
+        tokens = self.repl.runtime.last_context_tokens
+        num_ctx = ms.context_window
 
-        if num_ctx > 0:
-            pct = int((tokens / num_ctx) * 100)
+        if isinstance(num_ctx, int) and num_ctx > 0:
+            tokens_val = tokens if isinstance(tokens, (int, float)) else 0
+            pct = int((tokens_val / num_ctx) * 100)
             if pct > 90:
                 color = "#f87171"
             elif pct > 75:
                 color = "#fbbf24"
             else:
                 color = "#38bdf8"
-            tok_str = f"{tokens / 1000:.1f}k" if tokens >= 1000 else str(int(tokens))
+            tok_str = f"{tokens_val / 1000:.1f}k" if tokens_val >= 1000 else str(int(tokens_val))
             ctx_str = f"{num_ctx / 1000:.1f}k" if num_ctx >= 1000 else str(int(num_ctx))
             ctx_info = f"  [dim]│[/dim]  [bold #8b949e]Context:[/bold #8b949e] [bold {color}]{tok_str}/{ctx_str} ({pct}%)[/bold {color}]"
         else:
@@ -404,36 +403,27 @@ class AgentResponse(Container):
         self.flush_text()
         self._stop_thinking_animation()
 
-    def add_tool_call(self, name: str, agent: str | None = None) -> None:
+    def _reset_active_stream(self) -> None:
         self.flush_text()
         self._stop_thinking_animation()
         self.current_thinking = None
         self.current_thinking_text = None
         self.current_text_widget = None
+
+    def add_tool_call(self, name: str, agent: str | None = None) -> None:
+        self._reset_active_stream()
         self.mount(ToolCallMessage(tool_name=name, agent_name=agent))
 
     def add_tool_output(self, agent: str | None = None, output_len: int | None = None) -> None:
-        self.flush_text()
-        self._stop_thinking_animation()
-        self.current_thinking = None
-        self.current_thinking_text = None
-        self.current_text_widget = None
+        self._reset_active_stream()
         self.mount(ToolOutputMessage(agent_name=agent, output_len=output_len))
 
     def add_error(self, content: str) -> None:
-        self.flush_text()
-        self._stop_thinking_animation()
-        self.current_thinking = None
-        self.current_thinking_text = None
-        self.current_text_widget = None
+        self._reset_active_stream()
         self.mount(SystemMessage(f"[bold #f87171]✕ Error:[/bold #f87171] [red]{content}[/red]"))
 
     def add_warning(self, content: str) -> None:
-        self.flush_text()
-        self._stop_thinking_animation()
-        self.current_thinking = None
-        self.current_thinking_text = None
-        self.current_text_widget = None
+        self._reset_active_stream()
         self.mount(SystemMessage(f"[bold #fbbf24]⚠ Warning:[/bold #fbbf24] [yellow]{content}[/yellow]"))
 
 
@@ -636,8 +626,7 @@ class ToolApprovalWidget(Container):
 
         self.mount(Static(f"  {status_text}", classes="approval-status"))
 
-        if decision_type != "cancel-btn":
-            self.app_ref._current_worker = self.app_ref.run_worker(
-                self.app_ref._handle_approval_decision(decisions, self.scroll, self.agent_msg)
-            )
+        self.app_ref._current_worker = self.app_ref.run_worker(
+            self.app_ref._handle_approval_decision(decisions, self.scroll, self.agent_msg)
+        )
 

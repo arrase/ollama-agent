@@ -14,44 +14,40 @@ from textual import events
 from textual.app import App, ComposeResult
 from textual.worker import Worker
 from textual.containers import Container, Horizontal, ScrollableContainer
-from textual.widgets import Static, OptionList, TextArea
+from textual.widgets import OptionList, Static, TextArea
 from textual.widgets.option_list import Option
-from deepagents.middleware.summarization import count_tokens_approximately
+from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.types import Command
 
 from .clipboard import copy_to_system_clipboard, get_system_clipboard
 from .tui_components import (
     AgentFooter,
     AgentHeader,
-    ReplInput,
-    UserMessage,
     AgentResponse,
-    ToolCallMessage,
-    ToolOutputMessage,
+    ReplInput,
+    SkillCreateModal,
     SystemMessage,
     TaskCreateModal,
-    SkillCreateModal,
     ToolApprovalWidget,
+    UserMessage,
 )
 
 from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager, set_tool_timeout
+from ..core.common import extract_text
 from ..rag import RAGContext, RAGManager, load_rag_database
 from ..skills import SkillsContext, create_skill
-from ..core.common import extract_text
 from ..tasks.commands import CLIContext, TaskError, create_task
-from .dispatch import REPLCommand, build_repl_handlers, render_repl_help, safe_call
+from .dispatch import REPLCommand, build_repl_handlers, safe_call
 from .model_commands import set_model
 from .session_commands import (
     compact_session,
-    delete_session,
     export_session,
     get_available_sessions,
-    list_sessions,
     new_session,
     resume_session,
 )
-from ..streaming import stream_agent_events, StreamingRenderer
+from ..streaming import StreamingRenderer, stream_agent_events
 
 # @-mention regex: matches @"quoted", @'quoted', or @bare at word boundaries.
 _AT_MENTION_RE = re.compile(
@@ -330,24 +326,24 @@ class OllamaAgentApp(App):
             arg_token = parts[2]
 
             if root_cmd == "/task" and sub_cmd in ("run", "delete"):
-                tasks = self.repl._task_ctx.task_manager.list()
+                tasks = self.repl._task_ctx.task_manager.list_all()
                 return [
                     (
                         f"{root_cmd} {sub_cmd} {tid}",
                         Text.from_markup(f"[bold #e6edf3]{tid:<20}[/bold #e6edf3] [dim #8b949e]{t.title}[/dim #8b949e]"),
                     )
-                    for tid, t in tasks.items()
+                    for tid, t in tasks
                     if tid.startswith(arg_token)
                 ]
 
             if root_cmd == "/skill" and sub_cmd in ("show", "delete"):
-                skills = self.repl._skills_ctx.skill_manager.list()
+                skills = self.repl._skills_ctx.skill_manager.list_all()
                 return [
                     (
                         f"{root_cmd} {sub_cmd} {sid}",
                         Text.from_markup(f"[bold #e6edf3]{sid:<20}[/bold #e6edf3] [dim #8b949e]{s.name}[/dim #8b949e]"),
                     )
-                    for sid, s in skills.items()
+                    for sid, s in skills
                     if sid.startswith(arg_token)
                 ]
 
@@ -367,7 +363,7 @@ class OllamaAgentApp(App):
                 return [
                     (
                         f"{root_cmd} {sub_cmd} {d['name']}",
-                        Text.from_markup(f"[bold #e6edf3]{d['name']:<20}[/bold #e6edf3] [dim #8b949e]{d.get('doc_count', 0)} docs[/dim #8b949e]"),
+                        Text.from_markup(f"[bold #e6edf3]{d['name']:<20}[/bold #e6edf3] [dim #8b949e]{d['chunks'] if d['chunks'] is not None else 0} chunks[/dim #8b949e]"),
                     )
                     for d in dbs
                     if d["name"].startswith(arg_token)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextvars import ContextVar
 from typing import Any
 
-from langchain.tools import tool
+from langchain_core.tools import tool
 
 from ..core import RAGToolResult
 from ..rag import RAGError, RAGManager
@@ -60,7 +60,7 @@ async def rag_search(query: str, top_k: int | None = None) -> RAGToolResult:
         for r in results:
             source = r["filename"] or r["source"]
             context_parts.append(f"[Source: {source}]\n{r['content']}")
-        context = "\n\n---\n\n".join(context_parts) if context_parts else ""
+        context = "\n\n---\n\n".join(context_parts)
         return {"success": True, "context": context, "results": results}
     except RAGError as exc:
         return {"success": False, "error": str(exc)}

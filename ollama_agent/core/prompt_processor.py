@@ -84,11 +84,8 @@ def is_binary_file(file_path: Path) -> bool:
         return b"\x00" in chunk
 
 
-def read_file_content(file_path: Path, max_file_size: int = 1024 * 1024) -> str:
-    """Read file content as string, ensuring it is a text file and fits in size limit."""
-    if not file_path.is_file():
-        raise PromptProcessingError(f"Path is not a file: {file_path}")
-
+def _check_file_size(file_path: Path, max_file_size: int) -> None:
+    """Verify that file exists and its size does not exceed max_file_size."""
     try:
         file_size = file_path.stat().st_size
     except OSError as e:
@@ -98,6 +95,14 @@ def read_file_content(file_path: Path, max_file_size: int = 1024 * 1024) -> str:
         raise PromptProcessingError(
             f"File too large: {file_path} ({file_size} bytes, limit is {max_file_size} bytes)"
         )
+
+
+def read_file_content(file_path: Path, max_file_size: int = 1024 * 1024) -> str:
+    """Read file content as string, ensuring it is a text file and fits in size limit."""
+    if not file_path.is_file():
+        raise PromptProcessingError(f"Path is not a file: {file_path}")
+
+    _check_file_size(file_path, max_file_size)
 
     if is_binary_file(file_path):
         raise PromptProcessingError(f"Cannot read binary file as text: {file_path}")
@@ -111,15 +116,7 @@ def read_file_content(file_path: Path, max_file_size: int = 1024 * 1024) -> str:
 
 def read_binary_file_b64(file_path: Path, max_file_size: int = 1024 * 1024) -> str:
     """Read a binary file and return its content as a base64 encoded string."""
-    try:
-        file_size = file_path.stat().st_size
-    except OSError as e:
-        raise PromptProcessingError(f"Failed to get file stats for {file_path}: {e}") from e
-
-    if file_size > max_file_size:
-        raise PromptProcessingError(
-            f"File too large: {file_path} ({file_size} bytes, limit is {max_file_size} bytes)"
-        )
+    _check_file_size(file_path, max_file_size)
 
     try:
         with file_path.open("rb") as f:
@@ -261,11 +258,7 @@ def process_prompt_mentions(
             parsed = urlparse(resolved_target)
             resolved_target = url2pathname(unquote(parsed.path))
 
-        candidate_path = Path(resolved_target).expanduser()
-        if not candidate_path.is_absolute():
-            candidate_path = (Path.cwd() / candidate_path).resolve()
-        else:
-            candidate_path = candidate_path.resolve()
+        candidate_path = Path(resolved_target).expanduser().resolve()
 
         if candidate_path.exists():
             if candidate_path not in resolved_paths:

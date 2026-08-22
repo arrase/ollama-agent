@@ -77,10 +77,6 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
     def __init__(self, skills_dir: Path = SKILLS_DIR) -> None:
         super().__init__(skills_dir)
 
-    @property
-    def skills_dir(self) -> Path:
-        return self.base_dir
-
     @staticmethod
     def validate_skill_id(skill_id: str) -> str:
         """Validate skill_id: letters, numbers, underscore, dash only."""
@@ -109,7 +105,7 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
         """List all skills sorted by name."""
         skills = [
             (d.name, s)
-            for d in sorted(self.base_dir.iterdir())
+            for d in self.base_dir.iterdir()
             if d.is_dir() and (s := _read_skill(d)) is not None
         ]
         return sorted(skills, key=lambda x: x[1].name.lower())

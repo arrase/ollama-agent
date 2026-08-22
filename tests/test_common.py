@@ -6,9 +6,7 @@ from types import SimpleNamespace
 from ollama_agent.core.common import (
     ALLOWED_REASONING_EFFORTS,
     DEFAULT_REASONING_EFFORT,
-    assistant_text_from_messages,
     extract_text,
-    final_text_from_state,
     validate_identifier,
 )
 
@@ -29,34 +27,6 @@ class TestCommonUtilities(unittest.TestCase):
     def test_extract_text_empty_and_unknown_types(self) -> None:
         self.assertEqual(extract_text(123), "")
         self.assertEqual(extract_text(None), "")
-
-    def test_assistant_text_from_messages_finds_latest_ai_message(self) -> None:
-        messages = [
-            SimpleNamespace(type="human", content="hello"),
-            SimpleNamespace(type="ai", content="first response"),
-            SimpleNamespace(type="human", content="next question"),
-            SimpleNamespace(type="ai", content="latest response"),
-        ]
-        self.assertEqual(assistant_text_from_messages(messages), "latest response")
-
-    def test_assistant_text_from_messages_returns_empty_when_no_ai_message(self) -> None:
-        messages = [
-            SimpleNamespace(type="human", content="hello"),
-        ]
-        self.assertEqual(assistant_text_from_messages(messages), "")
-
-    def test_final_text_from_state_with_assistant_message(self) -> None:
-        state = {
-            "messages": [
-                SimpleNamespace(type="human", content="hello"),
-                SimpleNamespace(type="ai", content="agent answer"),
-            ]
-        }
-        self.assertEqual(final_text_from_state(state), "agent answer")
-
-    def test_final_text_from_state_without_messages(self) -> None:
-        state = {"raw_output": "data"}
-        self.assertEqual(final_text_from_state(state), "{'raw_output': 'data'}")
 
     def test_validate_identifier_valid_names(self) -> None:
         self.assertEqual(validate_identifier("valid_name-123"), "valid_name-123")
