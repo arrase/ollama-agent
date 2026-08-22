@@ -70,7 +70,6 @@ async def _stream_tool_events(request: Any, handler: Any) -> Any:
 
         out_event: dict[str, Any] = {
             "type": "tool_output",
-            "output": "",
             "output_len": len(content_str),
         }
         if agent_name:

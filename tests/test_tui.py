@@ -400,14 +400,14 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
 
         # Mock tasks and skills
         mock_task = MagicMock(title="My Test Task")
-        repl_mock._task_ctx.task_manager.list.return_value = {"test-task": mock_task}
+        repl_mock._task_ctx.task_manager.list_all.return_value = [("test-task", mock_task)]
 
         mock_skill = MagicMock()
         mock_skill.name = "My Test Skill"
-        repl_mock._skills_ctx.skill_manager.list.return_value = {"test-skill": mock_skill}
+        repl_mock._skills_ctx.skill_manager.list_all.return_value = [("test-skill", mock_skill)]
 
         mock_rag_mgr = MagicMock()
-        mock_rag_mgr.list_databases.return_value = [{"name": "docs-db", "doc_count": 5}]
+        mock_rag_mgr.list_databases.return_value = [{"name": "docs-db", "chunks": 5}]
         repl_mock._get_rag_ctx.return_value.rag_manager = mock_rag_mgr
 
         app = OllamaAgentApp(repl_mock)
@@ -490,6 +490,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
 
     async def test_run_slash_commands_dispatch(self) -> None:
         repl_mock = MagicMock()
+        repl_mock._handle_new_session = AsyncMock()
         repl_mock.console = Console(file=io.StringIO())
         repl_mock.runtime.settings.model.name = "gemma4:26b"
         repl_mock.runtime.settings.model.reasoning_effort = "medium"

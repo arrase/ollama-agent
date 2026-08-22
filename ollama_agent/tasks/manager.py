@@ -53,10 +53,6 @@ class TaskManager(BaseFileStoreManager[Task]):
     def __init__(self, tasks_dir: Path = TASKS_DIR) -> None:
         super().__init__(tasks_dir)
 
-    @property
-    def tasks_dir(self) -> Path:
-        return self.base_dir
-
     @staticmethod
     def validate_task_id(task_id: str) -> str:
         """Validate task_id: letters, numbers, underscore, dash only."""

@@ -27,11 +27,9 @@ from ..skills import SkillError, SkillsContext, create_skill, delete_skill, list
 from ..tasks.commands import CLIContext, TaskError, create_task, delete_task, list_tasks, run_task
 from .model_commands import list_models, set_model_param, show_model_params
 from .session_commands import (
-    compact_session,
     delete_session,
     export_session,
     list_sessions,
-    new_session,
     resume_session,
     search_sessions,
 )
@@ -170,7 +168,7 @@ def build_repl_handlers(
     def handle_params(args: list[str]) -> object:
         if not args or args[0] == "list":
             if get_runtime is not None:
-                return show_model_params(console, get_runtime())
+                show_model_params(console, get_runtime())
             return None
         if args[0] == "set":
             if len(args) < 3:
@@ -189,7 +187,8 @@ def build_repl_handlers(
 
     def handle_task(args: list[str]) -> object:
         if not args or args[0] == "list":
-            return list_tasks(task_ctx)
+            list_tasks(task_ctx)
+            return None
         sub = args[0]
         if sub == "create":
             return handle_task_create(args[1:])
@@ -204,52 +203,62 @@ def build_repl_handlers(
             if len(args) < 2:
                 console.print("[red]Usage: /task delete <id>[/red]")
                 return None
-            return delete_task(task_ctx, args[1])
+            delete_task(task_ctx, args[1])
+            return None
         console.print(f"[red]Unknown task subcommand '{sub}'. Usage: /task [list | create | run <id> | delete <id>][/red]")
         return None
 
     def handle_skill(args: list[str]) -> object:
         if not args or args[0] == "list":
-            return list_skills(skills_ctx)
+            list_skills(skills_ctx)
+            return None
         sub = args[0]
         if sub == "show":
             if len(args) < 2:
                 console.print("[red]Usage: /skill show <id>[/red]")
                 return None
-            return show_skill(skills_ctx, args[1])
+            show_skill(skills_ctx, args[1])
+            return None
         if sub == "create":
             return handle_skill_create(args[1:])
         if sub == "delete":
             if len(args) < 2:
                 console.print("[red]Usage: /skill delete <id>[/red]")
                 return None
-            return delete_skill(skills_ctx, args[1])
+            delete_skill(skills_ctx, args[1])
+            return None
         console.print(f"[red]Unknown skill subcommand '{sub}'. Usage: /skill [list | show <id> | create | delete <id>][/red]")
         return None
 
     def handle_rag(args: list[str]) -> object:
         if not args or args[0] == "status":
-            return show_rag_status(get_rag_ctx())
+            show_rag_status(get_rag_ctx())
+            return None
         sub = args[0]
         if sub == "list":
-            return list_rag_databases(get_rag_ctx())
+            list_rag_databases(get_rag_ctx())
+            return None
         if sub == "create":
             if len(args) < 2:
                 console.print("[red]Usage: /rag create <name>[/red]")
                 return None
-            return create_rag_database(get_rag_ctx(), args[1])
+            create_rag_database(get_rag_ctx(), args[1])
+            return None
         if sub == "delete":
             if len(args) < 2:
                 console.print("[red]Usage: /rag delete <name>[/red]")
                 return None
-            return delete_rag_database(get_rag_ctx(), args[1])
+            delete_rag_database(get_rag_ctx(), args[1])
+            return None
         if sub == "load":
             if len(args) < 2:
                 console.print("[red]Usage: /rag load <name>[/red]")
                 return None
-            return load_rag_database(get_rag_ctx(), args[1])
+            load_rag_database(get_rag_ctx(), args[1])
+            return None
         if sub == "unload":
-            return unload_rag_database(get_rag_ctx())
+            unload_rag_database(get_rag_ctx())
+            return None
         if sub == "add":
             sub_args = args[1:]
             is_dir = "--dir" in sub_args
@@ -267,7 +276,8 @@ def build_repl_handlers(
 
     def handle_session(args: list[str]) -> object:
         if not args or args[0] == "list":
-            return list_sessions(console, current_thread_id=current_thread_id())
+            list_sessions(console, current_thread_id=current_thread_id())
+            return None
         sub = args[0]
         if sub == "new":
             return handle_new([])
@@ -287,16 +297,18 @@ def build_repl_handlers(
             if len(args) < 2:
                 console.print("[red]Usage: /session search <query>[/red]")
                 return None
-            return search_sessions(
+            search_sessions(
                 console,
                 " ".join(args[1:]),
                 current_thread_id=current_thread_id(),
             )
+            return None
         if sub == "delete":
             if len(args) < 2:
                 console.print("[red]Usage: /session delete <session_id>[/red]")
                 return None
-            return delete_session(console, args[1])
+            delete_session(console, args[1])
+            return None
         console.print(f"[red]Unknown session subcommand '{sub}'. Usage: /session [list | search <query> | resume <id> | new | export [path] | delete <id>][/red]")
         return None
 

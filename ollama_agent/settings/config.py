@@ -11,7 +11,6 @@ from typing import Any, Callable, Self
 import yaml  # type: ignore[import-untyped]
 
 from .paths import (
-    AGENTS_MD_NAME,
     AGENTS_PATH,
     FS_POLICY_SANDBOXED_PATH,
     FS_POLICY_TRAVERSAL_PATH,
@@ -28,40 +27,29 @@ from .paths import (
 # ---------------------------------------------------------------------------
 
 
-def _default_instructions() -> str:
+def _read_bundled_prompt(filename: str) -> str:
     return (
         resources.files(__package__)
-        .joinpath("prompts/default_instructions.md")
+        .joinpath(f"prompts/{filename}")
         .read_text(encoding="utf-8")
         .strip()
     )
+
+
+def _default_instructions() -> str:
+    return _read_bundled_prompt("default_instructions.md")
 
 
 def _default_traversal() -> str:
-    return (
-        resources.files(__package__)
-        .joinpath("prompts/fs_policy_traversal.md")
-        .read_text(encoding="utf-8")
-        .strip()
-    )
+    return _read_bundled_prompt("fs_policy_traversal.md")
 
 
 def _default_sandboxed() -> str:
-    return (
-        resources.files(__package__)
-        .joinpath("prompts/fs_policy_sandboxed.md")
-        .read_text(encoding="utf-8")
-        .strip()
-    )
+    return _read_bundled_prompt("fs_policy_sandboxed.md")
 
 
 def _default_rag_policy() -> str:
-    return (
-        resources.files(__package__)
-        .joinpath("prompts/rag_policy.md")
-        .read_text(encoding="utf-8")
-        .strip()
-    )
+    return _read_bundled_prompt("rag_policy.md")
 
 
 # ---------------------------------------------------------------------------
@@ -170,8 +158,8 @@ class Settings:
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["model"] = {k: v for k, v in d["model"].items() if v is not None}
-        ls = d.get("langsmith", {})
-        if ls and not any(ls.values()):
+        ls = d["langsmith"]
+        if not any(ls.values()):
             d.pop("langsmith", None)
         return d
 
@@ -363,20 +351,15 @@ def reset_config(
     messages: list[str] = []
 
     if option in ("all", "config-file"):
-        if settings_path.exists():
-            settings_path.unlink()
+        settings_path.unlink(missing_ok=True)
         save_settings(Settings(), settings_path)
         messages.append(f"Reset: Restored default configuration at {settings_path}")
 
     if option in ("all", "system-prompt"):
-        if instructions_path.exists():
-            instructions_path.unlink()
-        if traversal_path.exists():
-            traversal_path.unlink()
-        if sandboxed_path.exists():
-            sandboxed_path.unlink()
-        if rag_policy_path.exists():
-            rag_policy_path.unlink()
+        instructions_path.unlink(missing_ok=True)
+        traversal_path.unlink(missing_ok=True)
+        sandboxed_path.unlink(missing_ok=True)
+        rag_policy_path.unlink(missing_ok=True)
         load_instructions(instructions_path)
         load_fs_policy_traversal(traversal_path)
         load_fs_policy_sandboxed(sandboxed_path)

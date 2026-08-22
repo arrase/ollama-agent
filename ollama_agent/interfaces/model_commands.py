@@ -131,7 +131,7 @@ async def set_model(
 def show_model_params(console: Console, runtime: AgentRuntime) -> None:
     """Print the active model parameters and their resolution sources."""
     model_name = runtime.settings.model.name
-    params = getattr(runtime, "effective_model_params", {})
+    params = runtime.effective_model_params
     if not params:
         console.print(
             f"[yellow]No active parameter data for model '{model_name}'.[/yellow]"

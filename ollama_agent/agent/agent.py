@@ -14,11 +14,9 @@ from typing import Any, AsyncGenerator, Self, cast
 
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
-from deepagents.middleware.summarization import (
-    count_tokens_approximately,
-    create_summarization_middleware,
-    create_summarization_tool_middleware,
-)
+from deepagents.middleware.summarization import create_summarization_tool_middleware
+from langchain_core.messages.utils import count_tokens_approximately
+from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import var_child_runnable_config
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
@@ -151,7 +149,7 @@ class AgentRuntime:
             repeat_penalty=ms.repeat_penalty,
             warn_callback=_log.warning,
         )
-        self.effective_model_params = getattr(model, "effective_params", {})
+        self.effective_model_params = model.effective_params
 
         # Backend: CWD for shell + APP_DIR for agent files (memory, etc.)
         timeout = int(get_tool_timeout())
@@ -198,31 +196,23 @@ class AgentRuntime:
         )
 
         # MCP flat tools (for main agent, from mcp_servers.json)
-        mcp_tools = await load_main_mcp_tools(self._exit_stack)
+        mcp_tools = await load_main_mcp_tools()
 
         # Custom subagents (from settings.yaml)
         subagents = await build_subagents(
             self.settings.subagents,
             model_settings=self.settings.model,
-            exit_stack=self._exit_stack,
         )
 
         def should_interrupt_tool(request: Any) -> bool:
             return not self.yolo_mode and request.tool_call["name"] not in self.auto_approved_tools
 
         interrupt_on = {
-            "execute": {
+            tool_name: {
                 "allowed_decisions": ["approve", "reject"],
                 "when": should_interrupt_tool,
-            },
-            "write_file": {
-                "allowed_decisions": ["approve", "reject"],
-                "when": should_interrupt_tool,
-            },
-            "edit_file": {
-                "allowed_decisions": ["approve", "reject"],
-                "when": should_interrupt_tool,
-            },
+            }
+            for tool_name in ("execute", "write_file", "edit_file")
         }
 
         tools: list[Any] = [*BUILTIN_TOOLS, *mcp_tools]
@@ -342,9 +332,9 @@ class AgentRuntime:
         thread = thread_id or self.thread_id
         if self.graph is None or self._summarization_mw is None or self._backend is None:
             await self.reload()
-        assert self.graph is not None
+        assert self.graph is not None and self._summarization_mw is not None and self._backend is not None
 
-        config = {"configurable": {"thread_id": thread}}
+        config: RunnableConfig = {"configurable": {"thread_id": thread}}
         state = await self.graph.aget_state(config)
         if not state or not state.values or "messages" not in state.values:
             return {"success": False, "message": "No messages in session to compact."}

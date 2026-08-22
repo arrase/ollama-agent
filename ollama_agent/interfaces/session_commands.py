@@ -180,6 +180,9 @@ async def export_session(
 
     if runtime.graph is None:
         await runtime.reload()
+    if runtime.graph is None:
+        console.print("[red]Agent runtime graph could not be initialized.[/red]")
+        return None
 
     config = {"configurable": {"thread_id": resolved}}
     state = await runtime.graph.aget_state(config)

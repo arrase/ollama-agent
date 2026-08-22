@@ -101,21 +101,19 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         ]
         mock_model = MagicMock()
 
-        async with AsyncExitStack() as stack:
-            with patch("ollama_agent.agent.subagents.create_ollama_chat_model", AsyncMock(return_value=mock_model)):
-                specs = await build_subagents(sa_list, model_settings=ms, exit_stack=stack)
-                self.assertEqual(len(specs), 1)
-                self.assertEqual(specs[0]["name"], "coder")
-                self.assertEqual(specs[0]["description"], "Writes code")
-                self.assertIn("You are an expert coder", specs[0]["system_prompt"])
+        with patch("ollama_agent.agent.subagents.create_ollama_chat_model", AsyncMock(return_value=mock_model)):
+            specs = await build_subagents(sa_list, model_settings=ms)
+            self.assertEqual(len(specs), 1)
+            self.assertEqual(specs[0]["name"], "coder")
+            self.assertEqual(specs[0]["description"], "Writes code")
+            self.assertIn("You are an expert coder", specs[0]["system_prompt"])
 
     async def test_build_subagents_invalid_name_raises(self) -> None:
         ms = ModelSettings(name="gemma4:26b", base_url="http://localhost:11434")
         sa_list = [SubAgentSettings(name="", description="Missing name")]
 
-        async with AsyncExitStack() as stack:
-            with self.assertRaises(ValueError):
-                await build_subagents(sa_list, model_settings=ms, exit_stack=stack)
+        with self.assertRaises(ValueError):
+            await build_subagents(sa_list, model_settings=ms)
 
     async def test_rag_search_uninitialized(self) -> None:
         set_rag_manager(None)

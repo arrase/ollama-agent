@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +19,7 @@ def format_iso_timestamp(ts: str) -> str:
     """Format ISO timestamp into a human-readable UTC string (YYYY-MM-DD HH:MM UTC)."""
     if not ts:
         return ""
-    dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    dt = datetime.fromisoformat(ts)
     return dt.strftime("%Y-%m-%d %H:%M UTC")
 
 
@@ -43,7 +43,7 @@ def load_past_conversations(
             "SELECT thread_id, type, checkpoint FROM checkpoints ORDER BY rowid ASC"
         )
         for tid, typ, chk in cursor.fetchall():
-            if exclude_thread_id and (tid == exclude_thread_id or tid.startswith(exclude_thread_id)):
+            if exclude_thread_id and tid.startswith(exclude_thread_id):
                 continue
             c = _serializer.loads_typed((typ, chk))
             if isinstance(c, dict) and "ts" in c:
@@ -53,7 +53,7 @@ def load_past_conversations(
             "SELECT thread_id, type, value FROM writes WHERE channel = 'messages' ORDER BY rowid ASC"
         )
         for tid, typ, val in cursor.fetchall():
-            if exclude_thread_id and (tid == exclude_thread_id or tid.startswith(exclude_thread_id)):
+            if exclude_thread_id and tid.startswith(exclude_thread_id):
                 continue
             msgs = _serializer.loads_typed((typ, val))
             if tid not in thread_messages:
@@ -107,7 +107,7 @@ def search_past_conversations_in_db(
         match_count += sum(formatted_date.lower().count(t) for t in terms)
 
         for msg in msgs:
-            role = getattr(msg, "type", None) or getattr(msg, "role", "unknown")
+            role = getattr(msg, "type", "unknown")
             if role not in ("human", "ai", "user", "assistant"):
                 continue
 

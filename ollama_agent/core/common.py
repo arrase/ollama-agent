@@ -19,15 +19,6 @@ ALLOWED_REASONING_EFFORTS: tuple[ReasoningEffortValue, ...] = (
 DEFAULT_REASONING_EFFORT: ReasoningEffortValue = "medium"
 
 
-class CommandResult(TypedDict):
-    """Result from executing a shell command."""
-
-    success: bool
-    stdout: str
-    stderr: str
-    exit_code: int
-
-
 class RAGToolResult(TypedDict, total=False):
     """Result from RAG operations."""
 
@@ -44,34 +35,9 @@ def extract_text(content: Any, *, sep: str = " ") -> str:
     if isinstance(content, list):
         return sep.join(filter(None, (extract_text(c, sep=sep) for c in content))).strip()
     if isinstance(content, dict):
-        text_val = content.get("text")
-        if text_val is None:
-            text_val = content.get("content")
+        text_val = content.get("text") or content.get("content")
         return extract_text(text_val, sep=sep) if text_val is not None else ""
     return ""
-
-
-def assistant_text_from_messages(messages: list[Any]) -> str:
-    """Return the latest assistant/AI textual content."""
-    for msg in reversed(messages):
-        if getattr(msg, "type", None) == "ai":
-            return extract_text(getattr(msg, "content", None))
-    return ""
-
-
-def final_text_from_state(state: dict[str, Any]) -> str:
-    """Extract a final, user-facing string from a DeepAgents state payload."""
-    messages = state.get("messages")
-    if messages:
-        text = assistant_text_from_messages(messages)
-        if text:
-            return text
-
-        last = messages[-1]
-        content = getattr(last, "content", last)
-        extracted = extract_text(content)
-        return extracted if extracted else str(content)
-    return str(state)
 
 
 _WINDOWS_RESERVED_NAMES: frozenset[str] = frozenset({

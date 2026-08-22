@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import platform
-from contextlib import AsyncExitStack
 from typing import Any
 
 from ..core import create_ollama_chat_model, validate_reasoning_effort
@@ -16,11 +15,10 @@ async def build_subagents(
     subagent_settings: list[SubAgentSettings],
     *,
     model_settings: ModelSettings,
-    exit_stack: AsyncExitStack,
 ) -> list[dict[str, Any]]:
     """Convert ``SubAgentSettings`` into dicts for ``create_deep_agent(subagents=...)``."""
     tasks = [
-        _build_spec(sa, model_settings=model_settings, exit_stack=exit_stack)
+        _build_spec(sa, model_settings=model_settings)
         for sa in subagent_settings
     ]
     return await asyncio.gather(*tasks)
@@ -30,7 +28,6 @@ async def _build_spec(
     sa: SubAgentSettings,
     *,
     model_settings: ModelSettings,
-    exit_stack: AsyncExitStack,
 ) -> dict[str, Any]:
     """Build a single subagent spec dict."""
     if not sa.name:
@@ -65,7 +62,7 @@ async def _build_spec(
     spec["skills"] = ["/skills/"]
 
     if sa.mcp_servers:
-        tools = await load_subagent_mcp_tools(sa.name, sa.mcp_servers, exit_stack)
+        tools = await load_subagent_mcp_tools(sa.name, sa.mcp_servers)
         if tools:
             spec["tools"] = tools
 
