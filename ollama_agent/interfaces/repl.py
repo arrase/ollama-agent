@@ -67,8 +67,8 @@ _ROOT_COMMANDS: list[tuple[str, str]] = [
     ("/skill", "Manage skills (list, show, create, delete)"),
     ("/rag", "Manage RAG databases (status, list, create, delete, load, unload, add)"),
     ("/yolo", "Toggle YOLO mode (on/off)"),
-    ("/new", "Start a new chat session"),
-    ("/clear", "Clear the screen"),
+    ("/new", "Start a new chat session and clear the screen"),
+    ("/clear", "Start a new chat session and clear the screen (alias for /new)"),
     ("/help", "Show help message"),
     ("/exit", "Exit the REPL"),
 ]
@@ -526,8 +526,12 @@ class OllamaAgentApp(App):
             self.exit()
             return
 
-        if cmd == "/clear":
+        if cmd in ("/clear", "/new") or (cmd == "/session" and args and args[0] == "new"):
+            await self.repl._handle_new_session([])
             await scroll.remove_children()
+            scroll.mount(SystemMessage(f"[bold #38bdf8]✓ New session started:[/bold #38bdf8] [bold #e6edf3]{self.repl.runtime.thread_id[:8]}[/bold #e6edf3]"))
+            self.query_one(AgentHeader).update_header()
+            self._deferred_scroll()
             return
 
         if cmd in ("/compact", "/compress"):
@@ -602,14 +606,6 @@ class OllamaAgentApp(App):
                 scroll.mount(SystemMessage(f"[bold #38bdf8]✓ Session exported to:[/bold #38bdf8] [bold #e6edf3]{out_file}[/bold #e6edf3]"))
             else:
                 scroll.mount(SystemMessage("[bold #f87171]✕ Failed to export session.[/bold #f87171]"))
-            self._deferred_scroll()
-            return
-
-        if cmd == "/session" and args and args[0] == "new":
-            self.repl.runtime.thread_id = new_session(self.repl.console)
-            await scroll.remove_children()
-            scroll.mount(SystemMessage(f"[bold #38bdf8]✓ New session started:[/bold #38bdf8] [bold #e6edf3]{self.repl.runtime.thread_id[:8]}[/bold #e6edf3]"))
-            self.query_one(AgentHeader).update_header()
             self._deferred_scroll()
             return
 
@@ -811,7 +807,6 @@ class OllamaREPL:
                 base_url=lambda: self.runtime.settings.model.base_url,
                 switch_model=self._switch_model,
                 handle_exit=lambda _: None,
-                handle_clear=lambda _: None,
                 handle_new=self._handle_new_session,
                 handle_task_create=lambda _: None,
                 handle_skill_create=lambda _: None,
@@ -866,6 +861,7 @@ class OllamaREPL:
 
     async def _handle_new_session(self, args: list[str]) -> None:
         self.runtime.thread_id = new_session(self.console)
+        self.runtime.last_context_tokens = 0
 
     def _handle_yolo_cmd(self, args: list[str]) -> None:
         if args:

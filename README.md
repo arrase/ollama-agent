@@ -171,8 +171,8 @@ The REPL provides built-in slash commands for managing models, sessions, tasks, 
 | `/skill` | `/skill [list \| show <id> \| create <id> \| delete <id>]` | Manage agent skills. Opens interactive modal dialogs for skill creation. |
 | `/rag` | `/rag [status \| list \| create <name> \| load <name> \| unload \| add <path> [--dir] \| delete <name>]` | Manage local RAG vector databases, index files/directories, and toggle active knowledge bases. |
 | `/yolo` | `/yolo [on \| off]` | Toggle YOLO mode or explicitly enable/disable it to bypass tool confirmations. |
-| `/new` | `/new` | Start a clean new session with fresh context (alias for `/session new`). |
-| `/clear` | `/clear` | Clear rendered message cards from the active chat scroll viewport. |
+| `/new` | `/new` (alias: `/clear`) | Start a clean new session with fresh context and clear the screen (alias for `/session new`). |
+| `/clear` | `/clear` | Clear the screen and start a clean new session (alias for `/new`). |
 | `/exit` | `/exit` (alias: `/quit`) | Exit the application cleanly. |
 
 ---
@@ -392,7 +392,7 @@ All conversations are saved to a local SQLite database at `~/.ollama-agent/histo
 | **List Sessions** | `/session list` | `ollama-agent session-list` | Display saved sessions with thread IDs, step counts, and active status. |
 | **Search Sessions** | `/session search <query>` | `ollama-agent session-search <query>` | Search across past chat sessions and conversations by keyword. |
 | **Resume Session** | `/session resume <id>` | — | Resume a past conversation by exact ID or prefix, restoring message history into the viewport. |
-| **New Session** | `/session new` (or `/new`) | — | Initialize a fresh conversation session with a new thread ID. |
+| **New Session** | `/session new` (or `/new`, `/clear`) | — | Initialize a fresh conversation session with a new thread ID and clear the screen. |
 | **Export Session** | `/session export [path]` | `ollama-agent session-export <id> [-o path]` | Export conversation history to a structured Markdown document. |
 | **Delete Session** | `/session delete <id>` | `ollama-agent session-delete <id>` | Delete session checkpoints and metadata from the SQLite database. |
 

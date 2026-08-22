@@ -156,8 +156,8 @@ Slash commands provide full application control directly within the REPL:
 | `/skill` | `/skill [list \| show <id> \| create <id> \| delete <id>]` | Manage agent skills. `/skill create` launches an interactive modal dialog. |
 | `/rag` | `/rag [status \| list \| create <name> \| load <name> \| unload \| add <path> [--dir] \| delete <name>]` | Manage local RAG databases, index documents, and toggle active knowledge bases. |
 | `/yolo` | `/yolo [on \| off]` | Toggle YOLO mode or set it explicitly to bypass tool execution confirmation prompts. |
-| `/new` | `/new` | Start a clean session with fresh context (alias for `/session new`). |
-| `/clear` | `/clear` | Clear rendered message cards from the active chat scroll viewport. |
+| `/new` | `/new` (alias: `/clear`) | Start a clean session with fresh context and clear the screen (alias for `/session new`). |
+| `/clear` | `/clear` | Clear the screen and start a clean session (alias for `/new`). |
 | `/exit` | `/exit` (alias: `/quit`) | Exit the application cleanly. |
 
 ---
