@@ -164,6 +164,7 @@ The REPL provides built-in slash commands for managing models, sessions, tasks, 
 | :--- | :--- | :--- |
 | `/help` | `/help` | Display the interactive help panel with command categories. |
 | `/model` | `/model [list \| set <model>]` | List available Ollama models (with tool support indicators) or switch the active model for the current session. |
+| `/params` | `/params [list \| set <parameter> <value>]` | Inspect active sampling parameters and resolution sources, or dynamically update parameter values for the active session. |
 | `/session` | `/session [list \| search <query> \| resume <id> \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume previous threads, export to Markdown, or delete history. |
 | `/compact` | `/compact` (alias: `/compress`) | Manually compact conversation history into a structured summary to reclaim context window tokens. |
 | `/task` | `/task [list \| create <id> \| run <id> [-y] \| delete <id>]` | Manage saved prompt tasks. Opens interactive modal dialogs for task creation. |
@@ -626,9 +627,15 @@ On initial launch, Ollama Agent generates its configuration directory at `~/.oll
 model:
   name: gemma4:26b
   base_url: http://localhost:11434
-  temperature: 0.0
   context_window: 10000
   reasoning_effort: medium
+  # Optional sampling parameter overrides (omitted by default to resolve dynamically):
+  # temperature: 0.8
+  # top_p: 0.9
+  # top_k: 40
+  # min_p: 0.0
+  # presence_penalty: 0.0
+  # repeat_penalty: 1.1
 runtime:
   allow_traversal: false
   builtin_tool_timeout: 30
@@ -656,7 +663,12 @@ subagents: []
 | :--- | :--- | :--- | :--- |
 | `model.name` | `str` | `gemma4:26b` | Default Ollama model name (must support tool calling). |
 | `model.base_url` | `str` | `http://localhost:11434` | Ollama native API endpoint. |
-| `model.temperature` | `float` | `0.0` | Sampling temperature for model responses. |
+| `model.temperature` | `float` | *(dynamic)* | Optional temperature override (0.8 engine default if unset in Modelfile). |
+| `model.top_p` | `float` | *(dynamic)* | Optional nucleus sampling threshold override (0.9 engine default if unset). |
+| `model.top_k` | `int` | *(dynamic)* | Optional top-k candidates limit override (40 engine default if unset). |
+| `model.min_p` | `float` | *(dynamic)* | Optional minimum probability threshold override (0.0 default if unset). |
+| `model.presence_penalty` | `float` | *(dynamic)* | Optional presence penalty override (0.0 default if unset). |
+| `model.repeat_penalty` | `float` | *(dynamic)* | Optional repetition penalty override (1.1 engine default; alias: `repetition_penalty`). |
 | `model.context_window` | `int` | `10000` | Fallback context window token limit (`num_ctx`). |
 | `model.reasoning_effort` | `str` | `medium` | Default reasoning effort (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
 | `runtime.allow_traversal` | `bool` | `false` | If true, permits filesystem operations outside project working directory. |
@@ -674,6 +686,34 @@ subagents: []
 | `mentions.max_files` | `int` | `100` | Maximum number of files processed during directory mentions. |
 | `mentions.max_total_size` | `int` | `10485760` | Maximum total context size for prompt attachments (10 MB). |
 | `mentions.max_completions` | `int` | `200` | Maximum autocompletion candidates for `@-mentions`. |
+
+---
+
+### Model Parameter Resolution Hierarchy
+
+Sampling parameters (`temperature`, `top_p`, `top_k`, `min_p`, `presence_penalty`, `repeat_penalty`) are resolved dynamically at startup and on model switches following a strict precedence hierarchy:
+
+```mermaid
+flowchart TD
+    A[Start Parameter Resolution] --> B{Defined in settings.yaml?}
+    B -- Yes --> C[Use User Configured Value]
+    B -- No --> D{Declared in Modelfile / Metadata?}
+    D -- Yes --> E[Use Modelfile Recommended Value]
+    D -- No --> F[Use Ollama Engine Default]
+```
+
+1. **User Settings (`settings.yaml`)**: If explicitly specified in configuration, the user's value takes precedence.
+2. **Modelfile / Model Metadata**: If omitted in configuration, the agent inspects the model's metadata (`PARAMETER <name> <value>`) for model-specific recommendations.
+3. **Ollama Engine Defaults**: If not specified in the Modelfile, official Ollama engine defaults are applied:
+   - `temperature`: `0.8`
+   - `top_p`: `0.9`
+   - `top_k`: `40`
+   - `min_p`: `0.0`
+   - `presence_penalty`: `0.0`
+   - `repeat_penalty`: `1.1`
+
+> [!TIP]
+> You can inspect active parameters at any time using `/params` (or `/params list`), and dynamically override parameters for the active session using `/params set <parameter> <value>` (e.g. `/params set temperature 0.7`).
 
 ---
 

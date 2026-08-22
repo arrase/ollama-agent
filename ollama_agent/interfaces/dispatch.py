@@ -25,7 +25,7 @@ from ..rag import (
 )
 from ..skills import SkillError, SkillsContext, create_skill, delete_skill, list_skills, show_skill
 from ..tasks.commands import CLIContext, TaskError, create_task, delete_task, list_tasks, run_task
-from .model_commands import list_models
+from .model_commands import list_models, set_model_param, show_model_params
 from .session_commands import (
     compact_session,
     delete_session,
@@ -154,6 +154,7 @@ def build_repl_handlers(
     handle_session_resume: Callable[[str], Awaitable[None]] | None = None,
     handle_session_export: Callable[[list[str]], Awaitable[None]] | None = None,
     handle_compact: Callable[[list[str]], Awaitable[None]] | None = None,
+    get_runtime: Callable[[], Any] | None = None,
 ) -> dict[str, REPLCommand]:
     """Build the REPL command registry for unified slash commands."""
 
@@ -165,6 +166,26 @@ def build_repl_handlers(
         if len(args) == 1 and args[0] != "list":
             return switch_model(args[0])
         console.print("[red]Usage: /model [list | set <model>][/red]")
+        return None
+
+    def handle_params(args: list[str]) -> object:
+        if not args or args[0] == "list":
+            if get_runtime is not None:
+                return show_model_params(console, get_runtime())
+            return None
+        if args[0] == "set":
+            if len(args) < 3:
+                console.print(
+                    "[red]Usage: /params set <parameter> <value>[/red]\n"
+                    "[dim]Example: /params set temperature 0.7[/dim]"
+                )
+                return None
+            if get_runtime is not None:
+                return set_model_param(
+                    console, args[1], args[2], runtime=get_runtime()
+                )
+            return None
+        console.print("[red]Usage: /params [list | set <parameter> <value>][/red]")
         return None
 
     def handle_task(args: list[str]) -> object:
@@ -318,6 +339,12 @@ def build_repl_handlers(
             "Model Management",
             "/model [list | set <model>]",
             handle_model,
+        ),
+        "/params": REPLCommand(
+            "Manage model sampling parameters (list, set)",
+            "Model Management",
+            "/params [list | set <parameter> <value>]",
+            handle_params,
         ),
         "/task": REPLCommand(
             "Manage saved tasks (list, create, run, delete)",

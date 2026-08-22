@@ -6,7 +6,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from ollama_agent.core.models import (
     ModelCapabilityError,
     ModelContextWindowError,
+    OLLAMA_PARAM_DEFAULTS,
     _model_context_length,
+    _parse_modelfile_param,
     _parse_num_ctx,
     create_ollama_chat_model,
     ensure_model_supports_tools,
@@ -14,6 +16,7 @@ from ollama_agent.core.models import (
     model_supports_thinking,
     model_supports_tools,
     resolve_context_window,
+    resolve_model_parameters,
     resolve_ollama_reasoning,
     validate_reasoning_effort,
 )
@@ -128,9 +131,92 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
             base_url="http://localhost:11434",
             context_window=8192,
             reasoning_effort="high",
+            temperature=0.7,
+            top_p=0.95,
+            top_k=50,
+            min_p=0.05,
+            presence_penalty=0.5,
+            repeat_penalty=1.2,
         )
         self.assertIsNotNone(model)
         self.assertEqual(model.model, "gemma4:26b")
+        self.assertEqual(model.temperature, 0.7)
+        self.assertEqual(model.top_p, 0.95)
+        self.assertEqual(model.top_k, 50)
+        self.assertEqual(model.repeat_penalty, 1.2)
+        self.assertEqual(model.min_p, 0.05)
+        self.assertEqual(model.presence_penalty, 0.5)
+
+        params = model._chat_params([])
+        options = params["options"]
+        self.assertEqual(options["temperature"], 0.7)
+        self.assertEqual(options["top_p"], 0.95)
+        self.assertEqual(options["top_k"], 50)
+        self.assertEqual(options["repeat_penalty"], 1.2)
+        self.assertEqual(options["min_p"], 0.05)
+        self.assertEqual(options["presence_penalty"], 0.5)
+
+    def test_parse_modelfile_param(self) -> None:
+        text = "PARAMETER temperature 0.65\nPARAMETER top_p 0.85\nPARAMETER top_k 30\nrepeat_penalty 1.15"
+        self.assertEqual(_parse_modelfile_param(text, "temperature"), "0.65")
+        self.assertEqual(_parse_modelfile_param(text, "top_p"), "0.85")
+        self.assertEqual(_parse_modelfile_param(text, "top_k"), "30")
+        self.assertEqual(_parse_modelfile_param(text, "repeat_penalty"), "1.15")
+        self.assertIsNone(_parse_modelfile_param(text, "min_p"))
+        self.assertIsNone(_parse_modelfile_param(None, "temperature"))
+
+    @patch("ollama_agent.core.models._show_model")
+    async def test_resolve_model_parameters_precedence(self, mock_show: AsyncMock) -> None:
+        mock_show.return_value = MagicMock(
+            parameters="temperature 0.65\ntop_p 0.85\nrepetition_penalty 1.25",
+            modelfile=None,
+        )
+
+        # 1. User overrides temperature; top_p and repeat_penalty resolve from metadata; others from defaults
+        resolved = await resolve_model_parameters(
+            "test-model",
+            "http://localhost:11434",
+            temperature=0.3,
+            top_p=None,
+            top_k=None,
+            min_p=None,
+            presence_penalty=None,
+            repeat_penalty=None,
+        )
+
+        # User value
+        self.assertEqual(resolved["temperature"], (0.3, "user"))
+        # Modelfile values
+        self.assertEqual(resolved["top_p"], (0.85, "modelfile"))
+        self.assertEqual(resolved["repeat_penalty"], (1.25, "modelfile"))
+        # Ollama Default values
+        self.assertEqual(resolved["top_k"], (OLLAMA_PARAM_DEFAULTS["top_k"], "default"))
+        self.assertEqual(resolved["min_p"], (OLLAMA_PARAM_DEFAULTS["min_p"], "default"))
+        self.assertEqual(resolved["presence_penalty"], (OLLAMA_PARAM_DEFAULTS["presence_penalty"], "default"))
+
+    @patch("ollama_agent.core.models._show_model")
+    @patch("ollama_agent.core.models.resolve_context_window", AsyncMock(return_value=4096))
+    @patch("ollama_agent.core.models.resolve_ollama_reasoning", AsyncMock(return_value=None))
+    async def test_create_ollama_chat_model_resolves_defaults(self, mock_show: AsyncMock) -> None:
+        mock_show.return_value = MagicMock(
+            parameters="",
+            modelfile="",
+            capabilities=["tools"],
+        )
+        model = await create_ollama_chat_model(
+            model="default-model",
+            base_url="http://localhost:11434",
+            context_window=4096,
+            reasoning_effort="disabled",
+        )
+        self.assertEqual(model.temperature, 0.8)
+        self.assertEqual(model.top_p, 0.9)
+        self.assertEqual(model.top_k, 40)
+        self.assertEqual(model.min_p, 0.0)
+        self.assertEqual(model.presence_penalty, 0.0)
+        self.assertEqual(model.repeat_penalty, 1.1)
+        self.assertIn("temperature", model.effective_params)
+        self.assertEqual(model.effective_params["temperature"][1], "default")
 
 
 if __name__ == "__main__":

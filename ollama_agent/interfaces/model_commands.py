@@ -6,10 +6,23 @@ import asyncio
 from typing import Any
 
 import ollama
+from rich import box
 from rich.console import Console
+from rich.table import Table
 
 from ..agent import AgentRuntime
 from ..core import ModelCapabilityError, model_supports_tools
+from ..settings import save_settings
+
+VALID_SAMPLING_PARAMS: dict[str, type] = {
+    "temperature": float,
+    "top_p": float,
+    "top_k": int,
+    "min_p": float,
+    "presence_penalty": float,
+    "repeat_penalty": float,
+    "repetition_penalty": float,
+}
 
 
 async def _list_models(base_url: str) -> list[Any]:
@@ -106,4 +119,76 @@ async def set_model(
     except (ollama.ResponseError, OSError) as exc:
         console.print(f"[red]Failed to switch to model '{model_name}': {exc}[/red]")
         return current
+
+
+def show_model_params(console: Console, runtime: AgentRuntime) -> None:
+    """Print the active model parameters and their resolution sources."""
+    model_name = runtime.settings.model.name
+    params = getattr(runtime, "effective_model_params", {})
+    if not params:
+        console.print(
+            f"[yellow]No active parameter data for model '{model_name}'.[/yellow]"
+        )
+        return
+
+    table = Table(
+        title=f"Active Model Parameters: [bold cyan]{model_name}[/bold cyan]",
+        box=box.ROUNDED,
+        header_style="bold magenta",
+    )
+    table.add_column("Parameter", style="cyan")
+    table.add_column("Effective Value", justify="right", style="green")
+    table.add_column("Resolved From", justify="center")
+
+    source_labels = {
+        "user": "[bold yellow]User Config (settings.yaml)[/bold yellow]",
+        "modelfile": "[bold cyan]Modelfile / Metadata[/bold cyan]",
+        "default": "[dim]Ollama Default[/dim]",
+    }
+
+    for name, (val, source) in params.items():
+        src_label = source_labels.get(source, source)
+        table.add_row(name, str(val), src_label)
+
+    console.print(table)
+
+
+async def set_model_param(
+    console: Console,
+    param_name: str,
+    value_str: str,
+    *,
+    runtime: AgentRuntime,
+) -> None:
+    """Set a model sampling parameter for the active session and save to settings."""
+    norm_name = param_name.lower().strip()
+    if norm_name == "repetition_penalty":
+        norm_name = "repeat_penalty"
+
+    if norm_name not in VALID_SAMPLING_PARAMS:
+        valid_list = ", ".join(
+            sorted(p for p in VALID_SAMPLING_PARAMS if p != "repetition_penalty")
+        )
+        console.print(
+            f"[red]Unknown parameter '{param_name}'. Valid parameters: {valid_list}[/red]"
+        )
+        return
+
+    expected_type = VALID_SAMPLING_PARAMS[norm_name]
+    try:
+        val = expected_type(value_str)
+    except ValueError:
+        type_name = "integer" if expected_type is int else "float"
+        console.print(
+            f"[red]Invalid value '{value_str}' for '{norm_name}'. Expected {type_name}.[/red]"
+        )
+        return
+
+    setattr(runtime.settings.model, norm_name, val)
+    await asyncio.to_thread(save_settings, runtime.settings)
+    await runtime.reload()
+    console.print(
+        f"[green]✓ Set [cyan]{norm_name}[/cyan] to [cyan]{val}[/cyan][/green]\n"
+        "[dim]Model reloaded with updated parameters.[/dim]"
+    )
 

@@ -73,7 +73,12 @@ def _default_rag_policy() -> str:
 class ModelSettings:
     name: str = "gemma4:26b"
     base_url: str = "http://localhost:11434"
-    temperature: float = 0.0
+    temperature: float | None = None
+    top_p: float | None = None
+    top_k: int | None = None
+    min_p: float | None = None
+    presence_penalty: float | None = None
+    repeat_penalty: float | None = None
     context_window: int = 10000
     reasoning_effort: str = "medium"
 
@@ -164,6 +169,7 @@ class Settings:
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
+        d["model"] = {k: v for k, v in d["model"].items() if v is not None}
         ls = d.get("langsmith", {})
         if ls and not any(ls.values()):
             d.pop("langsmith", None)
@@ -189,8 +195,11 @@ class Settings:
 def _dataclass_from_dict(cls: type[Any], raw: dict[str, Any] | None) -> Any:
     if raw is None:
         return cls()
+    data = dict(raw)
+    if "repetition_penalty" in data and "repeat_penalty" not in data:
+        data["repeat_penalty"] = data.pop("repetition_penalty")
     valid = {f.name for f in fields(cls)}
-    return cls(**{k: v for k, v in raw.items() if k in valid})
+    return cls(**{k: v for k, v in data.items() if k in valid})
 
 
 def _subagents_from_list(

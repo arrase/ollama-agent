@@ -7,6 +7,7 @@ from typing import Any, Callable, cast
 
 import ollama
 from langchain_ollama import ChatOllama
+from pydantic import Field
 
 from .common import (
     ALLOWED_REASONING_EFFORTS,
@@ -141,13 +142,113 @@ async def resolve_ollama_reasoning(
     return effort != "disabled"
 
 
+OLLAMA_PARAM_DEFAULTS: dict[str, Any] = {
+    "temperature": 0.8,
+    "top_p": 0.9,
+    "top_k": 40,
+    "min_p": 0.0,
+    "presence_penalty": 0.0,
+    "repeat_penalty": 1.1,
+}
+
+
+def _parse_modelfile_param(text: str | None, param_name: str) -> str | None:
+    if not text:
+        return None
+    pattern = rf"^\s*(?:PARAMETER\s+)?{re.escape(param_name)}\s+([^\s\n]+)"
+    match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+    return match.group(1) if match else None
+
+
+async def resolve_model_parameters(
+    model: str,
+    base_url: str,
+    *,
+    temperature: float | None = None,
+    top_p: float | None = None,
+    top_k: int | None = None,
+    min_p: float | None = None,
+    presence_penalty: float | None = None,
+    repeat_penalty: float | None = None,
+) -> dict[str, tuple[Any, str]]:
+    """Resolve model sampling parameters with precedence: User > Modelfile > Ollama Default."""
+    user_inputs: dict[str, Any] = {
+        "temperature": temperature,
+        "top_p": top_p,
+        "top_k": top_k,
+        "min_p": min_p,
+        "presence_penalty": presence_penalty,
+        "repeat_penalty": repeat_penalty,
+    }
+
+    response = await _show_model(model, base_url)
+    meta_sources = [
+        getattr(response, "parameters", None),
+        getattr(response, "modelfile", None),
+    ]
+
+    resolved: dict[str, tuple[Any, str]] = {}
+
+    for param, user_val in user_inputs.items():
+        is_int = param == "top_k"
+        if user_val is not None:
+            resolved[param] = (int(user_val) if is_int else float(user_val), "user")
+            continue
+
+        found_val: Any = None
+        for text in meta_sources:
+            raw = _parse_modelfile_param(text, param)
+            if raw is None and param == "repeat_penalty":
+                raw = _parse_modelfile_param(text, "repetition_penalty")
+            if raw is not None:
+                try:
+                    found_val = int(raw) if is_int else float(raw)
+                    break
+                except ValueError:
+                    pass
+
+        if found_val is not None:
+            resolved[param] = (found_val, "modelfile")
+        else:
+            resolved[param] = (OLLAMA_PARAM_DEFAULTS[param], "default")
+
+    return resolved
+
+
+class OllamaChatModel(ChatOllama):
+    """ChatOllama model with support for extended Ollama options and parameter tracking."""
+
+    min_p: float | None = None
+    presence_penalty: float | None = None
+    effective_params: dict[str, tuple[Any, str]] = Field(default_factory=dict)
+
+    def _chat_params(
+        self,
+        messages: list[Any],
+        stop: list[str] | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        params = super()._chat_params(messages, stop=stop, **kwargs)
+        options = params.setdefault("options", {})
+        if self.min_p is not None:
+            options["min_p"] = self.min_p
+        if self.presence_penalty is not None:
+            options["presence_penalty"] = self.presence_penalty
+        return params
+
+
 async def create_ollama_chat_model(
     *,
     model: str,
     base_url: str,
     context_window: int | None,
     reasoning_effort: ReasoningEffortValue,
-    temperature: float = 0,
+    temperature: float | None = None,
+    top_p: float | None = None,
+    top_k: int | None = None,
+    min_p: float | None = None,
+    presence_penalty: float | None = None,
+    repeat_penalty: float | None = None,
     warn_callback: Callable[[str], None] = lambda _: None,
 ) -> ChatOllama:
     """Create a native ChatOllama model with resolved runtime settings."""
@@ -156,17 +257,33 @@ async def create_ollama_chat_model(
         model, reasoning_effort, host, warn_callback
     )
     num_ctx = await resolve_context_window(model, context_window, host)
+    resolved_params = await resolve_model_parameters(
+        model,
+        host,
+        temperature=temperature,
+        top_p=top_p,
+        top_k=top_k,
+        min_p=min_p,
+        presence_penalty=presence_penalty,
+        repeat_penalty=repeat_penalty,
+    )
 
     kwargs: dict[str, Any] = {
         "base_url": host,
         "model": model,
         "num_ctx": num_ctx,
-        "temperature": temperature,
+        "temperature": resolved_params["temperature"][0],
+        "top_p": resolved_params["top_p"][0],
+        "top_k": resolved_params["top_k"][0],
+        "min_p": resolved_params["min_p"][0],
+        "presence_penalty": resolved_params["presence_penalty"][0],
+        "repeat_penalty": resolved_params["repeat_penalty"][0],
         "profile": {"max_input_tokens": num_ctx},
+        "effective_params": resolved_params,
     }
     if reasoning is not None:
         kwargs["reasoning"] = reasoning
-    return ChatOllama(**kwargs)
+    return OllamaChatModel(**kwargs)
 
 
 def validate_reasoning_effort(effort: str) -> ReasoningEffortValue:
