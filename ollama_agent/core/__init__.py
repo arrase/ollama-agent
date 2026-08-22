@@ -14,12 +14,15 @@ from .common import (
 from .models import (
     ModelCapabilityError,
     ModelContextWindowError,
+    OLLAMA_PARAM_DEFAULTS,
+    OllamaChatModel,
     create_ollama_chat_model,
     ensure_model_supports_tools,
     get_model_capabilities,
     model_supports_tools,
     model_supports_thinking,
     resolve_context_window,
+    resolve_model_parameters,
     resolve_ollama_reasoning,
     validate_reasoning_effort,
 )
@@ -40,12 +43,15 @@ __all__ = [
     # Models
     "ModelCapabilityError",
     "ModelContextWindowError",
+    "OLLAMA_PARAM_DEFAULTS",
+    "OllamaChatModel",
     "create_ollama_chat_model",
     "ensure_model_supports_tools",
     "get_model_capabilities",
     "model_supports_tools",
     "model_supports_thinking",
     "resolve_context_window",
+    "resolve_model_parameters",
     "resolve_ollama_reasoning",
     "validate_reasoning_effort",
     # Utils

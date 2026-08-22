@@ -44,13 +44,37 @@ class TestConfigManagement(unittest.TestCase):
         s = Settings()
         self.assertEqual(s.model.name, "gemma4:26b")
         self.assertEqual(s.model.context_window, 10000)
+        self.assertIsNone(s.model.temperature)
+        self.assertIsNone(s.model.top_p)
+        self.assertIsNone(s.model.top_k)
+        self.assertIsNone(s.model.min_p)
+        self.assertIsNone(s.model.presence_penalty)
+        self.assertIsNone(s.model.repeat_penalty)
         self.assertEqual(s.runtime.builtin_tool_timeout, 30)
         self.assertEqual(s.mentions.max_files, 100)
         self.assertEqual(s.rag.default_top_k, 5)
 
+        # Default model dict should not include unset sampling parameters
+        model_dict = s.to_dict()["model"]
+        self.assertNotIn("temperature", model_dict)
+        self.assertNotIn("top_p", model_dict)
+        self.assertNotIn("top_k", model_dict)
+        self.assertNotIn("min_p", model_dict)
+        self.assertNotIn("presence_penalty", model_dict)
+        self.assertNotIn("repeat_penalty", model_dict)
+
     def test_settings_serialization_cycle(self) -> None:
         original = Settings(
-            model=ModelSettings(name="llama3.3:70b", reasoning_effort="high"),
+            model=ModelSettings(
+                name="llama3.3:70b",
+                reasoning_effort="high",
+                temperature=0.7,
+                top_p=0.95,
+                top_k=50,
+                min_p=0.05,
+                presence_penalty=0.5,
+                repeat_penalty=1.2,
+            ),
             runtime=RuntimeSettings(allow_traversal=True, builtin_tool_timeout=60),
             subagents=[
                 SubAgentSettings(
@@ -67,12 +91,28 @@ class TestConfigManagement(unittest.TestCase):
         loaded = load_settings(self.settings_file)
         self.assertEqual(loaded.model.name, "llama3.3:70b")
         self.assertEqual(loaded.model.reasoning_effort, "high")
+        self.assertEqual(loaded.model.temperature, 0.7)
+        self.assertEqual(loaded.model.top_p, 0.95)
+        self.assertEqual(loaded.model.top_k, 50)
+        self.assertEqual(loaded.model.min_p, 0.05)
+        self.assertEqual(loaded.model.presence_penalty, 0.5)
+        self.assertEqual(loaded.model.repeat_penalty, 1.2)
         self.assertTrue(loaded.runtime.allow_traversal)
         self.assertEqual(loaded.runtime.builtin_tool_timeout, 60)
         self.assertEqual(len(loaded.subagents), 1)
         self.assertEqual(loaded.subagents[0].name, "coder")
         self.assertEqual(len(loaded.subagents[0].mcp_servers), 1)
         self.assertEqual(loaded.subagents[0].mcp_servers[0].name, "git")
+
+    def test_model_repetition_penalty_alias(self) -> None:
+        raw = {
+            "model": {
+                "name": "llama3.2:3b",
+                "repetition_penalty": 1.3,
+            }
+        }
+        s = Settings.from_dict(raw)
+        self.assertEqual(s.model.repeat_penalty, 1.3)
 
     def test_setup_environment_injects_langsmith_variables(self) -> None:
         with patch.dict(os.environ, {}, clear=False):

@@ -16,9 +16,15 @@
 model:
   name: "gemma4:26b"                     # Default Ollama model tag (must support tools)
   base_url: "http://localhost:11434"     # Ollama API server endpoint
-  temperature: 0.0                       # Sampling temperature (0.0 for deterministic outputs)
   context_window: 10000                  # Context window size in tokens (num_ctx)
   reasoning_effort: "medium"             # Reasoning effort: low, medium, high, xhigh, disabled, hide, enabled
+  # Optional sampling parameter overrides (omitted by default to resolve dynamically):
+  # temperature: 0.8                     # Sampling temperature (higher = creative, lower = deterministic)
+  # top_p: 0.9                           # Nucleus sampling probability mass threshold
+  # top_k: 40                            # Limits token selection pool to top K candidates
+  # min_p: 0.0                           # Minimum probability threshold relative to most likely token
+  # presence_penalty: 0.0                # Penalizes tokens if already present in text
+  # repeat_penalty: 1.1                  # Penalizes token repetitions (alias: repetition_penalty)
 
 # Agent Runtime Behavior & Security Policies
 runtime:
@@ -74,7 +80,12 @@ subagents:
 | :--- | :--- | :--- | :--- |
 | `model.name` | `str` | `gemma4:26b` | Default Ollama model name (must support tool calling). |
 | `model.base_url` | `str` | `http://localhost:11434` | Ollama native API endpoint. |
-| `model.temperature` | `float` | `0.0` | Sampling temperature for model responses. |
+| `model.temperature` | `float` | *(dynamic)* | Optional temperature override (0.8 engine default if unset in Modelfile). |
+| `model.top_p` | `float` | *(dynamic)* | Optional nucleus sampling threshold override (0.9 engine default if unset). |
+| `model.top_k` | `int` | *(dynamic)* | Optional top-k candidates limit override (40 engine default if unset). |
+| `model.min_p` | `float` | *(dynamic)* | Optional minimum probability threshold override (0.0 default if unset). |
+| `model.presence_penalty` | `float` | *(dynamic)* | Optional presence penalty override (0.0 default if unset). |
+| `model.repeat_penalty` | `float` | *(dynamic)* | Optional repetition penalty override (1.1 engine default; alias: `repetition_penalty`). |
 | `model.context_window` | `int` | `10000` | Fallback context window token limit (`num_ctx`). |
 | `model.reasoning_effort` | `str` | `medium` | Default reasoning effort (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
 | `runtime.allow_traversal` | `bool` | `false` | If true, permits filesystem operations outside project working directory. |
@@ -96,6 +107,34 @@ subagents:
 | `langsmith.tracing` | `str` | `""` | Enable tracing (`"true"` / `"false"`). |
 | `langsmith.project` | `str` | `""` | LangSmith project name for traces. |
 | `langsmith.endpoint` | `str` | `""` | API endpoint for LangSmith telemetry. |
+
+---
+
+## Model Sampling Parameters Resolution Hierarchy
+
+Sampling parameters (`temperature`, `top_p`, `top_k`, `min_p`, `presence_penalty`, `repeat_penalty`) are resolved dynamically at startup and on model switches following a strict precedence hierarchy:
+
+```mermaid
+flowchart TD
+    A[Start Parameter Resolution] --> B{Defined in settings.yaml?}
+    B -- Yes --> C[Use User Configured Value]
+    B -- No --> D{Declared in Modelfile / Metadata?}
+    D -- Yes --> E[Use Modelfile Recommended Value]
+    D -- No --> F[Use Ollama Engine Default]
+```
+
+1. **User Settings (`settings.yaml`)**: If explicitly specified in configuration, the user's value takes precedence.
+2. **Modelfile / Model Metadata**: If omitted in configuration, the agent inspects the model's metadata (`PARAMETER <name> <value>`) for model-specific recommendations.
+3. **Ollama Engine Defaults**: If not specified in the Modelfile, official Ollama engine defaults are applied:
+   - `temperature`: `0.8`
+   - `top_p`: `0.9`
+   - `top_k`: `40`
+   - `min_p`: `0.0`
+   - `presence_penalty`: `0.0`
+   - `repeat_penalty`: `1.1`
+
+> [!TIP]
+> You can inspect active parameters at any time using `/params` (or `/params list`), and dynamically override parameters for the active session using `/params set <parameter> <value>` (e.g. `/params set temperature 0.7`).
 
 ---
 

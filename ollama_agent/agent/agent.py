@@ -83,6 +83,7 @@ class AgentRuntime:
     yolo_mode: bool = field(default=False)
     auto_approved_tools: set[str] = field(default_factory=set)
     last_context_tokens: int = field(default=0, init=False)
+    effective_model_params: dict[str, tuple[Any, str]] = field(default_factory=dict, init=False)
     graph: Any = field(default=None, init=False, repr=False)
     _backend: Any = field(default=None, init=False, repr=False)
     _summarization_mw: Any = field(default=None, init=False, repr=False)
@@ -143,8 +144,14 @@ class AgentRuntime:
             context_window=ms.context_window,
             reasoning_effort=validate_reasoning_effort(ms.reasoning_effort),
             temperature=ms.temperature,
+            top_p=ms.top_p,
+            top_k=ms.top_k,
+            min_p=ms.min_p,
+            presence_penalty=ms.presence_penalty,
+            repeat_penalty=ms.repeat_penalty,
             warn_callback=_log.warning,
         )
+        self.effective_model_params = getattr(model, "effective_params", {})
 
         # Backend: CWD for shell + APP_DIR for agent files (memory, etc.)
         timeout = int(get_tool_timeout())

@@ -10,7 +10,7 @@ from rich.console import Console
 from ollama_agent.core.models import ModelCapabilityError
 from ollama_agent.interfaces.cli import handle_cli_commands
 from ollama_agent.interfaces.dispatch import build_repl_handlers, render_repl_help, safe_call
-from ollama_agent.interfaces.model_commands import list_models, set_model
+from ollama_agent.interfaces.model_commands import list_models, set_model, set_model_param, show_model_params
 from ollama_agent.interfaces.session_commands import new_session
 from ollama_agent.settings.config import Settings
 from ollama_agent.skills.commands import SkillError
@@ -114,6 +114,102 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(res, "qwen3:32b")
             runtime.set_model.assert_awaited_once_with("qwen3:32b")
             self.assertIn("Switched", console.export_text())
+
+    def test_show_model_params(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.settings.model.name = "llama3.2:3b"
+        runtime.effective_model_params = {
+            "temperature": (0.7, "user"),
+            "top_p": (0.85, "modelfile"),
+            "top_k": (40, "default"),
+        }
+
+        show_model_params(console, runtime)
+        out = console.export_text()
+        self.assertIn("Active Model Parameters", out)
+        self.assertIn("llama3.2:3b", out)
+        self.assertIn("temperature", out)
+        self.assertIn("0.7", out)
+        self.assertIn("User Config", out)
+        self.assertIn("Modelfile", out)
+        self.assertIn("Ollama Default", out)
+
+    async def test_set_model_param_success(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.settings.model.temperature = 0.8
+        runtime.reload = AsyncMock()
+
+        with patch("ollama_agent.interfaces.model_commands.save_settings"):
+            await set_model_param(console, "temperature", "0.5", runtime=runtime)
+            self.assertEqual(runtime.settings.model.temperature, 0.5)
+            runtime.reload.assert_awaited_once()
+            out = console.export_text()
+            self.assertIn("Set", out)
+            self.assertIn("temperature", out)
+            self.assertIn("0.5", out)
+
+    async def test_set_model_param_invalid(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+
+        # Unknown param
+        await set_model_param(console, "invalid_param", "0.5", runtime=runtime)
+        self.assertIn("Unknown parameter", console.export_text())
+
+        # Invalid type
+        console = Console(file=io.StringIO(), record=True)
+        await set_model_param(console, "temperature", "not_a_number", runtime=runtime)
+        self.assertIn("Invalid value", console.export_text())
+
+    def test_params_dispatch(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.settings.model.name = "llama3.2:3b"
+        runtime.effective_model_params = {
+            "temperature": (0.8, "default"),
+        }
+
+        handlers = build_repl_handlers(
+            task_ctx=MagicMock(),
+            skills_ctx=MagicMock(),
+            get_rag_ctx=MagicMock(),
+            console=console,
+            current_model=lambda: "llama3.2:3b",
+            base_url=lambda: "http://localhost:11434",
+            switch_model=AsyncMock(),
+            handle_exit=lambda _: None,
+            handle_clear=lambda _: None,
+            handle_new=AsyncMock(),
+            handle_task_create=lambda _: None,
+            handle_skill_create=lambda _: None,
+            handle_yolo=lambda _: None,
+            get_runtime=lambda: runtime,
+        )
+
+        # /params
+        handlers["/params"].callback([])
+        out = console.export_text()
+        self.assertIn("Active Model Parameters", out)
+
+        # /params list
+        console = Console(file=io.StringIO(), record=True)
+        handlers["/params"].callback(["list"])
+        out_list = console.export_text()
+        self.assertIn("Active Model Parameters", out_list)
+
+        # /params set with missing args
+        console = Console(file=io.StringIO(), record=True)
+        handlers["/params"].callback(["set", "temperature"])
+        out_missing = console.export_text()
+        self.assertIn("Usage: /params set", out_missing)
+
+        # /model does not handle params
+        console = Console(file=io.StringIO(), record=True)
+        handlers["/model"].callback(["params"])
+        out_model = console.export_text()
+        self.assertIn("Usage: /model", out_model)
 
     def test_render_repl_help(self) -> None:
         console = Console(file=io.StringIO(), record=True)

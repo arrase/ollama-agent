@@ -54,6 +54,12 @@ async def _build_spec(
         base_url=model_settings.base_url,
         context_window=num_ctx,
         reasoning_effort=validate_reasoning_effort(model_settings.reasoning_effort),
+        temperature=model_settings.temperature,
+        top_p=model_settings.top_p,
+        top_k=model_settings.top_k,
+        min_p=model_settings.min_p,
+        presence_penalty=model_settings.presence_penalty,
+        repeat_penalty=model_settings.repeat_penalty,
     )
 
     spec["skills"] = ["/skills/"]

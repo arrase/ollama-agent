@@ -60,6 +60,7 @@ _AT_MENTION_RE = re.compile(
 
 _ROOT_COMMANDS: list[tuple[str, str]] = [
     ("/model", "Manage models (list, set)"),
+    ("/params", "Manage model sampling parameters (list, set)"),
     ("/session", "Manage chat sessions (list, search, resume, new, export, delete)"),
     ("/compact", "Compact conversation history into a summary"),
     ("/task", "Manage saved tasks (list, create, run, delete)"),
@@ -76,6 +77,10 @@ _SUBCOMMANDS: dict[str, list[tuple[str, str]]] = {
     "/model": [
         ("list", "List available Ollama models"),
         ("set", "Switch to a different model"),
+    ],
+    "/params": [
+        ("list", "Show active model parameters and resolution sources"),
+        ("set", "Set a parameter value (e.g. /params set temperature 0.7)"),
     ],
     "/session": [
         ("list", "List all past sessions"),
@@ -815,6 +820,7 @@ class OllamaREPL:
                 handle_session_resume=self._handle_session_resume,
                 handle_session_export=self._handle_session_export,
                 handle_compact=self._handle_compact,
+                get_runtime=lambda: self.runtime,
             )
         return self._commands
 
