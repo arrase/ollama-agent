@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from rich import box
 from rich.console import Console
 from rich.table import Table
 
@@ -77,11 +78,11 @@ def list_sessions(
         console.print("[yellow]No saved sessions found in history.[/yellow]")
         return []
 
-    table = Table(title="Saved Sessions", header_style="bold cyan")
-    table.add_column("Session ID", style="bold")
-    table.add_column("Date / Time", style="cyan", justify="left")
-    table.add_column("Steps", justify="right", style="dim")
-    table.add_column("Status", justify="left")
+    table = Table(title="Saved Sessions", box=box.ROUNDED, header_style="bold cyan")
+    table.add_column("Session ID", style="bold", no_wrap=True)
+    table.add_column("Date / Time", style="cyan", no_wrap=True)
+    table.add_column("Steps", justify="right", style="dim", no_wrap=True)
+    table.add_column("Status", justify="left", no_wrap=True)
 
     for s in sessions:
         tid = s["thread_id"]
@@ -267,10 +268,10 @@ def search_sessions(
         console.print(f"[yellow]No sessions found matching '[bold]{clean_query}[/bold]'.[/yellow]")
         return []
 
-    table = Table(title=f"Search Results for '{clean_query}'", header_style="bold cyan")
-    table.add_column("Session ID", style="bold", width=14)
-    table.add_column("Date / Time", style="cyan", width=17)
-    table.add_column("Score", justify="right", width=6)
+    table = Table(title=f"Search Results for '{clean_query}'", box=box.ROUNDED, header_style="bold cyan")
+    table.add_column("Session ID", style="bold", no_wrap=True)
+    table.add_column("Date / Time", style="cyan", no_wrap=True)
+    table.add_column("Score", justify="right", style="dim", no_wrap=True)
     table.add_column("Snippet Preview", justify="left")
 
     for item in results:
@@ -279,7 +280,13 @@ def search_sessions(
         tid_display = f"{tid[:8]}" + (" [green]◀ current[/green]" if is_current else "")
         ts_display = item["formatted_date"]
         score_display = str(item["score"])
-        snippets_display = "\n".join(item["snippets"][:2])
+        cleaned_snippets = []
+        for s in item["snippets"][:2]:
+            single = " ".join(s.split())
+            if len(single) > 120:
+                single = f"{single[:117]}..."
+            cleaned_snippets.append(single)
+        snippets_display = "\n".join(cleaned_snippets)
         table.add_row(tid_display, ts_display, score_display, snippets_display)
 
     console.print(table)

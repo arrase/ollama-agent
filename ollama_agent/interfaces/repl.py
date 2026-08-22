@@ -657,6 +657,9 @@ class OllamaAgentApp(App):
             return
 
         spec = commands[cmd]
+        scroll_w = scroll.size.width if scroll.size.width > 10 else self.size.width
+        self.repl.console._width = max(40, scroll_w - 6)
+        self.repl.console._height = 25
         with self.repl.console.capture() as capture:
             await safe_call(spec.handler, args)
         output = capture.get()
@@ -680,6 +683,9 @@ class OllamaAgentApp(App):
 
     async def _do_create_task(self, task_id: str, title: str, model: str, effort: str, prompt: str, force: bool) -> None:
         scroll = self.query_one("#chat-scroll")
+        scroll_w = scroll.size.width if scroll.size.width > 10 else self.size.width
+        self.repl.console._width = max(40, scroll_w - 6)
+        self.repl.console._height = 25
         with self.repl.console.capture() as capture:
             await safe_call(
                 create_task, self.repl._task_ctx, task_id,
@@ -700,6 +706,9 @@ class OllamaAgentApp(App):
 
     async def _do_create_skill(self, skill_id: str, name: str, description: str, instructions: str, force: bool) -> None:
         scroll = self.query_one("#chat-scroll")
+        scroll_w = scroll.size.width if scroll.size.width > 10 else self.size.width
+        self.repl.console._width = max(40, scroll_w - 6)
+        self.repl.console._height = 25
         with self.repl.console.capture() as capture:
             await safe_call(
                 create_skill, self.repl._skills_ctx, skill_id,

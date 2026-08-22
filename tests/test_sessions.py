@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
+from langchain_core.messages import AIMessage, HumanMessage
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from rich.console import Console
 
 from ollama_agent.interfaces.session_commands import (
@@ -179,6 +181,32 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         # No database
         res_nodb = search_sessions(console, "python", db_path=self.db_path)
         self.assertEqual(res_nodb, [])
+
+        # Populated search
+        self._init_sample_db()
+        serializer = JsonPlusSerializer()
+        t_msgs = [HumanMessage(content="Explain python async"), AIMessage(content="Async uses asyncio event loop")]
+        typ, val = serializer.dumps_typed(t_msgs)
+        chk_typ, chk_val = serializer.dumps_typed({"ts": "2026-08-20T10:00:00+00:00"})
+        conn = sqlite3.connect(str(self.db_path))
+        cur = conn.cursor()
+        cur.execute("CREATE TABLE IF NOT EXISTS checkpoints_new (thread_id TEXT, checkpoint_id TEXT, type TEXT, checkpoint BLOB);")
+        cur.execute("DROP TABLE checkpoints;")
+        cur.execute("ALTER TABLE checkpoints_new RENAME TO checkpoints;")
+        cur.execute("INSERT INTO checkpoints VALUES ('session-12345678', 'cp-1', ?, ?);", (chk_typ, chk_val))
+        cur.execute("CREATE TABLE IF NOT EXISTS writes_new (thread_id TEXT, checkpoint_id TEXT, task_id TEXT, idx INTEGER, channel TEXT, type TEXT, value BLOB);")
+        cur.execute("DROP TABLE writes;")
+        cur.execute("ALTER TABLE writes_new RENAME TO writes;")
+        cur.execute("INSERT INTO writes VALUES ('session-12345678', 'cp-1', 'task-1', 0, 'messages', ?, ?);", (typ, val))
+        conn.commit()
+        conn.close()
+
+        console_search = Console(file=io.StringIO(), record=True)
+        results = search_sessions(console_search, "async", db_path=self.db_path)
+        self.assertEqual(len(results), 1)
+        out = console_search.export_text()
+        self.assertIn("session-", out)
+        self.assertIn("async", out.lower())
 
 
 if __name__ == "__main__":
