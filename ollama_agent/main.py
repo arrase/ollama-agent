@@ -10,6 +10,7 @@ from .agent import AgentRuntime
 from .agent.builtin_tools import set_tool_timeout
 from .core import ModelCapabilityError, ModelContextWindowError
 from .interfaces.cli import create_argument_parser, handle_cli_commands
+from .interfaces.model_commands import ensure_model_configured
 from .interfaces.repl import OllamaREPL
 from .settings import load_settings, reset_config
 
@@ -24,7 +25,6 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 def main() -> None:
     """Main entry point."""
 
-
     parser = create_argument_parser()
     args = parser.parse_args()
 
@@ -32,7 +32,6 @@ def main() -> None:
         for msg in reset_config(args.config_reset):
             print(msg)
         return
-
 
     settings = load_settings()
     settings.setup_environment()
@@ -50,7 +49,14 @@ def main() -> None:
     set_tool_timeout(settings.runtime.builtin_tool_timeout)
 
     try:
-        if handle_cli_commands(args, settings):
+        if args.command:
+            handle_cli_commands(args, settings)
+            return
+
+        ensure_model_configured(settings)
+
+        if args.prompt:
+            handle_cli_commands(args, settings)
             return
 
         runtime = AgentRuntime(settings=settings, yolo_mode=args.yolo)

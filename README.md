@@ -84,7 +84,7 @@ Before running Ollama Agent, ensure the following dependencies are available on 
 
 1. **Python 3.11+**: Ensure Python 3.11 or newer is installed.
 2. **Ollama**: Installed and running locally (or reachable at your configured host).
-3. **Tool-Calling Model**: A local model with tool/function-calling capabilities (e.g. `gemma4:26b`, `qwen2.5:14b`, `llama3.1:8b`). If the selected model lacks tool support, the agent will report an error and exit.
+3. **Tool-Calling Model**: A local model with tool/function-calling capabilities (e.g. `qwen3.8:27b`, `qwen2.5:14b`, `llama3.1:8b`). If the selected model lacks tool support, the agent will report an error and exit. If no model is configured or the configured model is missing, the agent will prompt you to select one interactively from your downloaded Ollama models.
 4. **Embeddings Model (for RAG)**: If using RAG features, download the default embedding model in Ollama:
    ```bash
    ollama pull nomic-embed-text:latest
@@ -293,7 +293,7 @@ flowchart LR
 
 | Flag | Short | Type | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `--model` | `-m` | `str` | `gemma4:26b` | Specify the Ollama model for this session. |
+| `--model` | `-m` | `str` | `settings.yaml` | Specify the Ollama model for this session (falls back to interactive selection if unconfigured or missing in Ollama). |
 | `--prompt` | `-p` | `str` | `None` | Run in non-interactive mode with the provided prompt. |
 | `--effort` | `-e` | `str` | `medium` | Set reasoning effort level (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
 | `--builtin-tool-timeout` | `-t` | `int` | `30` | Timeout in seconds for tool executions (including shell commands). |
@@ -619,13 +619,13 @@ subagents:
 
 ## Configuration & Customization
 
-On initial launch, Ollama Agent generates its configuration directory at `~/.ollama-agent/` and initializes `settings.yaml`.
+On initial launch, Ollama Agent generates its configuration directory at `~/.ollama-agent/` and initializes `settings.yaml`. If no model is configured or if the configured model is not downloaded in Ollama, the agent interactively prompts you to choose from your locally available Ollama models and saves your choice to `settings.yaml`.
 
 ### Configuration File (`settings.yaml`)
 
 ```yaml
 model:
-  name: gemma4:26b
+  name: qwen3.8:27b
   base_url: http://localhost:11434
   context_window: 10000
   reasoning_effort: medium
@@ -661,7 +661,7 @@ subagents: []
 
 | Section & Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `model.name` | `str` | `gemma4:26b` | Default Ollama model name (must support tool calling). |
+| `model.name` | `str` | *(interactive)* | Configured Ollama model name (must support tool calling). Selected interactively if unconfigured or missing. |
 | `model.base_url` | `str` | `http://localhost:11434` | Ollama native API endpoint. |
 | `model.temperature` | `float` | *(dynamic)* | Optional temperature override (0.8 engine default if unset in Modelfile). |
 | `model.top_p` | `float` | *(dynamic)* | Optional nucleus sampling threshold override (0.9 engine default if unset). |

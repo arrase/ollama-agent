@@ -10,7 +10,13 @@ from rich.console import Console
 from ollama_agent.core.models import ModelCapabilityError
 from ollama_agent.interfaces.cli import handle_cli_commands
 from ollama_agent.interfaces.dispatch import build_repl_handlers, render_repl_help, safe_call
-from ollama_agent.interfaces.model_commands import list_models, set_model, set_model_param, show_model_params
+from ollama_agent.interfaces.model_commands import (
+    ensure_model_configured,
+    list_models,
+    set_model,
+    set_model_param,
+    show_model_params,
+)
 from ollama_agent.interfaces.session_commands import new_session
 from ollama_agent.settings.config import Settings
 from ollama_agent.skills.commands import SkillError
@@ -396,4 +402,105 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         args = argparse.Namespace(command=None, prompt=None)
         settings = Settings()
         self.assertFalse(handle_cli_commands(args, settings))
+
+    def test_ensure_model_configured_already_available(self) -> None:
+        settings = Settings()
+        settings.model.name = "qwen3:32b"
+        mock_m1 = MagicMock(model="qwen3:32b", size=1024**3 * 10)
+        mock_m2 = MagicMock(model="llama3:8b", size=1024**3 * 5)
+        mock_resp = MagicMock(models=[mock_m1, mock_m2])
+
+        with patch("ollama.Client") as mock_client_cls:
+            mock_client = MagicMock()
+            mock_client.list.return_value = mock_resp
+            mock_client_cls.return_value = mock_client
+
+            res = ensure_model_configured(settings)
+            self.assertEqual(res, "qwen3:32b")
+            self.assertEqual(settings.model.name, "qwen3:32b")
+
+    def test_ensure_model_configured_latest_alias(self) -> None:
+        settings = Settings()
+        settings.model.name = "llama3"
+        mock_m = MagicMock(model="llama3:latest", size=1024**3 * 5)
+        mock_resp = MagicMock(models=[mock_m])
+
+        with patch("ollama.Client") as mock_client_cls, \
+             patch("ollama_agent.interfaces.model_commands.save_settings") as mock_save:
+            mock_client = MagicMock()
+            mock_client.list.return_value = mock_resp
+            mock_client_cls.return_value = mock_client
+
+            res = ensure_model_configured(settings)
+            self.assertEqual(res, "llama3:latest")
+            self.assertEqual(settings.model.name, "llama3:latest")
+            mock_save.assert_called_once_with(settings)
+
+    def test_ensure_model_configured_prompt_numeric_selection(self) -> None:
+        settings = Settings()
+        settings.model.name = "qwen3.8:2b"
+        mock_m1 = MagicMock(model="qwen3.8:27b", size=1024**3 * 17)
+        mock_m2 = MagicMock(model="ornith-1.5:9b", size=1024**3 * 6)
+        mock_resp = MagicMock(models=[mock_m1, mock_m2])
+
+        console = Console(file=io.StringIO(), record=True)
+        with patch("ollama.Client") as mock_client_cls, \
+             patch("ollama_agent.interfaces.model_commands.save_settings") as mock_save:
+            mock_client = MagicMock()
+            mock_client.list.return_value = mock_resp
+            mock_client_cls.return_value = mock_client
+
+            inputs = iter(["1"])
+            res = ensure_model_configured(settings, console=console, input_func=lambda _: next(inputs))
+            self.assertEqual(res, "qwen3.8:27b")
+            self.assertEqual(settings.model.name, "qwen3.8:27b")
+            mock_save.assert_called_once_with(settings)
+            out = console.export_text()
+            self.assertIn("not available in Ollama", out)
+            self.assertIn("qwen3.8:27b", out)
+
+    def test_ensure_model_configured_prompt_name_selection(self) -> None:
+        settings = Settings()
+        settings.model.name = ""
+        mock_m1 = MagicMock(model="qwen3.8:27b", size=1024**3 * 17)
+        mock_m2 = MagicMock(model="ornith-1.5:9b", size=1024**3 * 6)
+        mock_resp = MagicMock(models=[mock_m1, mock_m2])
+
+        console = Console(file=io.StringIO(), record=True)
+        with patch("ollama.Client") as mock_client_cls, \
+             patch("ollama_agent.interfaces.model_commands.save_settings") as mock_save:
+            mock_client = MagicMock()
+            mock_client.list.return_value = mock_resp
+            mock_client_cls.return_value = mock_client
+
+            inputs = iter(["invalid_name", "ornith-1.5:9b"])
+            res = ensure_model_configured(settings, console=console, input_func=lambda _: next(inputs))
+            self.assertEqual(res, "ornith-1.5:9b")
+            self.assertEqual(settings.model.name, "ornith-1.5:9b")
+            mock_save.assert_called_once_with(settings)
+            out = console.export_text()
+            self.assertIn("No model is currently configured", out)
+            self.assertIn("Invalid selection", out)
+
+    def test_ensure_model_configured_no_models_raises(self) -> None:
+        settings = Settings()
+        mock_resp = MagicMock(models=[])
+
+        with patch("ollama.Client") as mock_client_cls:
+            mock_client = MagicMock()
+            mock_client.list.return_value = mock_resp
+            mock_client_cls.return_value = mock_client
+
+            with self.assertRaises(ModelCapabilityError) as cm:
+                ensure_model_configured(settings)
+            self.assertIn("No models found in Ollama", str(cm.exception))
+
+    def test_ensure_model_configured_connection_error_raises(self) -> None:
+        settings = Settings()
+
+        with patch("ollama.Client", side_effect=ConnectionError("Refused")):
+            with self.assertRaises(ModelCapabilityError) as cm:
+                ensure_model_configured(settings)
+            self.assertIn("Could not connect to Ollama", str(cm.exception))
+
 

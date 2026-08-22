@@ -71,7 +71,7 @@ def _default_rag_policy() -> str:
 
 @dataclass(slots=True)
 class ModelSettings:
-    name: str = "gemma4:26b"
+    name: str = ""
     base_url: str = "http://localhost:11434"
     temperature: float | None = None
     top_p: float | None = None

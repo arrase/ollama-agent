@@ -46,7 +46,7 @@ ollama-agent --rag project-docs -p "How is authentication configured in this rep
 
 | Flag | Short | Type | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `--model` | `-m` | `str` | `gemma4:26b` | Specify the Ollama model for this session. |
+| `--model` | `-m` | `str` | `settings.yaml` | Specify the Ollama model for this session (falls back to interactive selection if unconfigured or missing in Ollama). |
 | `--prompt` | `-p` | `str` | `None` | Run in non-interactive mode with the provided prompt. |
 | `--effort` | `-e` | `str` | `medium` | Set reasoning effort level (`low`, `medium`, `high`, `disabled`, `hide`, `enabled`). |
 | `--builtin-tool-timeout` | `-t` | `int` | `30` | Timeout in seconds for tool executions (including shell commands). |

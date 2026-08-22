@@ -131,11 +131,13 @@ class TestDispatchAndCLI(unittest.TestCase):
         mock_settings = Settings()
         with patch("sys.argv", ["ollama-agent", "-m", "qwen3:32b", "-e", "high", "--builtin-tool-timeout", "40"]), \
              patch("ollama_agent.main.load_settings", return_value=mock_settings), \
+             patch("ollama_agent.main.ensure_model_configured", return_value="qwen3:32b") as mock_ensure, \
              patch("ollama_agent.main.handle_cli_commands", return_value=False), \
              patch("ollama_agent.main.AgentRuntime") as mock_runtime_cls, \
              patch("ollama_agent.main.OllamaREPL") as mock_repl_cls, \
              patch("asyncio.run") as mock_asyncio_run:
             main()
+            mock_ensure.assert_called_once_with(mock_settings)
             self.assertEqual(mock_settings.model.name, "qwen3:32b")
             self.assertEqual(mock_settings.model.reasoning_effort, "high")
             self.assertEqual(mock_settings.runtime.builtin_tool_timeout, 40)
@@ -147,7 +149,7 @@ class TestDispatchAndCLI(unittest.TestCase):
         with patch("sys.argv", ["ollama-agent"]), \
              patch("ollama_agent.main.Console"), \
              patch("ollama_agent.main.load_settings", return_value=Settings()), \
-             patch("ollama_agent.main.handle_cli_commands", side_effect=ModelCapabilityError("Model unsupported")):
+             patch("ollama_agent.main.ensure_model_configured", side_effect=ModelCapabilityError("Model unsupported")):
             with self.assertRaises(SystemExit) as cm:
                 main()
             self.assertEqual(cm.exception.code, 1)
