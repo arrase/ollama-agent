@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, Callable
 
 import ollama
 from rich import box
@@ -12,7 +12,7 @@ from rich.table import Table
 
 from ..agent import AgentRuntime
 from ..core import ModelCapabilityError, model_supports_tools
-from ..settings import save_settings
+from ..settings import Settings, save_settings
 
 VALID_SAMPLING_PARAMS: dict[str, type] = {
     "temperature": float,
@@ -23,6 +23,13 @@ VALID_SAMPLING_PARAMS: dict[str, type] = {
     "repeat_penalty": float,
     "repetition_penalty": float,
 }
+
+
+def _list_models_sync(base_url: str) -> list[Any]:
+    """Fetch the list of available Ollama models synchronously."""
+    client = ollama.Client(host=base_url)
+    response = client.list()
+    return list(response.models)
 
 
 async def _list_models(base_url: str) -> list[Any]:
@@ -191,4 +198,90 @@ async def set_model_param(
         f"[green]✓ Set [cyan]{norm_name}[/cyan] to [cyan]{val}[/cyan][/green]\n"
         "[dim]Model reloaded with updated parameters.[/dim]"
     )
+
+
+def ensure_model_configured(
+    settings: Settings,
+    console: Console | None = None,
+    input_func: Callable[[str], str] = input,
+) -> str:
+    """Ensure the configured model is available in Ollama, or prompt the user to choose one."""
+    base_url = settings.model.base_url
+    try:
+        models = _list_models_sync(base_url)
+        available_models = [m for m in models if getattr(m, "model", None)]
+    except Exception as exc:
+        raise ModelCapabilityError(
+            f"Could not connect to Ollama at '{base_url}': {exc}"
+        ) from exc
+
+    if not available_models:
+        raise ModelCapabilityError(
+            f"No models found in Ollama at '{base_url}'. Please pull a model first with 'ollama pull <model>'."
+        )
+
+    model_names = [m.model for m in available_models]
+    configured = settings.model.name.strip()
+    if configured:
+        if configured in model_names:
+            return configured
+        if f"{configured}:latest" in model_names:
+            settings.model.name = f"{configured}:latest"
+            save_settings(settings)
+            return settings.model.name
+
+    out = console if console is not None else Console()
+    if configured:
+        out.print(
+            f"[yellow]Configured model '[bold cyan]{configured}[/bold cyan]' is not available in Ollama.[/yellow]"
+        )
+    else:
+        out.print("[yellow]No model is currently configured in settings.[/yellow]")
+
+    out.print("[bold]Available Ollama models:[/bold]")
+    for i, item in enumerate(available_models, start=1):
+        size_str = (
+            f" ({item.size / (1024**3):.1f} GB)"
+            if getattr(item, "size", None)
+            else ""
+        )
+        out.print(f"  [cyan]{i})[/cyan] [bold]{item.model}[/bold]{size_str}")
+
+    while True:
+        try:
+            choice = input_func(
+                f"Select a model [1-{len(available_models)}]: "
+            ).strip()
+        except (KeyboardInterrupt, EOFError):
+            raise SystemExit(1)
+        if not choice:
+            continue
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(available_models):
+                selected = available_models[idx].model
+                break
+        else:
+            matched = next(
+                (
+                    m.model
+                    for m in available_models
+                    if m.model == choice or m.model == f"{choice}:latest"
+                ),
+                None,
+            )
+            if matched is not None:
+                selected = matched
+                break
+        out.print(
+            f"[red]Invalid selection '{choice}'. Please enter a number between 1 and {len(available_models)} or a model name.[/red]"
+        )
+
+    settings.model.name = selected
+    save_settings(settings)
+    out.print(
+        f"[green]✓ Selected model '[bold cyan]{selected}[/bold cyan]' saved to configuration.[/green]\n"
+    )
+    return selected
+
 

@@ -42,7 +42,7 @@ class TestConfigManagement(unittest.TestCase):
 
     def test_default_settings_instantiation(self) -> None:
         s = Settings()
-        self.assertEqual(s.model.name, "gemma4:26b")
+        self.assertEqual(s.model.name, "")
         self.assertEqual(s.model.context_window, 10000)
         self.assertIsNone(s.model.temperature)
         self.assertIsNone(s.model.top_p)

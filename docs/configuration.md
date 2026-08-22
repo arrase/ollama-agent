@@ -14,7 +14,7 @@
 
 # Primary LLM Model Settings
 model:
-  name: "gemma4:26b"                     # Default Ollama model tag (must support tools)
+  name: "qwen3.8:27b"                     # Active Ollama model tag (must support tools)
   base_url: "http://localhost:11434"     # Ollama API server endpoint
   context_window: 10000                  # Context window size in tokens (num_ctx)
   reasoning_effort: "medium"             # Reasoning effort: low, medium, high, xhigh, disabled, hide, enabled
@@ -78,7 +78,7 @@ subagents:
 
 | Section & Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `model.name` | `str` | `gemma4:26b` | Default Ollama model name (must support tool calling). |
+| `model.name` | `str` | *(interactive)* | Configured Ollama model name (must support tool calling). Selected interactively if unconfigured or missing. |
 | `model.base_url` | `str` | `http://localhost:11434` | Ollama native API endpoint. |
 | `model.temperature` | `float` | *(dynamic)* | Optional temperature override (0.8 engine default if unset in Modelfile). |
 | `model.top_p` | `float` | *(dynamic)* | Optional nucleus sampling threshold override (0.9 engine default if unset). |
