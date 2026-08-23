@@ -11,7 +11,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ..agent import AgentRuntime
-from ..core import ModelCapabilityError, model_supports_tools
+from ..core import ALLOWED_REASONING_EFFORTS, ModelCapabilityError, model_supports_tools
 from ..settings import Settings, save_settings
 
 VALID_SAMPLING_PARAMS: dict[str, type] = {
@@ -125,6 +125,48 @@ async def set_model(
         return model_name
     except (ollama.ResponseError, OSError) as exc:
         console.print(f"[red]Failed to switch to model '{model_name}': {exc}[/red]")
+        return current
+
+
+def show_effort(console: Console, runtime: AgentRuntime) -> None:
+    """Print the current reasoning effort and model."""
+    effort = runtime.settings.model.reasoning_effort
+    model = runtime.settings.model.name
+    console.print(
+        f"Current reasoning effort: [bold cyan]{effort}[/bold cyan] [dim](model: {model})[/dim]\n"
+        "[dim]Usage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)[/dim]"
+    )
+
+
+async def set_effort(
+    console: Console,
+    effort: str,
+    *,
+    runtime: AgentRuntime,
+) -> str:
+    """Switch reasoning effort level, returning the new effort level."""
+    norm_effort = effort.lower().strip()
+    if norm_effort not in ALLOWED_REASONING_EFFORTS:
+        valid_list = ", ".join(ALLOWED_REASONING_EFFORTS)
+        console.print(
+            f"[red]Invalid reasoning effort '{effort}'. Allowed values: {valid_list}[/red]"
+        )
+        return runtime.settings.model.reasoning_effort
+
+    current = runtime.settings.model.reasoning_effort
+    if norm_effort == current:
+        console.print(f"[yellow]Already using reasoning effort '{norm_effort}'.[/yellow]")
+        return current
+
+    try:
+        await runtime.set_reasoning_effort(norm_effort)
+        console.print(
+            f"[green]✓ Switched reasoning effort from [cyan]{current}[/cyan] to [cyan]{norm_effort}[/cyan][/green]\n"
+            "[dim]Conversation preserved. Continue chatting.[/dim]"
+        )
+        return norm_effort
+    except (ollama.ResponseError, OSError, ValueError) as exc:
+        console.print(f"[red]Failed to switch reasoning effort to '{norm_effort}': {exc}[/red]")
         return current
 
 

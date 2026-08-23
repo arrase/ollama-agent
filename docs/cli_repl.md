@@ -150,6 +150,8 @@ Slash commands provide full application control directly within the REPL:
 | :--- | :--- | :--- |
 | `/help` | `/help` | Display interactive help panel categorized by feature. |
 | `/model` | `/model [list \| set <model>]` | List available Ollama models (with tool support indicators) or switch model mid-session. |
+| `/effort` | `/effort [<level>]` | Show current reasoning effort or change thinking/reasoning effort mid-session (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
+| `/params` | `/params [list \| set <parameter> <value>]` | Inspect active sampling parameters and resolution sources, or dynamically update parameter values for the active session. |
 | `/session` | `/session [list \| search <query> \| resume <id> \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume threads, export to Markdown, or delete history. |
 | `/compact` | `/compact` (alias: `/compress`) | Manually compact conversation history into a structured summary to reclaim context window tokens. |
 | `/task` | `/task [list \| create <id> \| run <id> [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` launches an interactive modal dialog. |

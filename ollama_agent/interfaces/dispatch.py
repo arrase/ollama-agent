@@ -25,7 +25,13 @@ from ..rag import (
 )
 from ..skills import SkillError, SkillsContext, create_skill, delete_skill, list_skills, show_skill
 from ..tasks.commands import CLIContext, TaskError, create_task, delete_task, list_tasks, run_task
-from .model_commands import list_models, set_model_param, show_model_params
+from .model_commands import (
+    list_models,
+    set_effort,
+    set_model_param,
+    show_effort,
+    show_model_params,
+)
 from .session_commands import (
     delete_session,
     export_session,
@@ -152,6 +158,8 @@ def build_repl_handlers(
     handle_session_export: Callable[[list[str]], Awaitable[None]] | None = None,
     handle_compact: Callable[[list[str]], Awaitable[None]] | None = None,
     get_runtime: Callable[[], Any] | None = None,
+    current_effort: Callable[[], str] = lambda: "",
+    switch_effort: Callable[[str], Awaitable[None]] | None = None,
 ) -> dict[str, REPLCommand]:
     """Build the REPL command registry for unified slash commands."""
 
@@ -163,6 +171,22 @@ def build_repl_handlers(
         if len(args) == 1 and args[0] != "list":
             return switch_model(args[0])
         console.print("[red]Usage: /model [list | set <model>][/red]")
+        return None
+
+    def handle_effort(args: list[str]) -> object:
+        if not args:
+            if get_runtime is not None:
+                show_effort(console, get_runtime())
+            else:
+                eff = current_effort()
+                console.print(
+                    f"Current reasoning effort: [bold cyan]{eff}[/bold cyan]\n"
+                    "[dim]Usage: /effort <level>[/dim]"
+                )
+            return None
+        target = args[1] if args[0] in ("set", "use", "switch") and len(args) > 1 else args[0]
+        if switch_effort is not None:
+            return switch_effort(target)
         return None
 
     def handle_params(args: list[str]) -> object:
@@ -355,6 +379,12 @@ def build_repl_handlers(
             "Model Management",
             "/model [list | set <model>]",
             handle_model,
+        ),
+        "/effort": REPLCommand(
+            "Show or set reasoning/thinking effort",
+            "Model Management",
+            "/effort [<level>]",
+            handle_effort,
         ),
         "/params": REPLCommand(
             "Manage model sampling parameters (list, set)",

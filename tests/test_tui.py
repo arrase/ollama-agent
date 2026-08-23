@@ -518,8 +518,13 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         def _toggle_yolo(args):
             repl_mock.runtime.yolo_mode = not repl_mock.runtime.yolo_mode
 
+        def _set_effort(args):
+            if args:
+                repl_mock.runtime.settings.model.reasoning_effort = args[0]
+
         repl_mock._get_commands.return_value = {
             "/yolo": REPLCommand(summary="toggle yolo", section="General", usage=None, handler=_toggle_yolo),
+            "/effort": REPLCommand(summary="manage effort", section="Model Management", usage=None, handler=_set_effort),
         }
 
         app = OllamaAgentApp(repl_mock)
@@ -566,6 +571,12 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
                 self.assertEqual(len(list(chat_scroll.query(UserMessage))), 1)
                 self.assertEqual(len(list(chat_scroll.query(AgentResponse))), 1)
+
+            # 5. /effort command updates header
+            with patch.object(app.query_one(AgentHeader), "update_header") as mock_update_header:
+                await app._run_slash_command("/effort high")
+                mock_update_header.assert_called_once()
+                self.assertEqual(repl_mock.runtime.settings.model.reasoning_effort, "high")
 
     async def test_tui_streaming_renderer_events(self) -> None:
         repl_mock = MagicMock()

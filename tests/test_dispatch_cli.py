@@ -99,6 +99,7 @@ class TestDispatchAndCLI(unittest.TestCase):
 
         self.assertIn("/help", handlers)
         self.assertIn("/model", handlers)
+        self.assertIn("/effort", handlers)
         self.assertIn("/yolo", handlers)
         self.assertIn("/new", handlers)
         self.assertIn("/compact", handlers)

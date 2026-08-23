@@ -173,6 +173,13 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(runtime.settings.model.name, "qwen3:32b")
             self.assertIn("qwen3:32b", msg)
 
+            effort_msg = await runtime.set_reasoning_effort("high")
+            self.assertEqual(runtime.settings.model.reasoning_effort, "high")
+            self.assertIn("high", effort_msg)
+
+            with self.assertRaises(ValueError):
+                await runtime.set_reasoning_effort("invalid_effort")
+
         await runtime.aclose()
 
     async def test_agent_runtime_rag_active_instructions_and_tools(self) -> None:

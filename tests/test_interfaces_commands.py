@@ -13,8 +13,10 @@ from ollama_agent.interfaces.dispatch import build_repl_handlers, render_repl_he
 from ollama_agent.interfaces.model_commands import (
     ensure_model_configured,
     list_models,
+    set_effort,
     set_model,
     set_model_param,
+    show_effort,
     show_model_params,
 )
 from ollama_agent.interfaces.session_commands import new_session
@@ -121,6 +123,47 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             runtime.set_model.assert_awaited_once_with("qwen3:32b")
             self.assertIn("Switched", console.export_text())
 
+    def test_show_effort(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.settings.model.reasoning_effort = "medium"
+        runtime.settings.model.name = "llama3.2:3b"
+
+        show_effort(console, runtime)
+        out = console.export_text()
+        self.assertIn("Current reasoning effort", out)
+        self.assertIn("medium", out)
+        self.assertIn("llama3.2:3b", out)
+
+    async def test_set_effort_invalid(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.settings.model.reasoning_effort = "medium"
+
+        res = await set_effort(console, "super_extreme", runtime=runtime)
+        self.assertEqual(res, "medium")
+        self.assertIn("Invalid reasoning effort", console.export_text())
+
+    async def test_set_effort_same(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.settings.model.reasoning_effort = "high"
+
+        res = await set_effort(console, "high", runtime=runtime)
+        self.assertEqual(res, "high")
+        self.assertIn("Already using reasoning effort", console.export_text())
+
+    async def test_set_effort_success(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.settings.model.reasoning_effort = "medium"
+        runtime.set_reasoning_effort = AsyncMock()
+
+        res = await set_effort(console, "high", runtime=runtime)
+        self.assertEqual(res, "high")
+        runtime.set_reasoning_effort.assert_awaited_once_with("high")
+        self.assertIn("Switched reasoning effort", console.export_text())
+
     def test_show_model_params(self) -> None:
         console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
@@ -194,27 +237,57 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         )
 
         # /params
-        handlers["/params"].callback([])
+        handlers["/params"].handler([])
         out = console.export_text()
         self.assertIn("Active Model Parameters", out)
 
         # /params list
         console = Console(file=io.StringIO(), record=True)
-        handlers["/params"].callback(["list"])
+        handlers["/params"].handler(["list"])
         out_list = console.export_text()
         self.assertIn("Active Model Parameters", out_list)
 
         # /params set with missing args
         console = Console(file=io.StringIO(), record=True)
-        handlers["/params"].callback(["set", "temperature"])
+        handlers["/params"].handler(["set", "temperature"])
         out_missing = console.export_text()
         self.assertIn("Usage: /params set", out_missing)
 
         # /model does not handle params
         console = Console(file=io.StringIO(), record=True)
-        handlers["/model"].callback(["params"])
+        handlers["/model"].handler(["params"])
         out_model = console.export_text()
         self.assertIn("Usage: /model", out_model)
+
+    def test_effort_dispatch(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.settings.model.reasoning_effort = "medium"
+        runtime.settings.model.name = "llama3.2:3b"
+
+        handlers = build_repl_handlers(
+            task_ctx=MagicMock(),
+            skills_ctx=MagicMock(),
+            get_rag_ctx=MagicMock(),
+            console=console,
+            current_model=lambda: "llama3.2:3b",
+            base_url=lambda: "http://localhost:11434",
+            switch_model=AsyncMock(),
+            handle_exit=lambda _: None,
+            handle_new=AsyncMock(),
+            handle_task_create=lambda _: None,
+            handle_skill_create=lambda _: None,
+            handle_yolo=lambda _: None,
+            get_runtime=lambda: runtime,
+            current_effort=lambda: "medium",
+            switch_effort=AsyncMock(),
+        )
+
+        # /effort without args
+        handlers["/effort"].handler([])
+        out = console.export_text()
+        self.assertIn("Current reasoning effort", out)
+        self.assertIn("medium", out)
 
     def test_render_repl_help(self) -> None:
         console = Console(file=io.StringIO(), record=True)
@@ -237,6 +310,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Available Commands", out)
         self.assertIn("/help", out)
         self.assertIn("/model", out)
+        self.assertIn("/effort", out)
         self.assertIn("/task", out)
         self.assertIn("/skill", out)
         self.assertIn("/rag", out)
@@ -248,6 +322,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         skills_ctx = MagicMock()
         rag_ctx = MagicMock()
         switch_model = AsyncMock()
+        switch_effort = AsyncMock()
         handle_task_create = MagicMock()
         handle_skill_create = MagicMock()
 
@@ -264,6 +339,8 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             handle_task_create=handle_task_create,
             handle_skill_create=handle_skill_create,
             handle_yolo=lambda _: None,
+            current_effort=lambda: "medium",
+            switch_effort=switch_effort,
         )
 
         # 1. /model handler
@@ -273,6 +350,18 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
 
         await safe_call(handlers["/model"].handler, ["set", "llama3:8b"])
         switch_model.assert_awaited_with("llama3:8b")
+
+        # 1b. /effort handler
+        with patch("ollama_agent.interfaces.dispatch.show_effort") as mock_show_effort:
+            handlers["/effort"].handler([])
+            out_effort = console.export_text()
+            self.assertIn("Current reasoning effort", out_effort)
+
+        await safe_call(handlers["/effort"].handler, ["set", "high"])
+        switch_effort.assert_awaited_with("high")
+
+        await safe_call(handlers["/effort"].handler, ["low"])
+        switch_effort.assert_awaited_with("low")
 
         # 2. /task handler
         with patch("ollama_agent.interfaces.dispatch.list_tasks") as mock_list_tasks:

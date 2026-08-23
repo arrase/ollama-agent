@@ -409,6 +409,13 @@ class AgentRuntime:
         await self.reload()
         return f"Model set to {model_name}."
 
+    async def set_reasoning_effort(self, effort: str) -> str:
+        validated = validate_reasoning_effort(effort)
+        self.settings.model.reasoning_effort = validated
+        await asyncio.to_thread(save_settings, self.settings)
+        await self.reload()
+        return f"Reasoning effort set to {validated}."
+
     async def aclose(self) -> None:
         await self._exit_stack.aclose()
 
