@@ -67,11 +67,11 @@
 - 🛡️ **Human-in-the-Loop (HITL) & YOLO Mode**: Interactive terminal approval widget before executing shell commands or editing files, with full bypass available via YOLO mode (`-y` or `/yolo`).
 - 📁 **Interactive `@-mentions`**: Reference local files or entire directory trees directly in prompts (e.g. `@src/main.py`, `@"data folder"`, `@.`) with path autocompletion, multimodal encoding, and binary safety.
 - 💾 **SQLite-Backed Sessions**: Durable conversation checkpoints in `~/.ollama-agent/history.db` with instant resumption (`/session resume <id>`), markdown export (`/session export`), and history management.
-- 📋 **Saved Tasks**: Save reusable prompts as YAML templates and execute them on demand via CLI (`task-run`) or interactive REPL modals (`/task run`).
+- 📋 **Saved Tasks**: Save reusable prompts as YAML templates and execute them on demand via CLI (`task run`) or interactive REPL modals (`/task run`).
 - 🧩 **Agent Skills Standard**: Extend the agent with modular skills following the [Agent Skills specification](https://agentskills.io/specification) using progressive disclosure.
 - 📚 **Local RAG Engine**: Embed and index documents into local Qdrant vector collections with automated semantic retrieval via the agent's `rag_search` tool.
 - 🧠 **Persistent Memory & Guidelines**: Cross-session user memory (`MEMORY.md`), automatic discovery of project-level guidelines (`AGENTS.md`), and **Episodic Memory** to search past conversations and solutions (`search_past_conversations` tool and `/session search`).
-- 🔌 **Model Context Protocol (MCP)**: Attach MCP servers (`mcp.json` or `mcp_servers.json`) directly to the main agent across `stdio`, `http`, and `sse` transports, with real-time status inspection via `/mcp` and `mcp-list`.
+- 🔌 **Model Context Protocol (MCP)**: Attach MCP servers (`mcp.json` or `mcp_servers.json`) directly to the main agent across `stdio`, `http`, and `sse` transports, with real-time status inspection via `/mcp` and `mcp list`.
 - 🤖 **Specialized Subagents**: Configure isolated subagents in `settings.yaml` with their own model, system prompt, and dedicated MCP tool servers.
 
 ---
@@ -333,23 +333,23 @@ In addition to top-level flags, Ollama Agent provides dedicated CLI subcommands 
 
 | Domain | Subcommand | Example Usage | Description |
 | :--- | :--- | :--- | :--- |
-| **Sessions** | `session-list` | `ollama-agent session-list` | List all saved chat sessions. |
-| | `session-search` | `ollama-agent session-search "sqlite fix"` | Search past sessions by keyword. |
-| | `session-export` | `ollama-agent session-export <id> -o export.md` | Export a session to Markdown. |
-| | `session-delete` | `ollama-agent session-delete <id>` | Delete a session from SQLite history. |
-| **Tasks** | `task-list` | `ollama-agent task-list` | List all saved YAML tasks. |
-| | `task-create` | `ollama-agent task-create review --title "..." --task-prompt "..."` | Create a reusable task. |
-| | `task-run` | `ollama-agent task-run review -y` | Execute a task from CLI. |
-| | `task-delete` | `ollama-agent task-delete review` | Delete a saved task. |
-| **Skills** | `skill-list` | `ollama-agent skill-list` | List all discovered agent skills. |
-| | `skill-show` | `ollama-agent skill-show <id>` | Display skill metadata & instructions. |
-| | `skill-create` | `ollama-agent skill-create <id> --name "..." --description "..." --instructions "..."` | Create a new skill directory & `SKILL.md`. |
-| | `skill-delete` | `ollama-agent skill-delete <id>` | Delete a skill directory. |
-| **RAG** | `rag-list` | `ollama-agent rag-list` | List all local RAG vector databases. |
-| | `rag-create` | `ollama-agent rag-create docs-kb` | Create a new Qdrant vector database. |
-| | `rag-add` | `ollama-agent rag-add docs-kb ./docs --dir` | Index a file or directory into a RAG collection. |
-| | `rag-delete` | `ollama-agent rag-delete docs-kb` | Delete a RAG database. |
-| **MCP** | `mcp-list` | `ollama-agent mcp-list` | List configured MCP servers and check their connection health. |
+| **Sessions** | `session list` | `ollama-agent session list` | List all saved chat sessions. |
+| | `session search` | `ollama-agent session search "sqlite fix"` | Search past sessions by keyword. |
+| | `session export` | `ollama-agent session export <id> -o export.md` | Export a session to Markdown. |
+| | `session delete` | `ollama-agent session delete <id>` | Delete a session from SQLite history. |
+| **Tasks** | `task list` | `ollama-agent task list` | List all saved YAML tasks. |
+| | `task create` | `ollama-agent task create review --title "..." --task-prompt "..."` | Create a reusable task. |
+| | `task run` | `ollama-agent task run review -y` | Execute a task from CLI. |
+| | `task delete` | `ollama-agent task delete review` | Delete a saved task. |
+| **Skills** | `skill list` | `ollama-agent skill list` | List all discovered agent skills. |
+| | `skill show` | `ollama-agent skill show <id>` | Display skill metadata & instructions. |
+| | `skill create` | `ollama-agent skill create <id> --name "..." --description "..." --instructions "..."` | Create a new skill directory & `SKILL.md`. |
+| | `skill delete` | `ollama-agent skill delete <id>` | Delete a skill directory. |
+| **RAG** | `rag list` | `ollama-agent rag list` | List all local RAG vector databases. |
+| | `rag create` | `ollama-agent rag create docs-kb` | Create a new Qdrant vector database. |
+| | `rag add` | `ollama-agent rag add docs-kb ./docs --dir` | Index a file or directory into a RAG collection. |
+| | `rag delete` | `ollama-agent rag delete docs-kb` | Delete a RAG database. |
+| **MCP** | `mcp list` | `ollama-agent mcp list` | List configured MCP servers and check their connection health. |
 
 ---
 
@@ -405,12 +405,12 @@ All conversations are saved to a local SQLite database at `~/.ollama-agent/histo
 
 | Action | REPL Command | CLI Command | Description |
 | :--- | :--- | :--- | :--- |
-| **List Sessions** | `/session list` | `ollama-agent session-list` | Display saved sessions with thread IDs, step counts, and active status. |
-| **Search Sessions** | `/session search <query>` | `ollama-agent session-search <query>` | Search across past chat sessions and conversations by keyword. |
+| **List Sessions** | `/session list` | `ollama-agent session list` | Display saved sessions with thread IDs, step counts, and active status. |
+| **Search Sessions** | `/session search <query>` | `ollama-agent session search <query>` | Search across past chat sessions and conversations by keyword. |
 | **Resume Session** | `/session resume <id>` | — | Resume a past conversation by exact ID or prefix, restoring message history into the viewport. |
 | **New Session** | `/session new` (or `/new`, `/clear`) | — | Initialize a fresh conversation session with a new thread ID and clear the screen. |
-| **Export Session** | `/session export [path]` | `ollama-agent session-export <id> [-o path]` | Export conversation history to a structured Markdown document. |
-| **Delete Session** | `/session delete <id>` | `ollama-agent session-delete <id>` | Delete session checkpoints and metadata from the SQLite database. |
+| **Export Session** | `/session export [path]` | `ollama-agent session export <id> [-o path]` | Export conversation history to a structured Markdown document. |
+| **Delete Session** | `/session delete <id>` | `ollama-agent session delete <id>` | Delete session checkpoints and metadata from the SQLite database. |
 
 > [!TIP]
 > In the REPL, typing `/session resume ` or `/session delete ` dynamically lists and autocompletes available session IDs.
@@ -418,7 +418,7 @@ All conversations are saved to a local SQLite database at `~/.ollama-agent/histo
 ### 5. Episodic Memory & Conversation Recall
 Allows the AI agent to search and recall past conversation sessions, past troubleshooting steps, and previous architectural decisions stored in `~/.ollama-agent/history.db`:
 - **Autonomous Agent Tool**: The `search_past_conversations` tool is available to the agent so it can query prior sessions on demand when asked about past context (e.g., *"how did we resolve the database migration issue yesterday?"*).
-- **User Discovery**: Users can also search past sessions manually via `/session search <query>` in the REPL or `ollama-agent session-search <query>` in the CLI.
+- **User Discovery**: Users can also search past sessions manually via `/session search <query>` in the REPL or `ollama-agent session search <query>` in the CLI.
 
 ---
 
@@ -432,20 +432,20 @@ Tasks are reusable prompt templates stored as YAML files in `~/.ollama-agent/tas
 
 ```bash
 # Create a task
-ollama-agent task-create code-review \
+ollama-agent task create code-review \
     --title "Code Review Assistant" \
     --task-prompt "Review the git diff against main and highlight bugs, complexity, and styling issues." \
     -m "gemma4:26b" \
     -e "high"
 
 # List saved tasks
-ollama-agent task-list
+ollama-agent task list
 
 # Run a task (with optional YOLO mode)
-ollama-agent task-run code-review -y
+ollama-agent task run code-review -y
 
 # Delete a task
-ollama-agent task-delete code-review
+ollama-agent task delete code-review
 ```
 
 #### 2. REPL Task Management & Modal Dialogs
@@ -504,10 +504,10 @@ description: Guidelines and best practices for designing RESTful and OpenAPI com
 
 | Action | REPL Command | CLI Command |
 | :--- | :--- | :--- |
-| **List Skills** | `/skill list` | `ollama-agent skill-list` |
-| **Show Skill** | `/skill show <id>` | `ollama-agent skill-show <id>` |
-| **Create Skill** | `/skill create <id>` *(opens interactive modal)* | `ollama-agent skill-create <id> --name "..." --description "..." --instructions "..."` |
-| **Delete Skill** | `/skill delete <id>` | `ollama-agent skill-delete <id>` |
+| **List Skills** | `/skill list` | `ollama-agent skill list` |
+| **Show Skill** | `/skill show <id>` | `ollama-agent skill show <id>` |
+| **Create Skill** | `/skill create <id>` *(opens interactive modal)* | `ollama-agent skill create <id> --name "..." --description "..." --instructions "..."` |
+| **Delete Skill** | `/skill delete <id>` | `ollama-agent skill delete <id>` |
 
 > [!NOTE]
 > `SKILL.md` files must be under 10 MB. Descriptions longer than 1,024 characters are truncated automatically during skill indexing.
@@ -522,9 +522,9 @@ Local RAG empowers the agent to index documents into local Qdrant vector databas
 
 ```bash
 # CLI: Create, list, and delete databases
-ollama-agent rag-create project-docs
-ollama-agent rag-list
-ollama-agent rag-delete project-docs
+ollama-agent rag create project-docs
+ollama-agent rag list
+ollama-agent rag delete project-docs
 ```
 
 Inside REPL:
@@ -541,8 +541,8 @@ Inside REPL:
 
 ```bash
 # CLI: Index a single file or an entire directory
-ollama-agent rag-add project-docs ./docs/architecture.md
-ollama-agent rag-add project-docs ./src --dir
+ollama-agent rag add project-docs ./docs/architecture.md
+ollama-agent rag add project-docs ./src --dir
 ```
 
 Inside REPL:
@@ -605,7 +605,7 @@ Create `~/.ollama-agent/mcp.json` (or `mcp_servers.json`):
 
 - **Supported Transports**: `stdio` (subprocess execution), `http`, and `sse` (remote endpoints).
 - **Environment Substitution**: `${VAR_NAME}` (and `%VAR_NAME%`) syntax injects host environment variables; servers with missing required variables are skipped gracefully with a log warning.
-- **Server Status Inspection**: Run `/mcp` in the interactive REPL or `ollama-agent mcp-list` from the CLI to check connection status, health, and discovered tools with color-coded status badges (`● Active` / `● Failed`).
+- **Server Status Inspection**: Run `/mcp` in the interactive REPL or `ollama-agent mcp list` from the CLI to check connection status, health, and discovered tools with color-coded status badges (`● Active` / `● Failed`).
 
 ---
 

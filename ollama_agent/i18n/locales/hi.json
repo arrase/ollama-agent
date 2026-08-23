@@ -380,5 +380,11 @@
   "Invalid configuration or missing environment variables": "अमान्य कॉन्फ़िगरेशन या अनुपलब्ध पर्यावरण चर",
   "Connection timed out ({timeout}s)": "कनेक्शन समय समाप्त ({timeout}s)",
   "Error reading MCP configuration {path}: {exc}": "MCP कॉन्फ़िगरेशन {path} पढ़ने में त्रुटि: {exc}",
-  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list]": "अज्ञात mcp उप-कमांड '{sub}'। उपयोग: /mcp [list]"
+  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list]": "अज्ञात mcp उप-कमांड '{sub}'। उपयोग: /mcp [list]",
+  "Run 'ollama-agent <command> -h' for more details on a specific command.": "किसी विशिष्ट कमांड पर अधिक विवरण देखने के लिए 'ollama-agent <command> -h' चलाएँ।",
+  "Run 'ollama-agent task <subcommand> -h' for more details on a subcommand.": "उप-कमांड पर अधिक विवरण देखने के लिए 'ollama-agent task <subcommand> -h' चलाएँ।",
+  "Run 'ollama-agent rag <subcommand> -h' for more details on a subcommand.": "उप-कमांड पर अधिक विवरण देखने के लिए 'ollama-agent rag <subcommand> -h' चलाएँ।",
+  "Run 'ollama-agent skill <subcommand> -h' for more details on a subcommand.": "उप-कमांड पर अधिक विवरण देखने के लिए 'ollama-agent skill <subcommand> -h' चलाएँ।",
+  "Run 'ollama-agent session <subcommand> -h' for more details on a subcommand.": "उप-कमांड पर अधिक विवरण देखने के लिए 'ollama-agent session <subcommand> -h' चलाएँ।",
+  "Run 'ollama-agent mcp <subcommand> -h' for more details on a subcommand.": "उप-कमांड पर अधिक विवरण देखने के लिए 'ollama-agent mcp <subcommand> -h' चलाएँ।"
 }

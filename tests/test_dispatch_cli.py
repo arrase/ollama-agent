@@ -48,32 +48,32 @@ class TestDispatchAndCLI(unittest.TestCase):
 
     def test_task_run_yolo_flag_parsing(self) -> None:
         parser = create_argument_parser()
-        args1 = parser.parse_args(["task-run", "my-task", "-y"])
+        args1 = parser.parse_args(["task", "run", "my-task", "-y"])
         self.assertEqual(args1.task_id, "my-task")
         self.assertTrue(args1.yolo)
 
-        args2 = parser.parse_args(["-y", "task-run", "my-task"])
+        args2 = parser.parse_args(["-y", "task", "run", "my-task"])
         self.assertEqual(args2.task_id, "my-task")
         self.assertTrue(args2.yolo)
 
-        args3 = parser.parse_args(["task-run", "my-task"])
+        args3 = parser.parse_args(["task", "run", "my-task"])
         self.assertEqual(args3.task_id, "my-task")
         self.assertFalse(args3.yolo)
 
     def test_build_cli_handlers_registry(self) -> None:
         parser = create_argument_parser()
-        args = parser.parse_args(["task-list"])
+        args = parser.parse_args(["task", "list"])
         handlers = build_cli_handlers(
             args,
             task_ctx=CLIContext(console=Console(file=io.StringIO())),
             rag_ctx=RAGContext(rag_manager=RAGManager(RAGSettings()), console=Console(file=io.StringIO())),
             skills_ctx=SkillsContext(console=Console(file=io.StringIO())),
         )
-        self.assertIn("task-list", handlers)
-        self.assertIn("task-create", handlers)
-        self.assertIn("rag-list", handlers)
-        self.assertIn("skill-list", handlers)
-        self.assertIn("mcp-list", handlers)
+        self.assertIn(("task", "list"), handlers)
+        self.assertIn(("task", "create"), handlers)
+        self.assertIn(("rag", "list"), handlers)
+        self.assertIn(("skill", "list"), handlers)
+        self.assertIn(("mcp", "list"), handlers)
 
     def test_build_repl_handlers_registry(self) -> None:
         async def dummy_async_str(_: str) -> None:
@@ -122,7 +122,7 @@ class TestDispatchAndCLI(unittest.TestCase):
             mock_print.assert_called_once_with("Reset successful")
 
     def test_main_cli_commands_handled(self) -> None:
-        with patch("sys.argv", ["ollama-agent", "task-list"]), \
+        with patch("sys.argv", ["ollama-agent", "task", "list"]), \
              patch("ollama_agent.main.load_settings", return_value=Settings()), \
              patch("ollama_agent.main.handle_cli_commands", return_value=True) as mock_handle:
             main()
@@ -157,7 +157,7 @@ class TestDispatchAndCLI(unittest.TestCase):
 
     def test_cli_rag_add_file_and_directory(self) -> None:
         parser = create_argument_parser()
-        args_file = parser.parse_args(["rag-add", "docs_db", "file.md"])
+        args_file = parser.parse_args(["rag", "add", "docs_db", "file.md"])
         mock_load = MagicMock()
         mock_add_file = AsyncMock()
         mock_add_dir = AsyncMock()
@@ -171,7 +171,7 @@ class TestDispatchAndCLI(unittest.TestCase):
                 rag_ctx=RAGContext(rag_manager=RAGManager(RAGSettings()), console=Console(file=io.StringIO())),
                 skills_ctx=SkillsContext(console=Console(file=io.StringIO())),
             )
-            asyncio.run(handlers["rag-add"]())
+            asyncio.run(handlers[("rag", "add")]())
             mock_load.assert_called_once()
             mock_add_file.assert_called_once()
             mock_add_dir.assert_not_called()
@@ -180,7 +180,7 @@ class TestDispatchAndCLI(unittest.TestCase):
         mock_add_file.reset_mock()
         mock_add_dir.reset_mock()
 
-        args_dir = parser.parse_args(["rag-add", "docs_db", "./docs", "--dir"])
+        args_dir = parser.parse_args(["rag", "add", "docs_db", "./docs", "--dir"])
         with patch("ollama_agent.interfaces.dispatch.load_rag_database", mock_load), \
              patch("ollama_agent.interfaces.dispatch.add_rag_file", mock_add_file), \
              patch("ollama_agent.interfaces.dispatch.add_rag_directory", mock_add_dir):
@@ -190,14 +190,14 @@ class TestDispatchAndCLI(unittest.TestCase):
                 rag_ctx=RAGContext(rag_manager=RAGManager(RAGSettings()), console=Console(file=io.StringIO())),
                 skills_ctx=SkillsContext(console=Console(file=io.StringIO())),
             )
-            asyncio.run(handlers["rag-add"]())
+            asyncio.run(handlers[("rag", "add")]())
             mock_load.assert_called_once()
             mock_add_file.assert_not_called()
             mock_add_dir.assert_called_once()
 
     def test_cli_session_export(self) -> None:
         parser = create_argument_parser()
-        args = parser.parse_args(["session-export", "sess-123", "-o", "export.md"])
+        args = parser.parse_args(["session", "export", "sess-123", "-o", "export.md"])
         args._runtime = AsyncMock()
 
         with patch("ollama_agent.interfaces.dispatch.export_session", AsyncMock()) as mock_export:
@@ -207,7 +207,7 @@ class TestDispatchAndCLI(unittest.TestCase):
                 rag_ctx=RAGContext(rag_manager=RAGManager(RAGSettings()), console=Console(file=io.StringIO())),
                 skills_ctx=SkillsContext(console=Console(file=io.StringIO())),
             )
-            asyncio.run(handlers["session-export"]())
+            asyncio.run(handlers[("session", "export")]())
             mock_export.assert_called_once()
 
 

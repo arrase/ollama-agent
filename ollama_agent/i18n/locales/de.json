@@ -380,5 +380,11 @@
   "Invalid configuration or missing environment variables": "Ungültige Konfiguration oder fehlende Umgebungsvariablen",
   "Connection timed out ({timeout}s)": "Verbindungszeitüberschreitung ({timeout}s)",
   "Error reading MCP configuration {path}: {exc}": "Fehler beim Lesen der MCP-Konfiguration {path}: {exc}",
-  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list]": "Unbekannter MCP-Unterbefehl '{sub}'. Verwendung: /mcp [list]"
+  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list]": "Unbekannter MCP-Unterbefehl '{sub}'. Verwendung: /mcp [list]",
+  "Run 'ollama-agent <command> -h' for more details on a specific command.": "Führen Sie 'ollama-agent <command> -h' aus, um weitere Details zu einem bestimmten Befehl anzuzeigen.",
+  "Run 'ollama-agent task <subcommand> -h' for more details on a subcommand.": "Führen Sie 'ollama-agent task <subcommand> -h' aus, um weitere Details zu einem Unterbefehl anzuzeigen.",
+  "Run 'ollama-agent rag <subcommand> -h' for more details on a subcommand.": "Führen Sie 'ollama-agent rag <subcommand> -h' aus, um weitere Details zu einem Unterbefehl anzuzeigen.",
+  "Run 'ollama-agent skill <subcommand> -h' for more details on a subcommand.": "Führen Sie 'ollama-agent skill <subcommand> -h' aus, um weitere Details zu einem Unterbefehl anzuzeigen.",
+  "Run 'ollama-agent session <subcommand> -h' for more details on a subcommand.": "Führen Sie 'ollama-agent session <subcommand> -h' aus, um weitere Details zu einem Unterbefehl anzuzeigen.",
+  "Run 'ollama-agent mcp <subcommand> -h' for more details on a subcommand.": "Führen Sie 'ollama-agent mcp <subcommand> -h' aus, um weitere Details zu einem Unterbefehl anzuzeigen."
 }

@@ -65,10 +65,10 @@ ollama-agent --rag project-docs -p "How is authentication configured in this rep
 #### 1. Task Commands
 ```bash
 # List all saved tasks
-ollama-agent task-list
+ollama-agent task list
 
 # Create a new saved task
-ollama-agent task-create code-review \
+ollama-agent task create code-review \
     --title "Code Review Assistant" \
     --task-prompt "Review the git diff against main and highlight bugs, complexity, and styling issues." \
     -m "gemma4:26b" \
@@ -76,66 +76,66 @@ ollama-agent task-create code-review \
     [--force]
 
 # Execute a saved task (with optional YOLO mode)
-ollama-agent task-run code-review -y
+ollama-agent task run code-review -y
 
 # Delete a saved task
-ollama-agent task-delete code-review
+ollama-agent task delete code-review
 ```
 
 #### 2. RAG Commands
 ```bash
 # List all RAG vector databases
-ollama-agent rag-list
+ollama-agent rag list
 
 # Create a new RAG database
-ollama-agent rag-create project-docs
+ollama-agent rag create project-docs
 
 # Ingest a single file or an entire directory
-ollama-agent rag-add project-docs ./docs/architecture.md
-ollama-agent rag-add project-docs ./src --dir
+ollama-agent rag add project-docs ./docs/architecture.md
+ollama-agent rag add project-docs ./src --dir
 
 # Delete a RAG database
-ollama-agent rag-delete project-docs
+ollama-agent rag delete project-docs
 ```
 
 #### 3. Skill Commands
 ```bash
 # List all available skills
-ollama-agent skill-list
+ollama-agent skill list
 
 # Show details and instructions for a skill
-ollama-agent skill-show api-design
+ollama-agent skill show api-design
 
 # Create a new skill
-ollama-agent skill-create api-design \
+ollama-agent skill create api-design \
     --name "API Design Guidelines" \
     --description "RESTful and OpenAPI standards" \
     --instructions "Ensure all endpoints use nouns and camelCase properties." \
     [--force]
 
 # Delete a skill
-ollama-agent skill-delete api-design
+ollama-agent skill delete api-design
 ```
 
 #### 4. Session Commands
 ```bash
 # List all saved chat sessions with step counts
-ollama-agent session-list
+ollama-agent session list
 
 # Search past sessions by keyword
-ollama-agent session-search "dockerize fastapi"
+ollama-agent session search "dockerize fastapi"
 
 # Export a session to a Markdown document
-ollama-agent session-export 4d7e2a1b -o ./exports/session_summary.md
+ollama-agent session export 4d7e2a1b -o ./exports/session_summary.md
 
 # Delete a session from SQLite history
-ollama-agent session-delete 4d7e2a1b
+ollama-agent session delete 4d7e2a1b
 ```
 
 #### 5. MCP (Model Context Protocol) Commands
 ```bash
 # List all configured MCP servers and check their connection status
-ollama-agent mcp-list
+ollama-agent mcp list
 ```
 
 ---

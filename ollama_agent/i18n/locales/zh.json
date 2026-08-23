@@ -380,5 +380,11 @@
   "Invalid configuration or missing environment variables": "配置无效或缺少环境变量",
   "Connection timed out ({timeout}s)": "连接超时 ({timeout}秒)",
   "Error reading MCP configuration {path}: {exc}": "读取 MCP 配置文件 {path} 失败: {exc}",
-  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list]": "未知的 mcp 子命令 '{sub}'。用法: /mcp [list]"
+  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list]": "未知的 mcp 子命令 '{sub}'。用法: /mcp [list]",
+  "Run 'ollama-agent <command> -h' for more details on a specific command.": "运行 'ollama-agent <command> -h' 查看特定命令的详细帮助。",
+  "Run 'ollama-agent task <subcommand> -h' for more details on a subcommand.": "运行 'ollama-agent task <subcommand> -h' 查看子命令的详细帮助。",
+  "Run 'ollama-agent rag <subcommand> -h' for more details on a subcommand.": "运行 'ollama-agent rag <subcommand> -h' 查看子命令的详细帮助。",
+  "Run 'ollama-agent skill <subcommand> -h' for more details on a subcommand.": "运行 'ollama-agent skill <subcommand> -h' 查看子命令的详细帮助。",
+  "Run 'ollama-agent session <subcommand> -h' for more details on a subcommand.": "运行 'ollama-agent session <subcommand> -h' 查看子命令的详细帮助。",
+  "Run 'ollama-agent mcp <subcommand> -h' for more details on a subcommand.": "运行 'ollama-agent mcp <subcommand> -h' 查看子命令的详细帮助。"
 }
