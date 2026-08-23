@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -19,8 +20,7 @@ def format_iso_timestamp(ts: str) -> str:
     """Format ISO timestamp into a human-readable UTC string (YYYY-MM-DD HH:MM UTC)."""
     if not ts:
         return ""
-    dt = datetime.fromisoformat(ts)
-    return dt.strftime("%Y-%m-%d %H:%M UTC")
+    return datetime.fromisoformat(ts).strftime("%Y-%m-%d %H:%M UTC")
 
 
 def load_past_conversations(
@@ -35,7 +35,7 @@ def load_past_conversations(
         return {}
 
     thread_timestamps: dict[str, str] = {}
-    thread_messages: dict[str, list[Any]] = {}
+    thread_messages: defaultdict[str, list[Any]] = defaultdict(list)
 
     with sqlite3.connect(str(db_path)) as conn:
         cursor = conn.cursor()
@@ -56,8 +56,6 @@ def load_past_conversations(
             if exclude_thread_id and tid.startswith(exclude_thread_id):
                 continue
             msgs = _serializer.loads_typed((typ, val))
-            if tid not in thread_messages:
-                thread_messages[tid] = []
             if isinstance(msgs, list):
                 thread_messages[tid].extend(msgs)
             else:
@@ -136,7 +134,7 @@ def search_past_conversations_in_db(
             })
 
     scored_results.sort(key=lambda item: (item["score"], item["timestamp"]), reverse=True)
-    return scored_results[:max(1, limit)]
+    return scored_results[:limit]
 
 
 def format_past_conversations_context(results: list[dict[str, Any]]) -> str:

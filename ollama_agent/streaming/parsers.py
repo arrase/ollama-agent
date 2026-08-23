@@ -12,23 +12,16 @@ from typing import Any
 
 
 def streaming_text(content: Any) -> str:
-    """Extract text from a streaming chunk without altering whitespace.
-
-    Handles the three payload shapes that LangChain / Responses-API can
-    produce: plain ``str``, a ``dict`` with ``type='text'``, or a ``list``
-    of such dicts.
-    """
+    """Extract text from a streaming chunk without altering whitespace."""
     if isinstance(content, str):
         return content
     if isinstance(content, dict):
-        return content.get("text", "") if content.get("type") == "text" else ""
+        return content["text"] if content.get("type") == "text" and "text" in content else ""
     if isinstance(content, list):
         return "".join(
             b["text"]
             for b in content
-            if isinstance(b, dict)
-            and b.get("type") == "text"
-            and isinstance(b.get("text"), str)
+            if isinstance(b, dict) and b.get("type") == "text" and "text" in b
         )
     return ""
 
@@ -51,7 +44,5 @@ def streaming_reasoning(content: Any, additional_kwargs: Any = None) -> str:
         for block in content
         if isinstance(block, dict) and block.get("type") == "reasoning"
         for entry in (block.get("summary") or ())
-        if isinstance(entry, dict)
-        and entry.get("type") == "summary_text"
-        and isinstance(entry.get("text"), str)
+        if isinstance(entry, dict) and entry.get("type") == "summary_text" and "text" in entry
     )

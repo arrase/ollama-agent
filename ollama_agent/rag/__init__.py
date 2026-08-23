@@ -1,7 +1,8 @@
-"""RAG module for document storage and retrieval."""
-
+from ..settings import RAGSettings
 from .commands import (
+    AmbiguousRAGDatabaseError,
     RAGContext,
+    RAGDatabaseNotFoundError,
     add_rag_directory,
     add_rag_file,
     create_rag_database,
@@ -17,7 +18,6 @@ from .manager import (
     RAGManager,
     RAGNotLoadedError,
 )
-from .settings import RAGSettings
 
 __all__ = [
     # Settings
@@ -28,7 +28,9 @@ __all__ = [
     "RAGManager",
     "RAGNotLoadedError",
     # Commands
+    "AmbiguousRAGDatabaseError",
     "RAGContext",
+    "RAGDatabaseNotFoundError",
     "add_rag_directory",
     "add_rag_file",
     "create_rag_database",

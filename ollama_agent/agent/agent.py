@@ -60,21 +60,28 @@ from .subagents import build_subagents
 _log = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Agent Runtime (CUD-inspired)
-# ---------------------------------------------------------------------------
+def _prepare_instructions(settings: Settings) -> str:
+    ensure_prompt_files()
+    base_instructions = load_instructions()
+    fs_policy = load_fs_policy_traversal() if settings.runtime.allow_traversal else load_fs_policy_sandboxed()
+    instructions = base_instructions.replace("{FILESYSTEM_POLICY}", fs_policy)
 
+    rag_mgr = get_rag_manager()
+    if rag_mgr is not None and rag_mgr.current_database is not None:
+        instructions = instructions.replace("{RAG_POLICY}", load_rag_policy())
+    else:
+        instructions = instructions.replace("{RAG_POLICY}", "")
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    os_info = f"\n\n# ENVIRONMENT\nOperating System: {platform.system()} ({platform.release()})\nCurrent Date & Time: {now_str}\n"
+    ensure_memory_file(MEMORY_PATH)
+    ensure_agents_file(AGENTS_PATH)
+    return instructions + os_info
 
 
 @dataclass(slots=True)
 class AgentRuntime:
-    """Stateful agent runtime with DeepAgents graph.
-
-    The runtime rebuilds its graph on each ``reload()`` from settings, MCP
-    servers, and instruction files.  All async resources are owned by an
-    internal :class:`~contextlib.AsyncExitStack` and cleaned up automatically
-    when the runtime is closed.
-    """
+    """Stateful agent runtime wrapping DeepAgents create_deep_agent."""
 
     settings: Settings = field(default_factory=Settings)
     thread_id: str = field(default_factory=lambda: uuid.uuid4().hex)
@@ -100,36 +107,7 @@ class AgentRuntime:
         """Tear down existing resources and rebuild the agent graph."""
         await self._exit_stack.aclose()
         self._exit_stack = contextlib.AsyncExitStack()
-        await asyncio.to_thread(ensure_prompt_files)
-        base_instructions = await asyncio.to_thread(load_instructions)
-        if self.settings.runtime.allow_traversal:
-            fs_policy = await asyncio.to_thread(load_fs_policy_traversal)
-        else:
-            fs_policy = await asyncio.to_thread(load_fs_policy_sandboxed)
-        
-        if "{FILESYSTEM_POLICY}" in base_instructions:
-            instructions = base_instructions.replace("{FILESYSTEM_POLICY}", fs_policy)
-        else:
-            instructions = f"{base_instructions}\n\n{fs_policy}"
-
-        rag_mgr = get_rag_manager()
-        rag_active = rag_mgr is not None and rag_mgr.current_database is not None
-        if rag_active:
-            rag_policy = await asyncio.to_thread(load_rag_policy)
-            if "{RAG_POLICY}" in instructions:
-                instructions = instructions.replace("{RAG_POLICY}", rag_policy)
-            else:
-                instructions = f"{instructions}\n\n{rag_policy}"
-        else:
-            if "{RAG_POLICY}" in instructions:
-                instructions = instructions.replace("{RAG_POLICY}", "")
-
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-        os_info = f"\n\n# ENVIRONMENT\nOperating System: {platform.system()} ({platform.release()})\nCurrent Date & Time: {now_str}\n"
-        self._instructions = instructions + os_info
-
-        await asyncio.to_thread(ensure_memory_file, MEMORY_PATH)
-        await asyncio.to_thread(ensure_agents_file, AGENTS_PATH)
+        self._instructions = await asyncio.to_thread(_prepare_instructions, self.settings)
         self.graph = await self._build_graph()
 
     async def _build_graph(self) -> Any:
@@ -309,9 +287,7 @@ class AgentRuntime:
                 chunk = event[0] if isinstance(event, tuple) and event else event
                 meta = getattr(chunk, "response_metadata", None)
                 if isinstance(meta, dict) and "prompt_eval_count" in meta:
-                    eval_cnt = meta.get("eval_count") or 0
-                    prompt_cnt = meta.get("prompt_eval_count") or 0
-                    self.last_context_tokens = prompt_cnt + eval_cnt
+                    self.last_context_tokens = int(meta.get("eval_count", 0)) + int(meta["prompt_eval_count"])
                 result = _process_message_chunk(
                     chunk, hide_reasoning=hide_reasoning
                 )
@@ -339,7 +315,7 @@ class AgentRuntime:
         if not state or not state.values or "messages" not in state.values:
             return {"success": False, "message": "No messages in session to compact."}
 
-        messages = state.values.get("messages", [])
+        messages = state.values["messages"]
         event = state.values.get("_summarization_event")
         effective = self._summarization_mw._apply_event_to_messages(messages, event)
 

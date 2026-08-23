@@ -81,7 +81,7 @@ class RuntimeSettings:
 
 @dataclass(slots=True)
 class RAGSettings:
-    rag_dir: str = ""
+    rag_dir: str = str(RAG_DIR)
     embedder_model: str = "nomic-embed-text:latest"
     embedder_base_url: str = "http://localhost:11434"
     embedding_dims: int = 768
@@ -202,12 +202,9 @@ def _subagents_from_list(
             _dataclass_from_dict(SubAgentMCPServer, m)
             for m in (item.get("mcp_servers") or [])
         ]
-        sa = _dataclass_from_dict(
-            SubAgentSettings,
-            {k: v for k, v in item.items() if k != "mcp_servers"},
-        )
-        sa.mcp_servers = mcp_servers
-        subagents.append(sa)
+        data = {k: v for k, v in item.items() if k != "mcp_servers"}
+        data["mcp_servers"] = mcp_servers
+        subagents.append(_dataclass_from_dict(SubAgentSettings, data))
     return subagents
 
 

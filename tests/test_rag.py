@@ -4,13 +4,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ollama_agent.rag.commands import (
+from ollama_agent.rag import (
     AmbiguousRAGDatabaseError,
     RAGContext,
     RAGDatabaseNotFoundError,
+    RAGError,
+    RAGManager,
+    RAGSettings,
 )
-from ollama_agent.rag.manager import RAGError, RAGManager
-from ollama_agent.rag.settings import RAGSettings
 
 
 class TestRAGComponents(unittest.TestCase):

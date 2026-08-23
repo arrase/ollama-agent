@@ -17,8 +17,7 @@ from ollama_agent.interfaces.dispatch import (
 )
 from ollama_agent.main import main
 from ollama_agent.rag.commands import RAGContext
-from ollama_agent.rag.manager import RAGManager
-from ollama_agent.rag.settings import RAGSettings
+from ollama_agent.rag import RAGManager, RAGSettings
 from ollama_agent.settings.config import Settings
 from ollama_agent.skills.commands import SkillsContext
 from ollama_agent.tasks.commands import CLIContext

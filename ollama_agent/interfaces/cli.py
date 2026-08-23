@@ -229,7 +229,7 @@ def handle_cli_commands(
                     set_rag_manager(rag_ctx.rag_manager)
                     try:
                         load_rag_database(rag_ctx, args.rag)
-                    except (RAGError, SystemExit):
+                    except RAGError:
                         raise SystemExit(1)
                 await runtime.reload()
                 await run_non_interactive(runtime, args.prompt)

@@ -83,8 +83,7 @@ async def ensure_model_supports_tools(model: str, base_url: str) -> None:
 
 async def model_supports_thinking(model: str, base_url: str) -> bool:
     """Detection of Ollama thinking support for a model."""
-    capabilities = await get_model_capabilities(model, base_url)
-    return "thinking" in capabilities
+    return "thinking" in await get_model_capabilities(model, base_url)
 
 
 async def resolve_context_window(

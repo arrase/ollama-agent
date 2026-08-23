@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from rich.markup import escape
@@ -39,7 +38,7 @@ class AgentHeader(Static):
         num_ctx = ms.context_window
 
         if isinstance(num_ctx, int) and num_ctx > 0:
-            tokens_val = tokens if isinstance(tokens, (int, float)) else 0
+            tokens_val = tokens
             pct = int((tokens_val / num_ctx) * 100)
             if pct > 90:
                 color = "#f87171"

@@ -114,7 +114,8 @@ def get_system_clipboard() -> str:
                     p_mem = k32.GlobalLock(h_mem)
                     if p_mem:
                         try:
-                            return ctypes.c_wchar_p(p_mem).value or ""
+                            val = ctypes.c_wchar_p(p_mem).value
+                            return val if val is not None else ""
                         finally:
                             k32.GlobalUnlock(h_mem)
             finally:
