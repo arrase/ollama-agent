@@ -842,7 +842,6 @@ ollama-agent/
 ├── mkdocs.yml               # MkDocs site configuration
 ├── pyproject.toml           # Project dependencies and packaging metadata
 ├── AGENTS.md                # Development guidelines and coding conventions
-├── MCP_COMPATIBILITY.md     # Dependency constraint documentation for MCP
 ├── LICENSE                  # MIT license file
 └── README.md                # Project documentation
 ```
