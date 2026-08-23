@@ -80,6 +80,13 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
         gen_text = str(footer.render())
         self.assertIn("Generating response", gen_text)
 
+        footer.set_approval(True)
+        appr_text = str(footer.render())
+        self.assertIn("Approval required", appr_text)
+        self.assertIn("approve", appr_text)
+        self.assertIn("reject", appr_text)
+
+        footer.set_approval(False)
         footer.set_generating(False)
         self.assertIn("interrupt", str(footer.render()))
 
@@ -235,6 +242,9 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
 
         app = ApprovalApp()
         async with app.run_test() as pilot:
+            # Auto-focused on approve-btn
+            self.assertEqual(app.focused.id, "approve-btn")
+
             # Test keypress 'y' for Approve
             key_event = events.Key("y", "y")
             widget.on_key(key_event)
@@ -242,6 +252,92 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
             app_ref_mock._handle_approval_decision.assert_called_once()
             decisions = app_ref_mock._handle_approval_decision.call_args[0][0]
             self.assertEqual(decisions, [{"type": "approve"}])
+
+    async def test_tool_approval_widget_navigation_and_shortcuts(self) -> None:
+        # Test button labels
+        reqs = [{"name": "write_file", "args": {"path": "test.txt"}}]
+        widget = ToolApprovalWidget(
+            action_requests=reqs,
+            app_ref=MagicMock(),
+            scroll=MagicMock(),
+            agent_msg=AgentResponse(),
+        )
+        buttons = list(widget.query(Button))
+        # Compose buttons
+        composed_buttons = [w for w in widget.compose() if isinstance(w, Button) or hasattr(w, "query")]
+
+        # Test single direct shortcuts (y, n, a, c)
+        for shortcut, expected_type in [
+            ("y", "approve"),
+            ("n", "reject"),
+            ("a", "approve"),
+            ("c", "reject"),
+        ]:
+            app_ref_mock = MagicMock()
+            app_ref_mock.repl.runtime.auto_approved_tools = set()
+            widget = ToolApprovalWidget(
+                action_requests=[{"name": "execute", "args": {"cmd": "ls"}}],
+                app_ref=app_ref_mock,
+                scroll=MagicMock(),
+                agent_msg=AgentResponse(),
+            )
+
+            class ShortcutApp(App):
+                def compose(self) -> ComposeResult:
+                    yield widget
+
+            app = ShortcutApp()
+            async with app.run_test() as pilot:
+                widget.on_key(events.Key(shortcut, shortcut))
+                app_ref_mock._handle_approval_decision.assert_called_once()
+                decisions = app_ref_mock._handle_approval_decision.call_args[0][0]
+                self.assertEqual(decisions[0]["type"], expected_type)
+                if shortcut == "a":
+                    self.assertIn("execute", app_ref_mock.repl.runtime.auto_approved_tools)
+
+        # Test arrow key navigation between buttons
+        app_ref_mock = MagicMock()
+        widget = ToolApprovalWidget(
+            action_requests=[{"name": "execute", "args": {"cmd": "ls"}}],
+            app_ref=app_ref_mock,
+            scroll=MagicMock(),
+            agent_msg=AgentResponse(),
+        )
+
+        class NavApp(App):
+            def compose(self) -> ComposeResult:
+                yield widget
+
+        app = NavApp()
+        async with app.run_test() as pilot:
+            self.assertEqual(app.focused.id, "approve-btn")
+
+            # Press Right arrow -> reject-btn
+            widget.on_key(events.Key("right", "right"))
+            self.assertEqual(app.focused.id, "reject-btn")
+
+            # Press Right arrow -> allow-btn
+            widget.on_key(events.Key("right", "right"))
+            self.assertEqual(app.focused.id, "allow-btn")
+
+            # Press Right arrow -> cancel-btn
+            widget.on_key(events.Key("right", "right"))
+            self.assertEqual(app.focused.id, "cancel-btn")
+
+            # Press Right arrow (wrap around) -> approve-btn
+            widget.on_key(events.Key("right", "right"))
+            self.assertEqual(app.focused.id, "approve-btn")
+
+            # Press Left arrow (wrap around) -> cancel-btn
+            widget.on_key(events.Key("left", "left"))
+            self.assertEqual(app.focused.id, "cancel-btn")
+
+            # Press Enter on focused button (cancel-btn)
+            widget.on_key(events.Key("enter", "\r"))
+            app_ref_mock._handle_approval_decision.assert_called_once()
+            decisions = app_ref_mock._handle_approval_decision.call_args[0][0]
+            self.assertEqual(decisions[0]["type"], "reject")
+            self.assertEqual(decisions[0]["message"], "User cancelled the execution.")
 
 
     async def test_task_create_modal(self) -> None:

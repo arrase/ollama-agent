@@ -277,9 +277,37 @@ ToolApprovalWidget {
 
 .approval-btn {
     margin-right: 1;
-    min-width: 12;
+    min-width: 15;
     height: 1;
     border: none;
+}
+
+.approval-btn:focus {
+    text-style: bold;
+}
+
+#approve-btn:focus {
+    background: #34d399 !important;
+    color: #0d1117 !important;
+    text-style: bold;
+}
+
+#reject-btn:focus {
+    background: #f87171 !important;
+    color: #0d1117 !important;
+    text-style: bold;
+}
+
+#allow-btn:focus {
+    background: #38bdf8 !important;
+    color: #0d1117 !important;
+    text-style: bold;
+}
+
+#cancel-btn:focus {
+    background: #8b949e !important;
+    color: #0d1117 !important;
+    text-style: bold;
 }
 
 .approval-status {

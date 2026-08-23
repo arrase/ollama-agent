@@ -141,20 +141,20 @@ class ConsoleStreamingRenderer(StreamingRenderer):
             while True:
                 prompt_msg = (
                     "  [bold cyan]Choose action:[/bold cyan] "
-                    "([bold]a[/bold])pprove / ([bold]r[/bold])eject / "
-                    "allow ([bold]s[/bold])ession / ([bold]c[/bold])ancel: "
+                    "Approve ([bold]y[/bold]) / Reject ([bold]n[/bold]) / "
+                    "Allow Session ([bold]a[/bold]) / Cancel ([bold]c[/bold]): "
                 )
                 self.console.print(prompt_msg, end="")
                 self.console.file.flush()
                 choice = (await asyncio.to_thread(input)).strip().lower()
-                if choice == "a":
+                if choice == "y":
                     return [{"type": "approve"} for _ in action_requests]
-                elif choice == "r":
+                elif choice == "n":
                     return [{
                         "type": "reject",
                         "message": f"User rejected executing tool '{r['name']}'."
                     } for r in action_requests]
-                elif choice == "s":
+                elif choice == "a":
                     for req in action_requests:
                         runtime.auto_approved_tools.add(req["name"])
                     return [{"type": "approve"} for _ in action_requests]
@@ -162,7 +162,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
                     self.console.print("  [red]✗ Cancelled[/red]\n")
                     raise KeyboardInterrupt()
                 else:
-                    self.console.print("  [red]Invalid choice. Please enter 'a', 'r', 's', or 'c'.[/red]")
+                    self.console.print("  [red]Invalid choice. Please enter 'y', 'n', 'a', or 'c'.[/red]")
         except (EOFError, KeyboardInterrupt):
             self.console.print("  [red]✗ Cancelled[/red]\n")
             raise KeyboardInterrupt()
