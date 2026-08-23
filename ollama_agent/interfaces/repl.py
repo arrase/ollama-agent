@@ -40,7 +40,7 @@ from ..rag import RAGContext, RAGManager, load_rag_database
 from ..skills import SkillsContext, create_skill
 from ..tasks.commands import CLIContext, TaskError, create_task
 from .dispatch import REPLCommand, build_repl_handlers, safe_call
-from .model_commands import _list_models_sync, set_model
+from .model_commands import _list_models_sync, set_effort, set_model
 from .session_commands import (
     compact_session,
     export_session,
@@ -57,6 +57,7 @@ _AT_MENTION_RE = re.compile(
 
 _ROOT_COMMANDS: list[tuple[str, str]] = [
     ("/model", "Manage models (list, set)"),
+    ("/effort", "Show or set reasoning/thinking effort"),
     ("/params", "Manage model sampling parameters (list, set)"),
     ("/session", "Manage chat sessions (list, search, resume, new, export, delete)"),
     ("/compact", "Compact conversation history into a summary"),
@@ -685,7 +686,7 @@ class OllamaAgentApp(App):
             self.update_yolo_ui()
         elif cmd == "/rag" and args and args[0] in ("load", "unload", "delete"):
             await self.repl.runtime.reload()
-        elif cmd == "/model" and args and args[0] == "set":
+        elif cmd in ("/model", "/effort"):
             self.query_one(AgentHeader).update_header()
 
     # ── Modal helpers ─────────────────────────────────────────────────────
@@ -831,6 +832,8 @@ class OllamaREPL:
                 handle_session_export=self._handle_session_export,
                 handle_compact=self._handle_compact,
                 get_runtime=lambda: self.runtime,
+                current_effort=lambda: self.runtime.settings.model.reasoning_effort,
+                switch_effort=self._switch_effort,
             )
         return self._commands
 
@@ -873,6 +876,9 @@ class OllamaREPL:
 
     async def _switch_model(self, model_name: str) -> None:
         await set_model(self.console, model_name, runtime=self.runtime)
+
+    async def _switch_effort(self, effort: str) -> None:
+        await set_effort(self.console, effort, runtime=self.runtime)
 
     async def _handle_new_session(self, args: list[str]) -> None:
         self.runtime.thread_id = new_session(self.console)

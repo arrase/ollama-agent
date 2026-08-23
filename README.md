@@ -164,6 +164,7 @@ The REPL provides built-in slash commands for managing models, sessions, tasks, 
 | :--- | :--- | :--- |
 | `/help` | `/help` | Display the interactive help panel with command categories. |
 | `/model` | `/model [list \| set <model>]` | List available Ollama models (with tool support indicators) or switch the active model for the current session. |
+| `/effort` | `/effort [<level>]` | Show current reasoning effort or switch the thinking/reasoning effort level (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`) for the active session. |
 | `/params` | `/params [list \| set <parameter> <value>]` | Inspect active sampling parameters and resolution sources, or dynamically update parameter values for the active session. |
 | `/session` | `/session [list \| search <query> \| resume <id> \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume previous threads, export to Markdown, or delete history. |
 | `/compact` | `/compact` (alias: `/compress`) | Manually compact conversation history into a structured summary to reclaim context window tokens. |
