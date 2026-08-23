@@ -295,6 +295,7 @@
   "Failed to fetch metadata for '{model}': {exc}": "Falha ao obter metadados de '{model}': {exc}",
   "Model '{model}' does not support tools.": "O modelo '{model}' não suporta ferramentas.",
   "context_window must be greater than zero.": "context_window deve ser maior que zero.",
+  "Invalid context_window '{value}'. Expected a positive integer or 'max'.": "context_window inválido '{value}'. Esperava-se um número inteiro positivo ou 'max'.",
   "Failed to determine the context window for '{model}'. Define context_window in the settings or config file.": "Não foi possível determinar a janela de contexto de '{model}'. Defina context_window nas configurações.",
   "Model '{model}' is a thinking-only model. reasoning_effort='disabled' is not supported; thinking will remain enabled.": "O modelo '{model}' é somente de raciocínio. reasoning_effort='disabled' não é suportado; o pensamento continuará ativado.",
   "Invalid reasoning effort '{effort}'. Allowed values are: {allowed}": "Esforço de raciocínio inválido '{effort}'. Valores permitidos: {allowed}",

@@ -295,6 +295,7 @@
   "Failed to fetch metadata for '{model}': {exc}": "モデル '{model}' のメタデータ取得に失敗しました: {exc}",
   "Model '{model}' does not support tools.": "モデル '{model}' はツール呼び出しをサポートしていません。",
   "context_window must be greater than zero.": "context_window は 0 より大きい必要があります。",
+  "Invalid context_window '{value}'. Expected a positive integer or 'max'.": "無効な context_window '{value}' です。正の整数または 'max' を指定してください。",
   "Failed to determine the context window for '{model}'. Define context_window in the settings or config file.": "モデル '{model}' のコンテキストウィンドウサイズを特定できませんでした。設定ファイルで context_window を定義してください。",
   "Model '{model}' is a thinking-only model. reasoning_effort='disabled' is not supported; thinking will remain enabled.": "モデル '{model}' は思考専用モデルです。reasoning_effort='disabled' はサポートされておらず、思考は有効のままになります。",
   "Invalid reasoning effort '{effort}'. Allowed values are: {allowed}": "無効な思考レベル '{effort}' です。許可される値: {allowed}",

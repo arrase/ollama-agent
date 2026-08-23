@@ -295,6 +295,7 @@
   "Failed to fetch metadata for '{model}': {exc}": "'{model}' के लिए मेटाडेटा प्राप्त करने में विफल: {exc}",
   "Model '{model}' does not support tools.": "मॉडल '{model}' टूल का समर्थन नहीं करता है।",
   "context_window must be greater than zero.": "context_window शून्य से बड़ा होना चाहिए।",
+  "Invalid context_window '{value}'. Expected a positive integer or 'max'.": "अमान्य context_window '{value}'। धनात्मक पूर्णांक या 'max' अपेक्षित है।",
   "Failed to determine the context window for '{model}'. Define context_window in the settings or config file.": "'{model}' के लिए संदर्भ विंडो निर्धारित करने में विफल। सेटिंग्स या कॉन्फ़िग फ़ाइल में context_window परिभाषित करें।",
   "Model '{model}' is a thinking-only model. reasoning_effort='disabled' is not supported; thinking will remain enabled.": "मॉडल '{model}' केवल-सोचने वाला मॉडल है। reasoning_effort='disabled' समर्थित नहीं है; थिंकिंग सक्षम रहेगी।",
   "Invalid reasoning effort '{effort}'. Allowed values are: {allowed}": "अमान्य रीज़निंग प्रयास '{effort}'। अनुमत मान हैं: {allowed}",
