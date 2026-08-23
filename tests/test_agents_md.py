@@ -15,7 +15,6 @@ from langchain_core.messages import SystemMessage
 from ollama_agent.agent import AgentRuntime
 from ollama_agent.settings import (
     AGENTS_MD_NAME,
-    MEMORY_PATH,
     Settings,
     ensure_agents_file,
     find_agents_file,

@@ -59,7 +59,7 @@ def _read_skill(skill_dir: Path) -> SkillInfo | None:
     except OSError as exc:
         logger.error("Error reading %s: %s", skill_file, exc)
         return None
-    meta, _body = _parse_frontmatter(raw)
+    meta, _ = _parse_frontmatter(raw)
     return SkillInfo(
         name=str(meta.get("name", skill_dir.name)),
         description=str(meta.get("description", ""))[:1024],

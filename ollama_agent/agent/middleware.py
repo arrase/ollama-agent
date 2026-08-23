@@ -20,13 +20,16 @@ from .builtin_tools import get_tool_timeout
 
 def _extract_tool_name(request: Any) -> str:
     """Extract tool name from a middleware request."""
-    if name := getattr(request, "name", None):
-        return str(name)
-    if tool_call := getattr(request, "tool_call", None):
-        return str(tool_call.get("name", "unknown") if isinstance(tool_call, dict) else getattr(tool_call, "name", "unknown"))
-    if tool := getattr(request, "tool", None):
-        return str(getattr(tool, "name", "unknown"))
-    return "unknown"
+    if hasattr(request, "name") and request.name:
+        return str(request.name)
+    if hasattr(request, "tool_call") and request.tool_call:
+        tool_call = request.tool_call
+        if isinstance(tool_call, dict):
+            return str(tool_call["name"])
+        return str(tool_call.name)
+    if hasattr(request, "tool") and request.tool:
+        return str(request.tool.name)
+    raise ValueError("Unable to extract tool name from request")
 
 
 async def _stream_tool_events(request: Any, handler: Any) -> Any:

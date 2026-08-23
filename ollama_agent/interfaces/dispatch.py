@@ -28,7 +28,6 @@ from ..skills import SkillError, SkillsContext, create_skill, delete_skill, list
 from ..tasks.commands import CLIContext, TaskError, create_task, delete_task, list_tasks, run_task
 from .model_commands import (
     list_models,
-    set_effort,
     set_model_param,
     show_effort,
     show_model_params,
@@ -379,7 +378,7 @@ def build_repl_handlers(
             _("Compact conversation history into a summary"),
             "Session Management",
             None,
-            handle_compact or (lambda _: None),
+            handle_compact or (lambda _args: None),
         ),
         "/session": REPLCommand(
             _("Manage chat sessions"),

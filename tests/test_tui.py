@@ -243,6 +243,7 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
         app = ApprovalApp()
         async with app.run_test() as pilot:
             # Auto-focused on approve-btn
+            assert app.focused is not None
             self.assertEqual(app.focused.id, "approve-btn")
 
             # Test keypress 'y' for Approve
@@ -308,29 +309,35 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
             def compose(self) -> ComposeResult:
                 yield widget
 
-        app = NavApp()
-        async with app.run_test() as pilot:
-            self.assertEqual(app.focused.id, "approve-btn")
+        nav_app = NavApp()
+        async with nav_app.run_test() as pilot:
+            assert nav_app.focused is not None
+            self.assertEqual(nav_app.focused.id, "approve-btn")
 
             # Press Right arrow -> reject-btn
             widget.on_key(events.Key("right", "right"))
-            self.assertEqual(app.focused.id, "reject-btn")
+            assert nav_app.focused is not None
+            self.assertEqual(nav_app.focused.id, "reject-btn")
 
             # Press Right arrow -> allow-btn
             widget.on_key(events.Key("right", "right"))
-            self.assertEqual(app.focused.id, "allow-btn")
+            assert nav_app.focused is not None
+            self.assertEqual(nav_app.focused.id, "allow-btn")
 
             # Press Right arrow -> cancel-btn
             widget.on_key(events.Key("right", "right"))
-            self.assertEqual(app.focused.id, "cancel-btn")
+            assert nav_app.focused is not None
+            self.assertEqual(nav_app.focused.id, "cancel-btn")
 
             # Press Right arrow (wrap around) -> approve-btn
             widget.on_key(events.Key("right", "right"))
-            self.assertEqual(app.focused.id, "approve-btn")
+            assert nav_app.focused is not None
+            self.assertEqual(nav_app.focused.id, "approve-btn")
 
             # Press Left arrow (wrap around) -> cancel-btn
             widget.on_key(events.Key("left", "left"))
-            self.assertEqual(app.focused.id, "cancel-btn")
+            assert nav_app.focused is not None
+            self.assertEqual(nav_app.focused.id, "cancel-btn")
 
             # Press Enter on focused button (cancel-btn)
             widget.on_key(events.Key("enter", "\r"))

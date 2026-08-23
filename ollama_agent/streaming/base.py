@@ -25,7 +25,6 @@ class StreamingRenderer(ABC):
         """Handle a warning event."""
         pass
 
-
     async def handle_interrupt(self, event: dict[str, Any], runtime: AgentRuntime) -> list[dict[str, Any]] | None:
         """Handle an interrupt event. Default implementation does nothing."""
         return None

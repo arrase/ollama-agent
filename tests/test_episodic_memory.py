@@ -10,7 +10,6 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 from ollama_agent.agent.builtin_tools import (
-    get_active_thread_id,
     search_past_conversations,
     set_active_thread_id,
 )

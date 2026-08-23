@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -17,8 +16,6 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from ..i18n import _
 from ..settings import Settings
 from .loader import _build_mcp_connection, get_mcp_config_path
-
-_log = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)

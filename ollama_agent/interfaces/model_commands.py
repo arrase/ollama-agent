@@ -72,7 +72,7 @@ async def list_models(
             size_str = f"{(item.size / (1024**3)):.1f}GB" if item.size else ""
             console.print(f"  {tool_icon} [cyan]{name}[/cyan] {size_str}{marker}")
         legend_str = _("supports tools | Use /model set <model> to switch")
-        console.print(f"[dim]─" * 60 + f"[/dim]\n[dim]✓ = {legend_str}[/dim]")
+        console.print(f"[dim]{'─' * 60}[/dim]\n[dim]✓ = {legend_str}[/dim]")
     except (ollama.ResponseError, OSError) as exc:
         err_msg = _("Error listing models: {exc}", exc=exc)
         console.print(f"[red]{err_msg}[/red]")

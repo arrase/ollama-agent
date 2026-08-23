@@ -2,15 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import unittest
-from contextlib import AsyncExitStack
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessageChunk
 from langgraph.types import Command
 
 from ollama_agent.agent.agent import AgentRuntime, _process_message_chunk
-from ollama_agent.agent.builtin_tools import get_rag_manager, rag_search, set_rag_manager
+from ollama_agent.agent.builtin_tools import rag_search, set_rag_manager
 from ollama_agent.agent.middleware import _extract_tool_name, _stream_tool_events
 from ollama_agent.agent.subagents import build_subagents
 from ollama_agent.core.prompt_processor import PromptProcessingError
@@ -43,9 +42,13 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         chunk = MagicMock(type="tool", content="output", additional_kwargs={})
         self.assertIsNone(_process_message_chunk(chunk))
 
+        # Real ToolMessageChunk
+        real_tool_chunk = ToolMessageChunk(content="output", tool_call_id="call-1")
+        self.assertIsNone(_process_message_chunk(real_tool_chunk))
+
     def test_extract_tool_name(self) -> None:
         # From request.name
-        req1 = MagicMock(tool=None)
+        req1 = MagicMock(spec=["name"])
         req1.name = "search"
         self.assertEqual(_extract_tool_name(req1), "search")
 
@@ -54,6 +57,15 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         tool_obj.name = "calc"
         req2 = MagicMock(spec=["tool"], tool=tool_obj)
         self.assertEqual(_extract_tool_name(req2), "calc")
+
+        # From tool_call dict
+        req3 = MagicMock(spec=["tool_call"], tool_call={"name": "bash"})
+        self.assertEqual(_extract_tool_name(req3), "bash")
+
+        # Invalid request raises ValueError
+        req4 = MagicMock(spec=[])
+        with self.assertRaises(ValueError):
+            _extract_tool_name(req4)
 
     async def test_stream_tool_events_emits_events_and_result(self) -> None:
         mock_runtime = MagicMock()
@@ -290,7 +302,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         mock_graph.aget_state = AsyncMock(return_value=mock_state)
         runtime.graph = mock_graph
 
-        cmd = Command(resume={"decisions": [{"type": "approve"}]})
+        cmd: Command[Any] = Command(resume={"decisions": [{"type": "approve"}]})
         events = []
         async for event in runtime.run_streamed(cmd):
             events.append(event)

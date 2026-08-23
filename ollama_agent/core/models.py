@@ -118,7 +118,7 @@ async def resolve_ollama_reasoning(
     model: str,
     effort: ReasoningEffortValue,
     base_url: str,
-    warn_callback: Callable[[str], None] = lambda _: None,
+    warn_callback: Callable[[str], None] = lambda _msg: None,
 ) -> bool | str | None:
     """Translate reasoning_effort to Ollama's native reasoning setting."""
     lower_name = model.lower()
@@ -250,7 +250,7 @@ async def create_ollama_chat_model(
     min_p: float | None = None,
     presence_penalty: float | None = None,
     repeat_penalty: float | None = None,
-    warn_callback: Callable[[str], None] = lambda _: None,
+    warn_callback: Callable[[str], None] = lambda _msg: None,
 ) -> OllamaChatModel:
     """Create a native ChatOllama model with resolved runtime settings."""
     host = base_url.rstrip("/")

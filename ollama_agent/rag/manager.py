@@ -320,7 +320,7 @@ class RAGManager:
                     i,
                     e,
                 )
-                for source, *_ in batch:
+                for source, *_rest in batch:
                     failed_sources.add(source)
 
         # Populate results for successful files
@@ -461,7 +461,7 @@ class RAGManager:
         """Read file content, handling different encodings."""
         # Check if it's a text/code file
         if path.suffix.lower() not in SUPPORTED_RAG_EXTENSIONS:
-            mime_type, _ = mimetypes.guess_type(str(path))
+            mime_type, _encoding = mimetypes.guess_type(str(path))
             if mime_type and not mime_type.startswith(
                 ("text/", "application/json", "application/xml")
             ):

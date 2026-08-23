@@ -9,7 +9,6 @@ from ollama_agent.core.resource_manager import BaseFileStoreManager
 
 class DummyFileManager(BaseFileStoreManager[str]):
     _ext = ".txt"
-    _id_label = "dummy_id"
 
     def get(self, item_id: str) -> str | None:
         path = self._path(item_id)

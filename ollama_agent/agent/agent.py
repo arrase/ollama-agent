@@ -131,7 +131,7 @@ class AgentRuntime:
         self.effective_model_params = model.effective_params
 
         # Backend: CWD for shell + APP_DIR for agent files (memory, etc.)
-        timeout = int(get_tool_timeout())
+        timeout = get_tool_timeout()
         default_backend = LocalShellBackend(
             root_dir=Path.cwd().resolve(),
             timeout=timeout,
@@ -201,7 +201,7 @@ class AgentRuntime:
 
         summarization_tool_mw = create_summarization_tool_middleware(model, backend)
         self._backend = backend
-        self._summarization_mw = getattr(summarization_tool_mw, "_summarization", None)
+        self._summarization_mw = summarization_tool_mw._summarization
 
         kwargs: dict[str, Any] = {
             "model": model,
@@ -298,7 +298,7 @@ class AgentRuntime:
         # Check if we were interrupted
         state = await self.graph.aget_state(config)
         if state and state.values and "messages" in state.values:
-            total_chars = sum(len(extract_text(getattr(m, "content", ""))) for m in state.values["messages"])
+            total_chars = sum(len(extract_text(getattr(m, "content", m))) for m in state.values["messages"])
             if total_chars > 0 and self.last_context_tokens == 0:
                 self.last_context_tokens = max(1, total_chars // 4)
         if state.interrupts:
@@ -407,7 +407,7 @@ def _process_message_chunk(
     hide_reasoning: bool = False,
 ) -> dict[str, Any] | None:
     """Process 'messages' chunk to extract reasoning or text deltas."""
-    if getattr(chunk, "type", None) == "tool":
+    if getattr(chunk, "type", "") in ("tool", "ToolMessageChunk"):
         return None
 
     content = getattr(chunk, "content", None)

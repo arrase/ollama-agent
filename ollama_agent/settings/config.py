@@ -81,7 +81,6 @@ class RuntimeSettings:
     language: str = ""
 
 
-
 @dataclass(slots=True)
 class RAGSettings:
     rag_dir: str = str(RAG_DIR)
@@ -222,7 +221,7 @@ def load_settings(settings_path: Path = SETTINGS_PATH) -> Settings:
         settings = Settings()
         save_settings(settings, settings_path)
         return settings
-    
+
     raw = yaml.safe_load(settings_path.read_text(encoding="utf-8")) or {}
     return Settings.from_dict(raw)
 
