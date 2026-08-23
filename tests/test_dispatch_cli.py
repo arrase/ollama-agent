@@ -73,6 +73,7 @@ class TestDispatchAndCLI(unittest.TestCase):
         self.assertIn("task-create", handlers)
         self.assertIn("rag-list", handlers)
         self.assertIn("skill-list", handlers)
+        self.assertIn("mcp-list", handlers)
 
     def test_build_repl_handlers_registry(self) -> None:
         async def dummy_async_str(_: str) -> None:
@@ -105,6 +106,7 @@ class TestDispatchAndCLI(unittest.TestCase):
         self.assertIn("/task", handlers)
         self.assertIn("/skill", handlers)
         self.assertIn("/rag", handlers)
+        self.assertIn("/mcp", handlers)
         self.assertIn("/clear", handlers)
         self.assertIn("/exit", handlers)
 

@@ -67,6 +67,7 @@ def _get_root_commands() -> list[tuple[str, str]]:
         ("/task", _("Manage saved tasks")),
         ("/skill", _("Manage skills")),
         ("/rag", _("Manage RAG databases")),
+        ("/mcp", _("Manage and check MCP servers")),
         ("/yolo", _("Toggle YOLO mode or set it explicitly (on/off)")),
         ("/new", _("Start a new chat session and clear the screen")),
         ("/clear", _("Start a new chat session and clear the screen (alias for /new)")),
@@ -112,6 +113,9 @@ def _get_subcommands() -> dict[str, list[tuple[str, str]]]:
             ("load", _("Load a RAG database")),
             ("unload", _("Unload active RAG database")),
             ("add", _("Add file or directory to RAG")),
+        ],
+        "/mcp": [
+            ("list", _("List configured MCP servers and their status")),
         ],
         "/yolo": [
             ("on", _("Enable YOLO mode (bypasses confirmations)")),

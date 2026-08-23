@@ -192,6 +192,9 @@ def _add_task_subcommands(parser: argparse.ArgumentParser) -> None:
     session_exp.add_argument("session_id", type=str, help=_("Session ID or prefix to export"))
     session_exp.add_argument("--output", "-o", type=str, required=False, help=_("Target markdown file path"))
 
+    # MCP subcommands
+    _add_subparser(subparsers, "mcp-list", _("List configured MCP servers and check their status"))
+
 
 def create_argument_parser() -> argparse.ArgumentParser:
     """Create and configure argument parser."""
@@ -217,7 +220,11 @@ def handle_cli_commands(
     if cmd == "session-export":
         args._runtime = AgentRuntime(settings=settings)
     handlers = build_cli_handlers(
-        args, task_ctx=ctx, rag_ctx=rag_ctx, skills_ctx=skills_ctx
+        args,
+        task_ctx=ctx,
+        rag_ctx=rag_ctx,
+        skills_ctx=skills_ctx,
+        settings=settings,
     )
     if cmd in handlers:
         try:
