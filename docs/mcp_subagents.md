@@ -63,7 +63,7 @@ You can check configured MCP servers, test connectivity, and inspect available t
 
 Or via CLI:
 ```bash
-ollama-agent mcp-list
+ollama-agent mcp list
 ```
 
 This displays a color-coded status table showing:

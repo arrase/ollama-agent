@@ -406,7 +406,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             mock_del_sess.assert_called_once_with(console, "session-1234")
 
     def test_handle_cli_commands_subcommand(self) -> None:
-        args = argparse.Namespace(command="task-list", prompt=None, yolo=False, rag=None)
+        args = argparse.Namespace(command="task", subcommand="list", prompt=None, yolo=False, rag=None)
         settings = Settings()
         with patch("ollama_agent.interfaces.dispatch.list_tasks") as mock_list:
             handled = handle_cli_commands(args, settings)
@@ -414,7 +414,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             mock_list.assert_called_once()
 
     def test_handle_cli_commands_session_list(self) -> None:
-        args = argparse.Namespace(command="session-list", prompt=None, yolo=False, rag=None)
+        args = argparse.Namespace(command="session", subcommand="list", prompt=None, yolo=False, rag=None)
         settings = Settings()
         with patch("ollama_agent.interfaces.dispatch.list_sessions") as mock_list:
             handled = handle_cli_commands(args, settings)
@@ -422,7 +422,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             mock_list.assert_called_once()
 
     def test_handle_cli_commands_session_search(self) -> None:
-        args = argparse.Namespace(command="session-search", query="fastapi", prompt=None, yolo=False, rag=None)
+        args = argparse.Namespace(command="session", subcommand="search", query="fastapi", prompt=None, yolo=False, rag=None)
         settings = Settings()
         with patch("ollama_agent.interfaces.dispatch.search_sessions") as mock_search:
             handled = handle_cli_commands(args, settings)
@@ -430,7 +430,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             mock_search.assert_called_once()
 
     def test_handle_cli_commands_session_delete(self) -> None:
-        args = argparse.Namespace(command="session-delete", session_id="session-123", prompt=None, yolo=False, rag=None)
+        args = argparse.Namespace(command="session", subcommand="delete", session_id="session-123", prompt=None, yolo=False, rag=None)
         settings = Settings()
         with patch("ollama_agent.interfaces.dispatch.delete_session") as mock_del:
             handled = handle_cli_commands(args, settings)

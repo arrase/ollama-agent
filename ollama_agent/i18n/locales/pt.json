@@ -380,5 +380,11 @@
   "Invalid configuration or missing environment variables": "Configuração inválida ou variáveis de ambiente ausentes",
   "Connection timed out ({timeout}s)": "Tempo limite de conexão esgotado ({timeout}s)",
   "Error reading MCP configuration {path}: {exc}": "Erro ao ler a configuração MCP {path}: {exc}",
-  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list]": "Subcomando mcp desconhecido '{sub}'. Uso: /mcp [list]"
+  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list]": "Subcomando mcp desconhecido '{sub}'. Uso: /mcp [list]",
+  "Run 'ollama-agent <command> -h' for more details on a specific command.": "Execute 'ollama-agent <command> -h' para mais detalhes sobre um comando específico.",
+  "Run 'ollama-agent task <subcommand> -h' for more details on a subcommand.": "Execute 'ollama-agent task <subcommand> -h' para mais detalhes sobre um subcomando.",
+  "Run 'ollama-agent rag <subcommand> -h' for more details on a subcommand.": "Execute 'ollama-agent rag <subcommand> -h' para mais detalhes sobre um subcomando.",
+  "Run 'ollama-agent skill <subcommand> -h' for more details on a subcommand.": "Execute 'ollama-agent skill <subcommand> -h' para mais detalhes sobre um subcomando.",
+  "Run 'ollama-agent session <subcommand> -h' for more details on a subcommand.": "Execute 'ollama-agent session <subcommand> -h' para mais detalhes sobre um subcomando.",
+  "Run 'ollama-agent mcp <subcommand> -h' for more details on a subcommand.": "Execute 'ollama-agent mcp <subcommand> -h' para mais detalhes sobre um subcomando."
 }

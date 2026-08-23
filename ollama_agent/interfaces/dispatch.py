@@ -92,7 +92,7 @@ def build_cli_handlers(
     rag_ctx: RAGContext,
     skills_ctx: SkillsContext,
     settings: Settings | None = None,
-) -> dict[str, CLIHandler]:
+) -> dict[tuple[str, str], CLIHandler]:
     """Map parsed CLI subcommands to their synchronous or async handler functions."""
 
     async def rag_add() -> None:
@@ -103,10 +103,10 @@ def build_cli_handlers(
         await add_rag_file(rag_ctx, args.path)
 
     return {
-        "task-list": lambda: list_tasks(task_ctx),
-        "task-delete": lambda: delete_task(task_ctx, args.task_id),
-        "task-run": lambda: run_task(task_ctx, args.task_id, yolo=args.yolo),
-        "task-create": lambda: create_task(
+        ("task", "list"): lambda: list_tasks(task_ctx),
+        ("task", "delete"): lambda: delete_task(task_ctx, args.task_id),
+        ("task", "run"): lambda: run_task(task_ctx, args.task_id, yolo=args.yolo),
+        ("task", "create"): lambda: create_task(
             task_ctx,
             args.task_id,
             title=args.title,
@@ -115,14 +115,14 @@ def build_cli_handlers(
             reasoning_effort=(args.task_effort or args.effort),
             force=args.force,
         ),
-        "rag-list": lambda: list_rag_databases(rag_ctx),
-        "rag-create": lambda: create_rag_database(rag_ctx, args.name),
-        "rag-delete": lambda: delete_rag_database(rag_ctx, args.name),
-        "rag-add": rag_add,
-        "skill-list": lambda: list_skills(skills_ctx),
-        "skill-show": lambda: show_skill(skills_ctx, args.skill_id),
-        "skill-delete": lambda: delete_skill(skills_ctx, args.skill_id),
-        "skill-create": lambda: create_skill(
+        ("rag", "list"): lambda: list_rag_databases(rag_ctx),
+        ("rag", "create"): lambda: create_rag_database(rag_ctx, args.name),
+        ("rag", "delete"): lambda: delete_rag_database(rag_ctx, args.name),
+        ("rag", "add"): rag_add,
+        ("skill", "list"): lambda: list_skills(skills_ctx),
+        ("skill", "show"): lambda: show_skill(skills_ctx, args.skill_id),
+        ("skill", "delete"): lambda: delete_skill(skills_ctx, args.skill_id),
+        ("skill", "create"): lambda: create_skill(
             skills_ctx,
             args.skill_id,
             name=args.name,
@@ -130,16 +130,16 @@ def build_cli_handlers(
             instructions=args.instructions,
             force=args.force,
         ),
-        "session-list": lambda: list_sessions(Console()),
-        "session-search": lambda: search_sessions(Console(), args.query),
-        "session-delete": lambda: delete_session(Console(), args.session_id),
-        "session-export": lambda: _cli_export_session(
+        ("session", "list"): lambda: list_sessions(Console()),
+        ("session", "search"): lambda: search_sessions(Console(), args.query),
+        ("session", "delete"): lambda: delete_session(Console(), args.session_id),
+        ("session", "export"): lambda: _cli_export_session(
             Console(),
             args._runtime,
             args.session_id,
             output_path=args.output,
         ),
-        "mcp-list": lambda: list_mcp_servers(
+        ("mcp", "list"): lambda: list_mcp_servers(
             Console(),
             settings=settings,
         ),

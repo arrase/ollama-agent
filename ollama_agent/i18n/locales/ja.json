@@ -380,5 +380,11 @@
   "Invalid configuration or missing environment variables": "無効な設定または環境変数が不足しています",
   "Connection timed out ({timeout}s)": "接続がタイムアウトしました ({timeout}秒)",
   "Error reading MCP configuration {path}: {exc}": "MCP 設定 {path} の読み込みエラー: {exc}",
-  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list]": "不明な mcp サブコマンド '{sub}' です。使用法: /mcp [list]"
+  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list]": "不明な mcp サブコマンド '{sub}' です。使用法: /mcp [list]",
+  "Run 'ollama-agent <command> -h' for more details on a specific command.": "特定のコマンドの詳細ヘルプを表示するには 'ollama-agent <command> -h' を実行してください。",
+  "Run 'ollama-agent task <subcommand> -h' for more details on a subcommand.": "サブコマンドの詳細を表示するには 'ollama-agent task <subcommand> -h' を実行してください。",
+  "Run 'ollama-agent rag <subcommand> -h' for more details on a subcommand.": "サブコマンドの詳細を表示するには 'ollama-agent rag <subcommand> -h' を実行してください。",
+  "Run 'ollama-agent skill <subcommand> -h' for more details on a subcommand.": "サブコマンドの詳細を表示するには 'ollama-agent skill <subcommand> -h' を実行してください。",
+  "Run 'ollama-agent session <subcommand> -h' for more details on a subcommand.": "サブコマンドの詳細を表示するには 'ollama-agent session <subcommand> -h' を実行してください。",
+  "Run 'ollama-agent mcp <subcommand> -h' for more details on a subcommand.": "サブコマンドの詳細を表示するには 'ollama-agent mcp <subcommand> -h' を実行してください。"
 }

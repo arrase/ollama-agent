@@ -61,10 +61,10 @@ Skills can be managed via the CLI, REPL slash commands, or interactive TUI modal
 
 | Action | CLI Command | REPL Slash Command | Description |
 | :--- | :--- | :--- | :--- |
-| **List Skills** | `ollama-agent skill-list` | `/skill list` (or `/skill`) | List all available skills and descriptions. |
-| **Show Skill** | `ollama-agent skill-show <id>` | `/skill show <id>` | View raw contents and instructions of `SKILL.md`. |
-| **Create Skill** | `ollama-agent skill-create <id> --name <n> --description <d> --instructions <i> [--force]` | `/skill create <id>` *(launches modal)* | Create a new skill directory and `SKILL.md`. |
-| **Delete Skill** | `ollama-agent skill-delete <id>` | `/skill delete <id>` | Delete a skill directory permanently. |
+| **List Skills** | `ollama-agent skill list` | `/skill list` (or `/skill`) | List all available skills and descriptions. |
+| **Show Skill** | `ollama-agent skill show <id>` | `/skill show <id>` | View raw contents and instructions of `SKILL.md`. |
+| **Create Skill** | `ollama-agent skill create <id> --name <n> --description <d> --instructions <i> [--force]` | `/skill create <id>` *(launches modal)* | Create a new skill directory and `SKILL.md`. |
+| **Delete Skill** | `ollama-agent skill delete <id>` | `/skill delete <id>` | Delete a skill directory permanently. |
 
 ---
 
@@ -93,13 +93,13 @@ reasoning_effort: "medium"
 
 | Action | CLI Command | REPL Slash Command | Description |
 | :--- | :--- | :--- | :--- |
-| **List Tasks** | `ollama-agent task-list` | `/task list` (or `/task`) | List all saved tasks. |
-| **Create Task** | `ollama-agent task-create <id> --title <t> --task-prompt <p> [-m <model>] [-e <effort>] [--force]` | `/task create <id>` *(launches modal)* | Save a new task template. |
-| **Run Task** | `ollama-agent task-run <id> [-y]` | `/task run <id> [-y]` | Execute a saved task non-interactively or in REPL. |
-| **Delete Task** | `ollama-agent task-delete <id>` | `/task delete <id>` | Delete a saved task definition. |
+| **List Tasks** | `ollama-agent task list` | `/task list` (or `/task`) | List all saved tasks. |
+| **Create Task** | `ollama-agent task create <id> --title <t> --task-prompt <p> [-m <model>] [-e <effort>] [--force]` | `/task create <id>` *(launches modal)* | Save a new task template. |
+| **Run Task** | `ollama-agent task run <id> [-y]` | `/task run <id> [-y]` | Execute a saved task non-interactively or in REPL. |
+| **Delete Task** | `ollama-agent task delete <id>` | `/task delete <id>` | Delete a saved task definition. |
 
 ### Task Execution Behavior
-When running a task (`task-run <id>` or `/task run <id>`):
+When running a task (`task run <id>` or `/task run <id>`):
 1. `TaskManager` resolves the task ID or prefix.
 2. The runtime temporarily overrides `settings.model.name` and `settings.model.reasoning_effort` with the values defined in the task.
 3. The prompt is streamed non-interactively or inside the interactive REPL session with live tool tracking.
@@ -193,5 +193,5 @@ Users can search conversation history directly from the terminal:
 | Interface | Command | Description |
 | :--- | :--- | :--- |
 | **REPL Slash Command** | `/session search <query>` | Search all saved chat sessions and display matching snippets in a Rich table. |
-| **CLI Command** | `ollama-agent session-search <query>` | Query past sessions non-interactively from the shell. |
+| **CLI Command** | `ollama-agent session search <query>` | Query past sessions non-interactively from the shell. |
 | **Resume Matched Session** | `/session resume <id>` | Resume a discovered session by thread ID. |
