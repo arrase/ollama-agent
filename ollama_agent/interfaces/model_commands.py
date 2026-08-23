@@ -251,7 +251,7 @@ def ensure_model_configured(
     base_url = settings.model.base_url
     try:
         models = _list_models_sync(base_url)
-        available_models = [m for m in models if getattr(m, "model", None)]
+        available_models = [m for m in models if m.model]
     except Exception as exc:
         raise ModelCapabilityError(
             f"Could not connect to Ollama at '{base_url}': {exc}"
@@ -282,11 +282,7 @@ def ensure_model_configured(
 
     out.print("[bold]Available Ollama models:[/bold]")
     for i, item in enumerate(available_models, start=1):
-        size_str = (
-            f" ({item.size / (1024**3):.1f} GB)"
-            if getattr(item, "size", None)
-            else ""
-        )
+        size_str = f" ({item.size / (1024**3):.1f} GB)" if item.size else ""
         out.print(f"  [cyan]{i})[/cyan] [bold]{item.model}[/bold]{size_str}")
 
     while True:

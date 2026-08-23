@@ -36,7 +36,7 @@ def extract_text(content: Any, *, sep: str = " ") -> str:
         return sep.join(filter(None, (extract_text(c, sep=sep) for c in content))).strip()
     if isinstance(content, dict):
         text_val = content.get("text") or content.get("content")
-        return extract_text(text_val, sep=sep) if text_val is not None else ""
+        return extract_text(text_val, sep=sep)
     return ""
 
 

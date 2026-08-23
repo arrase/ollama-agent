@@ -82,7 +82,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
 
     def _agent_prefix(self, event: dict[str, Any]) -> str:
         agent = event.get("agent_name")
-        return f"[{agent}] " if isinstance(agent, str) and agent else ""
+        return f"[{agent}] " if agent else ""
 
     def on_tool_call(self, event: dict[str, Any]) -> None:
         self._end_reasoning()
@@ -99,7 +99,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         # and can interleave with streamed assistant output.
         out_len = event.get("output_len")
         prefix = self._agent_prefix(event)
-        suffix = f" ({out_len} chars)" if isinstance(out_len, int) else ""
+        suffix = f" ({out_len} chars)" if out_len is not None else ""
         self.console.print(
             f"  [dim cyan]✓ {prefix}Tool output received{suffix}[/dim cyan]\n"
         )

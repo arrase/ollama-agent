@@ -179,10 +179,6 @@ def resolve_context_files(
             if ignore_errors:
                 return
             raise
-        except OSError as e:
-            if ignore_errors:
-                return
-            raise PromptProcessingError(f"Failed to add file {file_path}: {e}") from e
 
     if target_path.is_file():
         add_file(target_path, ignore_errors=False)
@@ -245,7 +241,7 @@ def process_prompt_mentions(
                 if (
                     path_str.endswith("..")
                     or path_str == "."
-                    or bool(re.match(r"^[a-zA-Z]:$", path_str))
+                    or re.match(r"^[a-zA-Z]:$", path_str)
                 ):
                     break
                 path_str = path_str[:-1]
@@ -277,7 +273,7 @@ def process_prompt_mentions(
                 replacements.append((start, end, f"[{attachment_type}: {path_str}]"))
         else:
             has_separator = "/" in path_str or "\\" in path_str
-            has_extension = bool(re.search(r"\.[a-zA-Z0-9]{1,5}$", path_str))
+            has_extension = re.search(r"\.[a-zA-Z0-9]{1,5}$", path_str) is not None
 
             if has_separator or has_extension or is_quoted:
                 raise PromptProcessingError(

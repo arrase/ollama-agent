@@ -27,10 +27,7 @@ def _resolve_env(env: dict[str, str]) -> dict[str, str] | None:
         return {}
 
     def _replace(match: re.Match[str]) -> str:
-        var_name = match.group(1) or match.group(2)
-        if var_name not in os.environ:
-            raise KeyError(var_name)
-        return os.environ[var_name]
+        return os.environ[match.group(1) or match.group(2)]
 
     resolved: dict[str, str] = {}
     for key, value in env.items():
@@ -82,7 +79,7 @@ async def load_main_mcp_tools() -> list[Any]:
         _log.error("Failed to load MCP config %s: %s", MCP_SERVERS_PATH, exc)
         return []
 
-    servers_cfg = data.get("mcpServers", data.get("servers", {}))
+    servers_cfg = data.get("mcpServers") or data.get("servers") or {}
     if not isinstance(servers_cfg, dict) or not servers_cfg:
         return []
 

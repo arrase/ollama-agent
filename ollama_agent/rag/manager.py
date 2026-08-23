@@ -21,8 +21,8 @@ from qdrant_client.models import (
     VectorParams,
 )
 
-from .settings import RAGSettings
 from ..core.common import validate_identifier
+from ..settings import RAGSettings
 
 logger = logging.getLogger(__name__)
 
@@ -255,9 +255,6 @@ class RAGManager:
                 chunks = self._chunk_text(content)
                 all_file_chunks.append((file_path, chunks))
                 valid_files.append(str(file_path))
-            except RAGError as e:
-                logger.warning("Failed to add %s: %s", file_path, e)
-                results["failed"] += 1
             except Exception as e:
                 logger.warning("Failed to process %s: %s", file_path, e)
                 results["failed"] += 1
@@ -352,7 +349,7 @@ class RAGManager:
     ) -> list[dict[str, Any]]:
         """Search the RAG database for relevant documents."""
         client = self._ensure_loaded()
-        limit = self.settings.default_top_k if top_k is None else top_k
+        limit = top_k or self.settings.default_top_k
 
         # Get query embedding
         query_embedding = await self._get_embedding(query)
@@ -402,7 +399,7 @@ class RAGManager:
 
             expected = self.settings.embedding_dims
             for idx, vec in enumerate(embeddings):
-                if expected and len(vec) != expected:
+                if len(vec) != expected:
                     raise RAGError(
                         f"Embedding dimension mismatch for text {idx}: "
                         f"got {len(vec)}, expected {expected}"

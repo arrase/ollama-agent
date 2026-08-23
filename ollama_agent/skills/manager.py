@@ -68,6 +68,11 @@ def _read_skill(skill_dir: Path) -> SkillInfo | None:
     )
 
 
+def _remove_readonly(func: Any, path: str, exc: Any) -> None:
+    os.chmod(path, 0o777)
+    func(path)
+
+
 class SkillManager(BaseFileStoreManager[SkillInfo]):
     """Manages skills persisted as subdirectories with SKILL.md files."""
 
@@ -147,10 +152,6 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
         if not skill_dir.is_dir():
             return False
         try:
-            def _remove_readonly(func: Any, path: str, exc: Any) -> None:
-                os.chmod(path, 0o777)
-                func(path)
-
             shutil.rmtree(skill_dir, onexc=_remove_readonly)
             return True
         except OSError as exc:

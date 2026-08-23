@@ -174,9 +174,7 @@ async def export_session(
 ) -> Path | None:
     """Export conversation messages from a session to a Markdown file."""
     sessions = get_available_sessions(db_path)
-    resolved = resolve_session_id(target_id, sessions) if sessions else target_id
-    if not resolved:
-        resolved = target_id
+    resolved = resolve_session_id(target_id, sessions) or target_id
 
     if runtime.graph is None:
         await runtime.reload()
@@ -198,7 +196,7 @@ async def export_session(
     ]
 
     for msg in messages:
-        role = getattr(msg, "type", None) or getattr(msg, "role", "unknown")
+        role = getattr(msg, "type", "unknown")
         raw_content = getattr(msg, "content", "")
         content = extract_text(raw_content)
 
@@ -244,7 +242,7 @@ async def compact_session(
         if res.get("file_path"):
             console.print(f"  [dim]• History offloaded to:[/dim] [cyan]{res['file_path']}[/cyan]")
     else:
-        console.print(f"[yellow]{res.get('message', 'Compaction failed.')}[/yellow]")
+        console.print(f"[yellow]{res['message']}[/yellow]")
     return res
 
 

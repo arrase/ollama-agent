@@ -40,7 +40,7 @@ from .session_commands import (
     search_sessions,
 )
 
-CLIHandler = Callable[[], object]
+CLIHandler = Callable[[], Any]
 
 
 @dataclass(frozen=True)
@@ -362,11 +362,7 @@ def build_repl_handlers(
             "Compact conversation history into a summary",
             "Session Management",
             None,
-            (
-                handle_compact
-                if handle_compact is not None
-                else (lambda _: None)
-            ),
+            handle_compact or (lambda _: None),
         ),
         "/session": REPLCommand(
             "Manage chat sessions (list, resume, new, export, delete)",

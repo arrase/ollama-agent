@@ -593,7 +593,7 @@ class OllamaAgentApp(App):
                             count_tokens_approximately(effective)
                         )
                         for msg in messages:
-                            role = getattr(msg, "type", None) or getattr(msg, "role", "unknown")
+                            role = getattr(msg, "type", "unknown")
                             content = extract_text(getattr(msg, "content", ""))
                             if not content:
                                 continue
