@@ -159,6 +159,20 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(res["added"], 2)
             self.assertEqual(res["failed"], 0)
 
+        # Nonexistent directory raises RAGError
+        with self.assertRaises(RAGError):
+            await self.manager.add_directory(str(self.rag_dir / "nonexistent_dir"))
+
+        # File passed as directory raises RAGError
+        with self.assertRaises(RAGError):
+            await self.manager.add_directory(str(f1))
+
+        # Batch failure during add_directory
+        with patch.object(RAGManager, "_get_embeddings", AsyncMock(side_effect=RuntimeError("Ollama connection failed"))):
+            res = await self.manager.add_directory(str(sub_dir))
+            self.assertEqual(res["added"], 0)
+            self.assertEqual(res["failed"], 2)
+
         # Unloaded database error
         self.manager.unload()
         with self.assertRaises(RAGNotLoadedError):

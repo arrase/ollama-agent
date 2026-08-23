@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import unittest
-from types import SimpleNamespace
 
 from ollama_agent.core.common import (
     ALLOWED_REASONING_EFFORTS,

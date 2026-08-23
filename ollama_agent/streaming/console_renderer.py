@@ -62,7 +62,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
             self.console.print("  [dim magenta]│[/dim magenta] ", end="")
             self._reasoning = True
             self._rendered_reasoning = ""
-        
+
         # Determine the new delta to print (handles both cumulative and pure delta backends)
         if self._rendered_reasoning and content.startswith(self._rendered_reasoning):
             delta = content[len(self._rendered_reasoning):]

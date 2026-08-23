@@ -52,7 +52,6 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
         assert task is not None
         self.assertEqual(task.title, "Run Unit Tests")
 
-
         list_tasks(self.ctx)
         out = self.console.export_text()
         self.assertIn("Run Unit Tests", out)

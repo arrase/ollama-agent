@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING, Any, Iterable
 
-from rich.console import Console
 from langgraph.types import Command
+from rich.console import Console
 
 from .console_renderer import ConsoleStreamingRenderer
 
@@ -36,7 +36,7 @@ async def stream_agent_events(
     try:
         while True:
             interrupted = False
-            interrupt_event = None
+            interrupt_event: dict[str, Any] | None = None
             async for event in runtime.run_streamed(current_prompt, thread_id=thread_id):
                 etype = event.get("type")
                 if etype == "interrupt":
@@ -45,7 +45,7 @@ async def stream_agent_events(
                 elif etype and etype not in ignored:
                     renderer.on_event(event)
 
-            if interrupted and interrupt_event:
+            if interrupted and interrupt_event is not None:
                 decisions = await renderer.handle_interrupt(interrupt_event, runtime)
                 if decisions is not None:
                     current_prompt = Command(resume={"decisions": decisions})

@@ -47,7 +47,8 @@ def get_active_thread_id() -> str:
 @tool
 async def rag_search(query: str, top_k: int | None = None) -> RAGToolResult:
     """Search the loaded RAG database for relevant document chunks."""
-    if not (mgr := get_rag_manager()):
+    mgr = get_rag_manager()
+    if mgr is None:
         return {"success": False, "error": _("RAG manager not initialized")}
     if mgr.current_database is None:
         return {

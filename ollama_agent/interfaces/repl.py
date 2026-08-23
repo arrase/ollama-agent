@@ -501,9 +501,9 @@ class OllamaAgentApp(App):
                 if prefix_lower.startswith(rel_lower) or rel_lower.startswith(prefix_lower):
                     candidate_dirs.append((dirname, rel))
 
-            dirs[:] = [d for d, _ in candidate_dirs]
+            dirs[:] = [d for d, _rel in candidate_dirs]
 
-            for _, rel in candidate_dirs:
+            for _dirname, rel in candidate_dirs:
                 if count >= max_completions:
                     return
                 rel_lower = rel.lower()
@@ -847,10 +847,10 @@ class OllamaREPL:
                 current_model=lambda: self.runtime.settings.model.name,
                 base_url=lambda: self.runtime.settings.model.base_url,
                 switch_model=self._switch_model,
-                handle_exit=lambda _: None,
+                handle_exit=lambda _args: None,
                 handle_new=self._handle_new_session,
-                handle_task_create=lambda _: None,
-                handle_skill_create=lambda _: None,
+                handle_task_create=lambda _args: None,
+                handle_skill_create=lambda _args: None,
                 handle_yolo=self._handle_yolo_cmd,
                 current_thread_id=lambda: self.runtime.thread_id,
                 handle_session_resume=self._handle_session_resume,

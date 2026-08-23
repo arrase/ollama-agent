@@ -57,7 +57,7 @@ def get_file_type(file_path: Path) -> str:
         return "text/plain"
     if suffix in _MIME_EXTENSIONS:
         return _MIME_EXTENSIONS[suffix]
-    mime, _ = mimetypes.guess_type(str(file_path))
+    mime, _encoding = mimetypes.guess_type(str(file_path))
     return mime or ""
 
 
@@ -189,7 +189,7 @@ def resolve_context_files(
     if not target_path.is_dir():
         return text_contents, binary_attachments
 
-    for root, _, files in os.walk(target_path):
+    for root, _dirs, files in os.walk(target_path):
         for file_name in files:
             add_file(Path(root) / file_name, ignore_errors=True)
 

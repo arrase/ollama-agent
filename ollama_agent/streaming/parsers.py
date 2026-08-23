@@ -26,7 +26,7 @@ def streaming_text(content: Any) -> str:
     return ""
 
 
-def streaming_reasoning(content: Any, additional_kwargs: Any = None) -> str:
+def streaming_reasoning(content: Any, additional_kwargs: dict[str, Any] | None = None) -> str:
     """Extract reasoning/thinking text from a streaming chunk.
 
     Supports both OpenAI-style reasoning blocks and ChatOllama's

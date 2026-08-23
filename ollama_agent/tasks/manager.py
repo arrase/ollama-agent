@@ -114,6 +114,6 @@ class TaskManager(BaseFileStoreManager[Task]):
         tasks = [
             (p.stem, t)
             for p in self.base_dir.glob("*.yaml")
-            if (t := self.get(p.stem))
+            if (t := self.get(p.stem)) is not None
         ]
         return sorted(tasks, key=lambda x: x[1].title.lower())

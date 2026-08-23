@@ -50,8 +50,6 @@ class TestSkillsManager(unittest.TestCase):
         self.assertEqual(loaded.description, "Assists with git commands")
         self.assertIn("Use git status", loaded.content)
 
-
-
     def test_create_existing_skill_without_overwrite_raises(self) -> None:
         self.mgr.create("s1", name="N1", description="D1", instructions="I1")
         with self.assertRaises(FileExistsError):

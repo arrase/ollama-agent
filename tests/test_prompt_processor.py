@@ -15,7 +15,6 @@ from ollama_agent.core.prompt_processor import (
 )
 
 
-
 class TestPromptProcessor(unittest.TestCase):
     """Unit tests for @-mention parsing and file resolution logic."""
 
