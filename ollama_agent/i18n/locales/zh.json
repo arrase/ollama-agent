@@ -295,6 +295,7 @@
   "Failed to fetch metadata for '{model}': {exc}": "获取模型 '{model}' 的元数据失败：{exc}",
   "Model '{model}' does not support tools.": "模型 '{model}' 不支持工具调用。",
   "context_window must be greater than zero.": "context_window 必须大于零。",
+  "Invalid context_window '{value}'. Expected a positive integer or 'max'.": "无效的 context_window '{value}'。应为正整数或 'max'。",
   "Failed to determine the context window for '{model}'. Define context_window in the settings or config file.": "无法确定模型 '{model}' 的上下文窗口大小。请在设置或配置文件中定义 context_window。",
   "Model '{model}' is a thinking-only model. reasoning_effort='disabled' is not supported; thinking will remain enabled.": "模型 '{model}' 为纯思考模型。不支持 reasoning_effort='disabled'；思考将保持开启。",
   "Invalid reasoning effort '{effort}'. Allowed values are: {allowed}": "无效的推理强度 '{effort}'。允许的值为：{allowed}",

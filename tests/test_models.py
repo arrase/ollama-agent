@@ -133,9 +133,63 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         resolved = await resolve_context_window("test-model", 4096, "http://localhost:11434")
         self.assertEqual(resolved, 4096)
 
+    async def test_resolve_context_window_string_int(self) -> None:
+        resolved = await resolve_context_window("test-model", "16384", "http://localhost:11434")
+        self.assertEqual(resolved, 16384)
+
     async def test_resolve_context_window_invalid_explicit_value_raises(self) -> None:
         with self.assertRaises(ModelContextWindowError):
             await resolve_context_window("test-model", 0, "http://localhost:11434")
+
+        with self.assertRaises(ModelContextWindowError):
+            await resolve_context_window("test-model", -10, "http://localhost:11434")
+
+        with self.assertRaises(ModelContextWindowError):
+            await resolve_context_window("test-model", "invalid", "http://localhost:11434")
+
+    @patch("ollama_agent.core.models._show_model")
+    async def test_resolve_context_window_max(self, mock_show: AsyncMock) -> None:
+        mock_show.return_value = MagicMock(
+            model_info={"llama.context_length": 131072},
+            parameters="",
+            modelfile="",
+        )
+        resolved = await resolve_context_window("llama3.3:70b", "max", "http://localhost:11434")
+        self.assertEqual(resolved, 131072)
+
+        # Case-insensitive
+        resolved_upper = await resolve_context_window("llama3.3:70b", "MAX", "http://localhost:11434")
+        self.assertEqual(resolved_upper, 131072)
+
+        # Ollama SDK modelinfo attribute format (without underscore)
+        mock_show.return_value = MagicMock(
+            model_info=None,
+            modelinfo={"gemma4.context_length": 262144},
+            parameters="",
+            modelfile="",
+        )
+        resolved_sdk = await resolve_context_window("gemma4:26b-a4b-it-qat", "max", "http://localhost:11434")
+        self.assertEqual(resolved_sdk, 262144)
+
+    @patch("ollama_agent.core.models._show_model")
+    async def test_resolve_context_window_max_modelfile_fallback(self, mock_show: AsyncMock) -> None:
+        mock_show.return_value = MagicMock(
+            model_info={},
+            parameters="PARAMETER num_ctx 32768",
+            modelfile="",
+        )
+        resolved = await resolve_context_window("custom-model", "max", "http://localhost:11434")
+        self.assertEqual(resolved, 32768)
+
+    @patch("ollama_agent.core.models._show_model")
+    async def test_resolve_context_window_max_unresolved_raises(self, mock_show: AsyncMock) -> None:
+        mock_show.return_value = MagicMock(
+            model_info={},
+            parameters="",
+            modelfile="",
+        )
+        with self.assertRaises(ModelContextWindowError):
+            await resolve_context_window("unknown-model", "max", "http://localhost:11434")
 
     @patch("ollama_agent.core.models.resolve_context_window", AsyncMock(return_value=8192))
     @patch("ollama_agent.core.models.resolve_ollama_reasoning", AsyncMock(return_value=True))

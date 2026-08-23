@@ -86,7 +86,7 @@ subagents:
 | `model.min_p` | `float` | *(dynamic)* | Optional minimum probability threshold override (0.0 default if unset). |
 | `model.presence_penalty` | `float` | *(dynamic)* | Optional presence penalty override (0.0 default if unset). |
 | `model.repeat_penalty` | `float` | *(dynamic)* | Optional repetition penalty override (1.1 engine default; alias: `repetition_penalty`). |
-| `model.context_window` | `int` | `10000` | Fallback context window token limit (`num_ctx`). |
+| `model.context_window` | `int` \| `str` | `10000` | Context window token limit (`num_ctx`), or `'max'` to auto-detect model maximum. |
 | `model.reasoning_effort` | `str` | `medium` | Default reasoning effort (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
 | `runtime.allow_traversal` | `bool` | `false` | If true, permits filesystem operations outside project working directory. |
 | `runtime.builtin_tool_timeout` | `int` | `30` | Execution timeout in seconds for tool and shell commands. |
@@ -144,9 +144,9 @@ To guarantee optimal context utilization without exceeding model memory boundari
 
 ```mermaid
 flowchart TD
-    A[Start Context Resolution] --> B{Explicit Config Override?}
-    B -- Yes (`model.context_window` > 0) --> C[Use Configured Value]
-    B -- No / Unset --> D[Fetch Model Metadata via `ollama.show()`]
+    A[Start Context Resolution] --> B{Configured Value?}
+    B -- Explicit int > 0 --> C[Use Configured Value]
+    B -- 'max' / Unset --> D[Fetch Model Metadata via `ollama.show()`]
     D --> E{Structured `model_info` Key?}
     E -- Found `*.context_length` --> F[Use `context_length` Metadata]
     E -- Not Found --> G{Modelfile / Parameter `num_ctx`?}
@@ -154,10 +154,11 @@ flowchart TD
     G -- Not Found --> I[Raise `ModelContextWindowError`]
 ```
 
-1. **Explicit Configuration Override**: If `model.context_window` in `settings.yaml` (or CLI argument) is explicitly defined (> 0), its value is used directly.
-2. **Structured Model Metadata (`model_info`)**: Queries Ollama's `AsyncClient.show()` endpoint for modern model metadata keys ending in `.context_length` (e.g., `llama.context_length`, `qwen2.context_length`).
-3. **Modelfile Parameter Parsing**: Scans raw Modelfile `parameters` or string fields using regex matching (`^\s*(?:PARAMETER\s+)?num_ctx\s+(\d+)\s*$`) to extract declared `num_ctx` values.
-4. **Error Handling**: If resolution fails across all stages, `ollama-agent` halts startup and raises a `ModelContextWindowError`, prompting the user to specify `context_window` in `settings.yaml`.
+1. **Explicit Numeric Configuration Override**: If `model.context_window` in `settings.yaml` (or CLI argument) is explicitly defined (> 0), its value is used directly.
+2. **Dynamic Maximum Resolution (`'max'` or Unset)**: When configured as `'max'` (or omitted), `ollama-agent` fetches model metadata from Ollama (`ollama.show()`) to use the maximum context length supported by the model:
+   - **Structured Model Metadata (`model_info`)**: Queries modern model metadata keys ending in `.context_length` (e.g., `llama.context_length`, `qwen2.context_length`).
+   - **Modelfile Parameter Parsing**: Scans raw Modelfile `parameters` or string fields using regex matching (`^\s*(?:PARAMETER\s+)?num_ctx\s+(\d+)\s*$`) to extract declared `num_ctx` values.
+3. **Error Handling**: If resolution fails across all stages, `ollama-agent` halts startup and raises a `ModelContextWindowError`, prompting the user to specify `context_window` in `settings.yaml`.
 
 ---
 

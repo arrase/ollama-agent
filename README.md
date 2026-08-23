@@ -690,7 +690,7 @@ subagents: []
 | `model.min_p` | `float` | *(dynamic)* | Optional minimum probability threshold override (0.0 default if unset). |
 | `model.presence_penalty` | `float` | *(dynamic)* | Optional presence penalty override (0.0 default if unset). |
 | `model.repeat_penalty` | `float` | *(dynamic)* | Optional repetition penalty override (1.1 engine default; alias: `repetition_penalty`). |
-| `model.context_window` | `int` | `10000` | Fallback context window token limit (`num_ctx`). |
+| `model.context_window` | `int` \| `str` | `10000` | Context window token limit (`num_ctx`), or `'max'` to auto-detect model maximum. |
 | `model.reasoning_effort` | `str` | `medium` | Default reasoning effort (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
 | `runtime.allow_traversal` | `bool` | `false` | If true, permits filesystem operations outside project working directory. |
 | `runtime.builtin_tool_timeout` | `int` | `30` | Execution timeout in seconds for tool and shell commands. |
@@ -742,10 +742,11 @@ flowchart TD
 
 The effective context window (`num_ctx`) is resolved automatically in the following hierarchy:
 
-1. `model.context_window` defined in `settings.yaml` (if configured > 0).
-2. Structured metadata from `ollama show <model>` (e.g. `llama.context_length`, `qwen2.context_length`).
-3. Modelfile parameter regex (`PARAMETER num_ctx <size>`) from `ollama show <model>`.
-4. If unresolved, the agent halts with a clear configuration prompt.
+1. `model.context_window` defined in `settings.yaml` (if explicitly configured as a positive number > 0).
+2. Dynamic resolution when set to `'max'` or omitted:
+   - Structured metadata from `ollama show <model>` (e.g. `llama.context_length`, `qwen2.context_length`).
+   - Modelfile parameter regex (`PARAMETER num_ctx <size>`) from `ollama show <model>`.
+3. If unresolved, the agent halts with a clear configuration prompt.
 
 ---
 

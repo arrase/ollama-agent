@@ -114,6 +114,29 @@ class TestConfigManagement(unittest.TestCase):
         s = Settings.from_dict(raw)
         self.assertEqual(s.model.repeat_penalty, 1.3)
 
+    def test_model_and_subagent_context_window_max(self) -> None:
+        raw = {
+            "model": {
+                "name": "qwen2.5-coder:32b",
+                "context_window": "max",
+            },
+            "subagents": [
+                {
+                    "name": "researcher",
+                    "description": "Deep researcher",
+                    "context_window": "max",
+                }
+            ],
+        }
+        s = Settings.from_dict(raw)
+        self.assertEqual(s.model.context_window, "max")
+        self.assertEqual(s.subagents[0].context_window, "max")
+
+        save_settings(s, self.settings_file)
+        loaded = load_settings(self.settings_file)
+        self.assertEqual(loaded.model.context_window, "max")
+        self.assertEqual(loaded.subagents[0].context_window, "max")
+
     def test_setup_environment_injects_langsmith_variables(self) -> None:
         with patch.dict(os.environ, {}, clear=False):
             s = Settings(

@@ -89,6 +89,7 @@ class AgentRuntime:
     yolo_mode: bool = field(default=False)
     auto_approved_tools: set[str] = field(default_factory=set)
     last_context_tokens: int = field(default=0, init=False)
+    effective_context_window: int = field(default=0, init=False)
     effective_model_params: dict[str, tuple[Any, str]] = field(default_factory=dict, init=False)
     graph: Any = field(default=None, init=False, repr=False)
     _backend: Any = field(default=None, init=False, repr=False)
@@ -128,6 +129,7 @@ class AgentRuntime:
             repeat_penalty=ms.repeat_penalty,
             warn_callback=_log.warning,
         )
+        self.effective_context_window = getattr(model, "num_ctx", 0)
         self.effective_model_params = model.effective_params
 
         # Backend: CWD for shell + APP_DIR for agent files (memory, etc.)

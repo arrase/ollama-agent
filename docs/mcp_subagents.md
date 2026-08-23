@@ -161,7 +161,7 @@ subagents:
 | `description` | `string` | *(Required)* | Detailed description of when and how the main agent should delegate to this subagent. |
 | `system_prompt` | `string` | `""` | System prompt instructions. If omitted, defaults to `description`. OS environment info is appended automatically. |
 | `model` | `string` | `""` | Ollama model name. If omitted or empty, inherits the main agent's configured model. |
-| `context_window` | `integer` | `0` | Context window size (`num_ctx`). If `0` or omitted, inherits the main agent's setting. |
+| `context_window` | `integer` \| `string` | `0` | Context window size (`num_ctx`), or `'max'` for maximum model context. If `0` or omitted, inherits the main agent's setting. |
 | `mcp_servers` | `array` | `[]` | Dedicated MCP server definitions attached exclusively to this subagent. |
 
 #### Subagent MCP Server Fields (`mcp_servers`)

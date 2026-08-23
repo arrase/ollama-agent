@@ -36,7 +36,11 @@ class AgentHeader(Static):
     def update_header(self) -> None:
         ms = self.repl.runtime.settings.model
         tokens = self.repl.runtime.last_context_tokens
-        num_ctx = ms.context_window
+        num_ctx = (
+            self.repl.runtime.effective_context_window
+            if isinstance(self.repl.runtime.effective_context_window, int) and self.repl.runtime.effective_context_window > 0
+            else (ms.context_window if isinstance(ms.context_window, int) else 0)
+        )
 
         if isinstance(num_ctx, int) and num_ctx > 0:
             tokens_val = tokens

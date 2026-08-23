@@ -54,7 +54,7 @@ def _model_context_length(model_info: dict[str, Any]) -> int | None:
     values = [
         int(v)
         for k, v in model_info.items()
-        if str(k).endswith(".context_length") and str(v).isdigit()
+        if str(k).endswith("context_length") and str(v).isdigit()
     ]
     return max(values, default=None)
 
@@ -88,10 +88,21 @@ async def model_supports_thinking(model: str, base_url: str) -> bool:
 
 async def resolve_context_window(
     model: str,
-    context_window: int | None,
+    context_window: int | str | None,
     base_url: str,
 ) -> int:
     """Resolve the effective context window for a model."""
+    if isinstance(context_window, str):
+        cleaned = context_window.strip().lower()
+        if cleaned == "max":
+            context_window = None
+        elif cleaned.isdigit():
+            context_window = int(cleaned)
+        else:
+            raise ModelContextWindowError(
+                _("Invalid context_window '{value}'. Expected a positive integer or 'max'.", value=context_window)
+            )
+
     if context_window is not None:
         if context_window <= 0:
             raise ModelContextWindowError(_("context_window must be greater than zero."))
@@ -100,7 +111,7 @@ async def resolve_context_window(
     response = await _show_model(model, base_url)
 
     # 1. Structured info is the most reliable (modern Ollama)
-    model_info = getattr(response, "model_info", None)
+    model_info = getattr(response, "model_info", None) or getattr(response, "modelinfo", None)
     if isinstance(model_info, dict) and (resolved := _model_context_length(model_info)):
         return resolved
 
@@ -242,7 +253,7 @@ async def create_ollama_chat_model(
     *,
     model: str,
     base_url: str,
-    context_window: int | None,
+    context_window: int | str | None,
     reasoning_effort: ReasoningEffortValue,
     temperature: float | None = None,
     top_p: float | None = None,

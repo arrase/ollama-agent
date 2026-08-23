@@ -68,7 +68,7 @@ class ModelSettings:
     min_p: float | None = None
     presence_penalty: float | None = None
     repeat_penalty: float | None = None
-    context_window: int = 10000
+    context_window: int | str = 10000
     reasoning_effort: str = "medium"
 
 
@@ -114,7 +114,7 @@ class SubAgentSettings:
     description: str = ""
     system_prompt: str = ""
     model: str = ""
-    context_window: int = 0
+    context_window: int | str = 0
     mcp_servers: list[SubAgentMCPServer] = field(default_factory=list)
 
 
