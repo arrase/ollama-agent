@@ -26,9 +26,7 @@ from .tui_components import (
     AgentHeader,
     AgentResponse,
     ReplInput,
-    SkillCreateModal,
     SystemMessage,
-    TaskCreateModal,
     ToolApprovalWidget,
     UserMessage,
 )
@@ -38,8 +36,8 @@ from ..agent.builtin_tools import set_rag_manager, set_tool_timeout
 from ..core.common import extract_text
 from ..i18n import _
 from ..rag import RAGContext, RAGManager, load_rag_database
-from ..skills import SkillsContext, create_skill
-from ..tasks.commands import CLIContext, TaskError, create_task
+from ..skills import SkillsContext
+from ..tasks.commands import CLIContext, TaskError
 from .dispatch import REPLCommand, build_repl_handlers, safe_call
 from .model_commands import _list_models_sync, set_effort, set_model
 from .session_commands import (
@@ -95,14 +93,14 @@ def _get_subcommands() -> dict[str, list[tuple[str, str]]]:
         ],
         "/task": [
             ("list", _("List all saved tasks")),
-            ("create", _("Create a task using interactive modal")),
+            ("create", _("Create a task with agent guidance")),
             ("run", _("Run a saved task prompt")),
             ("delete", _("Delete a saved task")),
         ],
         "/skill": [
             ("list", _("List all available skills")),
             ("show", _("Show skill details and instructions")),
-            ("create", _("Create a skill using interactive modal")),
+            ("create", _("Create a skill with agent guidance")),
             ("delete", _("Delete a skill")),
         ],
         "/rag": [
@@ -636,14 +634,48 @@ class OllamaAgentApp(App):
 
         if cmd == "/task" and args and args[0] == "create":
             sub_args = args[1:]
-            task_id = sub_args[0] if sub_args and not sub_args[0].startswith("-") else ""
-            self._push_task_modal(task_id, "--force" in sub_args or "-f" in sub_args)
+            task_info = " ".join(sub_args)
+            if task_info:
+                prompt_text = (
+                    f"[System Instruction: The user executed '/task create {task_info}'. "
+                    f"Use your 'task-creator' instructions to guide the user or draft the task, "
+                    f"generate a clear and self-contained YAML task file, and save it in /tasks/<task_id>.yaml.]"
+                )
+            else:
+                prompt_text = (
+                    "[System Instruction: The user executed '/task create'. "
+                    "Use your 'task-creator' instructions to ask what repeatable workflow or prompt "
+                    "they want to save as a task, and guide them through creating it in /tasks/<task_id>.yaml.]"
+                )
+            scroll.mount(UserMessage(cmd_line))
+            agent_msg = AgentResponse()
+            scroll.mount(agent_msg)
+            self._deferred_scroll()
+            self._current_worker = self.run_worker(self._stream_chat(prompt_text, scroll, agent_msg))
             return
 
         if cmd == "/skill" and args and args[0] == "create":
             sub_args = args[1:]
-            skill_id = sub_args[0] if sub_args and not sub_args[0].startswith("-") else ""
-            self._push_skill_modal(skill_id, "--force" in sub_args or "-f" in sub_args)
+            skill_info = " ".join(sub_args)
+            if skill_info:
+                prompt_text = (
+                    f"[System Instruction: The user executed '/skill create {skill_info}'. "
+                    f"Use your 'skill-creator' instructions to guide the user, gather requirements, "
+                    f"evaluate whether helper scripts in scripts/ are needed, write the SKILL.md and any scripts "
+                    f"to /skills/<skill_id>/, and confirm when created.]"
+                )
+            else:
+                prompt_text = (
+                    "[System Instruction: The user executed '/skill create'. "
+                    "Use your 'skill-creator' instructions to ask what capability or workflow they want to teach "
+                    "the agent, evaluate whether helper scripts are needed, and guide them step-by-step through "
+                    "creating the skill in /skills/<skill_id>/.]"
+                )
+            scroll.mount(UserMessage(cmd_line))
+            agent_msg = AgentResponse()
+            scroll.mount(agent_msg)
+            self._deferred_scroll()
+            self._current_worker = self.run_worker(self._stream_chat(prompt_text, scroll, agent_msg))
             return
 
         if cmd == "/task" and args and args[0] == "run":
@@ -699,54 +731,6 @@ class OllamaAgentApp(App):
             await self.repl.runtime.reload()
         elif cmd in ("/model", "/effort"):
             self.query_one(AgentHeader).update_header()
-
-    # ── Modal helpers ─────────────────────────────────────────────────────
-
-    def _push_task_modal(self, task_id: str, force: bool) -> None:
-        def on_dismiss(result: tuple[str, str, str, str, str] | None) -> None:
-            if result:
-                tid, title, model, effort, prompt = result
-                self.run_worker(self._do_create_task(tid, title, model, effort, prompt, force))
-        self.push_screen(TaskCreateModal(self, task_id, force), on_dismiss)
-
-    async def _do_create_task(self, task_id: str, title: str, model: str, effort: str, prompt: str, force: bool) -> None:
-        scroll = self.query_one("#chat-scroll")
-        scroll_w = scroll.size.width if scroll.size.width > 10 else self.size.width
-        self.repl.console._width = max(40, scroll_w - 6)
-        self.repl.console._height = 25
-        with self.repl.console.capture() as capture:
-            await safe_call(
-                create_task, self.repl._task_ctx, task_id,
-                title=title, prompt=prompt, model=model,
-                reasoning_effort=effort, force=force,
-            )
-        output = capture.get()
-        if output:
-            scroll.mount(SystemMessage(Text.from_ansi(output)))
-            self._deferred_scroll()
-
-    def _push_skill_modal(self, skill_id: str, force: bool) -> None:
-        def on_dismiss(result: tuple[str, str, str, str] | None) -> None:
-            if result:
-                sid, name, description, instructions = result
-                self.run_worker(self._do_create_skill(sid, name, description, instructions, force))
-        self.push_screen(SkillCreateModal(self, skill_id, force), on_dismiss)
-
-    async def _do_create_skill(self, skill_id: str, name: str, description: str, instructions: str, force: bool) -> None:
-        scroll = self.query_one("#chat-scroll")
-        scroll_w = scroll.size.width if scroll.size.width > 10 else self.size.width
-        self.repl.console._width = max(40, scroll_w - 6)
-        self.repl.console._height = 25
-        with self.repl.console.capture() as capture:
-            await safe_call(
-                create_skill, self.repl._skills_ctx, skill_id,
-                name=name, description=description,
-                instructions=instructions, force=force,
-            )
-        output = capture.get()
-        if output:
-            scroll.mount(SystemMessage(Text.from_ansi(output)))
-            self._deferred_scroll()
 
     # ── Streaming chat ────────────────────────────────────────────────────
  

@@ -33,9 +33,11 @@ from ..i18n import _
 from ..mcp import load_main_mcp_tools
 from ..settings import (
     AGENTS_PATH,
+    BUILTIN_SKILLS_DIR,
     HISTORY_DB_PATH,
     MEMORY_PATH,
     SKILLS_DIR,
+    TASKS_DIR,
     Settings,
     ensure_agents_file,
     ensure_memory_file,
@@ -140,17 +142,31 @@ class AgentRuntime:
             virtual_mode=not self.settings.runtime.allow_traversal,
             inherit_env=self.settings.runtime.inherit_env,
         )
+        SKILLS_DIR.mkdir(parents=True, exist_ok=True)
+        TASKS_DIR.mkdir(parents=True, exist_ok=True)
+        BUILTIN_SKILLS_DIR.mkdir(parents=True, exist_ok=True)
+
         agent_backend = FilesystemBackend(
             root_dir=MEMORY_PATH.parent,
+            virtual_mode=True,
+        )
+        system_skills_backend = FilesystemBackend(
+            root_dir=BUILTIN_SKILLS_DIR,
             virtual_mode=True,
         )
         skills_backend = FilesystemBackend(
             root_dir=SKILLS_DIR,
             virtual_mode=True,
         )
+        tasks_backend = FilesystemBackend(
+            root_dir=TASKS_DIR,
+            virtual_mode=True,
+        )
         routes: dict[str, Any] = {
             "/agent/": agent_backend,
+            "/system_skills/": system_skills_backend,
             "/skills/": skills_backend,
+            "/tasks/": tasks_backend,
         }
 
         # Memory sources: global user memory and AGENTS.md (project / global)
@@ -211,7 +227,7 @@ class AgentRuntime:
             "system_prompt": self._instructions,
             "backend": backend,
             "memory": memory_sources,
-            "skills": ["/skills/"],
+            "skills": ["/system_skills/", "/skills/"],
             "checkpointer": await self._sqlite_checkpointer(),
             "middleware": [
                 summarization_tool_mw,

@@ -163,8 +163,8 @@ The REPL provides built-in slash commands for managing models, sessions, tasks, 
 | `/params` | `/params [list \| set <parameter> <value>]` | Inspect active sampling parameters and resolution sources, or dynamically update parameter values for the active session. |
 | `/session` | `/session [list \| search <query> \| resume <id> \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume previous threads, export to Markdown, or delete history. |
 | `/compact` | `/compact` (alias: `/compress`) | Manually compact conversation history into a structured summary to reclaim context window tokens. |
-| `/task` | `/task [list \| create <id> \| run <id> [-y] \| delete <id>]` | Manage saved prompt tasks. Opens interactive modal dialogs for task creation. |
-| `/skill` | `/skill [list \| show <id> \| create <id> \| delete <id>]` | Manage agent skills. Opens interactive modal dialogs for skill creation. |
+| `/task` | `/task [list \| create <id> \| run <id> [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` initiates an interactive conversational creation flow with the agent. |
+| `/skill` | `/skill [list \| show <id> \| create <id> \| delete <id>]` | Manage agent skills. `/skill create` initiates an interactive conversational creation flow with the agent. |
 | `/rag` | `/rag [status \| list \| create <name> \| load <name> \| unload \| add <path> [--dir] \| delete <name>]` | Manage local RAG vector databases, index files/directories, and toggle active knowledge bases. |
 | `/mcp` | `/mcp [list]` | List configured MCP servers and display real-time connection status with color-coded indicators. |
 | `/yolo` | `/yolo [on \| off]` | Toggle YOLO mode or explicitly enable/disable it to bypass tool confirmations. |
@@ -448,9 +448,9 @@ ollama-agent task run code-review -y
 ollama-agent task delete code-review
 ```
 
-#### 2. REPL Task Management & Modal Dialogs
+#### 2. REPL Task Management & Conversational Flow
 
-- **Create via Modal**: Type `/task create my-task` in the REPL to open an interactive modal dialog with fields for Task ID, Title, Model, Reasoning Effort, and a multiline prompt editor.
+- **Create via Agent Guidance**: Type `/task create my-task` (or `/task create`) in the REPL. The agent will guide you through clarifying the task objective, crafting a comprehensive self-contained prompt, and saving the YAML configuration in `~/.ollama-agent/tasks/`.
 - **Run in REPL**: Type `/task run code-review` (or `/task run code-review -y`) to execute the task streaming directly in the active chat.
 - **List / Delete**: Use `/task list` and `/task delete <id>`.
 
@@ -473,7 +473,7 @@ Ollama Agent supports the open [Agent Skills specification](https://agentskills.
 
 #### Skill Directory Layout
 
-Skills reside in `~/.ollama-agent/skills/<skill_id>/SKILL.md`:
+Skills reside in `~/.ollama-agent/skills/<skill_id>/SKILL.md` (and may include helper scripts in `scripts/`):
 
 ```text
 ~/.ollama-agent/skills/
@@ -481,7 +481,8 @@ Skills reside in `~/.ollama-agent/skills/<skill_id>/SKILL.md`:
 │   └── SKILL.md
 └── web-scraper/
     ├── SKILL.md
-    └── scraper.py
+    └── scripts/
+        └── scraper.py
 ```
 
 #### Example `SKILL.md`
@@ -506,7 +507,7 @@ description: Guidelines and best practices for designing RESTful and OpenAPI com
 | :--- | :--- | :--- |
 | **List Skills** | `/skill list` | `ollama-agent skill list` |
 | **Show Skill** | `/skill show <id>` | `ollama-agent skill show <id>` |
-| **Create Skill** | `/skill create <id>` *(opens interactive modal)* | `ollama-agent skill create <id> --name "..." --description "..." --instructions "..."` |
+| **Create Skill** | `/skill create <id>` *(conversational flow)* | `ollama-agent skill create <id> --name "..." --description "..." --instructions "..."` |
 | **Delete Skill** | `/skill delete <id>` | `ollama-agent skill delete <id>` |
 
 > [!NOTE]
@@ -831,7 +832,7 @@ ollama-agent/
 │   ├── main.py              # Main CLI / REPL entry point and signal routing
 │   ├── agent/               # DeepAgents graph orchestration, middleware, session & tools
 │   ├── core/                # Model capability checks, context calculations, prompt processing
-│   ├── interfaces/          # Textual REPL TUI, modal dialogs, CLI dispatchers
+│   ├── interfaces/          # Textual REPL TUI, CLI dispatchers, keybindings
 │   ├── mcp/                 # Model Context Protocol client lifecycle and connections
 │   ├── rag/                 # Local Qdrant vector store manager and embeddings pipeline
 │   ├── settings/            # Settings models, default prompt templates, path resolutions

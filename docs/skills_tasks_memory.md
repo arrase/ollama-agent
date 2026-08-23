@@ -57,13 +57,13 @@ description: Guidelines and best practices for designing RESTful and OpenAPI com
 
 ### Skill Management Commands
 
-Skills can be managed via the CLI, REPL slash commands, or interactive TUI modal dialogs:
+Skills can be managed via the CLI or REPL slash commands:
 
 | Action | CLI Command | REPL Slash Command | Description |
 | :--- | :--- | :--- | :--- |
 | **List Skills** | `ollama-agent skill list` | `/skill list` (or `/skill`) | List all available skills and descriptions. |
 | **Show Skill** | `ollama-agent skill show <id>` | `/skill show <id>` | View raw contents and instructions of `SKILL.md`. |
-| **Create Skill** | `ollama-agent skill create <id> --name <n> --description <d> --instructions <i> [--force]` | `/skill create <id>` *(launches modal)* | Create a new skill directory and `SKILL.md`. |
+| **Create Skill** | `ollama-agent skill create <id> --name <n> --description <d> --instructions <i> [--force]` | `/skill create <id>` *(conversational flow)* | Create a new skill directory and `SKILL.md`. |
 | **Delete Skill** | `ollama-agent skill delete <id>` | `/skill delete <id>` | Delete a skill directory permanently. |
 
 ---
@@ -94,7 +94,7 @@ reasoning_effort: "medium"
 | Action | CLI Command | REPL Slash Command | Description |
 | :--- | :--- | :--- | :--- |
 | **List Tasks** | `ollama-agent task list` | `/task list` (or `/task`) | List all saved tasks. |
-| **Create Task** | `ollama-agent task create <id> --title <t> --task-prompt <p> [-m <model>] [-e <effort>] [--force]` | `/task create <id>` *(launches modal)* | Save a new task template. |
+| **Create Task** | `ollama-agent task create <id> --title <t> --task-prompt <p> [-m <model>] [-e <effort>] [--force]` | `/task create <id>` *(conversational flow)* | Save a new task template. |
 | **Run Task** | `ollama-agent task run <id> [-y]` | `/task run <id> [-y]` | Execute a saved task non-interactively or in REPL. |
 | **Delete Task** | `ollama-agent task delete <id>` | `/task delete <id>` | Delete a saved task definition. |
 

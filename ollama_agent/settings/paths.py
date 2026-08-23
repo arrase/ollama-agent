@@ -26,4 +26,5 @@ MCP_SERVERS_PATH = APP_DIR / "mcp_servers.json"
 TASKS_DIR = APP_DIR / "tasks"
 RAG_DIR = APP_DIR / "rag"
 SKILLS_DIR = APP_DIR / "skills"
+BUILTIN_SKILLS_DIR = Path(__file__).resolve().parent.parent / "skills" / "builtin"
 

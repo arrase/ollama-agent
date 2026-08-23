@@ -114,7 +114,7 @@ ollama-agent/
 │   │   ├── dispatch.py      # Unified CLI/REPL command handler registry
 │   │   ├── model_commands.py# Model listing with tool capabilities, model switching
 │   │   ├── session_commands.py # SQLite session management, markdown export, compaction
-│   │   ├── tui_components.py# Textual TUI widgets (header, footer, input, messages, modals)
+│   │   ├── tui_components.py# Textual TUI widgets (header, footer, input, messages, approvals)
 │   │   ├── repl.py          # Interactive Textual REPL application & autocomplete
 │   │   └── repl.css         # Styling for Textual REPL interface
 │   ├── mcp/                 # Model Context Protocol integration
@@ -127,6 +127,7 @@ ollama-agent/
 │   │   ├── config.py        # YAML configuration loader, prompt scaffold, reset logic
 │   │   └── paths.py         # Centralized filesystem constants (~/.ollama-agent/)
 │   ├── skills/              # Agent Skills implementation
+│   │   ├── builtin/         # Internal application skills (skill-creator, task-creator)
 │   │   ├── commands.py      # Skill CLI and REPL handlers
 │   │   └── manager.py       # SkillManager and SKILL.md YAML frontmatter parser
 │   ├── streaming/           # Streaming event handling and rendering
