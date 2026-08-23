@@ -132,6 +132,12 @@ ollama-agent session-export 4d7e2a1b -o ./exports/session_summary.md
 ollama-agent session-delete 4d7e2a1b
 ```
 
+#### 5. MCP (Model Context Protocol) Commands
+```bash
+# List all configured MCP servers and check their connection status
+ollama-agent mcp-list
+```
+
 ---
 
 ## Interactive REPL Reference
@@ -156,6 +162,7 @@ Slash commands provide full application control directly within the REPL:
 | `/task` | `/task [list \| create <id> \| run <id> [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` launches an interactive modal dialog. |
 | `/skill` | `/skill [list \| show <id> \| create <id> \| delete <id>]` | Manage agent skills. `/skill create` launches an interactive modal dialog. |
 | `/rag` | `/rag [status \| list \| create <name> \| load <name> \| unload \| add <path> [--dir] \| delete <name>]` | Manage local RAG databases, index documents, and toggle active knowledge bases. |
+| `/mcp` | `/mcp [list]` | List configured MCP servers and display real-time connection status with color-coded indicators. |
 | `/yolo` | `/yolo [on \| off]` | Toggle YOLO mode or set it explicitly to bypass tool execution confirmation prompts. |
 | `/new` | `/new` (alias: `/clear`) | Start a clean session with fresh context and clear the screen (alias for `/session new`). |
 | `/clear` | `/clear` | Clear the screen and start a clean session (alias for `/new`). |

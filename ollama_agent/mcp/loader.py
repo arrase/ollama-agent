@@ -7,14 +7,24 @@ import json
 import logging
 import os
 import re
+from pathlib import Path
 from typing import Any
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
-from ..settings import MCP_SERVERS_PATH, SubAgentMCPServer
+from ..settings import MCP_PATH, MCP_SERVERS_PATH, SubAgentMCPServer
 
 _log = logging.getLogger(__name__)
 _ENV_RE = re.compile(r"\$\{([^}]+)\}|%([^%]+)%")
+
+
+def get_mcp_config_path() -> Path:
+    """Return the active MCP config path (mcp.json if present, else mcp_servers.json or mcp.json)."""
+    if MCP_PATH.exists():
+        return MCP_PATH
+    if MCP_SERVERS_PATH.exists():
+        return MCP_SERVERS_PATH
+    return MCP_PATH
 
 
 def _resolve_env(env: dict[str, str]) -> dict[str, str] | None:
@@ -41,25 +51,33 @@ def _resolve_env(env: dict[str, str]) -> dict[str, str] | None:
 
 def _build_mcp_connection(cfg: dict[str, Any]) -> dict[str, Any] | None:
     """Build a MultiServerMCPClient connection dict from a server config."""
+    transport = cfg.get("transport") or cfg.get("type")
+
     if cfg.get("command"):
         out: dict[str, Any] = {
             "transport": "stdio",
             "command": cfg["command"],
+            "args": cfg.get("args", []),
         }
-        if "args" in cfg:
-            out["args"] = cfg["args"]
+        if "cwd" in cfg:
+            out["cwd"] = cfg["cwd"]
         if "env" in cfg:
             resolved = _resolve_env(cfg["env"])
             if resolved is None:
                 return None
             if resolved:
                 out["env"] = resolved
-            return out
+        return out
 
     url = cfg.get("url") or cfg.get("httpUrl")
     if url:
-        out = {"transport": "http", "url": url}
-        for k in ("headers", "timeout", "sse_read_timeout"):
+        conn_transport = (
+            transport
+            if transport in {"sse", "websocket", "http", "streamable_http", "streamable-http"}
+            else "http"
+        )
+        out = {"transport": conn_transport, "url": url}
+        for k in ("headers", "timeout", "sse_read_timeout", "session_kwargs"):
             if k in cfg:
                 out[k] = cfg[k]
         return out
@@ -68,15 +86,16 @@ def _build_mcp_connection(cfg: dict[str, Any]) -> dict[str, Any] | None:
 
 
 async def load_main_mcp_tools() -> list[Any]:
-    """Load flat MCP tools for the main agent from mcp_servers.json."""
-    if not MCP_SERVERS_PATH.exists():
+    """Load flat MCP tools for the main agent from mcp.json / mcp_servers.json."""
+    config_path = get_mcp_config_path()
+    if not config_path.exists():
         return []
 
     try:
-        raw_json = await asyncio.to_thread(MCP_SERVERS_PATH.read_text, encoding="utf-8")
+        raw_json = await asyncio.to_thread(config_path.read_text, encoding="utf-8")
         data = json.loads(raw_json)
     except (json.JSONDecodeError, OSError) as exc:
-        _log.error("Failed to load MCP config %s: %s", MCP_SERVERS_PATH, exc)
+        _log.error("Failed to load MCP config %s: %s", config_path, exc)
         return []
 
     servers_cfg = data.get("mcpServers") or data.get("servers") or {}
@@ -99,18 +118,21 @@ async def load_main_mcp_tools() -> list[Any]:
     if not connections:
         return []
 
-    try:
-        client = MultiServerMCPClient(connections)  # type: ignore[arg-type]
-        tools = await client.get_tools()
-        _log.info(
-            "Loaded %d MCP tools from %d servers",
-            len(tools),
-            len(connections),
-        )
-        return tools
-    except Exception as exc:
-        _log.error("Failed to initialize MCP tools: %s", exc)
-        return []
+    tools: list[Any] = []
+    for name, conn in connections.items():
+        try:
+            client = MultiServerMCPClient({name: conn})  # type: ignore[dict-item,arg-type]
+            srv_tools = await client.get_tools()
+            tools.extend(srv_tools)
+            _log.info(
+                "Loaded %d MCP tools from server '%s'",
+                len(srv_tools),
+                name,
+            )
+        except Exception as exc:
+            _log.error("Failed to load tools from MCP server '%s': %s", name, exc)
+
+    return tools
 
 
 async def load_subagent_mcp_tools(

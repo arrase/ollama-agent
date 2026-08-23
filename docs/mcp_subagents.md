@@ -16,13 +16,17 @@ flowchart LR
     B -->|http / SSE endpoint| E["Remote Enterprise API MCP Server"]
 ```
 
-### Configuration File: `~/.ollama-agent/mcp_servers.json`
+### Configuration File: `~/.ollama-agent/mcp.json` (or `mcp_servers.json`)
 
-Global MCP servers for the main agent are declared in JSON format at `~/.ollama-agent/mcp_servers.json`. The configuration supports both `mcpServers` and `servers` top-level keys.
+Global MCP servers for the main agent are declared in JSON format at `~/.ollama-agent/mcp.json` (or `~/.ollama-agent/mcp_servers.json`). The configuration supports both `mcpServers` and `servers` top-level keys, as well as `stdio`, `http`, `sse`, and `streamable_http` transports.
 
 ```json
 {
   "mcpServers": {
+    "tavily-remote": {
+      "type": "http",
+      "url": "https://mcp.tavily.com/mcp/?tavilyApiKey=..."
+    },
     "filesystem": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/documents"],
@@ -48,6 +52,23 @@ Global MCP servers for the main agent are declared in JSON format at `~/.ollama-
   }
 }
 ```
+
+### Inspecting Servers (`/mcp` Slash Command)
+
+You can check configured MCP servers, test connectivity, and inspect available tools directly from the REPL with `/mcp`:
+
+```text
+/mcp
+```
+
+Or via CLI:
+```bash
+ollama-agent mcp-list
+```
+
+This displays a color-coded status table showing:
+- 🟢 **`● Active`**: Successfully connected, with count and list of discovered tools.
+- 🔴 **`● Failed`**: Connection or configuration error, with details of the exception.
 
 ### Supported Transports
 

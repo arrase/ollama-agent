@@ -71,7 +71,7 @@
 - 🧩 **Agent Skills Standard**: Extend the agent with modular skills following the [Agent Skills specification](https://agentskills.io/specification) using progressive disclosure.
 - 📚 **Local RAG Engine**: Embed and index documents into local Qdrant vector collections with automated semantic retrieval via the agent's `rag_search` tool.
 - 🧠 **Persistent Memory & Guidelines**: Cross-session user memory (`MEMORY.md`), automatic discovery of project-level guidelines (`AGENTS.md`), and **Episodic Memory** to search past conversations and solutions (`search_past_conversations` tool and `/session search`).
-- 🔌 **Model Context Protocol (MCP)**: Attach MCP servers (`mcp_servers.json`) directly to the main agent across `stdio` and `http` transports.
+- 🔌 **Model Context Protocol (MCP)**: Attach MCP servers (`mcp.json` or `mcp_servers.json`) directly to the main agent across `stdio`, `http`, and `sse` transports, with real-time status inspection via `/mcp` and `mcp-list`.
 - 🤖 **Specialized Subagents**: Configure isolated subagents in `settings.yaml` with their own model, system prompt, and dedicated MCP tool servers.
 
 ---
@@ -166,6 +166,7 @@ The REPL provides built-in slash commands for managing models, sessions, tasks, 
 | `/task` | `/task [list \| create <id> \| run <id> [-y] \| delete <id>]` | Manage saved prompt tasks. Opens interactive modal dialogs for task creation. |
 | `/skill` | `/skill [list \| show <id> \| create <id> \| delete <id>]` | Manage agent skills. Opens interactive modal dialogs for skill creation. |
 | `/rag` | `/rag [status \| list \| create <name> \| load <name> \| unload \| add <path> [--dir] \| delete <name>]` | Manage local RAG vector databases, index files/directories, and toggle active knowledge bases. |
+| `/mcp` | `/mcp [list]` | List configured MCP servers and display real-time connection status with color-coded indicators. |
 | `/yolo` | `/yolo [on \| off]` | Toggle YOLO mode or explicitly enable/disable it to bypass tool confirmations. |
 | `/new` | `/new` (alias: `/clear`) | Start a clean new session with fresh context and clear the screen (alias for `/session new`). |
 | `/clear` | `/clear` | Clear the screen and start a clean new session (alias for `/new`). |
@@ -348,6 +349,7 @@ In addition to top-level flags, Ollama Agent provides dedicated CLI subcommands 
 | | `rag-create` | `ollama-agent rag-create docs-kb` | Create a new Qdrant vector database. |
 | | `rag-add` | `ollama-agent rag-add docs-kb ./docs --dir` | Index a file or directory into a RAG collection. |
 | | `rag-delete` | `ollama-agent rag-delete docs-kb` | Delete a RAG database. |
+| **MCP** | `mcp-list` | `ollama-agent mcp-list` | List configured MCP servers and check their connection health. |
 
 ---
 
@@ -574,11 +576,15 @@ ollama-agent --rag project-docs -p "How is authentication handled in this projec
 
 Extend the primary agent with tools from external [Model Context Protocol](https://modelcontextprotocol.io/) servers. Configured tools are injected directly into the orchestrator.
 
-Create `~/.ollama-agent/mcp_servers.json`:
+Create `~/.ollama-agent/mcp.json` (or `mcp_servers.json`):
 
 ```json
 {
   "mcpServers": {
+    "tavily-remote": {
+      "type": "http",
+      "url": "https://mcp.tavily.com/mcp/?tavilyApiKey=..."
+    },
     "filesystem": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/documents"]
@@ -597,8 +603,9 @@ Create `~/.ollama-agent/mcp_servers.json`:
 }
 ```
 
-- **Supported Transports**: `stdio` (subprocess execution) and `http` (remote endpoints).
+- **Supported Transports**: `stdio` (subprocess execution), `http`, and `sse` (remote endpoints).
 - **Environment Substitution**: `${VAR_NAME}` (and `%VAR_NAME%`) syntax injects host environment variables; servers with missing required variables are skipped gracefully with a log warning.
+- **Server Status Inspection**: Run `/mcp` in the interactive REPL or `ollama-agent mcp-list` from the CLI to check connection status, health, and discovered tools with color-coded status badges (`● Active` / `● Failed`).
 
 ---
 

@@ -10,6 +10,8 @@ from typing import Awaitable, Callable, Any
 from rich.console import Console
 
 from ..i18n import _
+from ..mcp import list_mcp_servers
+from ..settings import Settings
 from ..rag import (
     RAGContext,
     RAGError,
@@ -69,6 +71,7 @@ REPL_SECTIONS: tuple[str, ...] = (
     "Task Management",
     "RAG (Document Retrieval)",
     "Skills Management",
+    "MCP (Model Context Protocol)",
 )
 
 
@@ -88,6 +91,7 @@ def build_cli_handlers(
     task_ctx: CLIContext,
     rag_ctx: RAGContext,
     skills_ctx: SkillsContext,
+    settings: Settings | None = None,
 ) -> dict[str, CLIHandler]:
     """Map parsed CLI subcommands to their synchronous or async handler functions."""
 
@@ -135,6 +139,10 @@ def build_cli_handlers(
             args.session_id,
             output_path=args.output,
         ),
+        "mcp-list": lambda: list_mcp_servers(
+            Console(),
+            settings=settings,
+        ),
     }
 
 
@@ -161,6 +169,14 @@ def build_repl_handlers(
     switch_effort: Callable[[str], Awaitable[None]] | None = None,
 ) -> dict[str, REPLCommand]:
     """Build the REPL command registry for unified slash commands."""
+
+    def handle_mcp(args: list[str]) -> object:
+        if not args or args[0] in ("list", "status"):
+            settings = get_runtime().settings if get_runtime is not None else None
+            return list_mcp_servers(console, settings=settings)
+        err_msg = _("Unknown mcp subcommand '{sub}'. Usage: /mcp [list]", sub=args[0])
+        console.print(f"[red]{err_msg}[/red]")
+        return None
 
     def handle_model(args: list[str]) -> object:
         if not args or args[0] == "list":
@@ -406,6 +422,12 @@ def build_repl_handlers(
             "RAG (Document Retrieval)",
             _("Usage: /rag [status | list | create | delete | load | unload | add]"),
             handle_rag,
+        ),
+        "/mcp": REPLCommand(
+            _("List configured MCP servers and check their status"),
+            "MCP (Model Context Protocol)",
+            _("Usage: /mcp [list]"),
+            handle_mcp,
         ),
     }
     return cmds
