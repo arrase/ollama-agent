@@ -118,12 +118,12 @@ class TestI18nTranslations(unittest.TestCase):
 
     def test_english_translation(self) -> None:
         set_locale("en")
-        self.assertEqual(_("Task Management"), "Task Management")
+        self.assertEqual(_("Manage saved tasks"), "Manage saved tasks")
         self.assertEqual(_("Exit the REPL"), "Exit the REPL")
 
     def test_spanish_translation(self) -> None:
         set_locale("es")
-        self.assertEqual(_("Task Management"), "Gestión de Tareas")
+        self.assertEqual(_("Manage saved tasks"), "Gestionar tareas guardadas")
         self.assertEqual(_("Exit the REPL"), "Salir del REPL")
         self.assertEqual(_("No skills found."), "No se encontraron habilidades.")
         self.assertEqual(_("Tool:"), "Herramienta:")
@@ -134,50 +134,50 @@ class TestI18nTranslations(unittest.TestCase):
 
     def test_french_translation(self) -> None:
         set_locale("fr")
-        self.assertEqual(_("Task Management"), "Gestion des Tâches")
+        self.assertEqual(_("Manage saved tasks"), "Gérer les tâches enregistrées")
         self.assertEqual(_("Exit the REPL"), "Quitter le REPL")
         self.assertEqual(_("Tool:"), "Outil :")
         self.assertEqual(_("Arguments:"), "Arguments :")
 
     def test_german_translation(self) -> None:
         set_locale("de")
-        self.assertEqual(_("Task Management"), "Aufgabenverwaltung")
+        self.assertEqual(_("Manage saved tasks"), "Gespeicherte Aufgaben verwalten")
         self.assertEqual(_("Exit the REPL"), "REPL beenden")
         self.assertEqual(_("Tool:"), "Werkzeug:")
         self.assertEqual(_("Arguments:"), "Argumente:")
 
     def test_italian_translation(self) -> None:
         set_locale("it")
-        self.assertEqual(_("Task Management"), "Gestione Attività")
+        self.assertEqual(_("Manage saved tasks"), "Gestisci le attività salvate")
         self.assertEqual(_("Exit the REPL"), "Esci dal REPL")
         self.assertEqual(_("Tool:"), "Strumento:")
         self.assertEqual(_("Arguments:"), "Argomenti:")
 
     def test_portuguese_translation(self) -> None:
         set_locale("pt")
-        self.assertEqual(_("Task Management"), "Gerenciamento de Tarefas")
+        self.assertEqual(_("Manage saved tasks"), "Gerenciar tarefas salvas")
         self.assertEqual(_("Exit the REPL"), "Sair do REPL")
         self.assertEqual(_("Tool:"), "Ferramenta:")
         self.assertEqual(_("Arguments:"), "Argumentos:")
 
     def test_chinese_translation(self) -> None:
         set_locale("zh")
-        self.assertEqual(_("Task Management"), "任务管理")
+        self.assertEqual(_("Manage saved tasks"), "管理保存的任务")
         self.assertEqual(_("Exit the REPL"), "退出 REPL")
 
     def test_japanese_translation(self) -> None:
         set_locale("ja")
-        self.assertEqual(_("Task Management"), "タスク管理")
+        self.assertEqual(_("Manage saved tasks"), "保存済みタスクを管理")
         self.assertEqual(_("Exit the REPL"), "REPLを終了")
 
     def test_russian_translation(self) -> None:
         set_locale("ru")
-        self.assertEqual(_("Task Management"), "Управление Задачами")
+        self.assertEqual(_("Manage saved tasks"), "Управление сохраненными задачами")
         self.assertEqual(_("Exit the REPL"), "Выйти из REPL")
 
     def test_hindi_translation(self) -> None:
         set_locale("hi")
-        self.assertEqual(_("Task Management"), "कार्य प्रबंधन")
+        self.assertEqual(_("Manage saved tasks"), "सहेजे गए कार्य प्रबंधित करें")
         self.assertEqual(_("Exit the REPL"), "REPL से बाहर निकलें")
         self.assertEqual(_("No skills found."), "कोई कौशल नहीं मिला।")
 
