@@ -124,6 +124,15 @@ async def resolve_ollama_reasoning(
 ) -> bool | str | None:
     """Translate reasoning_effort to Ollama's native reasoning setting."""
     lower_name = model.lower()
+    if "qwen3.8" in lower_name:
+        if effort == "disabled":
+            return False
+        if effort == "hide":
+            return True
+        if effort == "enabled":
+            return "xhigh"
+        return effort
+
     if "gpt-oss" in lower_name:
         if effort == "disabled":
             warn_callback(

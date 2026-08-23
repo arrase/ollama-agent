@@ -296,11 +296,17 @@ The `--effort` flag (and `model.reasoning_effort` in `settings.yaml`) controls m
 
 | Model Family | `--effort` Value | Ollama API Parameter | Behavior |
 | :--- | :--- | :--- | :--- |
+| **Qwen3.8 Series** | `xhigh` | `"xhigh"` | Default level. Thorough reasoning for complex analysis. |
+| **Qwen3.8 Series** | `medium` | `"medium"` | Balanced reasoning optimizing accuracy and speed. |
+| **Qwen3.8 Series** | `low` | `"low"` | Efficient reasoning optimizing for speed and cost. |
+| **Qwen3.8 Series** | `enabled` | `"xhigh"` | Enables reasoning with Qwen3.8 default `xhigh` level. |
+| **Qwen3.8 Series** | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
+| **Qwen3.8 Series** | `disabled` | `false` | Disables reasoning trace generation at the model level. |
 | **GPT-OSS** | `low` / `medium` / `high` / `xhigh` | `"low"` / `"medium"` / `"high"` / `"xhigh"` | Sets thinking trace depth. GPT-OSS accepts string effort levels. |
 | **GPT-OSS** | `enabled` | `"medium"` | Enables thinking with default `medium` level. |
 | **GPT-OSS** | `hide` | *(omitted)* | Uses model default effort and hides reasoning trace in UI. |
 | **GPT-OSS** | `disabled` | *(omitted)* | GPT-OSS cannot disable thinking; emits warning, uses default effort, and hides reasoning trace in UI. |
-| **Reasoning Models**<br>*(Qwen 2.5/3, DeepSeek R1, DeepSeek-v3.1)* | `low` / `medium` / `high` / `xhigh` / `enabled` | `true` | Enables native reasoning generation. |
-| **Reasoning Models** | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
-| **Reasoning Models** | `disabled` | `false` | Disables reasoning trace generation at the model level. |
+| **Binary Reasoning Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `low` / `medium` / `high` / `xhigh` / `enabled` | `true` | Enables native reasoning generation. |
+| **Binary Reasoning Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
+| **Binary Reasoning Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `disabled` | `false` | Disables reasoning trace generation at the model level. |
 | **Non-Thinking Models** | *(any)* | *(omitted)* | Setting is ignored gracefully. |

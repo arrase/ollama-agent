@@ -355,17 +355,23 @@ In addition to top-level flags, Ollama Agent provides dedicated CLI subcommands 
 The `--effort` flag, `/effort` slash command, and `model.reasoning_effort` in `settings.yaml` control model reasoning traces via Ollama's native thinking capabilities:
 
 > [!WARNING]
-> Not all models support all reasoning effort levels (or reasoning traces at all). Support for reasoning effort levels depends on the model manufacturer and architecture. It is the user's responsibility to know and verify which levels are supported by the model being used.
+> Not all models support all reasoning effort levels (or reasoning traces at all). Support for reasoning effort levels depends on the model manufacturer and architecture. For example, **Qwen3.8** officially supports granular reasoning effort levels (`xhigh` as default for thorough analysis, `medium` for balanced accuracy/speed, and `low` for fast/cost-effective reasoning), **GPT-OSS** accepts string levels without allowing thinking to be disabled, whereas other models (e.g. **Qwen 2.5 / 3**, **Gemma 4**, **DeepSeek R1 / DeepSeek-v3.1**) support binary toggling (`true`/`false`), and standard models ignore reasoning settings entirely. It is the user's responsibility to know and verify which levels are supported by the model being used.
 
 | Model Family | `--effort` Value | Ollama API Parameter | Behavior |
 | :--- | :--- | :--- | :--- |
+| **Qwen3.8 Series** | `xhigh` | `"xhigh"` | Default level. Thorough reasoning for complex analysis. |
+| **Qwen3.8 Series** | `medium` | `"medium"` | Balanced reasoning optimizing accuracy and speed. |
+| **Qwen3.8 Series** | `low` | `"low"` | Efficient reasoning optimizing for speed and cost. |
+| **Qwen3.8 Series** | `enabled` | `"xhigh"` | Enables reasoning with Qwen3.8 default `xhigh` level. |
+| **Qwen3.8 Series** | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
+| **Qwen3.8 Series** | `disabled` | `false` | Disables reasoning trace generation at the model level. |
 | **GPT-OSS** | `low` / `medium` / `high` / `xhigh` | `"low"` / `"medium"` / `"high"` / `"xhigh"` | Sets thinking trace depth. GPT-OSS accepts string effort levels. |
 | **GPT-OSS** | `enabled` | `"medium"` | Enables thinking with default `medium` level. |
 | **GPT-OSS** | `hide` | *(omitted)* | Uses model default effort and hides reasoning trace in UI. |
 | **GPT-OSS** | `disabled` | *(omitted)* | GPT-OSS cannot disable thinking; emits warning, uses default effort, and hides reasoning trace in UI. |
-| **Reasoning Models**<br>*(Qwen 2.5/3, DeepSeek R1, DeepSeek-v3.1)* | `low` / `medium` / `high` / `xhigh` / `enabled` | `true` | Enables native reasoning generation. |
-| **Reasoning Models** | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
-| **Reasoning Models** | `disabled` | `false` | Disables reasoning trace generation at the model level. |
+| **Binary Reasoning Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `low` / `medium` / `high` / `xhigh` / `enabled` | `true` | Enables native reasoning generation. |
+| **Binary Reasoning Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
+| **Binary Reasoning Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `disabled` | `false` | Disables reasoning trace generation at the model level. |
 | **Non-Thinking Models** | *(any)* | *(omitted)* | Setting is ignored gracefully. |
 
 ---

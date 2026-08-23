@@ -87,6 +87,20 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         res = await resolve_ollama_reasoning("llama3:8b", "high", "http://localhost:11434")
         self.assertIsNone(res)
 
+        # qwen3.8 model with official reasoning_effort support
+        res_qwen_xhigh = await resolve_ollama_reasoning("qwen3.8:27b", "xhigh", "http://localhost:11434")
+        self.assertEqual(res_qwen_xhigh, "xhigh")
+        res_qwen_med = await resolve_ollama_reasoning("qwen3.8:27b", "medium", "http://localhost:11434")
+        self.assertEqual(res_qwen_med, "medium")
+        res_qwen_low = await resolve_ollama_reasoning("qwen3.8:27b", "low", "http://localhost:11434")
+        self.assertEqual(res_qwen_low, "low")
+        res_qwen_enabled = await resolve_ollama_reasoning("qwen3.8:27b", "enabled", "http://localhost:11434")
+        self.assertEqual(res_qwen_enabled, "xhigh")
+        res_qwen_hide = await resolve_ollama_reasoning("qwen3.8:27b", "hide", "http://localhost:11434")
+        self.assertTrue(res_qwen_hide)
+        res_qwen_disabled = await resolve_ollama_reasoning("qwen3.8:27b", "disabled", "http://localhost:11434")
+        self.assertFalse(res_qwen_disabled)
+
         # gpt-oss special model
         res = await resolve_ollama_reasoning("gpt-oss:latest", "high", "http://localhost:11434")
         self.assertEqual(res, "high")
