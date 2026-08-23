@@ -471,6 +471,24 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(autolist.display)
                 self.assertEqual(autolist.option_count, 0)
 
+            # 7. Level 2: Dynamic Models for /model set
+            mock_m1 = MagicMock(model="llama3.2:latest", size=4 * 1024**3)
+            mock_m2 = MagicMock(model="mistral:latest", size=5 * 1024**3)
+            with patch("ollama_agent.interfaces.repl._list_models_sync", return_value=[mock_m1, mock_m2]):
+                app.update_autocomplete("/model set ")
+                self.assertTrue(autolist.display)
+                self.assertEqual(autolist.option_count, 2)
+
+                app.update_autocomplete("/model set llam")
+                self.assertEqual(autolist.option_count, 1)
+                app.accept_completion(0)
+                self.assertEqual(inp.text, "/model set llama3.2:latest ")
+
+            with patch("ollama_agent.interfaces.repl._list_models_sync", side_effect=OSError("Connection refused")):
+                app.update_autocomplete("/model set ")
+                self.assertFalse(autolist.display)
+                self.assertEqual(autolist.option_count, 0)
+
     async def test_accept_completion_file_mention(self) -> None:
         repl_mock = MagicMock()
         repl_mock.runtime.settings.model.name = "gemma4:26b"

@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import ollama
 from rich.console import Console
 from rich.text import Text
 
@@ -39,7 +40,7 @@ from ..rag import RAGContext, RAGManager, load_rag_database
 from ..skills import SkillsContext, create_skill
 from ..tasks.commands import CLIContext, TaskError, create_task
 from .dispatch import REPLCommand, build_repl_handlers, safe_call
-from .model_commands import set_model
+from .model_commands import _list_models_sync, set_model
 from .session_commands import (
     compact_session,
     export_session,
@@ -324,6 +325,22 @@ class OllamaAgentApp(App):
         if num_parts == 3:
             sub_cmd = parts[1]
             arg_token = parts[2]
+
+            if root_cmd == "/model" and sub_cmd == "set":
+                try:
+                    models = _list_models_sync(self.repl.runtime.settings.model.base_url)
+                except (ollama.ResponseError, OSError):
+                    return []
+                return [
+                    (
+                        f"{root_cmd} {sub_cmd} {m.model}",
+                        Text.from_markup(
+                            f"[bold #e6edf3]{m.model:<30}[/bold #e6edf3] [dim #8b949e]{f'{(m.size / (1024**3)):.1f}GB' if m.size else ''}[/dim #8b949e]"
+                        ),
+                    )
+                    for m in models
+                    if m.model and m.model.startswith(arg_token)
+                ]
 
             if root_cmd == "/task" and sub_cmd in ("run", "delete"):
                 tasks = self.repl._task_ctx.task_manager.list_all()
@@ -668,6 +685,8 @@ class OllamaAgentApp(App):
             self.update_yolo_ui()
         elif cmd == "/rag" and args and args[0] in ("load", "unload", "delete"):
             await self.repl.runtime.reload()
+        elif cmd == "/model" and args and args[0] == "set":
+            self.query_one(AgentHeader).update_header()
 
     # ── Modal helpers ─────────────────────────────────────────────────────
 
