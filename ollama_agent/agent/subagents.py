@@ -60,7 +60,7 @@ async def _build_spec(
         repeat_penalty=model_settings.repeat_penalty,
     )
 
-    spec["skills"] = ["/skills/"]
+    spec["skills"] = ["/system_skills/", "/skills/"]
 
     if sa.mcp_servers:
         tools = await load_subagent_mcp_tools(sa.name, sa.mcp_servers)

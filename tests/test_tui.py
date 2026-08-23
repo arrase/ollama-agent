@@ -20,9 +20,7 @@ from ollama_agent.interfaces.tui_components import (
     AgentHeader,
     AgentResponse,
     ReplInput,
-    SkillCreateModal,
     SystemMessage,
-    TaskCreateModal,
     ToolApprovalWidget,
     ToolCallMessage,
     ToolOutputMessage,
@@ -347,75 +345,6 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(decisions[0]["message"], "User cancelled the execution.")
 
 
-    async def test_task_create_modal(self) -> None:
-        app_mock = MagicMock()
-        app_mock.repl.runtime.settings.model.name = "qwen2.5-coder:32b"
-        app_mock.repl.runtime.settings.model.reasoning_effort = "high"
-
-        modal = TaskCreateModal(app_mock, "test-task", False)
-
-        class ModalHostApp(App):
-            def compose(self) -> ComposeResult:
-                yield Static("main screen")
-
-        app = ModalHostApp()
-        async with app.run_test() as pilot:
-            result_holder = []
-            def on_dismiss(res):
-                result_holder.append(res)
-            app.push_screen(modal, on_dismiss)
-            await pilot.pause()
-
-            # Verify inputs are present
-            title_inp = modal.query_one("#title-input", Input)
-            title_inp.value = "My Test Task"
-            prompt_area = modal.query_one("#prompt-area", TextArea)
-            prompt_area.text = "Do something cool"
-
-            # Press create button
-            create_btn = modal.query_one("#create-btn", Button)
-            modal.on_button_pressed(Button.Pressed(create_btn))
-            await pilot.pause()
-
-            self.assertEqual(len(result_holder), 1)
-            self.assertEqual(result_holder[0][0], "test-task")
-            self.assertEqual(result_holder[0][1], "My Test Task")
-            self.assertEqual(result_holder[0][4], "Do something cool")
-
-    async def test_skill_create_modal(self) -> None:
-        app_mock = MagicMock()
-        modal = SkillCreateModal(app_mock, "test-skill", False)
-
-        class ModalHostApp(App):
-            def compose(self) -> ComposeResult:
-                yield Static("main screen")
-
-        app = ModalHostApp()
-        async with app.run_test() as pilot:
-            result_holder = []
-            def on_dismiss(res):
-                result_holder.append(res)
-            app.push_screen(modal, on_dismiss)
-            await pilot.pause()
-
-            # Verify inputs are present
-            name_inp = modal.query_one("#name-input", Input)
-            name_inp.value = "Skill Name"
-            desc_inp = modal.query_one("#desc-input", Input)
-            desc_inp.value = "Skill Description"
-            inst_area = modal.query_one("#instructions-area", TextArea)
-            inst_area.text = "Run tests"
-
-            # Press create button
-            create_btn = modal.query_one("#create-btn", Button)
-            modal.on_button_pressed(Button.Pressed(create_btn))
-            await pilot.pause()
-
-            self.assertEqual(len(result_holder), 1)
-            self.assertEqual(result_holder[0][0], "test-skill")
-            self.assertEqual(result_holder[0][1], "Skill Name")
-            self.assertEqual(result_holder[0][2], "Skill Description")
-            self.assertEqual(result_holder[0][3], "Run tests")
 
 
 class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
@@ -680,6 +609,22 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
                 await app._run_slash_command("/effort high")
                 mock_update_header.assert_called_once()
                 self.assertEqual(repl_mock.runtime.settings.model.reasoning_effort, "high")
+
+            # 6. /task create conversational dispatch
+            with patch.object(app, "_stream_chat", new_callable=AsyncMock) as mock_stream:
+                await app._run_slash_command("/task create my-new-task")
+                mock_stream.assert_called_once()
+                prompt_arg = mock_stream.call_args[0][0]
+                self.assertIn("task-creator", prompt_arg)
+                self.assertIn("my-new-task", prompt_arg)
+
+            # 7. /skill create conversational dispatch
+            with patch.object(app, "_stream_chat", new_callable=AsyncMock) as mock_stream:
+                await app._run_slash_command("/skill create git-commit-helper")
+                mock_stream.assert_called_once()
+                prompt_arg = mock_stream.call_args[0][0]
+                self.assertIn("skill-creator", prompt_arg)
+                self.assertIn("git-commit-helper", prompt_arg)
 
     async def test_tui_streaming_renderer_events(self) -> None:
         repl_mock = MagicMock()

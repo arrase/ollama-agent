@@ -9,9 +9,8 @@ from textual import events
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal
 from textual.message import Message
-from textual.screen import ModalScreen
 from textual.timer import Timer
-from textual.widgets import Button, Collapsible, Input, Label, Markdown, OptionList, Static, TextArea
+from textual.widgets import Button, Collapsible, Label, Markdown, OptionList, Static, TextArea
 
 from ..i18n import _
 from ..settings.paths import APP_DIR
@@ -471,94 +470,6 @@ class ToolOutputMessage(Static):
 class SystemMessage(Static):
     """Command output or system-level notice."""
     pass
-
-
-# ─── Modals ───────────────────────────────────────────────────────────────────
-
-class TaskCreateModal(ModalScreen):
-    """Modal dialog form for creating a new Task."""
-
-    def __init__(self, app_ref: OllamaAgentApp, task_id: str, force: bool) -> None:
-        super().__init__()
-        self.app_ref = app_ref
-        self.task_id = task_id
-        self.force = force
-
-    def compose(self) -> ComposeResult:
-        with Container(id="modal-card"):
-            title_text = _("Create Task: {task_id}", task_id=self.task_id) if self.task_id else _("Create Task")
-            yield Label(title_text, id="modal-title")
-            with Container(classes="form-container"):
-                with Horizontal(classes="form-row"):
-                    yield Label(_("Task ID:"), classes="field-label")
-                    yield Input(value=self.task_id, id="task-id-input", classes="modal-input", disabled=bool(self.task_id))
-                with Horizontal(classes="form-row"):
-                    yield Label(_("Title:"), classes="field-label")
-                    yield Input(placeholder=_("Enter task title"), id="title-input", classes="modal-input")
-                with Horizontal(classes="form-row"):
-                    yield Label(_("Model:"), classes="field-label")
-                    yield Input(value=self.app_ref.repl.runtime.settings.model.name, id="model-input", classes="modal-input")
-                with Horizontal(classes="form-row"):
-                    yield Label(_("Effort:"), classes="field-label")
-                    yield Input(value=self.app_ref.repl.runtime.settings.model.reasoning_effort, id="effort-input", classes="modal-input")
-                yield Label(_("Prompt:"), classes="prompt-label")
-                yield TextArea(id="prompt-area", classes="modal-textarea")
-            with Horizontal(id="button-row"):
-                yield Button(_("Cancel"), id="cancel-btn", variant="error", classes="modal-button")
-                yield Button(_("Create"), id="create-btn", variant="success", classes="modal-button")
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "cancel-btn":
-            self.dismiss()
-        elif event.button.id == "create-btn":
-            self.dismiss((
-                self.query_one("#task-id-input", Input).value.strip(),
-                self.query_one("#title-input", Input).value.strip(),
-                self.query_one("#model-input", Input).value.strip(),
-                self.query_one("#effort-input", Input).value.strip(),
-                self.query_one("#prompt-area", TextArea).text,
-            ))
-
-
-class SkillCreateModal(ModalScreen):
-    """Modal dialog form for creating a new Skill."""
-
-    def __init__(self, app_ref: OllamaAgentApp, skill_id: str, force: bool) -> None:
-        super().__init__()
-        self.app_ref = app_ref
-        self.skill_id = skill_id
-        self.force = force
-
-    def compose(self) -> ComposeResult:
-        with Container(id="skill-modal-card"):
-            title_text = _("Create Skill: {skill_id}", skill_id=self.skill_id) if self.skill_id else _("Create Skill")
-            yield Label(title_text, id="skill-modal-title")
-            with Container(classes="form-container"):
-                with Horizontal(classes="form-row"):
-                    yield Label(_("Skill ID:"), classes="field-label")
-                    yield Input(value=self.skill_id, id="skill-id-input", classes="modal-input", disabled=bool(self.skill_id))
-                with Horizontal(classes="form-row"):
-                    yield Label(_("Name:"), classes="field-label")
-                    yield Input(placeholder=_("Enter skill name"), id="name-input", classes="modal-input")
-                with Horizontal(classes="form-row"):
-                    yield Label(_("Description:"), classes="field-label")
-                    yield Input(placeholder=_("Enter description"), id="desc-input", classes="modal-input")
-                yield Label(_("Instructions:"), classes="prompt-label")
-                yield TextArea(id="instructions-area", classes="modal-textarea")
-            with Horizontal(id="skill-button-row"):
-                yield Button(_("Cancel"), id="cancel-btn", variant="error", classes="modal-button")
-                yield Button(_("Create"), id="create-btn", variant="success", classes="modal-button")
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "cancel-btn":
-            self.dismiss()
-        elif event.button.id == "create-btn":
-            self.dismiss((
-                self.query_one("#skill-id-input", Input).value.strip(),
-                self.query_one("#name-input", Input).value.strip(),
-                self.query_one("#desc-input", Input).value.strip(),
-                self.query_one("#instructions-area", TextArea).text,
-            ))
 
 
 class ToolApprovalWidget(Container):

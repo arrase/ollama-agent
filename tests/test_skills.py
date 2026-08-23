@@ -4,9 +4,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from ollama_agent.settings.paths import BUILTIN_SKILLS_DIR
 from ollama_agent.skills.manager import (
     SkillManager,
     _parse_frontmatter,
+    _read_skill,
 )
 
 
@@ -88,6 +90,24 @@ class TestSkillsManager(unittest.TestCase):
         self.assertIsNotNone(loaded)
         assert loaded is not None
         self.assertEqual(loaded.name, "Lowercase Skill")
+
+    def test_builtin_skills_present_and_valid(self) -> None:
+        self.assertTrue((BUILTIN_SKILLS_DIR / "skill-creator" / "SKILL.md").is_file())
+        self.assertTrue((BUILTIN_SKILLS_DIR / "task-creator" / "SKILL.md").is_file())
+
+        sc = _read_skill(BUILTIN_SKILLS_DIR / "skill-creator")
+        self.assertIsNotNone(sc)
+        assert sc is not None
+        self.assertEqual(sc.name, "skill-creator")
+        self.assertTrue(len(sc.description) > 0)
+        self.assertIn("SKILL.md", sc.content)
+
+        tc = _read_skill(BUILTIN_SKILLS_DIR / "task-creator")
+        self.assertIsNotNone(tc)
+        assert tc is not None
+        self.assertEqual(tc.name, "task-creator")
+        self.assertTrue(len(tc.description) > 0)
+        self.assertIn("task_id", tc.content)
 
 
 if __name__ == "__main__":
