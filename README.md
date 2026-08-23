@@ -203,17 +203,23 @@ The dynamic header bar monitors token consumption and model parameters in real-t
 To ensure safety when interacting with your local system, Ollama Agent enforces a Human-in-the-Loop confirmation policy before executing potentially sensitive operations (such as running shell commands via `execute` or modifying files via `write_file` and `edit_file`).
 
 ```text
-╭─ Tool Execution Approval ───────────────────────────────────────────────────╮
+╭─ ⚠ Action Approval Required ────────────────────────────────────────────────╮
 │ Tool: execute                                                               │
-│ Command: rm -rf ./temp_cache                                                │
+│ Arguments: {'command': 'pytest tests/'}                                     │
 ╰─────────────────────────────────────────────────────────────────────────────╯
- [y] Approve    [n] Reject    [a] Allow Session    [esc] Cancel
+ Approve (y)    Reject (n)    Allow Session (a)    Cancel (c)
 ```
 
-- **Approve (`y`)**: Authorize this single tool execution.
-- **Reject (`n`)**: Block the execution and provide feedback to the agent so it can select an alternative approach.
-- **Allow Session (`a`)**: Approve this call and automatically authorize all subsequent calls for this specific tool for the remainder of the active session.
-- **Cancel (`esc` / `c`)**: Halts execution immediately, aborts the tool call, and returns focus to the prompt input.
+The approval dialog provides full keyboard-first navigation without requiring a mouse:
+
+- **Direct Keyboard Shortcuts**:
+  - **Approve (`y`)**: Authorize this single tool execution.
+  - **Reject (`n`)**: Block execution and provide feedback to the agent so it can select an alternative approach.
+  - **Allow Session (`a`)**: Approve this call and automatically authorize all subsequent calls for this specific tool for the remainder of the active session.
+  - **Cancel (`c`)**: Abort the execution and return focus to the prompt input.
+- **Arrow & Tab Navigation**: Use `←` / `→` / `↑` / `↓` arrow keys or `Tab` / `Shift+Tab` to cycle focus between buttons with high-contrast visual indicators.
+- **Default Action (`Enter` / `Space`)**: The `Approve (y)` button is focused automatically upon appearance; pressing `Enter` or `Space` immediately executes the focused button.
+- **Live Footer Status**: The bottom status bar automatically switches to display the confirmation key guide whenever an approval is pending.
 
 #### YOLO Mode
 
