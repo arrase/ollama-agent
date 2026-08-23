@@ -176,6 +176,9 @@ The REPL provides built-in slash commands for managing models, sessions, tasks, 
 | `/clear` | `/clear` | Clear the screen and start a clean new session (alias for `/new`). |
 | `/exit` | `/exit` (alias: `/quit`) | Exit the application cleanly. |
 
+> [!WARNING]
+> Not all models support all reasoning effort levels (or reasoning traces at all). Support for reasoning effort levels depends on the model provider and architecture. It is the user's responsibility to know and verify which levels are supported by the model being used. See [Thinking / Reasoning Effort Mapping](#thinking--reasoning-effort-mapping) for details.
+
 ---
 
 ### Live Context Usage & Token Gauge
@@ -349,7 +352,10 @@ In addition to top-level flags, Ollama Agent provides dedicated CLI subcommands 
 
 ### Thinking / Reasoning Effort Mapping
 
-The `--effort` flag (and `model.reasoning_effort` in `settings.yaml`) controls model reasoning traces via Ollama's native thinking capabilities:
+The `--effort` flag, `/effort` slash command, and `model.reasoning_effort` in `settings.yaml` control model reasoning traces via Ollama's native thinking capabilities:
+
+> [!WARNING]
+> Not all models support all reasoning effort levels (or reasoning traces at all). Support for reasoning effort levels depends on the model manufacturer and architecture. It is the user's responsibility to know and verify which levels are supported by the model being used.
 
 | Model Family | `--effort` Value | Ollama API Parameter | Behavior |
 | :--- | :--- | :--- | :--- |
