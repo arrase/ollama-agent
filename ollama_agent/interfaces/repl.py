@@ -757,11 +757,18 @@ class OllamaAgentApp(App):
             except asyncio.CancelledError:
                 scroll.mount(SystemMessage("[bold #f87171]🛑 Execution interrupted by user.[/bold #f87171]"))
                 self._deferred_scroll()
-                self.query_one(ReplInput).focus()
+                inp = self.query_one(ReplInput)
+                inp.disabled = False
+                inp.focus()
+                footer.set_approval(False)
                 raise
             except Exception as e:
                 scroll.mount(SystemMessage(f"[bold #f87171]✕ Error:[/bold #f87171] [red]{e}[/red]"))
                 self._deferred_scroll()
+                inp = self.query_one(ReplInput)
+                inp.disabled = False
+                inp.focus()
+                footer.set_approval(False)
                 return
 
             # Check if the execution got interrupted
@@ -771,6 +778,9 @@ class OllamaAgentApp(App):
                 interrupt_val = state.interrupts[0].value
                 action_requests = interrupt_val.get("action_requests", [])
                 if action_requests:
+                    inp = self.query_one(ReplInput)
+                    inp.disabled = True
+                    footer.set_approval(True)
                     approval_widget = ToolApprovalWidget(
                         action_requests=action_requests,
                         app_ref=self,
@@ -779,6 +789,10 @@ class OllamaAgentApp(App):
                     )
                     agent_msg.mount(approval_widget)
                     self._deferred_scroll()
+            else:
+                inp = self.query_one(ReplInput)
+                inp.disabled = False
+                inp.focus()
         finally:
             self._is_generating = False
             footer.set_generating(False)

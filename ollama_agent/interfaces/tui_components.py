@@ -76,6 +76,7 @@ class AgentFooter(Static):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._is_generating = False
+        self._is_approval = False
 
     def on_mount(self) -> None:
         self.update_footer()
@@ -84,8 +85,21 @@ class AgentFooter(Static):
         self._is_generating = is_generating
         self.update_footer()
 
+    def set_approval(self, is_approval: bool) -> None:
+        self._is_approval = is_approval
+        self.update_footer()
+
     def update_footer(self) -> None:
-        if self._is_generating:
+        if self._is_approval:
+            self.update(
+                "[bold #fbbf24]⚠ Approval required:[/bold #fbbf24]   "
+                "[dim]y[/dim] [bold #8b949e]approve[/bold #8b949e]   "
+                "[dim]n[/dim] [bold #8b949e]reject[/bold #8b949e]   "
+                "[dim]a[/dim] [bold #8b949e]allow session[/bold #8b949e]   "
+                "[dim]esc[/dim] [bold #8b949e]cancel[/bold #8b949e]   "
+                "[dim]←→[/dim] [bold #8b949e]select[/bold #8b949e]"
+            )
+        elif self._is_generating:
             self.update(
                 "[bold #38bdf8]⟡ Generating response...[/bold #38bdf8]   "
                 "[dim]press [bold #f87171]esc[/bold #f87171] or [bold #f87171]^C[/bold #f87171] to interrupt[/dim]"
@@ -543,6 +557,8 @@ class SkillCreateModal(ModalScreen):
 class ToolApprovalWidget(Container):
     """Inline widget prompting the user for approval of sensitive tool calls."""
 
+    BUTTON_IDS = ["approve-btn", "reject-btn", "allow-btn", "cancel-btn"]
+
     def __init__(self, action_requests: list[dict[str, Any]], app_ref: OllamaAgentApp, scroll: Any, agent_msg: AgentResponse, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.action_requests = action_requests
@@ -560,10 +576,13 @@ class ToolApprovalWidget(Container):
 
         with Horizontal(classes="approval-buttons") as buttons:
             self.buttons_container = buttons
-            yield Button("Approve [y]", id="approve-btn", variant="success", classes="approval-btn")
-            yield Button("Reject [n]", id="reject-btn", variant="error", classes="approval-btn")
-            yield Button("Allow Session [a]", id="allow-btn", variant="primary", classes="approval-btn")
-            yield Button("Cancel [esc]", id="cancel-btn", classes="approval-btn")
+            yield Button("Approve (y)", id="approve-btn", variant="success", classes="approval-btn")
+            yield Button("Reject (n)", id="reject-btn", variant="error", classes="approval-btn")
+            yield Button("Allow Session (a)", id="allow-btn", variant="primary", classes="approval-btn")
+            yield Button("Cancel (c)", id="cancel-btn", classes="approval-btn")
+
+    def on_mount(self) -> None:
+        self.query_one("#approve-btn", Button).focus()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         event.stop()
@@ -571,18 +590,40 @@ class ToolApprovalWidget(Container):
 
     def on_key(self, event: events.Key) -> None:
         key = event.key.lower()
-        if key in ("y",):
+        if key == "y":
             event.stop()
             self._handle_decision("approve-btn")
-        elif key in ("n",):
+        elif key == "n":
             event.stop()
             self._handle_decision("reject-btn")
-        elif key in ("a",):
+        elif key == "a":
             event.stop()
             self._handle_decision("allow-btn")
-        elif key in ("escape", "c"):
+        elif key == "c":
             event.stop()
             self._handle_decision("cancel-btn")
+        elif key in ("left", "up", "shift+tab"):
+            event.stop()
+            event.prevent_default()
+            focused = self.app.focused
+            current_id = focused.id if focused and focused.id in self.BUTTON_IDS else None
+            idx = self.BUTTON_IDS.index(current_id) if current_id else 0
+            prev_id = self.BUTTON_IDS[(idx - 1) % len(self.BUTTON_IDS)]
+            self.query_one(f"#{prev_id}", Button).focus()
+        elif key in ("right", "down", "tab"):
+            event.stop()
+            event.prevent_default()
+            focused = self.app.focused
+            current_id = focused.id if focused and focused.id in self.BUTTON_IDS else None
+            idx = self.BUTTON_IDS.index(current_id) if current_id else -1
+            next_id = self.BUTTON_IDS[(idx + 1) % len(self.BUTTON_IDS)]
+            self.query_one(f"#{next_id}", Button).focus()
+        elif key in ("enter", "space"):
+            focused = self.app.focused
+            decision = focused.id if focused and focused.id in self.BUTTON_IDS else "approve-btn"
+            event.stop()
+            event.prevent_default()
+            self._handle_decision(decision)
 
     def _handle_decision(self, decision_type: str | None) -> None:
         if not self.buttons_container:
@@ -624,6 +665,12 @@ class ToolApprovalWidget(Container):
             status_text = "[bold #f87171]✗ Cancelled[/bold #f87171]"
 
         self.mount(Static(f"  {status_text}", classes="approval-status"))
+
+        inp = self.app_ref.query_one(ReplInput)
+        inp.disabled = False
+
+        footer = self.app_ref.query_one(AgentFooter)
+        footer.set_approval(False)
 
         self.app_ref._current_worker = self.app_ref.run_worker(
             self.app_ref._handle_approval_decision(decisions, self.scroll, self.agent_msg)
