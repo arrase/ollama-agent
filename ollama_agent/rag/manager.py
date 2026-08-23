@@ -22,6 +22,7 @@ from qdrant_client.models import (
 )
 
 from ..core.common import validate_identifier
+from ..i18n import _
 from ..settings import RAGSettings
 
 logger = logging.getLogger(__name__)
@@ -74,7 +75,7 @@ class RAGManager:
         """Ensure a database is loaded and return the client."""
         if self._client is None or self._current_db is None:
             raise RAGNotLoadedError(
-                "No RAG database loaded. Use /rag load <name> first."
+                _("No RAG database loaded. Use /rag load <name> first.")
             )
         return self._client
 
@@ -102,14 +103,13 @@ class RAGManager:
             )
         return dbs
 
-
     def create_database(self, name: str) -> str:
         """Create a new RAG database."""
         name = self._validate_name(name)
         db_path = self._db_path(name)
 
         if db_path.exists():
-            raise RAGDatabaseExistsError(f"Database '{name}' already exists")
+            raise RAGDatabaseExistsError(_("Database '{name}' already exists", name=name))
 
         db_path.mkdir(parents=True, exist_ok=True)
 
@@ -150,7 +150,7 @@ class RAGManager:
         db_path = self._db_path(name)
 
         if not db_path.exists():
-            raise RAGError(f"Database '{name}' not found")
+            raise RAGError(_("Database '{name}' not found", name=name))
 
         # Unload current database if any
         if self._client is not None:
@@ -174,15 +174,15 @@ class RAGManager:
         path = Path(file_path).expanduser().resolve()
 
         if not path.exists():
-            raise RAGError(f"File not found: {file_path}")
+            raise RAGError(_("File not found: {file_path}", file_path=file_path))
 
         if not path.is_file():
-            raise RAGError(f"Not a file: {file_path}")
+            raise RAGError(_("Not a file: {file_path}", file_path=file_path))
 
         # Read file content
         content = self._read_file(path)
         if not content.strip():
-            raise RAGError(f"File is empty: {file_path}")
+            raise RAGError(_("File is empty: {file_path}", file_path=file_path))
 
         # Remove any previously indexed chunks for this file to avoid stale points
         # when chunking changes (e.g., file edits, config changes).
@@ -229,10 +229,10 @@ class RAGManager:
         path = Path(dir_path).expanduser().resolve()
 
         if not path.exists():
-            raise RAGError(f"Directory not found: {dir_path}")
+            raise RAGError(_("Directory not found: {dir_path}", dir_path=dir_path))
 
         if not path.is_dir():
-            raise RAGError(f"Not a directory: {dir_path}")
+            raise RAGError(_("Not a directory: {dir_path}", dir_path=dir_path))
 
         results: dict[str, Any] = {"added": 0, "failed": 0, "skipped": 0, "files": []}
 
@@ -250,7 +250,7 @@ class RAGManager:
             try:
                 content = self._read_file(file_path)
                 if not content.strip():
-                    raise RAGError(f"File is empty: {file_path}")
+                    raise RAGError(_("File is empty: {file_path}", file_path=file_path))
 
                 chunks = self._chunk_text(content)
                 all_file_chunks.append((file_path, chunks))
@@ -274,7 +274,7 @@ class RAGManager:
             logger.warning(
                 "Failed to delete existing points for directory batch: %s", e
             )
-            raise RAGError(f"Failed to clear existing points for directory batch: {e}") from e
+            raise RAGError(_("Failed to clear existing points for directory batch: {e}", e=e)) from e
 
         # Prepare a flat list of chunk data
         flat_chunks_data = []
@@ -394,22 +394,21 @@ class RAGManager:
 
             if len(embeddings) != len(texts):
                 raise RAGError(
-                    f"Embedding generation returned {len(embeddings)} vectors for {len(texts)} inputs"
+                    _("Embedding generation returned {actual} vectors for {expected} inputs", actual=len(embeddings), expected=len(texts))
                 )
 
             expected = self.settings.embedding_dims
             for idx, vec in enumerate(embeddings):
                 if len(vec) != expected:
                     raise RAGError(
-                        f"Embedding dimension mismatch for text {idx}: "
-                        f"got {len(vec)}, expected {expected}"
+                        _("Embedding dimension mismatch for text {idx}: got {actual}, expected {expected}", idx=idx, actual=len(vec), expected=expected)
                     )
 
             return embeddings
         except RAGError:
             raise
         except Exception as e:
-            raise RAGError(f"Failed to generate embeddings: {e}") from e
+            raise RAGError(_("Failed to generate embeddings: {e}", e=e)) from e
 
     def _delete_source_points(self, client: QdrantClient, source: str) -> None:
         """Delete all points previously indexed for a given source path."""
@@ -422,7 +421,7 @@ class RAGManager:
             )
         except Exception as e:
             raise RAGError(
-                f"Failed to delete existing points for source '{source}': {e}"
+                _("Failed to delete existing points for source '{source}': {e}", source=source, e=e)
             ) from e
 
     def _chunk_text(self, text: str) -> list[str]:
@@ -466,7 +465,7 @@ class RAGManager:
             if mime_type and not mime_type.startswith(
                 ("text/", "application/json", "application/xml")
             ):
-                raise RAGError(f"Unsupported file type: {mime_type}")
+                raise RAGError(_("Unsupported file type: {mime_type}", mime_type=mime_type))
 
         for encoding in ["utf-8", "cp1252", "latin-1"]:
             try:
@@ -474,7 +473,7 @@ class RAGManager:
             except UnicodeDecodeError:
                 continue
 
-        raise RAGError(f"Could not decode file: {path}")
+        raise RAGError(_("Could not decode file: {path}", path=path))
 
     @staticmethod
     def _validate_name(name: str) -> str:

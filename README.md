@@ -138,10 +138,6 @@ The interactive REPL is a full-featured terminal UI built on Textual and Rich, p
 ● ollama-agent │ Model: gemma4:26b │ Context: 2.1k/10.0k (21%) │ Effort: medium │ YOLO: OFF
 ```
 
-```text
-❯ /help
-```
-
 ---
 
 ### Multiline Input & Navigation
@@ -162,7 +158,6 @@ The REPL provides built-in slash commands for managing models, sessions, tasks, 
 
 | Command | Subcommands / Syntax | Description |
 | :--- | :--- | :--- |
-| `/help` | `/help` | Display the interactive help panel with command categories. |
 | `/model` | `/model [list \| set <model>]` | List available Ollama models (with tool support indicators) or switch the active model for the current session. |
 | `/effort` | `/effort [<level>]` | Show current reasoning effort or switch the thinking/reasoning effort level (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`) for the active session. |
 | `/params` | `/params [list \| set <parameter> <value>]` | Inspect active sampling parameters and resolution sources, or dynamically update parameter values for the active session. |

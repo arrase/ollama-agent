@@ -9,6 +9,7 @@ from rich.table import Table
 
 from ..agent import AgentRuntime
 from ..core import DEFAULT_REASONING_EFFORT, validate_reasoning_effort
+from ..i18n import _
 from ..settings import load_settings
 from ..streaming import run_non_interactive
 from .manager import Task, TaskManager
@@ -42,9 +43,9 @@ class TasksContext:
         if len(matches) == 1:
             return matches[0]
         msg = (
-            f"Task not found: {task_id}"
+            _("Task not found: {task_id}", task_id=task_id)
             if not matches
-            else f"Ambiguous prefix: {task_id} -> {', '.join(t[0] for t in matches)}"
+            else _("Ambiguous prefix: {name} -> {matches}", name=task_id, matches=", ".join(t[0] for t in matches))
         )
         if not matches:
             raise TaskNotFoundError(msg)
@@ -52,7 +53,7 @@ class TasksContext:
 
     def _require(self, value: str, name: str) -> str:
         if not (cleaned := value.strip()):
-            raise ValidationError(f"{name} cannot be empty.")
+            raise ValidationError(_("{name} cannot be empty.", name=name))
         return cleaned
 
 
@@ -62,14 +63,14 @@ CLIContext = TasksContext
 
 def list_tasks(ctx: TasksContext) -> None:
     if not (tasks := ctx.task_manager.list_all()):
-        ctx.console.print("[yellow]No tasks found.[/yellow]")
+        ctx.console.print(f"[yellow]{_('No tasks found.')}[/yellow]")
         return
-    table = Table(title="Saved Tasks", show_header=True, header_style="bold magenta")
+    table = Table(title=_("Saved Tasks"), show_header=True, header_style="bold magenta")
     for col, style in [
-        ("ID", "cyan"),
-        ("Title", "green"),
-        ("Model", "blue"),
-        ("Effort", "yellow"),
+        (_("ID"), "cyan"),
+        (_("Title"), "green"),
+        (_("Model"), "blue"),
+        (_("Effort"), "yellow"),
     ]:
         table.add_column(col, style=style)
     for tid, t in tasks:
@@ -80,9 +81,7 @@ def list_tasks(ctx: TasksContext) -> None:
 async def run_task(ctx: TasksContext, task_id: str, *, yolo: bool = False) -> None:
     tid, t = ctx._find_or_exit(task_id)
     ctx.console.print(
-        f"[bold cyan]Executing:[/bold cyan] {t.title} ({tid})\n"
-        f"[bold blue]Prompt:[/bold blue] {t.prompt}\n"
-        f"[bold]Model:[/bold] {t.model} | [bold]Effort:[/bold] {t.reasoning_effort}\n"
+        _("Executing: {title} ({tid})\nPrompt: {prompt}\nModel: {model} | Effort: {effort}", title=t.title, tid=tid, prompt=t.prompt, model=t.model, effort=t.reasoning_effort)
     )
     settings = load_settings()
     settings.model.name = t.model
@@ -96,9 +95,9 @@ async def run_task(ctx: TasksContext, task_id: str, *, yolo: bool = False) -> No
 def delete_task(ctx: TasksContext, task_id: str) -> None:
     tid, t = ctx._find_or_exit(task_id)
     if not ctx.task_manager.delete(tid):
-        ctx.console.print(f"[red]Error deleting task: {tid}[/red]")
-        raise TaskError(f"Error deleting task: {tid}")
-    ctx.console.print(f"[green]Task deleted:[/green] {t.title} ({tid})")
+        ctx.console.print(f"[red]{_('Error deleting task: {tid}', tid=tid)}[/red]")
+        raise TaskError(_("Error deleting task: {tid}", tid=tid))
+    ctx.console.print(f"[green]✓ {_('Task deleted: {title} ({tid})', title=t.title, tid=tid)}[/green]")
 
 
 def create_task(
@@ -112,21 +111,21 @@ def create_task(
     force: bool = False,
 ) -> None:
     task = Task(
-        ctx._require(title, "Title"),
-        ctx._require(prompt, "Prompt"),
-        ctx._require(model, "Model"),
+        ctx._require(title, _("Title")),
+        ctx._require(prompt, _("Prompt")),
+        ctx._require(model, _("Model")),
         validate_reasoning_effort(reasoning_effort or DEFAULT_REASONING_EFFORT),
     )
     try:
+        saved_id = ctx.task_manager.save(task_id, task, overwrite=force)
         ctx.console.print(
-            f"[green]Task created:[/green] {task.title} ({ctx.task_manager.save(task_id, task, overwrite=force)})"
+            f"[green]✓ {_('Task created: {title} ({task_id})', title=task.title, task_id=saved_id)}[/green]"
         )
     except FileExistsError as exc:
         ctx.console.print(
-            f"[red]Task already exists:[/red] {task_id} (use --force to overwrite)"
+            f"[red]{_('Task already exists: {task_id} (use --force to overwrite)', task_id=task_id)}[/red]"
         )
-        raise TaskError(f"Task already exists: {task_id}") from exc
+        raise TaskError(_("Task already exists: {task_id}", task_id=task_id)) from exc
     except ValueError as e:
         ctx.console.print(f"[red]{e}[/red]")
         raise ValidationError(str(e)) from e
-

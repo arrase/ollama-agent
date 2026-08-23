@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any, Literal, TypedDict
 
+from ..i18n import _
+
 # Reasoning effort types
 ReasoningEffortValue = Literal["low", "medium", "high", "xhigh", "disabled", "hide", "enabled"]
 ALLOWED_REASONING_EFFORTS: tuple[ReasoningEffortValue, ...] = (
@@ -50,7 +52,7 @@ _WINDOWS_RESERVED_NAMES: frozenset[str] = frozenset({
 })
 
 
-def validate_identifier(name: str, label: str = "identifier") -> str:
+def validate_identifier(name: str, label: str | None = None) -> str:
     """Validate that *name* contains only [A-Za-z0-9_-] and is not a reserved system name."""
     name = name.strip()
     if (
@@ -58,7 +60,8 @@ def validate_identifier(name: str, label: str = "identifier") -> str:
         or not re.fullmatch(r"[A-Za-z0-9_-]+", name)
         or name.upper() in _WINDOWS_RESERVED_NAMES
     ):
+        resolved_label = label or _("identifier")
         raise ValueError(
-            f"Invalid {label}. Use only letters, numbers, '_' and '-' (reserved device names not allowed)."
+            _("Invalid {label}. Use only letters, numbers, '_' and '-' (reserved device names not allowed).", label=resolved_label)
         )
     return name

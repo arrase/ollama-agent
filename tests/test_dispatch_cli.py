@@ -96,7 +96,7 @@ class TestDispatchAndCLI(unittest.TestCase):
             handle_yolo=lambda _: None,
         )
 
-        self.assertIn("/help", handlers)
+        self.assertNotIn("/help", handlers)
         self.assertIn("/model", handlers)
         self.assertIn("/effort", handlers)
         self.assertIn("/yolo", handlers)

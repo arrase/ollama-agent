@@ -9,6 +9,7 @@ from rich.console import Console
 from .agent import AgentRuntime
 from .agent.builtin_tools import set_tool_timeout
 from .core import ModelCapabilityError, ModelContextWindowError
+from .i18n import _, set_locale
 from .interfaces.cli import create_argument_parser, handle_cli_commands
 from .interfaces.model_commands import ensure_model_configured
 from .interfaces.repl import OllamaREPL
@@ -24,6 +25,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 def main() -> None:
     """Main entry point."""
+    set_locale()
 
     parser = create_argument_parser()
     args = parser.parse_args()
@@ -35,6 +37,12 @@ def main() -> None:
 
     settings = load_settings()
     settings.setup_environment()
+
+    # Apply language overrides
+    if getattr(args, "language", None):
+        settings.runtime.language = args.language
+    if settings.runtime.language:
+        set_locale(settings.runtime.language)
 
     # Apply CLI overrides
     if args.model:
@@ -71,8 +79,9 @@ def main() -> None:
             pass
     except (ModelCapabilityError, ModelContextWindowError) as exc:
         console = Console()
-        console.print(f"[red]Error: {exc}[/red]")
+        console.print(f"[red]{_('Error: {exc}', exc=exc)}[/red]")
         raise SystemExit(1)
+
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ import ollama
 from langchain_ollama import ChatOllama
 from pydantic import Field
 
+from ..i18n import _
 from .common import (
     ALLOWED_REASONING_EFFORTS,
     DEFAULT_REASONING_EFFORT,
@@ -17,7 +18,6 @@ from .common import (
 
 
 class ModelCapabilityError(RuntimeError):
-
     """Raised when the selected model cannot run tool calls."""
 
 
@@ -33,7 +33,7 @@ async def _show_model(model: str, base_url: str) -> Any:
         return await client.show(model)
     except Exception as exc:
         raise ModelCapabilityError(
-            f"Failed to fetch metadata for '{model}': {exc}"
+            _("Failed to fetch metadata for '{model}': {exc}", model=model, exc=exc)
         ) from exc
 
 
@@ -78,7 +78,7 @@ async def model_supports_tools(model: str, base_url: str) -> bool:
 async def ensure_model_supports_tools(model: str, base_url: str) -> None:
     """Raise ModelCapabilityError if the model doesn't support tools."""
     if not await model_supports_tools(model, base_url):
-        raise ModelCapabilityError(f"Model '{model}' does not support tools.")
+        raise ModelCapabilityError(_("Model '{model}' does not support tools.", model=model))
 
 
 async def model_supports_thinking(model: str, base_url: str) -> bool:
@@ -94,7 +94,7 @@ async def resolve_context_window(
     """Resolve the effective context window for a model."""
     if context_window is not None:
         if context_window <= 0:
-            raise ModelContextWindowError("context_window must be greater than zero.")
+            raise ModelContextWindowError(_("context_window must be greater than zero."))
         return context_window
 
     response = await _show_model(model, base_url)
@@ -110,8 +110,7 @@ async def resolve_context_window(
             return resolved
 
     raise ModelContextWindowError(
-        f"Failed to determine the context window for '{model}'. "
-        "Define context_window in the settings or config file."
+        _("Failed to determine the context window for '{model}'. Define context_window in the settings or config file.", model=model)
     )
 
 
@@ -135,8 +134,7 @@ async def resolve_ollama_reasoning(
     if "gpt-oss" in lower_name:
         if effort == "disabled":
             warn_callback(
-                f"Model '{model}' is a thinking-only model. "
-                "reasoning_effort='disabled' is not supported; thinking will remain enabled."
+                _("Model '{model}' is a thinking-only model. reasoning_effort='disabled' is not supported; thinking will remain enabled.", model=model)
             )
             return None
         if effort == "hide":
@@ -294,5 +292,5 @@ def validate_reasoning_effort(effort: str) -> ReasoningEffortValue:
     if effort in ALLOWED_REASONING_EFFORTS:
         return cast(ReasoningEffortValue, effort)
     raise ValueError(
-        f"Invalid reasoning effort '{effort}'. Allowed values are: {sorted(ALLOWED_REASONING_EFFORTS)}"
+        _("Invalid reasoning effort '{effort}'. Allowed values are: {allowed}", effort=effort, allowed=sorted(ALLOWED_REASONING_EFFORTS))
     )

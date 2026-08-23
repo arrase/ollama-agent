@@ -12,6 +12,7 @@ from typing import Any
 import yaml  # type: ignore[import-untyped]
 
 from ..core import BaseFileStoreManager, validate_identifier
+from ..i18n import _
 from ..settings.paths import SKILLS_DIR
 
 logger = logging.getLogger(__name__)
@@ -129,7 +130,7 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
         skill_id = self.validate_skill_id(skill_id)
         skill_dir = self._path(skill_id)
         if skill_dir.exists() and not overwrite:
-            raise FileExistsError(f"Skill already exists: {skill_id}")
+            raise FileExistsError(_("Skill already exists: {skill_id}", skill_id=skill_id))
         skill_dir.mkdir(parents=True, exist_ok=True)
 
         meta = {"name": name, "description": description}

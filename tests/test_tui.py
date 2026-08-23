@@ -451,8 +451,8 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.yolo_mode = False
 
         cmd_spec = MagicMock()
-        cmd_spec.summary = "Show help message"
-        repl_mock._get_commands.return_value = {"/help": cmd_spec}
+        cmd_spec.summary = "Switch model"
+        repl_mock._get_commands.return_value = {"/model": cmd_spec}
 
         app = OllamaAgentApp(repl_mock)
         async with app.run_test() as pilot:
@@ -460,7 +460,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(autolist.display)
 
             # Trigger autocomplete with /
-            app.update_autocomplete("/h")
+            app.update_autocomplete("/m")
             self.assertTrue(autolist.display)
             self.assertEqual(autolist.option_count, 1)
 
@@ -476,16 +476,16 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.yolo_mode = False
 
         cmd_spec = MagicMock()
-        cmd_spec.summary = "Show help"
-        repl_mock._get_commands.return_value = {"/help": cmd_spec}
+        cmd_spec.summary = "Switch model"
+        repl_mock._get_commands.return_value = {"/model": cmd_spec}
 
         app = OllamaAgentApp(repl_mock)
         async with app.run_test() as pilot:
             inp = app.query_one(ReplInput)
-            inp.text = "/he"
-            app.update_autocomplete("/he")
+            inp.text = "/mo"
+            app.update_autocomplete("/mo")
             app.accept_completion(0)
-            self.assertEqual(inp.text, "/help ")
+            self.assertEqual(inp.text, "/model ")
 
     async def test_autocomplete_subcommands_and_entities(self) -> None:
         repl_mock = MagicMock()

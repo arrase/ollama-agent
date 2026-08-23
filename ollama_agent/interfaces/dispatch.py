@@ -8,9 +8,8 @@ from dataclasses import dataclass
 from typing import Awaitable, Callable, Any
 
 from rich.console import Console
-from rich.markup import escape
-from rich.panel import Panel
 
+from ..i18n import _
 from ..rag import (
     RAGContext,
     RAGError,
@@ -170,7 +169,7 @@ def build_repl_handlers(
             return switch_model(args[1])
         if len(args) == 1 and args[0] != "list":
             return switch_model(args[0])
-        console.print("[red]Usage: /model [list | set <model>][/red]")
+        console.print(f"[red]{_('Usage: /model [list | set <model>]')}[/red]")
         return None
 
     def handle_effort(args: list[str]) -> object:
@@ -180,8 +179,7 @@ def build_repl_handlers(
             else:
                 eff = current_effort()
                 console.print(
-                    f"Current reasoning effort: [bold cyan]{eff}[/bold cyan]\n"
-                    "[dim]Usage: /effort <level>[/dim]"
+                    _("Current reasoning effort: [bold cyan]{eff}[/bold cyan]\n[dim]Usage: /effort <level>[/dim]", eff=eff)
                 )
             return None
         target = args[1] if args[0] in ("set", "use", "switch") and len(args) > 1 else args[0]
@@ -197,8 +195,8 @@ def build_repl_handlers(
         if args[0] == "set":
             if len(args) < 3:
                 console.print(
-                    "[red]Usage: /params set <parameter> <value>[/red]\n"
-                    "[dim]Example: /params set temperature 0.7[/dim]"
+                    f"[red]{_('Usage: /params set <parameter> <value>')}[/red]\n"
+                    f"[dim]{_('Example: /params set temperature 0.7')}[/dim]"
                 )
                 return None
             if get_runtime is not None:
@@ -206,7 +204,7 @@ def build_repl_handlers(
                     console, args[1], args[2], runtime=get_runtime()
                 )
             return None
-        console.print("[red]Usage: /params [list | set <parameter> <value>][/red]")
+        console.print(f"[red]{_('Usage: /params [list | set <parameter> <value>]')}[/red]")
         return None
 
     def handle_task(args: list[str]) -> object:
@@ -220,16 +218,17 @@ def build_repl_handlers(
             sub_args = args[1:]
             task_id = next((a for a in sub_args if not a.startswith("-")), "")
             if not task_id:
-                console.print("[red]Usage: /task run <id> [-y][/red]")
+                console.print(f"[red]{_('Usage: /task run <id> [-y]')}[/red]")
                 return None
             return run_task(task_ctx, task_id, yolo=("-y" in sub_args or "--yolo" in sub_args))
         if sub == "delete":
             if len(args) < 2:
-                console.print("[red]Usage: /task delete <id>[/red]")
+                console.print(f"[red]{_('Usage: /task delete <id>')}[/red]")
                 return None
             delete_task(task_ctx, args[1])
             return None
-        console.print(f"[red]Unknown task subcommand '{sub}'. Usage: /task [list | create | run <id> | delete <id>][/red]")
+        err_msg = _("Unknown task subcommand '{sub}'. Usage: /task [list | create | run <id> | delete <id>]", sub=sub)
+        console.print(f"[red]{err_msg}[/red]")
         return None
 
     def handle_skill(args: list[str]) -> object:
@@ -239,7 +238,7 @@ def build_repl_handlers(
         sub = args[0]
         if sub == "show":
             if len(args) < 2:
-                console.print("[red]Usage: /skill show <id>[/red]")
+                console.print(f"[red]{_('Usage: /skill show <id>')}[/red]")
                 return None
             show_skill(skills_ctx, args[1])
             return None
@@ -247,11 +246,12 @@ def build_repl_handlers(
             return handle_skill_create(args[1:])
         if sub == "delete":
             if len(args) < 2:
-                console.print("[red]Usage: /skill delete <id>[/red]")
+                console.print(f"[red]{_('Usage: /skill delete <id>')}[/red]")
                 return None
             delete_skill(skills_ctx, args[1])
             return None
-        console.print(f"[red]Unknown skill subcommand '{sub}'. Usage: /skill [list | show <id> | create | delete <id>][/red]")
+        err_msg = _("Unknown skill subcommand '{sub}'. Usage: /skill [list | show <id> | create | delete <id>]", sub=sub)
+        console.print(f"[red]{err_msg}[/red]")
         return None
 
     def handle_rag(args: list[str]) -> object:
@@ -264,19 +264,19 @@ def build_repl_handlers(
             return None
         if sub == "create":
             if len(args) < 2:
-                console.print("[red]Usage: /rag create <name>[/red]")
+                console.print(f"[red]{_('Usage: /rag create <name>')}[/red]")
                 return None
             create_rag_database(get_rag_ctx(), args[1])
             return None
         if sub == "delete":
             if len(args) < 2:
-                console.print("[red]Usage: /rag delete <name>[/red]")
+                console.print(f"[red]{_('Usage: /rag delete <name>')}[/red]")
                 return None
             delete_rag_database(get_rag_ctx(), args[1])
             return None
         if sub == "load":
             if len(args) < 2:
-                console.print("[red]Usage: /rag load <name>[/red]")
+                console.print(f"[red]{_('Usage: /rag load <name>')}[/red]")
                 return None
             load_rag_database(get_rag_ctx(), args[1])
             return None
@@ -288,14 +288,15 @@ def build_repl_handlers(
             is_dir = "--dir" in sub_args
             paths = [a for a in sub_args if a != "--dir"]
             if not paths:
-                console.print("[red]Usage: /rag add <path> [--dir][/red]")
+                console.print(f"[red]{_('Usage: /rag add <path> [--dir]')}[/red]")
                 return None
             return (
                 add_rag_directory(get_rag_ctx(), paths[0])
                 if is_dir
                 else add_rag_file(get_rag_ctx(), paths[0])
             )
-        console.print(f"[red]Unknown rag subcommand '{sub}'. Usage: /rag [status | list | create | delete | load | unload | add][/red]")
+        err_msg = _("Unknown rag subcommand '{sub}'. Usage: /rag [status | list | create | delete | load | unload | add]", sub=sub)
+        console.print(f"[red]{err_msg}[/red]")
         return None
 
     def handle_session(args: list[str]) -> object:
@@ -307,7 +308,7 @@ def build_repl_handlers(
             return handle_new([])
         if sub in ("resume", "switch"):
             if len(args) < 2:
-                console.print("[red]Usage: /session resume <session_id>[/red]")
+                console.print(f"[red]{_('Usage: /session resume <session_id>')}[/red]")
                 return None
             if handle_session_resume is not None:
                 return handle_session_resume(args[1])
@@ -315,11 +316,11 @@ def build_repl_handlers(
         if sub == "export":
             if handle_session_export is not None:
                 return handle_session_export(args[1:])
-            console.print("[red]Export not available in current context.[/red]")
+            console.print(f"[red]{_('Export not available in current context.')}[/red]")
             return None
         if sub == "search":
             if len(args) < 2:
-                console.print("[red]Usage: /session search <query>[/red]")
+                console.print(f"[red]{_('Usage: /session search <query>')}[/red]")
                 return None
             search_sessions(
                 console,
@@ -329,102 +330,82 @@ def build_repl_handlers(
             return None
         if sub == "delete":
             if len(args) < 2:
-                console.print("[red]Usage: /session delete <session_id>[/red]")
+                console.print(f"[red]{_('Usage: /session delete <session_id>')}[/red]")
                 return None
             delete_session(console, args[1])
             return None
-        console.print(f"[red]Unknown session subcommand '{sub}'. Usage: /session [list | search <query> | resume <id> | new | export [path] | delete <id>][/red]")
+        err_msg = _("Unknown session subcommand '{sub}'. Usage: /session [list | search <query> | resume <id> | new | export [path] | delete <id>]", sub=sub)
+        console.print(f"[red]{err_msg}[/red]")
         return None
 
     cmds: dict[str, REPLCommand] = {
-        "/help": REPLCommand("Show this help message", "General", None, lambda _: render_repl_help(console, cmds)),
         "/yolo": REPLCommand(
-            "Toggle YOLO mode or set it explicitly (on/off)",
+            _("Toggle YOLO mode or set it explicitly (on/off)"),
             "General",
-            "/yolo [on|off]",
+            _("Usage: /yolo [on|off]"),
             handle_yolo,
         ),
-        "/exit": REPLCommand("Exit the REPL", "General", None, handle_exit),
-        "/quit": REPLCommand("Exit the REPL", "General", None, handle_exit),
+        "/exit": REPLCommand(_("Exit the REPL"), "General", None, handle_exit),
+        "/quit": REPLCommand(_("Exit the REPL"), "General", None, handle_exit),
         "/clear": REPLCommand(
-            "Start a new chat session and clear the screen (alias for /new)",
+            _("Start a new chat session and clear the screen (alias for /new)"),
             "Session Management",
             None,
             handle_new,
         ),
         "/new": REPLCommand(
-            "Start a new chat session and clear the screen",
+            _("Start a new chat session and clear the screen"),
             "Session Management",
             None,
             handle_new,
         ),
         "/compact": REPLCommand(
-            "Compact conversation history into a summary",
+            _("Compact conversation history into a summary"),
             "Session Management",
             None,
             handle_compact or (lambda _: None),
         ),
         "/session": REPLCommand(
-            "Manage chat sessions (list, resume, new, export, delete)",
+            _("Manage chat sessions"),
             "Session Management",
-            "/session [list | resume <id> | new | export [path] | delete <id>]",
+            _("Usage: /session [list | search <query> | resume <id> | new | export [path] | delete <id>]"),
             handle_session,
         ),
         "/model": REPLCommand(
-            "Manage models (list, set)",
+            _("Manage models"),
             "Model Management",
-            "/model [list | set <model>]",
+            _("Usage: /model [list | set <model>]"),
             handle_model,
         ),
         "/effort": REPLCommand(
-            "Show or set reasoning/thinking effort",
+            _("Show or set reasoning/thinking effort"),
             "Model Management",
-            "/effort [<level>]",
+            _("Usage: /effort <level>"),
             handle_effort,
         ),
         "/params": REPLCommand(
-            "Manage model sampling parameters (list, set)",
+            _("Manage model sampling parameters"),
             "Model Management",
-            "/params [list | set <parameter> <value>]",
+            _("Usage: /params [list | set <parameter> <value>]"),
             handle_params,
         ),
         "/task": REPLCommand(
-            "Manage saved tasks (list, create, run, delete)",
+            _("Manage saved tasks"),
             "Task Management",
-            "/task [list | create | run <id> | delete <id>]",
+            _("Usage: /task [list | create | run <id> | delete <id>]"),
             handle_task,
         ),
         "/skill": REPLCommand(
-            "Manage skills (list, show, create, delete)",
+            _("Manage skills"),
             "Skills Management",
-            "/skill [list | show <id> | create | delete <id>]",
+            _("Usage: /skill [list | show <id> | create | delete <id>]"),
             handle_skill,
         ),
         "/rag": REPLCommand(
-            "Manage RAG databases (status, list, create, delete, load, unload, add)",
+            _("Manage RAG databases"),
             "RAG (Document Retrieval)",
-            "/rag [status | list | create | delete | load | unload | add]",
+            _("Usage: /rag [status | list | create | delete | load | unload | add]"),
             handle_rag,
         ),
     }
     return cmds
-
-
-def render_repl_help(console: Console, commands: dict[str, REPLCommand]) -> None:
-    """Render REPL help from command metadata."""
-    lines: list[str] = ["[bold]Available Commands:[/bold]"]
-    for section in REPL_SECTIONS:
-        section_commands = [
-            (name, spec)
-            for name, spec in commands.items()
-            if spec.section == section and name not in {"/quit"}
-        ]
-        if not section_commands:
-            continue
-        lines.append("")
-        lines.append(f"[bold]{section}:[/bold]")
-        for name, spec in section_commands:
-            summary = escape(spec.summary)
-            detail = f" (Usage: {escape(spec.usage)})" if spec.usage else ""
-            lines.append(f"[green]{escape(name)}[/green]  {summary}{detail}")
-    console.print(Panel("\n".join(lines), title="Help"))
