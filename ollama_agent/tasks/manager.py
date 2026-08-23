@@ -17,6 +17,7 @@ from ..core import (
     validate_reasoning_effort,
     validate_identifier,
 )
+from ..i18n import _
 from ..settings.paths import TASKS_DIR
 
 logger = logging.getLogger(__name__)
@@ -63,7 +64,7 @@ class TaskManager(BaseFileStoreManager[Task]):
         task_id = self.validate_task_id(task_id)
         path = self._path(task_id)
         if path.exists() and not overwrite:
-            raise FileExistsError(f"Task already exists: {task_id}")
+            raise FileExistsError(_("Task already exists: {task_id}", task_id=task_id))
         tmp_path = path.with_suffix(".tmp")
         tmp_path.write_text(
             yaml.safe_dump(asdict(task), allow_unicode=True), encoding="utf-8"
@@ -116,4 +117,3 @@ class TaskManager(BaseFileStoreManager[Task]):
             if (t := self.get(p.stem))
         ]
         return sorted(tasks, key=lambda x: x[1].title.lower())
-

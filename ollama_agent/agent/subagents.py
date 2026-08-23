@@ -7,6 +7,7 @@ import platform
 from typing import Any
 
 from ..core import create_ollama_chat_model, validate_reasoning_effort
+from ..i18n import _
 from ..mcp import load_subagent_mcp_tools
 from ..settings import ModelSettings, SubAgentSettings
 
@@ -31,9 +32,9 @@ async def _build_spec(
 ) -> dict[str, Any]:
     """Build a single subagent spec dict."""
     if not sa.name:
-        raise ValueError("Subagent configuration error: name cannot be empty")
+        raise ValueError(_("Subagent configuration error: name cannot be empty"))
     if not sa.description:
-        raise ValueError(f"Subagent '{sa.name}' configuration error: description cannot be empty")
+        raise ValueError(_("Subagent '{name}' configuration error: description cannot be empty", name=sa.name))
 
     base_prompt = sa.system_prompt or sa.description
     os_info = f"\n\n# ENVIRONMENT\nOperating System: {platform.system()} ({platform.release()})\n"

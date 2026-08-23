@@ -36,6 +36,7 @@ from .tui_components import (
 from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager, set_tool_timeout
 from ..core.common import extract_text
+from ..i18n import _
 from ..rag import RAGContext, RAGManager, load_rag_database
 from ..skills import SkillsContext, create_skill
 from ..tasks.commands import CLIContext, TaskError, create_task
@@ -55,65 +56,69 @@ _AT_MENTION_RE = re.compile(
     r"""(?:^|[\s\(\[\{<])@(?:"([^"]*)|'([^']*)|([^\s"'\(\[\{<>,;]*))$"""
 )
 
-_ROOT_COMMANDS: list[tuple[str, str]] = [
-    ("/model", "Manage models (list, set)"),
-    ("/effort", "Show or set reasoning/thinking effort"),
-    ("/params", "Manage model sampling parameters (list, set)"),
-    ("/session", "Manage chat sessions (list, search, resume, new, export, delete)"),
-    ("/compact", "Compact conversation history into a summary"),
-    ("/task", "Manage saved tasks (list, create, run, delete)"),
-    ("/skill", "Manage skills (list, show, create, delete)"),
-    ("/rag", "Manage RAG databases (status, list, create, delete, load, unload, add)"),
-    ("/yolo", "Toggle YOLO mode (on/off)"),
-    ("/new", "Start a new chat session and clear the screen"),
-    ("/clear", "Start a new chat session and clear the screen (alias for /new)"),
-    ("/help", "Show help message"),
-    ("/exit", "Exit the REPL"),
-]
 
-_SUBCOMMANDS: dict[str, list[tuple[str, str]]] = {
-    "/model": [
-        ("list", "List available Ollama models"),
-        ("set", "Switch to a different model"),
-    ],
-    "/params": [
-        ("list", "Show active model parameters and resolution sources"),
-        ("set", "Set a parameter value (e.g. /params set temperature 0.7)"),
-    ],
-    "/session": [
-        ("list", "List all past sessions"),
-        ("search", "Search past sessions by keyword"),
-        ("resume", "Resume a previous session"),
-        ("new", "Start a new session"),
-        ("export", "Export session to Markdown"),
-        ("delete", "Delete a session from history"),
-    ],
-    "/task": [
-        ("list", "List all saved tasks"),
-        ("create", "Create a task using interactive modal"),
-        ("run", "Run a saved task prompt"),
-        ("delete", "Delete a saved task"),
-    ],
-    "/skill": [
-        ("list", "List all available skills"),
-        ("show", "Show skill details and instructions"),
-        ("create", "Create a skill using interactive modal"),
-        ("delete", "Delete a skill"),
-    ],
-    "/rag": [
-        ("status", "Show current RAG database status"),
-        ("list", "List all RAG databases"),
-        ("create", "Create a new RAG database"),
-        ("delete", "Delete a RAG database"),
-        ("load", "Load a RAG database"),
-        ("unload", "Unload active RAG database"),
-        ("add", "Add file or directory to RAG"),
-    ],
-    "/yolo": [
-        ("on", "Enable YOLO mode (bypasses confirmations)"),
-        ("off", "Disable YOLO mode"),
-    ],
-}
+def _get_root_commands() -> list[tuple[str, str]]:
+    return [
+        ("/model", _("Manage models")),
+        ("/effort", _("Show or set reasoning/thinking effort")),
+        ("/params", _("Manage model sampling parameters")),
+        ("/session", _("Manage chat sessions")),
+        ("/compact", _("Compact conversation history into a summary")),
+        ("/task", _("Manage saved tasks")),
+        ("/skill", _("Manage skills")),
+        ("/rag", _("Manage RAG databases")),
+        ("/yolo", _("Toggle YOLO mode or set it explicitly (on/off)")),
+        ("/new", _("Start a new chat session and clear the screen")),
+        ("/clear", _("Start a new chat session and clear the screen (alias for /new)")),
+        ("/exit", _("Exit the REPL")),
+    ]
+
+
+def _get_subcommands() -> dict[str, list[tuple[str, str]]]:
+    return {
+        "/model": [
+            ("list", _("List available Ollama models")),
+            ("set", _("Switch to a different model")),
+        ],
+        "/params": [
+            ("list", _("Show active model parameters and resolution sources")),
+            ("set", _("Set a parameter value (e.g. /params set temperature 0.7)")),
+        ],
+        "/session": [
+            ("list", _("List all past sessions")),
+            ("search", _("Search past sessions by keyword")),
+            ("resume", _("Resume a previous session")),
+            ("new", _("Start a new session")),
+            ("export", _("Export session to Markdown")),
+            ("delete", _("Delete a session from history")),
+        ],
+        "/task": [
+            ("list", _("List all saved tasks")),
+            ("create", _("Create a task using interactive modal")),
+            ("run", _("Run a saved task prompt")),
+            ("delete", _("Delete a saved task")),
+        ],
+        "/skill": [
+            ("list", _("List all available skills")),
+            ("show", _("Show skill details and instructions")),
+            ("create", _("Create a skill using interactive modal")),
+            ("delete", _("Delete a skill")),
+        ],
+        "/rag": [
+            ("status", _("Show current RAG database status")),
+            ("list", _("List all RAG databases")),
+            ("create", _("Create a new RAG database")),
+            ("delete", _("Delete a RAG database")),
+            ("load", _("Load a RAG database")),
+            ("unload", _("Unload active RAG database")),
+            ("add", _("Add file or directory to RAG")),
+        ],
+        "/yolo": [
+            ("on", _("Enable YOLO mode (bypasses confirmations)")),
+            ("off", _("Disable YOLO mode")),
+        ],
+    }
+
 
 class _TUIStreamingRenderer(StreamingRenderer):
     def __init__(self, app: OllamaAgentApp, scroll: Any, widget: AgentResponse):
@@ -181,11 +186,11 @@ class OllamaAgentApp(App):
     """Main Textual Application representing the Agent's interactive TUI."""
 
     BINDINGS = [
-        ("escape", "cancel_generation", "Interrupt"),
-        ("ctrl+c", "cancel_or_quit", "Interrupt/Quit"),
-        ("super+c", "copy_selection", "Copy"),
-        ("ctrl+shift+c", "copy_selection", "Copy"),
-        ("ctrl+insert", "copy_selection", "Copy"),
+        ("escape", "cancel_generation", _("Interrupt")),
+        ("ctrl+c", "cancel_or_quit", _("Interrupt/Quit")),
+        ("super+c", "copy_selection", _("Copy")),
+        ("ctrl+shift+c", "copy_selection", _("Copy")),
+        ("ctrl+insert", "copy_selection", _("Copy")),
     ]
 
     def action_cancel_generation(self) -> None:
@@ -293,6 +298,8 @@ class OllamaAgentApp(App):
     def _slash_completions(self, text: str) -> list[tuple[str, Text]]:
         parts = text.split(" ")
         num_parts = len(parts)
+        root_commands = _get_root_commands()
+        subcommands = _get_subcommands()
 
         # Level 0: Root commands (e.g., "/" or "/mo")
         if num_parts == 1:
@@ -302,12 +309,12 @@ class OllamaAgentApp(App):
                     cmd,
                     Text.from_markup(f"[bold #38bdf8]{cmd:<12}[/bold #38bdf8] [dim #8b949e]{desc}[/dim #8b949e]"),
                 )
-                for cmd, desc in _ROOT_COMMANDS
+                for cmd, desc in root_commands
                 if cmd.startswith(token)
             ]
 
         root_cmd = parts[0]
-        if root_cmd not in _SUBCOMMANDS:
+        if root_cmd not in subcommands:
             return []
 
         # Level 1: Subcommands (e.g., "/task " or "/task r")
@@ -318,7 +325,7 @@ class OllamaAgentApp(App):
                     f"{root_cmd} {sub}",
                     Text.from_markup(f"[bold #38bdf8]{sub:<12}[/bold #38bdf8] [dim #8b949e]{desc}[/dim #8b949e]"),
                 )
-                for sub, desc in _SUBCOMMANDS[root_cmd]
+                for sub, desc in subcommands[root_cmd]
                 if sub.startswith(sub_token)
             ]
 
@@ -370,7 +377,7 @@ class OllamaAgentApp(App):
                 return [
                     (
                         f"{root_cmd} {sub_cmd} {s['thread_id']}",
-                        Text.from_markup(f"[bold #e6edf3]{s['thread_id'][:8]:<10}[/bold #e6edf3] [dim #8b949e]{s['steps']} steps[/dim #8b949e]"),
+                        Text.from_markup(f"[bold #e6edf3]{s['thread_id'][:8]:<10}[/bold #e6edf3] [dim #8b949e]{s['steps']} {_('steps')}[/dim #8b949e]"),
                     )
                     for s in sessions
                     if s["thread_id"].startswith(arg_token)
@@ -381,7 +388,7 @@ class OllamaAgentApp(App):
                 return [
                     (
                         f"{root_cmd} {sub_cmd} {d['name']}",
-                        Text.from_markup(f"[bold #e6edf3]{d['name']:<20}[/bold #e6edf3] [dim #8b949e]{d['chunks'] if d['chunks'] is not None else 0} chunks[/dim #8b949e]"),
+                        Text.from_markup(f"[bold #e6edf3]{d['name']:<20}[/bold #e6edf3] [dim #8b949e]{d['chunks'] if d['chunks'] is not None else 0} {_('chunks')}[/dim #8b949e]"),
                     )
                     for d in dbs
                     if d["name"].startswith(arg_token)
@@ -499,7 +506,7 @@ class OllamaAgentApp(App):
                 if rel_lower == prefix_lower or not rel_lower.startswith(prefix_lower):
                     continue
                 count += 1
-                yield rel, "dir"
+                yield rel, _("dir")
 
             for filename in sorted(files):
                 if count >= max_completions:
@@ -512,7 +519,7 @@ class OllamaAgentApp(App):
                     continue
                 if not rel.lower().startswith(prefix_lower):
                     continue
-                meta = "file"
+                meta = _("file")
                 try:
                     size_kb = (root_path / filename).stat().st_size / 1024
                     meta = f"{size_kb:.1f} KB"
@@ -543,33 +550,33 @@ class OllamaAgentApp(App):
         if cmd in ("/clear", "/new") or (cmd == "/session" and args and args[0] == "new"):
             await self.repl._handle_new_session([])
             await scroll.remove_children()
-            scroll.mount(SystemMessage(f"[bold #38bdf8]✓ New session started:[/bold #38bdf8] [bold #e6edf3]{self.repl.runtime.thread_id[:8]}[/bold #e6edf3]"))
+            scroll.mount(SystemMessage(f"[bold #38bdf8]✓ {_('New session started: {session_id}', session_id=self.repl.runtime.thread_id[:8])}[/bold #38bdf8]"))
             self.query_one(AgentHeader).update_header()
             self._deferred_scroll()
             return
 
         if cmd in ("/compact", "/compress"):
-            scroll.mount(SystemMessage("[dim]⚡ Compacting conversation context...[/dim]"))
+            scroll.mount(SystemMessage(f"[dim]⚡ {_('Compacting conversation context...')}[/dim]"))
             self._deferred_scroll()
             res = await self.repl.runtime.compact_context()
             if res["success"]:
                 msg_text = (
-                    f"[bold #38bdf8]✓ Context compacted successfully:[/bold #38bdf8]\n"
-                    f"  • [dim]Messages summarized:[/dim] {res['messages_summarized']}\n"
-                    f"  • [dim]Recent messages preserved:[/dim] {res['messages_preserved']}"
+                    f"[bold #38bdf8]✓ {_('Context compacted successfully:')}[/bold #38bdf8]\n"
+                    f"  • [dim]{_('Messages summarized:')}[/dim] {res['messages_summarized']}\n"
+                    f"  • [dim]{_('Recent messages preserved:')}[/dim] {res['messages_preserved']}"
                 )
                 if res.get("file_path"):
-                    msg_text += f"\n  • [dim]History offloaded to:[/dim] [cyan]{res['file_path']}[/cyan]"
+                    msg_text += f"\n  • [dim]{_('History offloaded to:')}[/dim] [cyan]{res['file_path']}[/cyan]"
                 scroll.mount(SystemMessage(msg_text))
                 self.query_one(AgentHeader).update_header()
             else:
-                scroll.mount(SystemMessage(f"[bold #f87171]✕ Compaction skipped:[/bold #f87171] {res.get('message', 'Failed to compact.')}"))
+                scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Compaction skipped:')}[/bold #f87171] {res.get('message', _('Failed to compact.'))}"))
             self._deferred_scroll()
             return
 
         if cmd == "/session" and args and args[0] in ("resume", "switch"):
             if len(args) < 2:
-                scroll.mount(SystemMessage("[bold #f87171]✕ Usage:[/bold #f87171] /session resume <session_id>"))
+                scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Usage: /session resume <session_id>')}[/bold #f87171]"))
                 self._deferred_scroll()
                 return
             resolved = resume_session(self.repl.console, args[1])
@@ -601,11 +608,11 @@ class OllamaAgentApp(App):
                                 scroll.mount(UserMessage(content))
                             elif role in ("ai", "assistant"):
                                 scroll.mount(AgentResponse(initial_text=content))
-                scroll.mount(SystemMessage(f"[bold #38bdf8]✓ Resumed session:[/bold #38bdf8] [bold #e6edf3]{resolved[:8]}[/bold #e6edf3] [dim]({resolved})[/dim]"))
+                scroll.mount(SystemMessage(f"[bold #38bdf8]✓ {_('Resumed session: {session_id}', session_id=f'{resolved[:8]} ({resolved})')}[/bold #38bdf8]"))
                 self.query_one(AgentHeader).update_header()
                 self._deferred_scroll()
             else:
-                scroll.mount(SystemMessage(f"[bold #f87171]✕ Session not found:[/bold #f87171] {args[1]}"))
+                scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Session not found: {session_id}', session_id=args[1])}[/bold #f87171]"))
                 self._deferred_scroll()
             return
 
@@ -617,9 +624,9 @@ class OllamaAgentApp(App):
                 output_path=args[1] if len(args) > 1 else None,
             )
             if out_file:
-                scroll.mount(SystemMessage(f"[bold #38bdf8]✓ Session exported to:[/bold #38bdf8] [bold #e6edf3]{out_file}[/bold #e6edf3]"))
+                scroll.mount(SystemMessage(f"[bold #38bdf8]✓ {_('Session exported to: {path}', path=out_file)}[/bold #38bdf8]"))
             else:
-                scroll.mount(SystemMessage("[bold #f87171]✕ Failed to export session.[/bold #f87171]"))
+                scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Failed to export session.')}[/bold #f87171]"))
             self._deferred_scroll()
             return
 
@@ -639,7 +646,7 @@ class OllamaAgentApp(App):
             sub_args = args[1:]
             target_id = next((a for a in sub_args if not a.startswith("-")), "")
             if not target_id:
-                scroll.mount(SystemMessage("[bold #f87171]✕ Usage:[/bold #f87171] /task run <id> [-y]"))
+                scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Usage: /task run <id> [-y]')}[/bold #f87171]"))
                 self._deferred_scroll()
                 return
             try:
@@ -650,8 +657,8 @@ class OllamaAgentApp(App):
                 return
 
             scroll.mount(SystemMessage(Text.from_markup(
-                f"[bold #38bdf8]▶ Executing Task:[/bold #38bdf8] [bold #e6edf3]{t.title}[/bold #e6edf3] [dim]({tid})[/dim]\n"
-                f"  [dim]model:[/dim] {t.model} [dim]·[/dim] [dim]effort:[/dim] {t.reasoning_effort}"
+                f"[bold #38bdf8]▶ {_('Executing Task: {title} ({task_id})', title=t.title, task_id=tid)}[/bold #38bdf8]\n"
+                f"  [dim]{_('Model:')}[/dim] {t.model} [dim]·[/dim] [dim]{_('Effort:')}[/dim] {t.reasoning_effort}"
             )))
             agent_msg = AgentResponse()
             scroll.mount(agent_msg)
@@ -667,7 +674,7 @@ class OllamaAgentApp(App):
 
         commands = self.repl._get_commands()
         if cmd not in commands:
-            scroll.mount(SystemMessage(f"[bold #f87171]✕ Unknown command:[/bold #f87171] {cmd}"))
+            scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Unknown command: {cmd}', cmd=cmd)}[/bold #f87171]"))
             self._deferred_scroll()
             return
 
@@ -755,7 +762,7 @@ class OllamaAgentApp(App):
             try:
                 await stream_agent_events(self.repl.runtime, prompt, _TUIStreamingRenderer(self, scroll, agent_msg), auto_close=True)
             except asyncio.CancelledError:
-                scroll.mount(SystemMessage("[bold #f87171]🛑 Execution interrupted by user.[/bold #f87171]"))
+                scroll.mount(SystemMessage(f"[bold #f87171]🛑 {_('Execution interrupted by user.')}[/bold #f87171]"))
                 self._deferred_scroll()
                 inp = self.query_one(ReplInput)
                 inp.disabled = False
@@ -763,7 +770,7 @@ class OllamaAgentApp(App):
                 footer.set_approval(False)
                 raise
             except Exception as e:
-                scroll.mount(SystemMessage(f"[bold #f87171]✕ Error:[/bold #f87171] [red]{e}[/red]"))
+                scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Error:')}[/bold #f87171] [red]{e}[/red]"))
                 self._deferred_scroll()
                 inp = self.query_one(ReplInput)
                 inp.disabled = False
@@ -906,11 +913,11 @@ class OllamaREPL:
             elif val in ("off", "false", "no", "0"):
                 self.runtime.yolo_mode = False
             else:
-                self.console.print("[red]Usage: /yolo [on|off][/red]")
+                self.console.print(f"[red]{_('Usage: /yolo [on|off]')}[/red]")
                 return
         else:
             self.runtime.yolo_mode = not self.runtime.yolo_mode
 
-        status = "ON" if self.runtime.yolo_mode else "OFF"
+        status = _("on") if self.runtime.yolo_mode else _("off")
         color = "red" if self.runtime.yolo_mode else "green"
-        self.console.print(f"[bold {color}]YOLO mode is now {status}[/bold {color}]")
+        self.console.print(f"[bold {color}]{_('YOLO mode is now {status}', status=status)}[/bold {color}]")

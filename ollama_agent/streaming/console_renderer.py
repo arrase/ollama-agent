@@ -10,6 +10,7 @@ from rich.live import Live
 from rich.markdown import Markdown
 from rich.padding import Padding
 
+from ..i18n import _
 from .base import StreamingRenderer
 
 if TYPE_CHECKING:
@@ -45,7 +46,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
     def on_text_delta(self, event: dict[str, Any]) -> None:
         self._end_reasoning()
         if not self._banner_shown:
-            self.console.print("  [bold green]🤖 Agent[/bold green]")
+            self.console.print(f"  [bold green]🤖 {_('Assistant')}[/bold green]")
             self._banner_shown = True
         self._toggle_live(True)
         self._text.append(event["content"])
@@ -57,7 +58,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
             return
         if not self._reasoning:
             self._toggle_live(False)
-            self.console.print("\n  [bold magenta]🧠 Thinking[/bold magenta]")
+            self.console.print(f"\n  [bold magenta]🧠 {_('Thinking')}[/bold magenta]")
             self.console.print("  [dim magenta]│[/dim magenta] ", end="")
             self._reasoning = True
             self._rendered_reasoning = ""
@@ -89,31 +90,30 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         self._toggle_live(False)
         prefix = self._agent_prefix(event)
         tool_name = event["name"]
+        tool_msg = _("Calling tool: {tool_name}", tool_name=tool_name)
         self.console.print(
-            f"  [yellow]✦ {prefix}Calling tool:[/yellow] [bold yellow]{tool_name}[/bold yellow]"
+            f"  [yellow]✦ {prefix}{tool_msg}[/yellow]"
         )
 
     def on_tool_output(self, event: dict[str, Any]) -> None:
         self._toggle_live(False)
-        # Tool outputs are meant for the model; printing them makes the CLI noisy
-        # and can interleave with streamed assistant output.
         out_len = event.get("output_len")
         prefix = self._agent_prefix(event)
-        suffix = f" ({out_len} chars)" if out_len is not None else ""
+        suffix = f" ({_('{output_len} chars', output_len=out_len)})" if out_len is not None else ""
         self.console.print(
-            f"  [dim cyan]✓ {prefix}Tool output received{suffix}[/dim cyan]\n"
+            f"  [dim cyan]✓ {prefix}{_('Tool output received')}{suffix}[/dim cyan]\n"
         )
 
     def on_error(self, event: dict[str, Any]) -> None:
         self._toggle_live(False)
         self.console.print(
-            f"  [red]❌ Error: {event['content']}[/red]"
+            f"  [red]❌ {_('Error:')} {event['content']}[/red]"
         )
 
     def on_warning(self, event: dict[str, Any]) -> None:
         self._toggle_live(False)
         self.console.print(
-            f"  [yellow]⚠ Warning: {event['content']}[/yellow]"
+            f"  [yellow]⚠ {_('Warning:')} {event['content']}[/yellow]"
         )
 
     async def handle_interrupt(
@@ -126,7 +126,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         if not interrupts:
             return None
 
-        self.console.print("\n  [bold yellow]⚠️ Sensitive Tool Approval Required[/bold yellow]")
+        self.console.print(f"\n  [bold yellow]⚠️ {_('Sensitive Tool Approval Required')}[/bold yellow]")
 
         interrupt_val = interrupts[0].value
         action_requests = interrupt_val.get("action_requests", [])
@@ -134,16 +134,12 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         for req in action_requests:
             name = req["name"]
             args = req.get("args", {})
-            self.console.print(f"  Tool: [bold]{name}[/bold]")
-            self.console.print(f"  Arguments: {args}")
+            self.console.print(f"  {_('Tool:')} [bold]{name}[/bold]")
+            self.console.print(f"  {_('Arguments:')} {args}")
 
         try:
             while True:
-                prompt_msg = (
-                    "  [bold cyan]Choose action:[/bold cyan] "
-                    "Approve ([bold]y[/bold]) / Reject ([bold]n[/bold]) / "
-                    "Allow Session ([bold]a[/bold]) / Cancel ([bold]c[/bold]): "
-                )
+                prompt_msg = f"  {_('Choose action: Approve (y) / Reject (n) / Allow Session (a) / Cancel (c): ')}"
                 self.console.print(prompt_msg, end="")
                 self.console.file.flush()
                 choice = (await asyncio.to_thread(input)).strip().lower()
@@ -152,19 +148,20 @@ class ConsoleStreamingRenderer(StreamingRenderer):
                 elif choice == "n":
                     return [{
                         "type": "reject",
-                        "message": f"User rejected executing tool '{r['name']}'."
+                        "message": _("User rejected executing tool '{name}'.", name=r["name"])
                     } for r in action_requests]
                 elif choice == "a":
                     for req in action_requests:
                         runtime.auto_approved_tools.add(req["name"])
                     return [{"type": "approve"} for _ in action_requests]
                 elif choice == "c":
-                    self.console.print("  [red]✗ Cancelled[/red]\n")
+                    self.console.print(f"  [red]✗ {_('Cancelled')}[/red]\n")
                     raise KeyboardInterrupt()
                 else:
-                    self.console.print("  [red]Invalid choice. Please enter 'y', 'n', 'a', or 'c'.[/red]")
+                    invalid_msg = _("Invalid choice. Please enter 'y', 'n', 'a', or 'c'.")
+                    self.console.print(f"  [red]{invalid_msg}[/red]")
         except (EOFError, KeyboardInterrupt):
-            self.console.print("  [red]✗ Cancelled[/red]\n")
+            self.console.print(f"  [red]✗ {_('Cancelled')}[/red]\n")
             raise KeyboardInterrupt()
 
     def close(self) -> None:

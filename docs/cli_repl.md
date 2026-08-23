@@ -148,7 +148,6 @@ Slash commands provide full application control directly within the REPL:
 
 | Command | Subcommands / Syntax | Description |
 | :--- | :--- | :--- |
-| `/help` | `/help` | Display interactive help panel categorized by feature. |
 | `/model` | `/model [list \| set <model>]` | List available Ollama models (with tool support indicators) or switch model mid-session. |
 | `/effort` | `/effort [<level>]` | Show current reasoning effort or change thinking/reasoning effort mid-session (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
 | `/params` | `/params [list \| set <parameter> <value>]` | Inspect active sampling parameters and resolution sources, or dynamically update parameter values for the active session. |

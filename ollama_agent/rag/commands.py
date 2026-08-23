@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from rich.console import Console
 from rich.table import Table
 
+from ..i18n import _
 from .manager import RAGManager, RAGError, RAGDatabaseExistsError, RAGNotLoadedError
 
 
@@ -37,9 +38,9 @@ class RAGContext:
         if len(matches) == 1:
             return matches[0]
         msg = (
-            f"Database not found: {name}"
+            _("Database not found: {name}", name=name)
             if not matches
-            else f"Ambiguous prefix: {name} -> {', '.join(matches)}"
+            else _("Ambiguous prefix: {name} -> {matches}", name=name, matches=", ".join(matches))
         )
         if not matches:
             raise RAGDatabaseNotFoundError(msg)
@@ -50,16 +51,16 @@ def list_rag_databases(ctx: RAGContext) -> None:
     """List all RAG databases."""
     dbs = ctx.rag_manager.list_databases()
     if not dbs:
-        ctx.console.print("[yellow]No RAG databases found.[/yellow]")
-        ctx.console.print("[dim]Create one with /rag create <name>[/dim]")
+        ctx.console.print(f"[yellow]{_('No RAG databases found.')}[/yellow]")
+        ctx.console.print(f"[dim]{_('Create one with /rag create <name>')}[/dim]")
         return
 
-    table = Table(title="RAG Databases", show_header=True, header_style="bold magenta")
-    for col, style in [("Name", "cyan"), ("Chunks", "green"), ("Status", "yellow")]:
+    table = Table(title=_("RAG Databases"), show_header=True, header_style="bold magenta")
+    for col, style in [(_("Name"), "cyan"), (_("Chunks"), "green"), (_("Status"), "yellow")]:
         table.add_column(col, style=style)
 
     for db in dbs:
-        status = "[green]◀ active[/green]" if db["active"] else ""
+        status = f"[green]◀ {_('active')}[/green]" if db["active"] else ""
         table.add_row(db["name"], str(db["chunks"]) if db["chunks"] is not None else "-", status)
 
     ctx.console.print(table)
@@ -70,11 +71,11 @@ def create_rag_database(ctx: RAGContext, name: str) -> None:
     try:
         created = ctx.rag_manager.create_database(name)
         ctx.console.print(
-            f"[green]RAG database created:[/green] [cyan]{created}[/cyan]"
+            f"[green]✓ {_('RAG database created: {created}', created=created)}[/green]"
         )
-        ctx.console.print(f"[dim]Load it with /rag load {created}[/dim]")
+        ctx.console.print(f"[dim]{_('Load it with /rag load {created}', created=created)}[/dim]")
     except RAGDatabaseExistsError:
-        ctx.console.print(f"[red]Database already exists:[/red] {name}")
+        ctx.console.print(f"[red]{_('Database already exists: {name}', name=name)}[/red]")
         raise
     except RAGError as e:
         ctx.console.print(f"[red]{e}[/red]")
@@ -86,11 +87,11 @@ def delete_rag_database(ctx: RAGContext, name: str) -> None:
     full_name = ctx._find_or_exit(name)
     if ctx.rag_manager.delete_database(full_name):
         ctx.console.print(
-            f"[green]Deleted RAG database:[/green] [cyan]{full_name}[/cyan]"
+            f"[green]✓ {_('Deleted RAG database: {full_name}', full_name=full_name)}[/green]"
         )
     else:
-        ctx.console.print(f"[red]Failed to delete database: {full_name}[/red]")
-        raise RAGError(f"Failed to delete database: {full_name}")
+        ctx.console.print(f"[red]{_('Failed to delete database: {full_name}', full_name=full_name)}[/red]")
+        raise RAGError(_("Failed to delete database: {full_name}", full_name=full_name))
 
 
 def load_rag_database(ctx: RAGContext, name: str) -> None:
@@ -99,7 +100,7 @@ def load_rag_database(ctx: RAGContext, name: str) -> None:
     try:
         ctx.rag_manager.load_database(full_name)
         ctx.console.print(
-            f"[green]Loaded RAG database:[/green] [cyan]{full_name}[/cyan]"
+            f"[green]✓ {_('Loaded RAG database: {full_name}', full_name=full_name)}[/green]"
         )
     except RAGError as e:
         ctx.console.print(f"[red]{e}[/red]")
@@ -109,11 +110,11 @@ def load_rag_database(ctx: RAGContext, name: str) -> None:
 def unload_rag_database(ctx: RAGContext) -> None:
     """Unload the current RAG database."""
     if ctx.rag_manager.current_database is None:
-        ctx.console.print("[yellow]No RAG database is currently loaded.[/yellow]")
+        ctx.console.print(f"[yellow]{_('No RAG database is currently loaded.')}[/yellow]")
         return
     name = ctx.rag_manager.current_database
     ctx.rag_manager.unload()
-    ctx.console.print(f"[green]Unloaded RAG database:[/green] [cyan]{name}[/cyan]")
+    ctx.console.print(f"[green]✓ {_('Unloaded RAG database: {name}', name=name)}[/green]")
 
 
 async def add_rag_file(ctx: RAGContext, file_path: str) -> None:
@@ -121,12 +122,11 @@ async def add_rag_file(ctx: RAGContext, file_path: str) -> None:
     try:
         result = await ctx.rag_manager.add_file(file_path)
         ctx.console.print(
-            f"[green]Added to RAG:[/green] [cyan]{result['file']}[/cyan] "
-            f"([dim]{result['chunks']} chunks[/dim])"
+            f"[green]✓ {_('Added to RAG: {file} ({chunks} chunks)', file=result['file'], chunks=result['chunks'])}[/green]"
         )
     except RAGNotLoadedError:
         ctx.console.print(
-            "[red]No RAG database loaded.[/red] Use /rag load <name> first."
+            f"[red]{_('No RAG database loaded. Use /rag load <name> first.')}[/red]"
         )
         raise
     except RAGError as e:
@@ -139,12 +139,11 @@ async def add_rag_directory(ctx: RAGContext, dir_path: str) -> None:
     try:
         result = await ctx.rag_manager.add_directory(dir_path)
         ctx.console.print(
-            f"[green]Added {result['added']} files[/green] "
-            f"([dim]skipped: {result['skipped']}, failed: {result['failed']}[/dim])"
+            f"[green]✓ {_('Added {added} files (skipped: {skipped}, failed: {failed})', added=result['added'], skipped=result['skipped'], failed=result['failed'])}[/green]"
         )
     except RAGNotLoadedError:
         ctx.console.print(
-            "[red]No RAG database loaded.[/red] Use /rag load <name> first."
+            f"[red]{_('No RAG database loaded. Use /rag load <name> first.')}[/red]"
         )
         raise
     except RAGError as e:
@@ -156,7 +155,7 @@ def show_rag_status(ctx: RAGContext) -> None:
     """Show current RAG status."""
     current = ctx.rag_manager.current_database
     if current:
-        ctx.console.print(f"[bold]Active RAG database:[/bold] [cyan]{current}[/cyan]")
+        ctx.console.print(f"[bold]{_('Active RAG database: {current}', current=current)}[/bold]")
     else:
-        ctx.console.print("[yellow]No RAG database is currently loaded.[/yellow]")
-        ctx.console.print("[dim]Use /rag list to see available databases[/dim]")
+        ctx.console.print(f"[yellow]{_('No RAG database is currently loaded.')}[/yellow]")
+        ctx.console.print(f"[dim]{_('Use /rag list to see available databases')}[/dim]")

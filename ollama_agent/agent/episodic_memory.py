@@ -11,6 +11,7 @@ from typing import Any
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 from ..core.common import extract_text
+from ..i18n import _
 from ..settings.paths import HISTORY_DB_PATH
 
 _serializer = JsonPlusSerializer()
@@ -117,7 +118,7 @@ def search_past_conversations_in_db(
             if term_hits > 0:
                 match_count += term_hits
                 truncated = text if len(text) <= 300 else f"{text[:297]}..."
-                role_label = "User" if role in ("human", "user") else "Assistant"
+                role_label = _("User") if role in ("human", "user") else _("Assistant")
                 snippets.append(f"[{role_label}]: {truncated}")
                 total_chars += len(truncated)
                 if total_chars > 1200:
@@ -140,18 +141,18 @@ def search_past_conversations_in_db(
 def format_past_conversations_context(results: list[dict[str, Any]]) -> str:
     """Format matching episodic conversation sessions into a markdown context string with dates."""
     if not results:
-        return "No relevant past conversations found in episodic memory."
+        return _("No relevant past conversations found in episodic memory.")
 
     lines: list[str] = [
-        f"Found {len(results)} relevant past conversation(s) in episodic memory:\n"
+        _("Found {count} relevant past conversation(s) in episodic memory:", count=len(results)) + "\n"
     ]
     for idx, item in enumerate(results, start=1):
         tid = item["thread_id"]
         short_id = tid[:8]
         date_str = item["formatted_date"]
-        header_date = f" - [Date: {date_str}]" if date_str else ""
+        header_date = f" - [{_('Date:')} {date_str}]" if date_str else ""
         lines.append(
-            f"### Session #{idx} ({short_id}){header_date} - [Total messages: {item['total_messages']}]"
+            f"### {_('Session')} #{idx} ({short_id}){header_date} - [{_('Total messages:')} {item['total_messages']}]"
         )
         for snippet in item["snippets"]:
             lines.append(f"  {snippet}")

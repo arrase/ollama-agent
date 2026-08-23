@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ollama-agent"
-version = "0.8.0"
+version = "0.8.1"
 description = "AI agent to interact with local language models through Ollama"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -33,4 +33,5 @@ where = ["."]
 include = ["ollama_agent*"]
 
 [tool.setuptools.package-data]
-ollama_agent = ["settings/prompts/*.md", "interfaces/*.css"]
+ollama_agent = ["settings/prompts/*.md", "interfaces/*.css", "i18n/locales/*.json"]
+

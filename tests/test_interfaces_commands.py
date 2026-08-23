@@ -9,7 +9,7 @@ from rich.console import Console
 
 from ollama_agent.core.models import ModelCapabilityError
 from ollama_agent.interfaces.cli import handle_cli_commands
-from ollama_agent.interfaces.dispatch import build_repl_handlers, render_repl_help, safe_call
+from ollama_agent.interfaces.dispatch import build_repl_handlers, safe_call
 from ollama_agent.interfaces.model_commands import (
     ensure_model_configured,
     list_models,
@@ -288,33 +288,6 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         out = console.export_text()
         self.assertIn("Current reasoning effort", out)
         self.assertIn("medium", out)
-
-    def test_render_repl_help(self) -> None:
-        console = Console(file=io.StringIO(), record=True)
-        handlers = build_repl_handlers(
-            task_ctx=MagicMock(),
-            skills_ctx=MagicMock(),
-            get_rag_ctx=MagicMock(),
-            console=console,
-            current_model=lambda: "gemma4:26b",
-            base_url=lambda: "http://localhost:11434",
-            switch_model=AsyncMock(),
-            handle_exit=lambda _: None,
-            handle_new=AsyncMock(),
-            handle_task_create=lambda _: None,
-            handle_skill_create=lambda _: None,
-            handle_yolo=lambda _: None,
-        )
-        render_repl_help(console, handlers)
-        out = console.export_text()
-        self.assertIn("Available Commands", out)
-        self.assertIn("/help", out)
-        self.assertIn("/model", out)
-        self.assertIn("/effort", out)
-        self.assertIn("/task", out)
-        self.assertIn("/skill", out)
-        self.assertIn("/rag", out)
-        self.assertIn("/yolo", out)
 
     async def test_unified_repl_handlers(self) -> None:
         console = Console(file=io.StringIO(), record=True)

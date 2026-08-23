@@ -13,6 +13,7 @@ from textual.screen import ModalScreen
 from textual.timer import Timer
 from textual.widgets import Button, Collapsible, Input, Label, Markdown, OptionList, Static, TextArea
 
+from ..i18n import _
 from ..settings.paths import APP_DIR
 
 if TYPE_CHECKING:
@@ -48,22 +49,22 @@ class AgentHeader(Static):
                 color = "#38bdf8"
             tok_str = f"{tokens_val / 1000:.1f}k" if tokens_val >= 1000 else str(int(tokens_val))
             ctx_str = f"{num_ctx / 1000:.1f}k" if num_ctx >= 1000 else str(int(num_ctx))
-            ctx_info = f"  [dim]│[/dim]  [bold #8b949e]Context:[/bold #8b949e] [bold {color}]{tok_str}/{ctx_str} ({pct}%)[/bold {color}]"
+            ctx_info = f"  [dim]│[/dim]  [bold #8b949e]{_('Context:')}[/bold #8b949e] [bold {color}]{tok_str}/{ctx_str} ({pct}%)[/bold {color}]"
         else:
             ctx_info = ""
 
         rag_ctx = self.repl._rag_ctx
         rag_db = rag_ctx.rag_manager.current_database if rag_ctx else None
-        rag_info = f"  [dim]│[/dim]  [bold #8b949e]RAG:[/bold #8b949e] [bold #a78bfa]{rag_db}[/bold #a78bfa]" if rag_db else ""
+        rag_info = f"  [dim]│[/dim]  [bold #8b949e]{_('RAG:')}[/bold #8b949e] [bold #a78bfa]{rag_db}[/bold #a78bfa]" if rag_db else ""
         yolo_status = (
-            "[bold #f87171 on #3b181e] YOLO: ON [/bold #f87171 on #3b181e]"
+            f"[bold #f87171 on #3b181e] {_('YOLO: ON')} [/bold #f87171 on #3b181e]"
             if self.repl.runtime.yolo_mode
-            else "[dim #8b949e]YOLO: OFF[/dim #8b949e]"
+            else f"[dim #8b949e]{_('YOLO: OFF')}[/dim #8b949e]"
         )
         self.update(
             f"[bold #38bdf8]● ollama-agent[/bold #38bdf8]  [dim]│[/dim]  "
-            f"[bold #8b949e]Model:[/bold #8b949e] [bold #e6edf3]{ms.name}[/bold #e6edf3]{ctx_info}  [dim]│[/dim]  "
-            f"[bold #8b949e]Effort:[/bold #8b949e] [#e6edf3]{ms.reasoning_effort}[/#e6edf3]{rag_info}  [dim]│[/dim]  "
+            f"[bold #8b949e]{_('Model:')}[/bold #8b949e] [bold #e6edf3]{ms.name}[/bold #e6edf3]{ctx_info}  [dim]│[/dim]  "
+            f"[bold #8b949e]{_('Effort:')}[/bold #8b949e] [#e6edf3]{ms.reasoning_effort}[/#e6edf3]{rag_info}  [dim]│[/dim]  "
             f"{yolo_status}"
         )
 
@@ -92,26 +93,26 @@ class AgentFooter(Static):
     def update_footer(self) -> None:
         if self._is_approval:
             self.update(
-                "[bold #fbbf24]⚠ Approval required:[/bold #fbbf24]   "
-                "[dim]y[/dim] [bold #8b949e]approve[/bold #8b949e]   "
-                "[dim]n[/dim] [bold #8b949e]reject[/bold #8b949e]   "
-                "[dim]a[/dim] [bold #8b949e]allow session[/bold #8b949e]   "
-                "[dim]esc[/dim] [bold #8b949e]cancel[/bold #8b949e]   "
-                "[dim]←→[/dim] [bold #8b949e]select[/bold #8b949e]"
+                f"[bold #fbbf24]⚠ {_('Approval required:')}[/bold #fbbf24]   "
+                f"[dim]y[/dim] [bold #8b949e]{_('approve')}[/bold #8b949e]   "
+                f"[dim]n[/dim] [bold #8b949e]{_('reject')}[/bold #8b949e]   "
+                f"[dim]a[/dim] [bold #8b949e]{_('allow session')}[/bold #8b949e]   "
+                f"[dim]esc[/dim] [bold #8b949e]{_('cancel')}[/bold #8b949e]   "
+                f"[dim]←→[/dim] [bold #8b949e]{_('select')}[/bold #8b949e]"
             )
         elif self._is_generating:
             self.update(
-                "[bold #38bdf8]⟡ Generating response...[/bold #38bdf8]   "
-                "[dim]press [bold #f87171]esc[/bold #f87171] or [bold #f87171]^C[/bold #f87171] to interrupt[/dim]"
+                f"[bold #38bdf8]⟡ {_('Generating response...')}[/bold #38bdf8]   "
+                f"[dim]{_('press esc or ^C to interrupt')}[/dim]"
             )
         else:
             self.update(
-                "[dim]enter[/dim] [bold #8b949e]send[/bold #8b949e]   "
-                "[dim]\\+enter[/dim] [bold #8b949e]newline[/bold #8b949e]   "
-                "[dim]tab[/dim] [bold #8b949e]complete[/bold #8b949e]   "
-                "[dim]↑↓[/dim] [bold #8b949e]history[/bold #8b949e]   "
-                "[dim]esc[/dim] [bold #8b949e]interrupt[/bold #8b949e]   "
-                "[dim]/help[/dim] [bold #8b949e]commands[/bold #8b949e]"
+                f"[dim]enter[/dim] [bold #8b949e]{_('send')}[/bold #8b949e]   "
+                f"[dim]\\+enter[/dim] [bold #8b949e]{_('newline')}[/bold #8b949e]   "
+                f"[dim]tab[/dim] [bold #8b949e]{_('complete')}[/bold #8b949e]   "
+                f"[dim]↑↓[/dim] [bold #8b949e]{_('history')}[/bold #8b949e]   "
+                f"[dim]esc[/dim] [bold #8b949e]{_('interrupt')}[/bold #8b949e]   "
+                f"[dim]/[/dim] [bold #8b949e]{_('commands')}[/bold #8b949e]"
             )
 
 
@@ -121,15 +122,15 @@ class ReplInput(TextArea):
     """Interactive input field that captures Tab/arrow keys for autocomplete."""
 
     BINDINGS = [
-        ("ctrl+v", "paste", "Paste"),
-        ("super+v", "paste", "Paste"),
-        ("shift+insert", "paste", "Paste"),
+        ("ctrl+v", "paste", _("Paste")),
+        ("super+v", "paste", _("Paste")),
+        ("shift+insert", "paste", _("Paste")),
     ]
 
     def __init__(self, **kwargs: Any) -> None:
         kwargs.setdefault("highlight_cursor_line", False)
         kwargs.setdefault("show_line_numbers", False)
-        kwargs.setdefault("placeholder", "Ask anything, / for commands, @ for files...")
+        kwargs.setdefault("placeholder", _("Ask anything, / for commands, @ for files..."))
         super().__init__(**kwargs)
         self._history: list[str] = []
         self._history_index: int = 0
@@ -318,7 +319,7 @@ class UserMessage(Container):
 
     def compose(self) -> ComposeResult:
         yield Static(
-            "[bold #38bdf8]❯ you[/bold #38bdf8]",
+            f"[bold #38bdf8]❯ {_('you')}[/bold #38bdf8]",
             classes="msg-role user-role",
         )
         yield Static(self.text, markup=False, classes="msg-content user-content")
@@ -334,7 +335,7 @@ class AgentResponse(Container):
         super().__init__(**kwargs)
         self.initial_text = initial_text
         self._header = Static(
-            "[bold #34d399]◆ agent[/bold #34d399]",
+            f"[bold #34d399]◆ {_('agent')}[/bold #34d399]",
             classes="msg-role agent-role",
         )
         self.current_thinking: Collapsible | None = None
@@ -357,14 +358,14 @@ class AgentResponse(Container):
         if self.current_thinking is not None:
             self._thinking_dots_count = (self._thinking_dots_count % 3) + 1
             dots = " ·" * self._thinking_dots_count
-            self.current_thinking.title = f"⟡ Thinking{dots}"
+            self.current_thinking.title = f"⟡ {_('Thinking')}{dots}"
 
     def _stop_thinking_animation(self) -> None:
         if self.thinking_timer is not None:
             self.thinking_timer.stop()
             self.thinking_timer = None
         if self.current_thinking is not None:
-            self.current_thinking.title = "⟡ Thought process"
+            self.current_thinking.title = f"⟡ {_('Thought process')}"
 
     def append_thinking(self, delta: str) -> None:
         self.current_text_widget = None
@@ -375,7 +376,7 @@ class AgentResponse(Container):
             self._thinking_chunks = []
             self.current_thinking = Collapsible(
                 self.current_thinking_text,
-                title="⟡ Thinking ···",
+                title=f"⟡ {_('Thinking ···')}",
                 collapsed=collapse_default,
             )
             self.mount(self.current_thinking)
@@ -433,11 +434,11 @@ class AgentResponse(Container):
 
     def add_error(self, content: str) -> None:
         self._reset_active_stream()
-        self.mount(SystemMessage(f"[bold #f87171]✕ Error:[/bold #f87171] [red]{content}[/red]"))
+        self.mount(SystemMessage(f"[bold #f87171]✕ {_('Error:')}[/bold #f87171] [red]{content}[/red]"))
 
     def add_warning(self, content: str) -> None:
         self._reset_active_stream()
-        self.mount(SystemMessage(f"[bold #fbbf24]⚠ Warning:[/bold #fbbf24] [yellow]{content}[/yellow]"))
+        self.mount(SystemMessage(f"[bold #fbbf24]⚠ {_('Warning:')}[/bold #fbbf24] [yellow]{content}[/yellow]"))
 
 
 class ToolCallMessage(Static):
@@ -456,9 +457,9 @@ class ToolOutputMessage(Static):
 
     def __init__(self, agent_name: str | None = None, output_len: int | None = None, **kwargs: Any) -> None:
         prefix = f"[dim]{escape(f'[{agent_name}]')}[/dim] " if agent_name else ""
-        suffix = f" [dim]({output_len} chars)[/dim]" if output_len is not None else ""
+        suffix = f" [dim]({_('{output_len} chars', output_len=output_len)})[/dim]" if output_len is not None else ""
         super().__init__(
-            f"  [#34d399]✓[/#34d399] {prefix}[dim]output received[/dim]{suffix}",
+            f"  [#34d399]✓[/#34d399] {prefix}[dim]{_('output received')}[/dim]{suffix}",
             **kwargs,
         )
 
@@ -481,25 +482,26 @@ class TaskCreateModal(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Container(id="modal-card"):
-            yield Label(f"Create Task: {self.task_id}" if self.task_id else "Create Task", id="modal-title")
+            title_text = _("Create Task: {task_id}", task_id=self.task_id) if self.task_id else _("Create Task")
+            yield Label(title_text, id="modal-title")
             with Container(classes="form-container"):
                 with Horizontal(classes="form-row"):
-                    yield Label("Task ID:", classes="field-label")
+                    yield Label(_("Task ID:"), classes="field-label")
                     yield Input(value=self.task_id, id="task-id-input", classes="modal-input", disabled=bool(self.task_id))
                 with Horizontal(classes="form-row"):
-                    yield Label("Title:", classes="field-label")
-                    yield Input(placeholder="Enter task title", id="title-input", classes="modal-input")
+                    yield Label(_("Title:"), classes="field-label")
+                    yield Input(placeholder=_("Enter task title"), id="title-input", classes="modal-input")
                 with Horizontal(classes="form-row"):
-                    yield Label("Model:", classes="field-label")
+                    yield Label(_("Model:"), classes="field-label")
                     yield Input(value=self.app_ref.repl.runtime.settings.model.name, id="model-input", classes="modal-input")
                 with Horizontal(classes="form-row"):
-                    yield Label("Effort:", classes="field-label")
+                    yield Label(_("Effort:"), classes="field-label")
                     yield Input(value=self.app_ref.repl.runtime.settings.model.reasoning_effort, id="effort-input", classes="modal-input")
-                yield Label("Prompt:", classes="prompt-label")
+                yield Label(_("Prompt:"), classes="prompt-label")
                 yield TextArea(id="prompt-area", classes="modal-textarea")
             with Horizontal(id="button-row"):
-                yield Button("Cancel", id="cancel-btn", variant="error", classes="modal-button")
-                yield Button("Create", id="create-btn", variant="success", classes="modal-button")
+                yield Button(_("Cancel"), id="cancel-btn", variant="error", classes="modal-button")
+                yield Button(_("Create"), id="create-btn", variant="success", classes="modal-button")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "cancel-btn":
@@ -525,22 +527,23 @@ class SkillCreateModal(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Container(id="skill-modal-card"):
-            yield Label(f"Create Skill: {self.skill_id}" if self.skill_id else "Create Skill", id="skill-modal-title")
+            title_text = _("Create Skill: {skill_id}", skill_id=self.skill_id) if self.skill_id else _("Create Skill")
+            yield Label(title_text, id="skill-modal-title")
             with Container(classes="form-container"):
                 with Horizontal(classes="form-row"):
-                    yield Label("Skill ID:", classes="field-label")
+                    yield Label(_("Skill ID:"), classes="field-label")
                     yield Input(value=self.skill_id, id="skill-id-input", classes="modal-input", disabled=bool(self.skill_id))
                 with Horizontal(classes="form-row"):
-                    yield Label("Name:", classes="field-label")
-                    yield Input(placeholder="Enter skill name", id="name-input", classes="modal-input")
+                    yield Label(_("Name:"), classes="field-label")
+                    yield Input(placeholder=_("Enter skill name"), id="name-input", classes="modal-input")
                 with Horizontal(classes="form-row"):
-                    yield Label("Description:", classes="field-label")
-                    yield Input(placeholder="Enter description", id="desc-input", classes="modal-input")
-                yield Label("Instructions:", classes="prompt-label")
+                    yield Label(_("Description:"), classes="field-label")
+                    yield Input(placeholder=_("Enter description"), id="desc-input", classes="modal-input")
+                yield Label(_("Instructions:"), classes="prompt-label")
                 yield TextArea(id="instructions-area", classes="modal-textarea")
             with Horizontal(id="skill-button-row"):
-                yield Button("Cancel", id="cancel-btn", variant="error", classes="modal-button")
-                yield Button("Create", id="create-btn", variant="success", classes="modal-button")
+                yield Button(_("Cancel"), id="cancel-btn", variant="error", classes="modal-button")
+                yield Button(_("Create"), id="create-btn", variant="success", classes="modal-button")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "cancel-btn":
@@ -568,18 +571,18 @@ class ToolApprovalWidget(Container):
         self.buttons_container: Horizontal | None = None
 
     def compose(self) -> ComposeResult:
-        yield Static("[bold #fbbf24]⚠ Action Approval Required[/bold #fbbf24]", classes="approval-title")
+        yield Static(f"[bold #fbbf24]⚠ {_('Action Approval Required')}[/bold #fbbf24]", classes="approval-title")
         for req in self.action_requests:
             name = req["name"]
             args = req["args"]
-            yield Static(f"Tool: [bold #38bdf8]{name}[/bold #38bdf8]\nArguments: [dim]{args}[/dim]", classes="approval-details")
+            yield Static(f"{_('Tool:')} [bold #38bdf8]{name}[/bold #38bdf8]\n{_('Arguments:')} [dim]{args}[/dim]", classes="approval-details")
 
         with Horizontal(classes="approval-buttons") as buttons:
             self.buttons_container = buttons
-            yield Button("Approve (y)", id="approve-btn", variant="success", classes="approval-btn")
-            yield Button("Reject (n)", id="reject-btn", variant="error", classes="approval-btn")
-            yield Button("Allow Session (a)", id="allow-btn", variant="primary", classes="approval-btn")
-            yield Button("Cancel (c)", id="cancel-btn", classes="approval-btn")
+            yield Button(_("Approve (y)"), id="approve-btn", variant="success", classes="approval-btn")
+            yield Button(_("Reject (n)"), id="reject-btn", variant="error", classes="approval-btn")
+            yield Button(_("Allow Session (a)"), id="allow-btn", variant="primary", classes="approval-btn")
+            yield Button(_("Cancel (c)"), id="cancel-btn", classes="approval-btn")
 
     def on_mount(self) -> None:
         self.query_one("#approve-btn", Button).focus()
@@ -640,7 +643,7 @@ class ToolApprovalWidget(Container):
             elif decision_type == "reject-btn":
                 decisions.append({
                     "type": "reject",
-                    "message": f"User rejected executing tool '{name}'."
+                    "message": _("User rejected executing tool '{name}'.", name=name)
                 })
             elif decision_type == "allow-btn":
                 self.app_ref.repl.runtime.auto_approved_tools.add(name)
@@ -648,7 +651,7 @@ class ToolApprovalWidget(Container):
             elif decision_type == "cancel-btn":
                 decisions.append({
                     "type": "reject",
-                    "message": "User cancelled the execution."
+                    "message": _("User cancelled the execution.")
                 })
 
         self.buttons_container.remove()
@@ -656,13 +659,13 @@ class ToolApprovalWidget(Container):
 
         status_text = ""
         if decision_type == "approve-btn":
-            status_text = "[bold #34d399]✓ Approved[/bold #34d399]"
+            status_text = f"[bold #34d399]✓ {_('Approved')}[/bold #34d399]"
         elif decision_type == "reject-btn":
-            status_text = "[bold #f87171]✗ Rejected[/bold #f87171]"
+            status_text = f"[bold #f87171]✗ {_('Rejected')}[/bold #f87171]"
         elif decision_type == "allow-btn":
-            status_text = "[bold #38bdf8]✓ Allowed for session & approved[/bold #38bdf8]"
+            status_text = f"[bold #38bdf8]✓ {_('Allowed for session & approved')}[/bold #38bdf8]"
         elif decision_type == "cancel-btn":
-            status_text = "[bold #f87171]✗ Cancelled[/bold #f87171]"
+            status_text = f"[bold #f87171]✗ {_('Cancelled')}[/bold #f87171]"
 
         self.mount(Static(f"  {status_text}", classes="approval-status"))
 
@@ -675,4 +678,3 @@ class ToolApprovalWidget(Container):
         self.app_ref._current_worker = self.app_ref.run_worker(
             self.app_ref._handle_approval_decision(decisions, self.scroll, self.agent_msg)
         )
-

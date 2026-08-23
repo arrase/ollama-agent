@@ -15,6 +15,7 @@ from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 from ..agent.episodic_memory import format_iso_timestamp, search_past_conversations_in_db
 from ..core.common import extract_text
+from ..i18n import _
 from ..settings.paths import HISTORY_DB_PATH
 
 if TYPE_CHECKING:
@@ -30,7 +31,7 @@ def new_session(console: Console) -> str:
     to the runtime.
     """
     new_id = str(uuid.uuid4())[:8]
-    console.print(f"[green]✓ New session started:[/green] [cyan]{new_id}[/cyan]")
+    console.print(f"[green]✓ {_('New session started: {new_id}', new_id=new_id)}[/green]")
     return new_id
 
 
@@ -75,25 +76,25 @@ def list_sessions(
     """List available chat sessions with step counts, timestamps, and current session indicator."""
     sessions = get_available_sessions(db_path)
     if not sessions:
-        console.print("[yellow]No saved sessions found in history.[/yellow]")
+        console.print(f"[yellow]{_('No saved sessions found in history.')}[/yellow]")
         return []
 
-    table = Table(title="Saved Sessions", box=box.ROUNDED, header_style="bold cyan")
-    table.add_column("Session ID", style="bold", no_wrap=True)
-    table.add_column("Date / Time", style="cyan", no_wrap=True)
-    table.add_column("Steps", justify="right", style="dim", no_wrap=True)
-    table.add_column("Status", justify="left", no_wrap=True)
+    table = Table(title=_("Saved Sessions"), box=box.ROUNDED, header_style="bold cyan")
+    table.add_column(_("Session ID"), style="bold", no_wrap=True)
+    table.add_column(_("Date / Time"), style="cyan", no_wrap=True)
+    table.add_column(_("Steps"), justify="right", style="dim", no_wrap=True)
+    table.add_column(_("Status"), justify="left", no_wrap=True)
 
     for s in sessions:
         tid = s["thread_id"]
         ts = s["timestamp"]
         steps = str(s["steps"])
         is_current = tid == current_thread_id or (current_thread_id and tid.startswith(current_thread_id))
-        marker = "[green]◀ current[/green]" if is_current else ""
+        marker = f"[green]◀ {_('current')}[/green]" if is_current else ""
         table.add_row(tid, ts, steps, marker)
 
     console.print(table)
-    console.print("[dim]Use /session resume <id> to switch to a previous session.[/dim]")
+    console.print(f"[dim]{_('Use /session resume <id> to switch to a previous session.')}[/dim]")
     return sessions
 
 
@@ -124,19 +125,23 @@ def resume_session(
     """Resume a previous session by thread ID or prefix."""
     sessions = available_sessions if available_sessions is not None else get_available_sessions(db_path)
     if not sessions:
-        console.print("[red]No sessions available to resume.[/red]")
+        console.print(f"[red]{_('No sessions available to resume.')}[/red]")
         return None
 
     resolved = resolve_session_id(target_id, sessions)
     if resolved is None:
         prefix_matches = [s["thread_id"] for s in sessions if s["thread_id"].startswith(target_id)]
         if len(prefix_matches) > 1:
-            console.print(f"[red]Ambiguous session ID '{target_id}'. Matches: {', '.join(prefix_matches[:5])}[/red]")
+            matches_str = ", ".join(prefix_matches[:5])
+            ambiguous_msg = _("Ambiguous session ID '{target_id}'. Matches: {matches}", target_id=target_id, matches=matches_str)
+            console.print(f"[red]{ambiguous_msg}[/red]")
         else:
-            console.print(f"[red]Session '{target_id}' not found.[/red]")
+            not_found_msg = _("Session '{target_id}' not found.", target_id=target_id)
+            console.print(f"[red]{not_found_msg}[/red]")
         return None
 
-    console.print(f"[green]✓ Switched to session:[/green] [cyan]{resolved[:8]}[/cyan] [dim]({resolved})[/dim]")
+    switched_msg = _("Switched to session: {resolved}", resolved=f"{resolved[:8]} ({resolved})")
+    console.print(f"[green]✓ {switched_msg}[/green]")
     return resolved
 
 
@@ -149,7 +154,8 @@ def delete_session(
     sessions = get_available_sessions(db_path)
     resolved = resolve_session_id(target_id, sessions)
     if resolved is None:
-        console.print(f"[red]Session '{target_id}' not found.[/red]")
+        not_found_msg = _("Session '{target_id}' not found.", target_id=target_id)
+        console.print(f"[red]{not_found_msg}[/red]")
         return False
 
     try:
@@ -158,10 +164,12 @@ def delete_session(
             cursor.execute("DELETE FROM checkpoints WHERE thread_id = ?", (resolved,))
             cursor.execute("DELETE FROM writes WHERE thread_id = ?", (resolved,))
             conn.commit()
-        console.print(f"[green]✓ Deleted session:[/green] [cyan]{resolved}[/cyan]")
+        deleted_msg = _("Deleted session: {resolved}", resolved=resolved)
+        console.print(f"[green]✓ {deleted_msg}[/green]")
         return True
     except (sqlite3.Error, OSError) as exc:
-        console.print(f"[red]Failed to delete session '{resolved}': {exc}[/red]")
+        failed_msg = _("Failed to delete session '{resolved}': {exc}", resolved=resolved, exc=exc)
+        console.print(f"[red]{failed_msg}[/red]")
         return False
 
 
@@ -179,7 +187,7 @@ async def export_session(
     if runtime.graph is None:
         await runtime.reload()
     if runtime.graph is None:
-        console.print("[red]Agent runtime graph could not be initialized.[/red]")
+        console.print(f"[red]{_('Agent runtime graph could not be initialized.')}[/red]")
         return None
 
     config = {"configurable": {"thread_id": resolved}}
@@ -187,11 +195,16 @@ async def export_session(
     messages = state.values.get("messages", []) if state and state.values else []
 
     if not messages:
-        console.print(f"[yellow]No messages found for session '{resolved}'.[/yellow]")
+        no_msgs = _("No messages found for session '{resolved}'.", resolved=resolved)
+        console.print(f"[yellow]{no_msgs}[/yellow]")
         return None
 
+    export_title = _("Session Export: {resolved}", resolved=resolved)
+    user_label = _("User")
+    asst_label = _("Assistant")
+
     lines: list[str] = [
-        f"# Session Export: {resolved}",
+        f"# {export_title}",
         "",
     ]
 
@@ -201,18 +214,19 @@ async def export_session(
         content = extract_text(raw_content)
 
         if role in ("human", "user"):
-            lines.append("## 👤 User")
+            lines.append(f"## 👤 {user_label}")
             lines.append("")
             lines.append(content)
             lines.append("")
         elif role in ("ai", "assistant"):
-            lines.append("## 🤖 Assistant")
+            lines.append(f"## 🤖 {asst_label}")
             lines.append("")
             lines.append(content)
             lines.append("")
         elif role in ("tool",):
             name = getattr(msg, "name", "tool")
-            lines.append(f"### ⚙ Tool: `{name}`")
+            tool_hdr = _("Tool: {name}", name=name)
+            lines.append(f"### ⚙ {tool_hdr}")
             lines.append("```")
             lines.append(content[:1000])
             lines.append("```")
@@ -221,10 +235,12 @@ async def export_session(
     target_file = Path(output_path).expanduser().resolve() if output_path else Path.cwd() / f"session_{resolved[:8]}.md"
     try:
         target_file.write_text("\n".join(lines), encoding="utf-8")
-        console.print(f"[green]✓ Session exported to:[/green] [cyan]{target_file}[/cyan]")
+        exported_msg = _("Session exported to: {target_file}", target_file=target_file)
+        console.print(f"[green]✓ {exported_msg}[/green]")
         return target_file
     except OSError as exc:
-        console.print(f"[red]Failed to export session: {exc}[/red]")
+        failed_export = _("Failed to export session: {exc}", exc=exc)
+        console.print(f"[red]{failed_export}[/red]")
         return None
 
 
@@ -236,11 +252,11 @@ async def compact_session(
     """Compact conversation context for a session into a structured summary."""
     res = await runtime.compact_context(target_id)
     if res["success"]:
-        console.print("[green]✓ Context compacted successfully:[/green]")
-        console.print(f"  [dim]• Messages summarized:[/dim] {res['messages_summarized']}")
-        console.print(f"  [dim]• Recent messages preserved:[/dim] {res['messages_preserved']}")
+        console.print(f"[green]✓ {_('Context compacted successfully:')}[/green]")
+        console.print(f"  [dim]• {_('Messages summarized:')}[/dim] {res['messages_summarized']}")
+        console.print(f"  [dim]• {_('Recent messages preserved:')}[/dim] {res['messages_preserved']}")
         if res.get("file_path"):
-            console.print(f"  [dim]• History offloaded to:[/dim] [cyan]{res['file_path']}[/cyan]")
+            console.print(f"  [dim]• {_('History offloaded to:')}[/dim] [cyan]{res['file_path']}[/cyan]")
     else:
         console.print(f"[yellow]{res['message']}[/yellow]")
     return res
@@ -256,7 +272,7 @@ def search_sessions(
     """Search chat sessions matching query keywords and display formatted results."""
     clean_query = query.strip()
     if not clean_query:
-        console.print("[yellow]Please provide a search query.[/yellow]")
+        console.print(f"[yellow]{_('Please provide a search query.')}[/yellow]")
         return []
 
     results = search_past_conversations_in_db(
@@ -266,19 +282,21 @@ def search_sessions(
         limit=limit,
     )
     if not results:
-        console.print(f"[yellow]No sessions found matching '[bold]{clean_query}[/bold]'.[/yellow]")
+        no_res = _("No sessions found matching '{query}'.", query=clean_query)
+        console.print(f"[yellow]{no_res}[/yellow]")
         return []
 
-    table = Table(title=f"Search Results for '{clean_query}'", box=box.ROUNDED, header_style="bold cyan")
-    table.add_column("Session ID", style="bold", no_wrap=True)
-    table.add_column("Date / Time", style="cyan", no_wrap=True)
-    table.add_column("Score", justify="right", style="dim", no_wrap=True)
-    table.add_column("Snippet Preview", justify="left")
+    table_title = _("Search Results for '{query}'", query=clean_query)
+    table = Table(title=table_title, box=box.ROUNDED, header_style="bold cyan")
+    table.add_column(_("Session ID"), style="bold", no_wrap=True)
+    table.add_column(_("Date / Time"), style="cyan", no_wrap=True)
+    table.add_column(_("Score"), justify="right", style="dim", no_wrap=True)
+    table.add_column(_("Snippet Preview"), justify="left")
 
     for item in results:
         tid = item["thread_id"]
         is_current = tid == current_thread_id or (current_thread_id and tid.startswith(current_thread_id))
-        tid_display = f"{tid[:8]}" + (" [green]◀ current[/green]" if is_current else "")
+        tid_display = f"{tid[:8]}" + (f" [green]◀ {_('current')}[/green]" if is_current else "")
         ts_display = item["formatted_date"]
         score_display = str(item["score"])
         cleaned_snippets = []
@@ -291,6 +309,5 @@ def search_sessions(
         table.add_row(tid_display, ts_display, score_display, snippets_display)
 
     console.print(table)
-    console.print("[dim]Use /session resume <id> to switch to a matched session.[/dim]")
+    console.print(f"[dim]{_('Use /session resume <id> to switch to a matched session.')}[/dim]")
     return results
-

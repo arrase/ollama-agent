@@ -11,6 +11,8 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 from urllib.request import url2pathname
 
+from ..i18n import _
+
 
 class PromptProcessingError(Exception):
     """Exception raised when prompt processing fails, e.g., referenced file not found."""
@@ -89,29 +91,29 @@ def _check_file_size(file_path: Path, max_file_size: int) -> None:
     try:
         file_size = file_path.stat().st_size
     except OSError as e:
-        raise PromptProcessingError(f"Failed to get file stats for {file_path}: {e}") from e
+        raise PromptProcessingError(_("Failed to read file {file_path}: {e}", file_path=file_path, e=e)) from e
 
     if file_size > max_file_size:
         raise PromptProcessingError(
-            f"File too large: {file_path} ({file_size} bytes, limit is {max_file_size} bytes)"
+            _("File too large: {file_path} ({file_size} bytes, limit is {max_file_size} bytes)", file_path=file_path, file_size=file_size, max_file_size=max_file_size)
         )
 
 
 def read_file_content(file_path: Path, max_file_size: int = 1024 * 1024) -> str:
     """Read file content as string, ensuring it is a text file and fits in size limit."""
     if not file_path.is_file():
-        raise PromptProcessingError(f"Path is not a file: {file_path}")
+        raise PromptProcessingError(_("Path is not a file: {file_path}", file_path=file_path))
 
     _check_file_size(file_path, max_file_size)
 
     if is_binary_file(file_path):
-        raise PromptProcessingError(f"Cannot read binary file as text: {file_path}")
+        raise PromptProcessingError(_("Cannot read binary file as text: {file_path}", file_path=file_path))
 
     try:
         with file_path.open("r", encoding="utf-8", errors="replace") as f:
             return f.read()
     except OSError as e:
-        raise PromptProcessingError(f"Failed to read file {file_path}: {e}") from e
+        raise PromptProcessingError(_("Failed to read file {file_path}: {e}", file_path=file_path, e=e)) from e
 
 
 def read_binary_file_b64(file_path: Path, max_file_size: int = 1024 * 1024) -> str:
@@ -122,7 +124,7 @@ def read_binary_file_b64(file_path: Path, max_file_size: int = 1024 * 1024) -> s
         with file_path.open("rb") as f:
             return base64.b64encode(f.read()).decode("utf-8")
     except OSError as e:
-        raise PromptProcessingError(f"Failed to read binary file {file_path}: {e}") from e
+        raise PromptProcessingError(_("Failed to read file {file_path}: {e}", file_path=file_path, e=e)) from e
 
 
 def resolve_context_files(
@@ -144,22 +146,22 @@ def resolve_context_files(
         except OSError as e:
             if ignore_errors:
                 return
-            raise PromptProcessingError(f"Failed to get file stats for {file_path}: {e}") from e
+            raise PromptProcessingError(_("Failed to read file {file_path}: {e}", file_path=file_path, e=e)) from e
 
         attachment_type = classify_multimodal_file(file_path)
         if attachment_type is None and is_binary_file(file_path):
             if ignore_errors:
                 return
-            raise PromptProcessingError(f"Cannot read binary file as text: {file_path}")
+            raise PromptProcessingError(_("Cannot read binary file as text: {file_path}", file_path=file_path))
 
         if len(text_contents) + len(binary_attachments) >= max_files:
             raise PromptProcessingError(
-                f"Mentions limit exceeded: max {max_files} files."
+                _("Mentions limit exceeded: max {max_files} files.", max_files=max_files)
             )
 
         if total_size + size > max_total_size:
             raise PromptProcessingError(
-                f"Total context size limit of {max_total_size} bytes exceeded."
+                _("Total context size limit of {max_total_size} bytes exceeded.", max_total_size=max_total_size)
             )
 
         try:
@@ -277,7 +279,7 @@ def process_prompt_mentions(
 
             if has_separator or has_extension or is_quoted:
                 raise PromptProcessingError(
-                    f"File or directory not found: '{path_str}'"
+                    _("File or directory not found: '{path_str}'", path_str=path_str)
                 )
 
     # Perform placeholder replacements in the original prompt (in reverse order to preserve offsets)

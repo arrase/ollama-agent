@@ -10,6 +10,7 @@ from typing import Any, Callable, Self
 
 import yaml  # type: ignore[import-untyped]
 
+from ..i18n import _
 from .paths import (
     AGENTS_PATH,
     FS_POLICY_SANDBOXED_PATH,
@@ -77,6 +78,8 @@ class RuntimeSettings:
     builtin_tool_timeout: int = 30
     collapse_thinking: bool = True
     inherit_env: bool = True
+    language: str = ""
+
 
 
 @dataclass(slots=True)
@@ -342,7 +345,7 @@ def reset_config(
     """Reset configuration or system prompt to defaults."""
     if option not in VALID_RESET_OPTIONS:
         raise ValueError(
-            f"Invalid reset option '{option}'. Expected one of: {sorted(VALID_RESET_OPTIONS)}"
+            _("Invalid reset option '{option}'. Expected one of: {valid}", option=option, valid=sorted(VALID_RESET_OPTIONS))
         )
 
     messages: list[str] = []
@@ -350,7 +353,7 @@ def reset_config(
     if option in ("all", "config-file"):
         settings_path.unlink(missing_ok=True)
         save_settings(Settings(), settings_path)
-        messages.append(f"Reset: Restored default configuration at {settings_path}")
+        messages.append(_("Reset: Restored default configuration at {path}", path=settings_path))
 
     if option in ("all", "system-prompt"):
         instructions_path.unlink(missing_ok=True)
@@ -361,10 +364,10 @@ def reset_config(
         load_fs_policy_traversal(traversal_path)
         load_fs_policy_sandboxed(sandboxed_path)
         load_rag_policy(rag_policy_path)
-        messages.append(f"Reset: Restored default system prompt at {instructions_path}")
-        messages.append(f"Reset: Restored default traversal policy at {traversal_path}")
-        messages.append(f"Reset: Restored default sandboxed policy at {sandboxed_path}")
-        messages.append(f"Reset: Restored default RAG policy at {rag_policy_path}")
+        messages.append(_("Reset: Restored default system prompt at {path}", path=instructions_path))
+        messages.append(_("Reset: Restored default traversal policy at {path}", path=traversal_path))
+        messages.append(_("Reset: Restored default sandboxed policy at {path}", path=sandboxed_path))
+        messages.append(_("Reset: Restored default RAG policy at {path}", path=rag_policy_path))
 
     return messages
 

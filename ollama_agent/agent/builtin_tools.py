@@ -8,12 +8,12 @@ from typing import Any
 from langchain_core.tools import tool
 
 from ..core import RAGToolResult
+from ..i18n import _
 from ..rag import RAGError, RAGManager
 from .episodic_memory import (
     format_past_conversations_context,
     search_past_conversations_in_db,
 )
-
 
 _tool_timeout: ContextVar[int] = ContextVar("tool_timeout", default=30)
 _rag_manager: ContextVar[RAGManager | None] = ContextVar("rag_manager", default=None)
@@ -48,18 +48,18 @@ def get_active_thread_id() -> str:
 async def rag_search(query: str, top_k: int | None = None) -> RAGToolResult:
     """Search the loaded RAG database for relevant document chunks."""
     if not (mgr := get_rag_manager()):
-        return {"success": False, "error": "RAG manager not initialized"}
+        return {"success": False, "error": _("RAG manager not initialized")}
     if mgr.current_database is None:
         return {
             "success": False,
-            "error": "No RAG database loaded. Use /rag load <name> first.",
+            "error": _("No RAG database loaded. Use /rag load <name> first."),
         }
     try:
         results = await mgr.search(query, top_k)
         context_parts: list[str] = []
         for r in results:
             source = r["filename"]
-            context_parts.append(f"[Source: {source}]\n{r['content']}")
+            context_parts.append(f"[{_('Source:')} {source}]\n{r['content']}")
         context = "\n\n---\n\n".join(context_parts)
         return {"success": True, "context": context, "results": results}
     except RAGError as exc:
@@ -78,5 +78,3 @@ async def search_past_conversations(query: str, limit: int = 3) -> str:
 
 
 BUILTIN_TOOLS: list[Any] = [search_past_conversations]
-
-

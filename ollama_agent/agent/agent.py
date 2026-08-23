@@ -29,6 +29,7 @@ from ..core import (
     process_prompt_mentions,
     validate_reasoning_effort,
 )
+from ..i18n import _
 from ..mcp import load_main_mcp_tools
 from ..settings import (
     AGENTS_PATH,
@@ -313,7 +314,7 @@ class AgentRuntime:
         config: RunnableConfig = {"configurable": {"thread_id": thread}}
         state = await self.graph.aget_state(config)
         if not state or not state.values or "messages" not in state.values:
-            return {"success": False, "message": "No messages in session to compact."}
+            return {"success": False, "message": _("No messages in session to compact.")}
 
         messages = state.values["messages"]
         event = state.values.get("_summarization_event")
@@ -322,7 +323,7 @@ class AgentRuntime:
         if len(effective) < 2:
             return {
                 "success": False,
-                "message": "Not enough messages in session to compact (at least 2 messages required).",
+                "message": _("Not enough messages in session to compact (at least 2 messages required)."),
             }
 
         cutoff = self._summarization_mw._determine_cutoff_index(effective)
@@ -339,7 +340,7 @@ class AgentRuntime:
         if not to_summarize:
             return {
                 "success": False,
-                "message": "No messages eligible for summarization.",
+                "message": _("No messages eligible for summarization."),
             }
 
         token = var_child_runnable_config.set(config)
@@ -383,14 +384,14 @@ class AgentRuntime:
         self.settings.model.name = model_name
         await asyncio.to_thread(save_settings, self.settings)
         await self.reload()
-        return f"Model set to {model_name}."
+        return _("Model set to {model_name}.", model_name=model_name)
 
     async def set_reasoning_effort(self, effort: str) -> str:
         validated = validate_reasoning_effort(effort)
         self.settings.model.reasoning_effort = validated
         await asyncio.to_thread(save_settings, self.settings)
         await self.reload()
-        return f"Reasoning effort set to {validated}."
+        return _("Reasoning effort set to {validated}.", validated=validated)
 
     async def aclose(self) -> None:
         await self._exit_stack.aclose()

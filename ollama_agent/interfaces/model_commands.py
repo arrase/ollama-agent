@@ -12,6 +12,7 @@ from rich.table import Table
 
 from ..agent import AgentRuntime
 from ..core import ALLOWED_REASONING_EFFORTS, ModelCapabilityError, model_supports_tools
+from ..i18n import _
 from ..settings import Settings, save_settings
 
 VALID_SAMPLING_PARAMS: dict[str, type] = {
@@ -48,7 +49,7 @@ async def list_models(
     try:
         models = await _list_models(base_url)
         if not models:
-            console.print("[yellow]No models found in Ollama.[/yellow]")
+            console.print(f"[yellow]{_('No models found in Ollama.')}[/yellow]")
             return
 
         valid_models = [m for m in models if m.model]
@@ -64,18 +65,17 @@ async def list_models(
             *(get_tool_icon(m.model) for m in valid_models)
         )
 
-        console.print("[bold]Available Models:[/bold]\n[dim]─" + "─" * 59 + "[/dim]")
+        console.print(f"[bold]{_('Available Models:')}[/bold]\n[dim]─" + "─" * 59 + "[/dim]")
         for item, tool_icon in zip(valid_models, tool_icons):
             name = item.model
-            marker = " [green]◀ current[/green]" if name == current_model else ""
+            marker = f" [green]◀ {_('current')}[/green]" if name == current_model else ""
             size_str = f"{(item.size / (1024**3)):.1f}GB" if item.size else ""
             console.print(f"  {tool_icon} [cyan]{name}[/cyan] {size_str}{marker}")
-        console.print(
-            "[dim]─" * 60
-            + "[/dim]\n[dim]✓ = supports tools | Use /model set <model> to switch[/dim]"
-        )
+        legend_str = _("supports tools | Use /model set <model> to switch")
+        console.print(f"[dim]─" * 60 + f"[/dim]\n[dim]✓ = {legend_str}[/dim]")
     except (ollama.ResponseError, OSError) as exc:
-        console.print(f"[red]Error listing models: {exc}[/red]")
+        err_msg = _("Error listing models: {exc}", exc=exc)
+        console.print(f"[red]{err_msg}[/red]")
 
 
 async def set_model(
@@ -91,40 +91,38 @@ async def set_model(
             model.model for model in await _list_models(base_url)
         }
         if model_name not in available:
-            console.print(
-                f"[red]Model '{model_name}' not found.[/red]\n"
-                "[dim]Use /model to see available models.[/dim]"
-            )
+            not_found_msg = _("Model '{model_name}' not found.\nUse /model to see available models.", model_name=model_name)
+            console.print(f"[red]{not_found_msg}[/red]")
             return runtime.settings.model.name
     except (ollama.ResponseError, OSError) as exc:
-        console.print(f"[red]Error checking model: {exc}[/red]")
+        err_msg = _("Error checking model: {exc}", exc=exc)
+        console.print(f"[red]{err_msg}[/red]")
         return runtime.settings.model.name
 
     current = runtime.settings.model.name
     if model_name == current:
-        console.print(f"[yellow]Already using model '{model_name}'.[/yellow]")
+        already_msg = _("Already using model '{model_name}'.", model_name=model_name)
+        console.print(f"[yellow]{already_msg}[/yellow]")
         return current
 
     try:
         if not await model_supports_tools(model_name, base_url):
-            console.print(
-                f"[red]Model '{model_name}' does not support tools.[/red]\n"
-                "[dim]The agent requires tool support.[/dim]"
-            )
+            no_tools_msg = _("Model '{model_name}' does not support tools.\nThe agent requires tool support.", model_name=model_name)
+            console.print(f"[red]{no_tools_msg}[/red]")
             return current
     except ModelCapabilityError as exc:
-        console.print(f"[red]Cannot verify model capabilities: {exc}[/red]")
+        err_msg = _("Cannot verify model capabilities: {exc}", exc=exc)
+        console.print(f"[red]{err_msg}[/red]")
         return current
 
     try:
         await runtime.set_model(model_name)
-        console.print(
-            f"[green]✓ Switched from [cyan]{current}[/cyan] to [cyan]{model_name}[/cyan][/green]\n"
-            "[dim]Conversation preserved. Continue chatting.[/dim]"
-        )
+        switched_msg = _("Switched from {current} to {model_name}\nConversation preserved. Continue chatting.", current=current, model_name=model_name)
+        console.print(f"[green]✓ {switched_msg}[/green]")
         return model_name
     except (ollama.ResponseError, OSError) as exc:
-        console.print(f"[red]Failed to switch to model '{model_name}': {exc}[/red]")
+        failed_msg = _("Failed to switch to model '{model_name}': {exc}", model_name=model_name, exc=exc)
+        console.print(f"[red]{failed_msg}[/red]")
         return current
 
 
@@ -133,8 +131,7 @@ def show_effort(console: Console, runtime: AgentRuntime) -> None:
     effort = runtime.settings.model.reasoning_effort
     model = runtime.settings.model.name
     console.print(
-        f"Current reasoning effort: [bold cyan]{effort}[/bold cyan] [dim](model: {model})[/dim]\n"
-        "[dim]Usage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)[/dim]"
+        _("Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)", effort=effort, model=model)
     )
 
 
@@ -148,25 +145,24 @@ async def set_effort(
     norm_effort = effort.lower().strip()
     if norm_effort not in ALLOWED_REASONING_EFFORTS:
         valid_list = ", ".join(ALLOWED_REASONING_EFFORTS)
-        console.print(
-            f"[red]Invalid reasoning effort '{effort}'. Allowed values: {valid_list}[/red]"
-        )
+        err_msg = _("Invalid reasoning effort '{effort}'. Allowed values: {valid_list}", effort=effort, valid_list=valid_list)
+        console.print(f"[red]{err_msg}[/red]")
         return runtime.settings.model.reasoning_effort
 
     current = runtime.settings.model.reasoning_effort
     if norm_effort == current:
-        console.print(f"[yellow]Already using reasoning effort '{norm_effort}'.[/yellow]")
+        already_msg = _("Already using reasoning effort '{norm_effort}'.", norm_effort=norm_effort)
+        console.print(f"[yellow]{already_msg}[/yellow]")
         return current
 
     try:
         await runtime.set_reasoning_effort(norm_effort)
-        console.print(
-            f"[green]✓ Switched reasoning effort from [cyan]{current}[/cyan] to [cyan]{norm_effort}[/cyan][/green]\n"
-            "[dim]Conversation preserved. Continue chatting.[/dim]"
-        )
+        switched_msg = _("Switched reasoning effort from {current} to {norm_effort}\nConversation preserved. Continue chatting.", current=current, norm_effort=norm_effort)
+        console.print(f"[green]✓ {switched_msg}[/green]")
         return norm_effort
     except (ollama.ResponseError, OSError, ValueError) as exc:
-        console.print(f"[red]Failed to switch reasoning effort to '{norm_effort}': {exc}[/red]")
+        failed_msg = _("Failed to switch reasoning effort to '{norm_effort}': {exc}", norm_effort=norm_effort, exc=exc)
+        console.print(f"[red]{failed_msg}[/red]")
         return current
 
 
@@ -175,24 +171,28 @@ def show_model_params(console: Console, runtime: AgentRuntime) -> None:
     model_name = runtime.settings.model.name
     params = runtime.effective_model_params
     if not params:
-        console.print(
-            f"[yellow]No active parameter data for model '{model_name}'.[/yellow]"
-        )
+        no_params_msg = _("No active parameter data for model '{model_name}'.", model_name=model_name)
+        console.print(f"[yellow]{no_params_msg}[/yellow]")
         return
 
+    table_title = _("Active Model Parameters: {model_name}", model_name=model_name)
     table = Table(
-        title=f"Active Model Parameters: [bold cyan]{model_name}[/bold cyan]",
+        title=table_title,
         box=box.ROUNDED,
         header_style="bold magenta",
     )
-    table.add_column("Parameter", style="cyan")
-    table.add_column("Effective Value", justify="right", style="green")
-    table.add_column("Resolved From", justify="center")
+    table.add_column(_("Parameter"), style="cyan")
+    table.add_column(_("Effective Value"), justify="right", style="green")
+    table.add_column(_("Resolved From"), justify="center")
+
+    user_label = _("User Config (settings.yaml)")
+    meta_label = _("Modelfile / Metadata")
+    default_label = _("Ollama Default")
 
     source_labels = {
-        "user": "[bold yellow]User Config (settings.yaml)[/bold yellow]",
-        "modelfile": "[bold cyan]Modelfile / Metadata[/bold cyan]",
-        "default": "[dim]Ollama Default[/dim]",
+        "user": f"[bold yellow]{user_label}[/bold yellow]",
+        "modelfile": f"[bold cyan]{meta_label}[/bold cyan]",
+        "default": f"[dim]{default_label}[/dim]",
     }
 
     for name, (val, source) in params.items():
@@ -218,9 +218,8 @@ async def set_model_param(
         valid_list = ", ".join(
             sorted(p for p in VALID_SAMPLING_PARAMS if p != "repetition_penalty")
         )
-        console.print(
-            f"[red]Unknown parameter '{param_name}'. Valid parameters: {valid_list}[/red]"
-        )
+        unknown_msg = _("Unknown parameter '{param_name}'. Valid parameters: {valid_list}", param_name=param_name, valid_list=valid_list)
+        console.print(f"[red]{unknown_msg}[/red]")
         return
 
     expected_type = VALID_SAMPLING_PARAMS[norm_name]
@@ -228,18 +227,15 @@ async def set_model_param(
         val = expected_type(value_str)
     except ValueError:
         type_name = "integer" if expected_type is int else "float"
-        console.print(
-            f"[red]Invalid value '{value_str}' for '{norm_name}'. Expected {type_name}.[/red]"
-        )
+        invalid_msg = _("Invalid value '{value_str}' for '{norm_name}'. Expected {type_name}.", value_str=value_str, norm_name=norm_name, type_name=type_name)
+        console.print(f"[red]{invalid_msg}[/red]")
         return
 
     setattr(runtime.settings.model, norm_name, val)
     await asyncio.to_thread(save_settings, runtime.settings)
     await runtime.reload()
-    console.print(
-        f"[green]✓ Set [cyan]{norm_name}[/cyan] to [cyan]{val}[/cyan][/green]\n"
-        "[dim]Model reloaded with updated parameters.[/dim]"
-    )
+    success_msg = _("Set {norm_name} to {val}\nModel reloaded with updated parameters.", norm_name=norm_name, val=val)
+    console.print(f"[green]✓ {success_msg}[/green]")
 
 
 def ensure_model_configured(
@@ -254,12 +250,12 @@ def ensure_model_configured(
         available_models = [m for m in models if m.model]
     except Exception as exc:
         raise ModelCapabilityError(
-            f"Could not connect to Ollama at '{base_url}': {exc}"
+            _("Could not connect to Ollama at '{base_url}': {exc}", base_url=base_url, exc=exc)
         ) from exc
 
     if not available_models:
         raise ModelCapabilityError(
-            f"No models found in Ollama at '{base_url}'. Please pull a model first with 'ollama pull <model>'."
+            _("No models found in Ollama at '{base_url}'. Please pull a model first with 'ollama pull <model>'.", base_url=base_url)
         )
 
     model_names = [m.model for m in available_models]
@@ -274,13 +270,12 @@ def ensure_model_configured(
 
     out = console if console is not None else Console()
     if configured:
-        out.print(
-            f"[yellow]Configured model '[bold cyan]{configured}[/bold cyan]' is not available in Ollama.[/yellow]"
-        )
+        not_avail_msg = _("Configured model '{configured}' is not available in Ollama.", configured=configured)
+        out.print(f"[yellow]{not_avail_msg}[/yellow]")
     else:
-        out.print("[yellow]No model is currently configured in settings.[/yellow]")
+        out.print(f"[yellow]{_('No model is currently configured in settings.')}[/yellow]")
 
-    out.print("[bold]Available Ollama models:[/bold]")
+    out.print(f"[bold]{_('Available Ollama models:')}[/bold]")
     for i, item in enumerate(available_models, start=1):
         size_str = f" ({item.size / (1024**3):.1f} GB)" if item.size else ""
         out.print(f"  [cyan]{i})[/cyan] [bold]{item.model}[/bold]{size_str}")
@@ -288,7 +283,7 @@ def ensure_model_configured(
     while True:
         try:
             choice = input_func(
-                f"Select a model [1-{len(available_models)}]: "
+                _("Select a model [1-{count}]: ", count=len(available_models))
             ).strip()
         except (KeyboardInterrupt, EOFError):
             raise SystemExit(1)
@@ -311,15 +306,11 @@ def ensure_model_configured(
             if matched is not None:
                 selected = matched
                 break
-        out.print(
-            f"[red]Invalid selection '{choice}'. Please enter a number between 1 and {len(available_models)} or a model name.[/red]"
-        )
+        invalid_sel = _("Invalid selection '{choice}'. Please enter a number between 1 and {count} or a model name.", choice=choice, count=len(available_models))
+        out.print(f"[red]{invalid_sel}[/red]")
 
     settings.model.name = selected
     save_settings(settings)
-    out.print(
-        f"[green]✓ Selected model '[bold cyan]{selected}[/bold cyan]' saved to configuration.[/green]\n"
-    )
+    saved_msg = _("Selected model '{selected}' saved to configuration.", selected=selected)
+    out.print(f"[green]✓ {saved_msg}[/green]\n")
     return selected
-
-

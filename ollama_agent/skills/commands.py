@@ -9,6 +9,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
+from ..i18n import _
 from .manager import SkillInfo, SkillManager
 
 
@@ -40,9 +41,9 @@ class SkillsContext:
         if len(matches) == 1:
             return matches[0]
         msg = (
-            f"Skill not found: {skill_id}"
+            _("Skill not found: {skill_id}", skill_id=skill_id)
             if not matches
-            else f"Ambiguous prefix: {skill_id} -> {', '.join(t[0] for t in matches)}"
+            else _("Ambiguous prefix: {name} -> {matches}", name=skill_id, matches=", ".join(t[0] for t in matches))
         )
         if not matches:
             raise SkillNotFoundError(msg)
@@ -50,17 +51,17 @@ class SkillsContext:
 
     def _require(self, value: str, name: str) -> str:
         if not (cleaned := value.strip()):
-            raise ValidationError(f"{name} cannot be empty.")
+            raise ValidationError(_("{name} cannot be empty.", name=name))
         return cleaned
 
 
 def list_skills(ctx: SkillsContext) -> None:
     """List all skills in the managed directory."""
     if not (skills := ctx.skill_manager.list_all()):
-        ctx.console.print("[yellow]No skills found.[/yellow]")
+        ctx.console.print(f"[yellow]{_('No skills found.')}[/yellow]")
         return
-    table = Table(title="Skills", show_header=True, header_style="bold magenta")
-    for col, style in [("ID", "cyan"), ("Name", "green"), ("Description", "blue")]:
+    table = Table(title=_("Skills"), show_header=True, header_style="bold magenta")
+    for col, style in [(_("ID"), "cyan"), (_("Name"), "green"), (_("Description"), "blue")]:
         table.add_column(col, style=style)
     for sid, s in skills:
         table.add_row(sid, s.name, s.description[:80] or "-")
@@ -71,7 +72,7 @@ def show_skill(ctx: SkillsContext, skill_id: str) -> None:
     """Display the full contents of a skill's SKILL.md."""
     sid, info = ctx._find_or_exit(skill_id)
     ctx.console.print(
-        Panel(Markdown(info.content), title=f"Skill: {sid}", border_style="cyan")
+        Panel(Markdown(info.content), title=_("Skill: {sid}", sid=sid), border_style="cyan")
     )
 
 
@@ -93,18 +94,18 @@ def create_skill(
     try:
         created = ctx.skill_manager.create(
             skill_id,
-            name=ctx._require(name, "Name"),
-            description=ctx._require(description, "Description"),
-            instructions=ctx._require(instructions, "Instructions"),
+            name=ctx._require(name, _("Name")),
+            description=ctx._require(description, _("Description")),
+            instructions=ctx._require(instructions, _("Instructions")),
             overwrite=force,
             metadata=metadata,
         )
-        ctx.console.print(f"[green]Skill created:[/green] {name} ({created})")
+        ctx.console.print(f"[green]✓ {_('Skill created: {name} ({created})', name=name, created=created)}[/green]")
     except FileExistsError as exc:
         ctx.console.print(
-            f"[red]Skill already exists:[/red] {skill_id} (use --force to overwrite)"
+            f"[red]{_('Skill already exists: {skill_id} (use --force to overwrite)', skill_id=skill_id)}[/red]"
         )
-        raise SkillError(f"Skill already exists: {skill_id}") from exc
+        raise SkillError(_("Skill already exists: {skill_id}", skill_id=skill_id)) from exc
     except ValueError as exc:
         ctx.console.print(f"[red]{exc}[/red]")
         raise ValidationError(str(exc)) from exc
@@ -114,7 +115,6 @@ def delete_skill(ctx: SkillsContext, skill_id: str) -> None:
     """Delete an existing skill."""
     sid, info = ctx._find_or_exit(skill_id)
     if not ctx.skill_manager.delete(sid):
-        ctx.console.print(f"[red]Error deleting skill: {sid}[/red]")
-        raise SkillError(f"Error deleting skill: {sid}")
-    ctx.console.print(f"[green]Skill deleted:[/green] {info.name} ({sid})")
-
+        ctx.console.print(f"[red]{_('Error deleting skill: {sid}', sid=sid)}[/red]")
+        raise SkillError(_("Error deleting skill: {sid}", sid=sid))
+    ctx.console.print(f"[green]✓ {_('Skill deleted: {name} ({sid})', name=info.name, sid=sid)}[/green]")
