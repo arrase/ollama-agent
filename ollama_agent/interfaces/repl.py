@@ -13,10 +13,11 @@ from rich.text import Text
 
 from textual import events
 from textual.app import App, ComposeResult
-from textual.worker import Worker
 from textual.containers import Container, Horizontal, ScrollableContainer
+from textual.screen import Screen
 from textual.widgets import OptionList, Static, TextArea
 from textual.widgets.option_list import Option
+from textual.worker import Worker
 from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.types import Command
 
@@ -53,6 +54,22 @@ from ..streaming import StreamingRenderer, stream_agent_events
 _AT_MENTION_RE = re.compile(
     r"""(?:^|[\s\(\[\{<])@(?:"([^"]*)|'([^']*)|([^\s"'\(\[\{<>,;]*))$"""
 )
+
+# Textual workaround: prevent crash when clicking/dragging on unmounted/detached widgets during text selection
+_original_screen_forward_event = Screen._forward_event
+
+
+def _safe_screen_forward_event(self: Screen, event: events.Event) -> None:
+    try:
+        _original_screen_forward_event(self, event)
+    except AttributeError as err:
+        if "'NoneType' object has no attribute 'region'" in str(err):
+            self._select_state = None
+            return
+        raise
+
+
+Screen._forward_event = _safe_screen_forward_event
 
 
 def _get_root_commands() -> list[tuple[str, str]]:

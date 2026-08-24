@@ -152,3 +152,34 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
                 mock_sys_copy.assert_called()
                 copied_arg = mock_sys_copy.call_args[0][0]
                 self.assertIn("Copy action message", copied_arg)
+
+    async def test_screen_forward_event_handles_detached_widget_gracefully(self) -> None:
+        repl_mock = MagicMock(spec=OllamaREPL)
+        repl_mock.runtime = MagicMock()
+        repl_mock.runtime.yolo_mode = False
+        repl_mock._rag_ctx = None
+        repl_mock.runtime.settings.model.name = "gemma4:26b"
+        repl_mock.runtime.settings.model.reasoning_effort = "medium"
+
+        app = OllamaAgentApp(repl_mock)
+        async with app.run_test() as pilot:
+            event = events.MouseDown(None, 5, 5, 0, 0, 1, False, False, False)
+            with patch("ollama_agent.interfaces.repl._original_screen_forward_event", side_effect=AttributeError("'NoneType' object has no attribute 'region'")):
+                app.screen._forward_event(event)
+                self.assertIsNone(app.screen._select_state)
+
+    async def test_screen_forward_event_reraises_other_attribute_error(self) -> None:
+        repl_mock = MagicMock(spec=OllamaREPL)
+        repl_mock.runtime = MagicMock()
+        repl_mock.runtime.yolo_mode = False
+        repl_mock._rag_ctx = None
+        repl_mock.runtime.settings.model.name = "gemma4:26b"
+        repl_mock.runtime.settings.model.reasoning_effort = "medium"
+
+        app = OllamaAgentApp(repl_mock)
+        async with app.run_test() as pilot:
+            event = events.MouseDown(None, 5, 5, 0, 0, 1, False, False, False)
+            with patch("ollama_agent.interfaces.repl._original_screen_forward_event", side_effect=AttributeError("'CustomType' object has no attribute 'something_else'")):
+                with self.assertRaises(AttributeError):
+                    app.screen._forward_event(event)
+
