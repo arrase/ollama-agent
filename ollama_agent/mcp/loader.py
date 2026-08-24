@@ -118,19 +118,29 @@ async def load_main_mcp_tools() -> list[Any]:
     if not connections:
         return []
 
-    tools: list[Any] = []
-    for name, conn in connections.items():
+    async def _load_single_server(name: str, conn: dict[str, Any]) -> list[Any]:
+        """Helper to isolate errors and run in parallel."""
         try:
             client = MultiServerMCPClient({name: conn})  # type: ignore[dict-item,arg-type]
             srv_tools = await client.get_tools()
-            tools.extend(srv_tools)
             _log.info(
                 "Loaded %d MCP tools from server '%s'",
                 len(srv_tools),
                 name,
             )
+            return srv_tools
         except Exception as exc:
             _log.error("Failed to load tools from MCP server '%s': %s", name, exc)
+            return []
+
+    # Execute all loading tasks in parallel
+    tasks = [_load_single_server(name, conn) for name, conn in connections.items()]
+    results = await asyncio.gather(*tasks)
+
+    # Flatten the list of lists
+    tools: list[Any] = []
+    for tool_list in results:
+        tools.extend(tool_list)
 
     return tools
 
