@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import asyncio
 import io
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from textual import events
 from textual.app import App, ComposeResult
-from textual.widgets import Button, Input, Markdown, OptionList, Static, TextArea
+from textual.widgets import OptionList
 
 from rich.console import Console
 
@@ -108,7 +107,7 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
                 yield AgentResponse()
 
         app = AgentResponseTestApp()
-        async with app.run_test() as pilot:
+        async with app.run_test():
             agent_msg = app.query_one(AgentResponse)
             self.assertIsNotNone(agent_msg)
 
@@ -234,7 +233,7 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
                 yield widget
 
         app = ApprovalApp()
-        async with app.run_test() as pilot:
+        async with app.run_test():
             # Auto-focused on approve-btn
             assert app.focused is not None
             self.assertEqual(app.focused.id, "approve-btn")
@@ -248,18 +247,6 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(decisions, [{"type": "approve"}])
 
     async def test_tool_approval_widget_navigation_and_shortcuts(self) -> None:
-        # Test button labels
-        reqs = [{"name": "write_file", "args": {"path": "test.txt"}}]
-        widget = ToolApprovalWidget(
-            action_requests=reqs,
-            app_ref=MagicMock(),
-            scroll=MagicMock(),
-            agent_msg=AgentResponse(),
-        )
-        buttons = list(widget.query(Button))
-        # Compose buttons
-        composed_buttons = [w for w in widget.compose() if isinstance(w, Button) or hasattr(w, "query")]
-
         # Test single direct shortcuts (y, n, a, c)
         for shortcut, expected_type in [
             ("y", "approve"),
@@ -281,7 +268,7 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
                     yield widget
 
             app = ShortcutApp()
-            async with app.run_test() as pilot:
+            async with app.run_test():
                 widget.on_key(events.Key(shortcut, shortcut))
                 app_ref_mock._handle_approval_decision.assert_called_once()
                 decisions = app_ref_mock._handle_approval_decision.call_args[0][0]
@@ -309,26 +296,31 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
 
             # Press Right arrow -> reject-btn
             widget.on_key(events.Key("right", "right"))
+            await pilot.pause()
             assert nav_app.focused is not None
             self.assertEqual(nav_app.focused.id, "reject-btn")
 
             # Press Right arrow -> allow-btn
             widget.on_key(events.Key("right", "right"))
+            await pilot.pause()
             assert nav_app.focused is not None
             self.assertEqual(nav_app.focused.id, "allow-btn")
 
             # Press Right arrow -> cancel-btn
             widget.on_key(events.Key("right", "right"))
+            await pilot.pause()
             assert nav_app.focused is not None
             self.assertEqual(nav_app.focused.id, "cancel-btn")
 
             # Press Right arrow (wrap around) -> approve-btn
             widget.on_key(events.Key("right", "right"))
+            await pilot.pause()
             assert nav_app.focused is not None
             self.assertEqual(nav_app.focused.id, "approve-btn")
 
             # Press Left arrow (wrap around) -> cancel-btn
             widget.on_key(events.Key("left", "left"))
+            await pilot.pause()
             assert nav_app.focused is not None
             self.assertEqual(nav_app.focused.id, "cancel-btn")
 
@@ -354,7 +346,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock._get_commands.return_value = {}
 
         app = OllamaAgentApp(repl_mock)
-        async with app.run_test() as pilot:
+        async with app.run_test():
             # Check widgets present
             self.assertIsNotNone(app.query_one(AgentHeader))
             self.assertIsNotNone(app.query_one(AgentFooter))
@@ -386,14 +378,14 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock._get_commands.return_value = {"/model": cmd_spec}
 
         app = OllamaAgentApp(repl_mock)
-        async with app.run_test() as pilot:
+        async with app.run_test():
             autolist = app.query_one("#autocomplete-list", OptionList)
             self.assertFalse(autolist.display)
 
             # Trigger autocomplete with /
             app.update_autocomplete("/m")
             self.assertTrue(autolist.display)
-            self.assertEqual(autolist.option_count, 1)
+            self.assertEqual(autolist.option_count, 2)  # /model, /mcp
 
             # Hide autocomplete
             app.hide_autocomplete()
@@ -411,7 +403,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock._get_commands.return_value = {"/model": cmd_spec}
 
         app = OllamaAgentApp(repl_mock)
-        async with app.run_test() as pilot:
+        async with app.run_test():
             inp = app.query_one(ReplInput)
             inp.text = "/mo"
             app.update_autocomplete("/mo")
@@ -438,7 +430,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock._get_rag_ctx.return_value.rag_manager = mock_rag_mgr
 
         app = OllamaAgentApp(repl_mock)
-        async with app.run_test() as pilot:
+        async with app.run_test():
             autolist = app.query_one("#autocomplete-list", OptionList)
 
             # 1. Level 1: Subcommands for /task
@@ -446,10 +438,10 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(autolist.display)
             self.assertEqual(autolist.option_count, 4)  # list, create, run, delete
 
-            # 1b. Level 1: Subcommands for /session including search
+            # 1b. Level 1: Subcommands for /session including search and switch
             app.update_autocomplete("/session ")
             self.assertTrue(autolist.display)
-            self.assertEqual(autolist.option_count, 6)  # list, search, resume, new, export, delete
+            self.assertEqual(autolist.option_count, 7)  # list, search, resume, switch, new, export, delete
 
             app.update_autocomplete("/session sea")
             self.assertEqual(autolist.option_count, 1)
@@ -525,7 +517,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock._get_commands.return_value = {}
 
         app = OllamaAgentApp(repl_mock)
-        async with app.run_test() as pilot:
+        async with app.run_test():
             inp = app.query_one(ReplInput)
             inp.text = "Look at @"
             with patch.object(app, "_file_completions", return_value=[("src/main.py", "1.2 KB")]):
@@ -535,12 +527,16 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
 
     async def test_run_slash_commands_dispatch(self) -> None:
         repl_mock = MagicMock()
-        repl_mock._handle_new_session = AsyncMock()
         repl_mock.console = Console(file=io.StringIO())
         repl_mock.runtime.settings.model.name = "gemma4:26b"
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
         repl_mock._rag_ctx = None
         repl_mock.runtime.yolo_mode = False
+
+        async def _handle_new_session(args: list[str]) -> None:
+            pass
+
+        repl_mock._handle_new_session = _handle_new_session
 
         def _toggle_yolo(args):
             repl_mock.runtime.yolo_mode = not repl_mock.runtime.yolo_mode
@@ -561,6 +557,9 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             await chat_scroll.mount(UserMessage("clear me"))
             await pilot.pause()
             with patch("ollama_agent.interfaces.repl.new_session", return_value="newsess12345678"):
+                async def _handle_new(args: list[str], _tid: str = "newsess12345678") -> None:
+                    repl_mock.runtime.thread_id = _tid
+                repl_mock._handle_new_session = _handle_new
                 await app._run_slash_command("/clear")
                 await pilot.pause()
                 self.assertEqual(len(list(chat_scroll.query(UserMessage))), 0)
@@ -570,6 +569,9 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             await chat_scroll.mount(UserMessage("new me"))
             await pilot.pause()
             with patch("ollama_agent.interfaces.repl.new_session", return_value="newsess87654321"):
+                async def _handle_new2(args: list[str], _tid: str = "newsess87654321") -> None:
+                    repl_mock.runtime.thread_id = _tid
+                repl_mock._handle_new_session = _handle_new2
                 await app._run_slash_command("/new")
                 await pilot.pause()
                 self.assertEqual(len(list(chat_scroll.query(UserMessage))), 0)
@@ -588,10 +590,8 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             # 4. /session resume command (mounting previous conversation)
             human_msg = MagicMock(type="human", content="Past question")
             ai_msg = MagicMock(type="ai", content="Past answer")
-            mock_state = MagicMock()
-            mock_state.values = {"messages": [human_msg, ai_msg]}
-            repl_mock.runtime.graph = MagicMock()
-            repl_mock.runtime.graph.aget_state = AsyncMock(return_value=mock_state)
+            repl_mock.runtime.get_thread_messages = AsyncMock(return_value=[human_msg, ai_msg])
+            repl_mock.runtime.count_effective_tokens = AsyncMock(return_value=42)
 
             with patch("ollama_agent.interfaces.repl.resume_session", return_value="sess12345678"):
                 await app._run_slash_command("/session resume sess12345678")

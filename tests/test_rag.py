@@ -5,7 +5,6 @@ import unittest
 from pathlib import Path
 
 from ollama_agent.rag import (
-    AmbiguousRAGDatabaseError,
     RAGContext,
     RAGDatabaseNotFoundError,
     RAGError,

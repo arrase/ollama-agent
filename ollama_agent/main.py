@@ -15,12 +15,12 @@ from .interfaces.model_commands import ensure_model_configured
 from .interfaces.repl import OllamaREPL
 from .settings import load_settings, reset_config
 
+# Silence only the known third-party noise, not all deprecations.
 warnings.filterwarnings(
     "ignore",
     category=LangChainPendingDeprecationWarning,
     message=".*allowed_objects.*",
 )
-warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 def main() -> None:

@@ -9,6 +9,7 @@ from typing import Awaitable, Callable, Any
 
 from rich.console import Console
 
+from ..agent.episodic_memory import HistoryError
 from ..i18n import _
 from ..mcp import list_mcp_servers
 from ..settings import Settings
@@ -53,14 +54,28 @@ class REPLCommand:
     handler: Callable[[list[str]], object]
 
 
-async def safe_call(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
-    """Call *fn*(*args, **kwargs), awaiting if necessary and silencing SystemExit/domain errors."""
+async def safe_call(
+    fn: Callable[..., Any],
+    *args: Any,
+    console: Console | None = None,
+    **kwargs: Any,
+) -> None:
+    """Call *fn*(*args, **kwargs), awaiting if necessary.
+
+    Domain errors (SkillError, TaskError, RAGError) are swallowed because
+    every raiser prints a user-facing message before raising; they exist to
+    signal failure exit codes on the CLI. HistoryError is not printed by its
+    raisers, so it is reported here when a *console* is provided.
+    """
     try:
         result = fn(*args, **kwargs)
         if inspect.isawaitable(result):
             await result
-    except (SystemExit, SkillError, TaskError, RAGError):
+    except (SkillError, TaskError, RAGError):
         pass
+    except HistoryError as exc:
+        if console is not None:
+            console.print(f"[red]{exc}[/red]")
 
 
 REPL_SECTIONS: tuple[str, ...] = (

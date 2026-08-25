@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import argparse
 import io
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from rich.console import Console
 
-from ollama_agent.core import ModelCapabilityError, ModelContextWindowError
+from ollama_agent.core import ModelCapabilityError
 from ollama_agent.interfaces.cli import create_argument_parser
 from ollama_agent.interfaces.dispatch import (
     REPL_SECTIONS,
@@ -114,7 +113,9 @@ class TestDispatchAndCLI(unittest.TestCase):
             self.assertIn(cmd.section, REPL_SECTIONS)
 
     def test_main_config_reset(self) -> None:
+        # Patch set_locale so the system language does not leak into other tests.
         with patch("sys.argv", ["ollama-agent", "--config-reset", "config-file"]), \
+             patch("ollama_agent.main.set_locale", return_value="en"), \
              patch("ollama_agent.main.reset_config", return_value=["Reset successful"]) as mock_reset, \
              patch("builtins.print") as mock_print:
             main()
@@ -123,6 +124,7 @@ class TestDispatchAndCLI(unittest.TestCase):
 
     def test_main_cli_commands_handled(self) -> None:
         with patch("sys.argv", ["ollama-agent", "task", "list"]), \
+             patch("ollama_agent.main.set_locale", return_value="en"), \
              patch("ollama_agent.main.load_settings", return_value=Settings()), \
              patch("ollama_agent.main.handle_cli_commands", return_value=True) as mock_handle:
             main()
@@ -131,6 +133,7 @@ class TestDispatchAndCLI(unittest.TestCase):
     def test_main_repl_flow(self) -> None:
         mock_settings = Settings()
         with patch("sys.argv", ["ollama-agent", "-m", "qwen3:32b", "-e", "high", "--builtin-tool-timeout", "40"]), \
+             patch("ollama_agent.main.set_locale", return_value="en"), \
              patch("ollama_agent.main.load_settings", return_value=mock_settings), \
              patch("ollama_agent.main.ensure_model_configured", return_value="qwen3:32b") as mock_ensure, \
              patch("ollama_agent.main.handle_cli_commands", return_value=False), \
@@ -148,6 +151,7 @@ class TestDispatchAndCLI(unittest.TestCase):
 
     def test_main_model_capability_error_exits(self) -> None:
         with patch("sys.argv", ["ollama-agent"]), \
+             patch("ollama_agent.main.set_locale", return_value="en"), \
              patch("ollama_agent.main.Console"), \
              patch("ollama_agent.main.load_settings", return_value=Settings()), \
              patch("ollama_agent.main.ensure_model_configured", side_effect=ModelCapabilityError("Model unsupported")):

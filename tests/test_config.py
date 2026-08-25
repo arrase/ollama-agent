@@ -8,9 +8,7 @@ from unittest.mock import patch
 
 from ollama_agent.settings.config import (
     LangSmithSettings,
-    MentionSettings,
     ModelSettings,
-    RAGSettings,
     RuntimeSettings,
     Settings,
     SubAgentMCPServer,

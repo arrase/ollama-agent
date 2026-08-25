@@ -10,11 +10,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from rich.console import Console
 
 from ollama_agent.mcp.commands import (
-    MCPServerStatus,
     check_mcp_server,
     list_mcp_servers,
 )
 from ollama_agent.mcp.loader import (
+    MCPConfigError,
     _build_mcp_connection,
     _resolve_env,
     get_mcp_config_path,
@@ -139,15 +139,15 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             tools = await load_main_mcp_tools()
             self.assertEqual(tools, [])
 
-    async def test_load_main_mcp_tools_invalid_json_returns_empty(self) -> None:
+    async def test_load_main_mcp_tools_invalid_json_raises(self) -> None:
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as tmp:
             tmp.write("{invalid-json")
             tmp_path = Path(tmp.name)
 
         try:
             with patch("ollama_agent.mcp.loader.get_mcp_config_path", return_value=tmp_path):
-                tools = await load_main_mcp_tools()
-                self.assertEqual(tools, [])
+                with self.assertRaises(MCPConfigError):
+                    await load_main_mcp_tools()
         finally:
             tmp_path.unlink(missing_ok=True)
 

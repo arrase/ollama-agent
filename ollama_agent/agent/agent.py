@@ -16,8 +16,6 @@ from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
 from deepagents.middleware.summarization import create_summarization_tool_middleware
 from langchain_core.messages.utils import count_tokens_approximately
-from langchain_core.runnables import RunnableConfig
-from langchain_core.runnables.config import var_child_runnable_config
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
 
@@ -56,6 +54,17 @@ from .builtin_tools import (
     rag_search,
     set_active_thread_id,
 )
+from .compaction import (
+    HISTORY_PATH_PREFIX,
+    KEEP_RECENT_MESSAGES,
+    apply_summarization_event,
+    build_summary_message,
+    compute_state_cutoff,
+    find_safe_cutoff,
+    generate_summary,
+    new_session_id,
+    offload_history,
+)
 from .middleware import stream_tool_events_mw
 from .subagents import build_subagents
 
@@ -93,7 +102,7 @@ class AgentRuntime:
     effective_model_params: dict[str, tuple[Any, str]] = field(default_factory=dict, init=False)
     graph: Any = field(default=None, init=False, repr=False)
     _backend: Any = field(default=None, init=False, repr=False)
-    _summarization_mw: Any = field(default=None, init=False, repr=False)
+    _model: Any = field(default=None, init=False, repr=False)
     _instructions: str = field(default="", init=False)
     _exit_stack: contextlib.AsyncExitStack = field(
         default_factory=contextlib.AsyncExitStack, init=False, repr=False
@@ -217,7 +226,7 @@ class AgentRuntime:
 
         summarization_tool_mw = create_summarization_tool_middleware(model, backend)
         self._backend = backend
-        self._summarization_mw = summarization_tool_mw._summarization
+        self._model = model
 
         kwargs: dict[str, Any] = {
             "model": model,
@@ -323,68 +332,47 @@ class AgentRuntime:
     async def compact_context(self, thread_id: str = "") -> dict[str, Any]:
         """Compact conversation history for the specified thread into a summary."""
         thread = thread_id or self.thread_id
-        if self.graph is None or self._summarization_mw is None or self._backend is None:
+        if self.graph is None:
             await self.reload()
-        assert self.graph is not None and self._summarization_mw is not None and self._backend is not None
+        assert self.graph is not None and self._model is not None
 
-        config: RunnableConfig = {"configurable": {"thread_id": thread}}
+        config = {"configurable": {"thread_id": thread}}
         state = await self.graph.aget_state(config)
-        if not state or not state.values or "messages" not in state.values:
+        values: dict[str, Any] = state.values if state and state.values else {}
+        raw_messages = list(values.get("messages") or [])
+        if not raw_messages:
             return {"success": False, "message": _("No messages in session to compact.")}
 
-        messages = state.values["messages"]
-        event = state.values.get("_summarization_event")
-        effective = self._summarization_mw._apply_event_to_messages(messages, event)
+        prior_event = values.get("_summarization_event")
+        effective = apply_summarization_event(raw_messages, prior_event)
 
-        if len(effective) < 2:
+        cutoff = find_safe_cutoff(effective, KEEP_RECENT_MESSAGES)
+        if cutoff <= 0:
             return {
                 "success": False,
                 "message": _("Not enough messages in session to compact (at least 2 messages required)."),
             }
+        to_summarize, preserved = effective[:cutoff], effective[cutoff:]
 
-        cutoff = self._summarization_mw._determine_cutoff_index(effective)
-        if cutoff <= 0:
-            cutoff = self._summarization_mw._lc_helper._find_safe_cutoff(
-                effective, min(2, len(effective) - 1)
-            )
-            if cutoff <= 0:
-                cutoff = max(1, len(effective) - 1)
-
-        to_summarize, preserved = self._summarization_mw._partition_messages(
-            effective, cutoff
-        )
-        if not to_summarize:
-            return {
-                "success": False,
-                "message": _("No messages eligible for summarization."),
-            }
-
-        token = var_child_runnable_config.set(config)
-        try:
-            file_path, summary = await asyncio.gather(
-                self._summarization_mw._aoffload_to_backend(self._backend, to_summarize),
-                self._summarization_mw._acreate_summary(to_summarize),
-            )
-        finally:
-            var_child_runnable_config.reset(token)
-
-        new_messages = self._summarization_mw._build_new_messages_with_path(
-            summary, file_path
-        )
-        state_cutoff_index = self._summarization_mw._compute_state_cutoff(
-            event, cutoff
+        session_id = new_session_id(values)
+        history_path = f"{HISTORY_PATH_PREFIX}/{session_id}.md"
+        summary, file_path = await asyncio.gather(
+            generate_summary(self._model, to_summarize),
+            offload_history(self._backend, to_summarize, history_path),
         )
 
         new_event: dict[str, Any] = {
-            "cutoff_index": state_cutoff_index,
-            "summary_message": new_messages[0],
+            "cutoff_index": compute_state_cutoff(prior_event, cutoff),
+            "summary_message": build_summary_message(summary, file_path),
             "file_path": file_path,
         }
-
-        await self.graph.aupdate_state(config, {"_summarization_event": new_event})
+        await self.graph.aupdate_state(
+            config,
+            {"_summarization_event": new_event, "_summarization_session_id": session_id},
+        )
 
         self.last_context_tokens = count_tokens_approximately(
-            [new_messages[0], *preserved]
+            [new_event["summary_message"], *preserved]
         )
 
         return {
@@ -395,6 +383,28 @@ class AgentRuntime:
             "summary": summary,
         }
 
+    async def get_thread_messages(self, thread_id: str = "") -> list[Any]:
+        """Return the raw stored messages for a thread (empty when unknown)."""
+        if self.graph is None:
+            await self.reload()
+        assert self.graph is not None
+        config = {"configurable": {"thread_id": thread_id or self.thread_id}}
+        state = await self.graph.aget_state(config)
+        values: dict[str, Any] = state.values if state and state.values else {}
+        return list(values.get("messages") or [])
+
+    async def count_effective_tokens(self, thread_id: str = "") -> int:
+        """Count tokens of the effective context for a thread (after compaction)."""
+        if self.graph is None:
+            await self.reload()
+        assert self.graph is not None
+        config = {"configurable": {"thread_id": thread_id or self.thread_id}}
+        state = await self.graph.aget_state(config)
+        values: dict[str, Any] = state.values if state and state.values else {}
+        effective = apply_summarization_event(
+            list(values.get("messages") or []), values.get("_summarization_event")
+        )
+        return count_tokens_approximately(effective)
 
     async def set_model(self, model_name: str) -> str:
         self.settings.model.name = model_name

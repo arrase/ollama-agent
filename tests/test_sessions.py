@@ -23,6 +23,8 @@ from ollama_agent.interfaces.session_commands import (
     search_sessions,
 )
 
+_serializer = JsonPlusSerializer()
+
 
 class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
     """Unit tests for session management and persistence."""
@@ -35,13 +37,46 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         self.tmpdir.cleanup()
 
     def _init_sample_db(self) -> None:
+        """Create a history DB matching the langgraph AsyncSqliteSaver schema."""
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
-        cursor.execute("CREATE TABLE checkpoints (thread_id TEXT, checkpoint_id TEXT, checkpoint BLOB);")
-        cursor.execute("CREATE TABLE writes (thread_id TEXT, task_id TEXT, channel TEXT);")
-        cursor.execute("INSERT INTO checkpoints VALUES ('session-12345678', 'cp-1', 'blob');")
-        cursor.execute("INSERT INTO checkpoints VALUES ('session-12345678', 'cp-2', 'blob');")
-        cursor.execute("INSERT INTO checkpoints VALUES ('session-87654321', 'cp-3', 'blob');")
+        cursor.execute(
+            """
+            CREATE TABLE checkpoints (
+                thread_id TEXT NOT NULL,
+                checkpoint_ns TEXT NOT NULL DEFAULT '',
+                checkpoint_id TEXT,
+                parent_checkpoint_id TEXT,
+                type TEXT,
+                checkpoint BLOB,
+                metadata BLOB
+            );
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE writes (
+                thread_id TEXT NOT NULL,
+                checkpoint_ns TEXT NOT NULL DEFAULT '',
+                checkpoint_id TEXT,
+                task_id TEXT,
+                idx INTEGER,
+                channel TEXT,
+                type TEXT,
+                value BLOB
+            );
+            """
+        )
+        for tid, ts in [
+            ("session-12345678", "2026-01-01T10:00:00+00:00"),
+            ("session-12345678", "2026-01-01T10:05:00+00:00"),
+            ("session-87654321", "2026-01-02T09:00:00+00:00"),
+        ]:
+            typ, blob = _serializer.dumps_typed({"v": 1, "ts": ts})
+            cursor.execute(
+                "INSERT INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, type, checkpoint) VALUES (?, '', ?, ?, ?)",
+                (tid, f"cp-{tid}-{ts}", typ, blob),
+            )
         conn.commit()
         conn.close()
 
@@ -113,13 +148,10 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
     async def test_export_session(self) -> None:
         console = Console(file=io.StringIO(), record=True)
         runtime_mock = MagicMock()
-        runtime_mock.graph = MagicMock()
 
         human_msg = MagicMock(type="human", content="How do I create a class?")
         ai_msg = MagicMock(type="ai", content="Use `class MyClass:` syntax.")
-        mock_state = MagicMock()
-        mock_state.values = {"messages": [human_msg, ai_msg]}
-        runtime_mock.graph.aget_state = AsyncMock(return_value=mock_state)
+        runtime_mock.get_thread_messages = AsyncMock(return_value=[human_msg, ai_msg])
 
         out_file = Path(self.tmpdir.name) / "export_test.md"
         exported_path = await export_session(

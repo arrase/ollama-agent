@@ -6,8 +6,11 @@ import argparse
 import asyncio
 import inspect
 
+from rich.console import Console
+
 from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager
+from ..agent.episodic_memory import HistoryError
 from ..core import ALLOWED_REASONING_EFFORTS
 from ..i18n import _
 from ..rag import RAGContext, RAGManager, RAGError, load_rag_database
@@ -269,6 +272,9 @@ def handle_cli_commands(
                 if inspect.isawaitable(result):
                     asyncio.run(result)  # type: ignore[arg-type]
             except (SkillError, TaskError, RAGError):
+                raise SystemExit(1)
+            except HistoryError as exc:
+                Console().print(f"[red]{exc}[/red]")
                 raise SystemExit(1)
             return True
 

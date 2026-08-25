@@ -191,9 +191,11 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ModelContextWindowError):
             await resolve_context_window("unknown-model", "max", "http://localhost:11434")
 
+    @patch("ollama_agent.core.models._show_model")
     @patch("ollama_agent.core.models.resolve_context_window", AsyncMock(return_value=8192))
     @patch("ollama_agent.core.models.resolve_ollama_reasoning", AsyncMock(return_value=True))
-    async def test_create_ollama_chat_model(self) -> None:
+    async def test_create_ollama_chat_model(self, mock_show: AsyncMock) -> None:
+        mock_show.return_value = MagicMock(parameters="", modelfile="")
         model = await create_ollama_chat_model(
             model="gemma4:26b",
             base_url="http://localhost:11434",

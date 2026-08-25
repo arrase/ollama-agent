@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -10,13 +11,15 @@ from textual.app import ComposeResult
 from textual.containers import Container, Horizontal
 from textual.message import Message
 from textual.timer import Timer
-from textual.widgets import Button, Collapsible, Label, Markdown, OptionList, Static, TextArea
+from textual.widgets import Button, Collapsible, Markdown, OptionList, Static, TextArea
 
-from ..agent.episodic_memory import load_past_user_prompts
+from ..agent.episodic_memory import HistoryError, load_past_user_prompts
 from ..i18n import _
 
 if TYPE_CHECKING:
     from .repl import OllamaREPL, OllamaAgentApp
+
+_log = logging.getLogger(__name__)
 
 
 # ─── Header ──────────────────────────────────────────────────────────────────
@@ -152,7 +155,11 @@ class ReplInput(TextArea):
         self._update_height()
 
     async def _load_history(self) -> None:
-        db_entries = await asyncio.to_thread(load_past_user_prompts)
+        try:
+            db_entries = await asyncio.to_thread(load_past_user_prompts)
+        except HistoryError as exc:
+            _log.warning("Prompt history unavailable: %s", exc)
+            db_entries = []
         self._history = list(db_entries)
         self._history_index = len(self._history)
         self._temp_input = ""

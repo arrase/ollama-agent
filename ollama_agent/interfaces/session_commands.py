@@ -13,7 +13,11 @@ from rich.table import Table
 
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
-from ..agent.episodic_memory import format_iso_timestamp, search_past_conversations_in_db
+from ..agent.episodic_memory import (
+    connect_history,
+    format_iso_timestamp,
+    search_past_conversations_in_db,
+)
 from ..core.common import extract_text
 from ..i18n import _
 from ..settings.paths import HISTORY_DB_PATH
@@ -40,32 +44,29 @@ def get_available_sessions(db_path: Path = HISTORY_DB_PATH) -> list[dict[str, An
     if not db_path.exists():
         return []
 
-    try:
-        with sqlite3.connect(str(db_path)) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT thread_id, type, checkpoint FROM checkpoints ORDER BY rowid ASC"
-            )
-            timestamps: dict[str, str] = {}
-            for tid, typ, chk in cursor.fetchall():
-                c = _serializer.loads_typed((typ, chk))
-                if isinstance(c, dict) and "ts" in c:
-                    timestamps[tid] = str(c["ts"])
+    with connect_history(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT thread_id, type, checkpoint FROM checkpoints ORDER BY rowid ASC"
+        )
+        timestamps: dict[str, str] = {}
+        for tid, typ, chk in cursor.fetchall():
+            c = _serializer.loads_typed((typ, chk))
+            if isinstance(c, dict) and "ts" in c:
+                timestamps[tid] = str(c["ts"])
 
-            cursor.execute(
-                "SELECT thread_id, COUNT(*) as steps FROM checkpoints GROUP BY thread_id ORDER BY MAX(rowid) DESC"
-            )
-            rows = cursor.fetchall()
-            return [
-                {
-                    "thread_id": row[0],
-                    "steps": row[1],
-                    "timestamp": format_iso_timestamp(timestamps.get(row[0], "")),
-                }
-                for row in rows
-            ]
-    except (sqlite3.Error, OSError):
-        return []
+        cursor.execute(
+            "SELECT thread_id, COUNT(*) as steps FROM checkpoints GROUP BY thread_id ORDER BY MAX(rowid) DESC"
+        )
+        rows = cursor.fetchall()
+        return [
+            {
+                "thread_id": row[0],
+                "steps": row[1],
+                "timestamp": format_iso_timestamp(timestamps.get(row[0], "")),
+            }
+            for row in rows
+        ]
 
 
 def list_sessions(
@@ -184,15 +185,7 @@ async def export_session(
     sessions = get_available_sessions(db_path)
     resolved = resolve_session_id(target_id, sessions) or target_id
 
-    if runtime.graph is None:
-        await runtime.reload()
-    if runtime.graph is None:
-        console.print(f"[red]{_('Agent runtime graph could not be initialized.')}[/red]")
-        return None
-
-    config = {"configurable": {"thread_id": resolved}}
-    state = await runtime.graph.aget_state(config)
-    messages = state.values.get("messages", []) if state and state.values else []
+    messages = await runtime.get_thread_messages(resolved)
 
     if not messages:
         no_msgs = _("No messages found for session '{resolved}'.", resolved=resolved)
