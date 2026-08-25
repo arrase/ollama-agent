@@ -307,6 +307,7 @@ flowchart LR
 | `--rag` | — | `str` | `None` | Preload a RAG database collection at startup. |
 | `--allow-traversal` | — | `flag` | `False` | Allow filesystem traversal outside current working directory. |
 | `--no-allow-traversal` | — | `flag` | `True` | Sandbox filesystem operations to current working directory (default). |
+| `--lang`, `--language` | `-l` | `str` | `auto` | Set interface language (e.g. `en`, `es`, `fr`, `de`, `it`, `pt`, `zh`, `ja`, `ru`, `hi`). |
 | `--config-reset` | — | `str` | `None` | Reset configuration files: `all`, `system-prompt`, or `config-file`. |
 
 ---
@@ -395,7 +396,7 @@ flowchart TD
 The agent searches the current working directory and ascends parent directories up to the repository root (`.git`) for `AGENTS.md` (or `agents.md`, `.agents.md`). Discovered instructions are mounted directly into agent memory.
 
 ### 2. Global Agent Guidelines (`~/.ollama-agent/AGENTS.md`)
-Initialized automatically by the runtime to maintain user-wide coding standards across all repositories and directories.
+An optional user-defined file loaded when present to maintain global coding standards and preferences across all repositories and directories.
 
 ### 3. Cross-Session Memory (`~/.ollama-agent/MEMORY.md`)
 Maintained by the agent across sessions to record user preferences, persistent architectural decisions, and project notes. When you instruct the agent to remember something (e.g. *"remember that we always use pytest"*), it updates this file.
@@ -697,6 +698,7 @@ subagents: []
 | `runtime.builtin_tool_timeout` | `int` | `30` | Execution timeout in seconds for tool and shell commands. |
 | `runtime.collapse_thinking` | `bool` | `true` | If true, collapses reasoning blocks by default in REPL output. |
 | `runtime.inherit_env` | `bool` | `true` | If true, tool executions inherit the full parent environment. |
+| `runtime.language` | `str` | `""` | Interface language code (e.g. `en`, `es`, `fr`, `de`, `it`, `pt`, `zh`, `ja`, `ru`, `hi`). Auto-detects system locale if unset. |
 | `rag.rag_dir` | `str` | `~/.ollama-agent/rag` | Storage directory for local RAG databases and vector indices. |
 | `rag.embedder_base_url` | `str` | `http://localhost:11434` | Ollama native API endpoint for embedding generation. |
 | `rag.embedder_model` | `str` | `nomic-embed-text:latest` | Ollama model used to generate vector embeddings. |
@@ -735,7 +737,7 @@ flowchart TD
    - `repeat_penalty`: `1.1`
 
 > [!TIP]
-> You can inspect active parameters at any time using `/params` (or `/params list`), and dynamically override parameters for the active session using `/params set <parameter> <value>` (e.g. `/params set temperature 0.7`).
+> You can inspect active parameters at any time using `/params` (or `/params list`), and dynamically override parameters for the active session (saving to `settings.yaml`) using `/params set <parameter> <value>` (e.g. `/params set temperature 0.7`).
 
 ---
 
@@ -832,6 +834,7 @@ ollama-agent/
 │   ├── main.py              # Main CLI / REPL entry point and signal routing
 │   ├── agent/               # DeepAgents graph orchestration, middleware, session & tools
 │   ├── core/                # Model capability checks, context calculations, prompt processing
+│   ├── i18n/                # Internationalization engine, translation helpers & locale catalogs
 │   ├── interfaces/          # Textual REPL TUI, CLI dispatchers, keybindings
 │   ├── mcp/                 # Model Context Protocol client lifecycle and connections
 │   ├── rag/                 # Local Qdrant vector store manager and embeddings pipeline
