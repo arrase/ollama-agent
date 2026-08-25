@@ -15,7 +15,6 @@ from ollama_agent.settings.config import (
     Settings,
     SubAgentMCPServer,
     SubAgentSettings,
-    ensure_agents_file,
     ensure_memory_file,
     ensure_prompt_files,
     find_agents_file,
@@ -27,7 +26,6 @@ from ollama_agent.settings.config import (
     reset_config,
     save_settings,
 )
-from ollama_agent.settings.paths import AGENTS_MD_NAME
 
 
 class TestConfigManagement(unittest.TestCase):
@@ -162,15 +160,6 @@ class TestConfigManagement(unittest.TestCase):
         self.assertEqual(result, memory_file)
         self.assertTrue(memory_file.exists())
         self.assertIn("Long-Term Memory", memory_file.read_text(encoding="utf-8"))
-
-    def test_ensure_agents_file_creates_file_with_scaffold(self) -> None:
-        agents_file = Path(self.temp_dir.name) / AGENTS_MD_NAME
-        self.assertFalse(agents_file.exists())
-
-        result = ensure_agents_file(agents_file)
-        self.assertEqual(result, agents_file)
-        self.assertTrue(agents_file.exists())
-        self.assertIn("Agent Guidelines", agents_file.read_text(encoding="utf-8"))
 
     def test_find_agents_file_resolution(self) -> None:
         proj_dir = Path(self.temp_dir.name) / "my_project"

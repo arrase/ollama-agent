@@ -39,7 +39,6 @@ from ..settings import (
     SKILLS_DIR,
     TASKS_DIR,
     Settings,
-    ensure_agents_file,
     ensure_memory_file,
     ensure_prompt_files,
     find_agents_file,
@@ -78,7 +77,6 @@ def _prepare_instructions(settings: Settings) -> str:
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
     os_info = f"\n\n# ENVIRONMENT\nOperating System: {platform.system()} ({platform.release()})\nCurrent Date & Time: {now_str}\n"
     ensure_memory_file(MEMORY_PATH)
-    ensure_agents_file(AGENTS_PATH)
     return instructions + os_info
 
 
@@ -171,7 +169,7 @@ class AgentRuntime:
 
         # Memory sources: global user memory and AGENTS.md (project / global)
         memory_sources: list[str] = ["/agent/MEMORY.md"]
-        if (MEMORY_PATH.parent / "AGENTS.md").is_file():
+        if AGENTS_PATH.is_file():
             memory_sources.append("/agent/AGENTS.md")
 
         project_agents = find_agents_file(Path.cwd())
