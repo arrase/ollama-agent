@@ -17,6 +17,18 @@ from ..settings.paths import HISTORY_DB_PATH
 _serializer = JsonPlusSerializer()
 
 
+class HistoryError(RuntimeError):
+    """Raised when the conversation history database cannot be read."""
+
+
+def connect_history(db_path: Path) -> sqlite3.Connection:
+    """Open the history database, raising HistoryError when unreadable."""
+    try:
+        return sqlite3.connect(str(db_path))
+    except sqlite3.Error as e:
+        raise HistoryError(_("Failed to open history database {db_path}: {e}", db_path=db_path, e=e)) from e
+
+
 def format_iso_timestamp(ts: str) -> str:
     """Format ISO timestamp into a human-readable UTC string (YYYY-MM-DD HH:MM UTC)."""
     if not ts:
@@ -24,15 +36,16 @@ def format_iso_timestamp(ts: str) -> str:
     return datetime.fromisoformat(ts).strftime("%Y-%m-%d %H:%M UTC")
 
 
-def load_past_user_prompts(db_path: Path = HISTORY_DB_PATH) -> list[str]:
+def load_past_user_prompts(db_path: Path | None = None) -> list[str]:
     """Load past user prompt strings from the SQLite history database in chronological order."""
+    db_path = db_path if db_path is not None else HISTORY_DB_PATH
     if not db_path.exists():
         return []
 
     prompts: list[str] = []
     seen: set[str] = set()
     try:
-        with sqlite3.connect(str(db_path)) as conn:
+        with connect_history(db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT type, value FROM writes WHERE channel = 'messages' ORDER BY rowid ASC"
@@ -47,19 +60,22 @@ def load_past_user_prompts(db_path: Path = HISTORY_DB_PATH) -> list[str]:
                         if text and text not in seen:
                             seen.add(text)
                             prompts.append(text)
-    except (sqlite3.Error, OSError):
-        return []
+    except sqlite3.Error as e:
+        raise HistoryError(_("Failed to read history database {db_path}: {e}", db_path=db_path, e=e)) from e
+    except OSError as e:
+        raise HistoryError(_("Failed to read history database {db_path}: {e}", db_path=db_path, e=e)) from e
     return prompts
 
 
 def load_past_conversations(
-    db_path: Path = HISTORY_DB_PATH,
+    db_path: Path | None = None,
     exclude_thread_id: str = "",
 ) -> dict[str, dict[str, Any]]:
     """Load conversation messages and timestamps grouped by thread_id from SQLite history.
 
     Threads matching ``exclude_thread_id`` (e.g. active conversation) are skipped.
     """
+    db_path = db_path if db_path is not None else HISTORY_DB_PATH
     if not db_path.exists():
         return {}
 
@@ -67,7 +83,7 @@ def load_past_conversations(
     thread_messages: defaultdict[str, list[Any]] = defaultdict(list)
 
     try:
-        with sqlite3.connect(str(db_path)) as conn:
+        with connect_history(db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT thread_id, type, checkpoint FROM checkpoints ORDER BY rowid ASC"
@@ -90,8 +106,10 @@ def load_past_conversations(
                     thread_messages[tid].extend(msgs)
                 else:
                     thread_messages[tid].append(msgs)
-    except (sqlite3.Error, OSError):
-        return {}
+    except sqlite3.Error as e:
+        raise HistoryError(_("Failed to read history database {db_path}: {e}", db_path=db_path, e=e)) from e
+    except OSError as e:
+        raise HistoryError(_("Failed to read history database {db_path}: {e}", db_path=db_path, e=e)) from e
 
     conversations: dict[str, dict[str, Any]] = {}
     for tid, msgs in thread_messages.items():
@@ -107,7 +125,7 @@ def load_past_conversations(
 
 def search_past_conversations_in_db(
     query: str,
-    db_path: Path = HISTORY_DB_PATH,
+    db_path: Path | None = None,
     exclude_thread_id: str = "",
     limit: int = 3,
 ) -> list[dict[str, Any]]:
@@ -155,7 +173,7 @@ def search_past_conversations_in_db(
                 if total_chars > 1200:
                     break
 
-        if match_count > 0 and snippets:
+        if match_count > 0:
             scored_results.append({
                 "thread_id": tid,
                 "score": match_count,

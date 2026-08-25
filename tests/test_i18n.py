@@ -13,7 +13,6 @@ from ollama_agent.i18n import (
     detect_system_language,
     get_locale,
     get_supported_locales,
-    get_text,
     set_locale,
 )
 from ollama_agent.interfaces.cli import create_argument_parser
@@ -149,7 +148,7 @@ class TestI18nTranslations(unittest.TestCase):
     def test_italian_translation(self) -> None:
         set_locale("it")
         self.assertEqual(_("Manage saved tasks"), "Gestisci le attività salvate")
-        self.assertEqual(_("Exit the REPL"), "Esci dal REPL")
+        self.assertEqual(_("Exit the REPL"), "Uscire dalla REPL")
         self.assertEqual(_("Tool:"), "Strumento:")
         self.assertEqual(_("Arguments:"), "Argomenti:")
 

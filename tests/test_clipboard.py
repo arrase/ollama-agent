@@ -7,7 +7,7 @@ from textual import events
 
 from ollama_agent.interfaces.clipboard import copy_to_system_clipboard, get_system_clipboard
 from ollama_agent.interfaces.repl import OllamaAgentApp, OllamaREPL
-from ollama_agent.interfaces.tui_components import ReplInput, UserMessage
+from ollama_agent.interfaces.tui_components import UserMessage
 
 
 class TestClipboard(unittest.TestCase):
@@ -55,7 +55,11 @@ class TestClipboard(unittest.TestCase):
         mock_k32.GlobalAlloc.return_value = 12345
         mock_k32.GlobalLock.return_value = 67890
 
-        copy_to_system_clipboard("hello windows")
+        # memmove must be mocked: the mocked GlobalLock returns a plain int,
+        # and writing to it as a pointer would segfault the interpreter.
+        with patch("ctypes.memmove") as mock_memmove:
+            copy_to_system_clipboard("hello windows")
+            mock_memmove.assert_called_once()
         mock_u32.OpenClipboard.assert_called_once_with(None)
         mock_u32.EmptyClipboard.assert_called_once()
         mock_u32.SetClipboardData.assert_called_once_with(13, 12345)
@@ -104,7 +108,7 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
 
         app = OllamaAgentApp(repl_mock)
         with patch("ollama_agent.interfaces.repl.copy_to_system_clipboard") as mock_sys_copy:
-            async with app.run_test() as pilot:
+            async with app.run_test():
                 app.copy_to_clipboard("test copy content")
                 mock_sys_copy.assert_called_once_with("test copy content")
                 self.assertEqual(app._clipboard, "test copy content")
@@ -162,9 +166,9 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
 
         app = OllamaAgentApp(repl_mock)
-        async with app.run_test() as pilot:
+        async with app.run_test():
             event = events.MouseDown(None, 5, 5, 0, 0, 1, False, False, False)
-            with patch("ollama_agent.interfaces.repl._original_screen_forward_event", side_effect=AttributeError("'NoneType' object has no attribute 'region'")):
+            with patch("textual.screen.Screen._forward_event", side_effect=AttributeError("'NoneType' object has no attribute 'region'")):
                 app.screen._forward_event(event)
                 self.assertIsNone(app.screen._select_state)
 
@@ -177,9 +181,9 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
 
         app = OllamaAgentApp(repl_mock)
-        async with app.run_test() as pilot:
+        async with app.run_test():
             event = events.MouseDown(None, 5, 5, 0, 0, 1, False, False, False)
-            with patch("ollama_agent.interfaces.repl._original_screen_forward_event", side_effect=AttributeError("'CustomType' object has no attribute 'something_else'")):
+            with patch("textual.screen.Screen._forward_event", side_effect=AttributeError("'CustomType' object has no attribute 'something_else'")):
                 with self.assertRaises(AttributeError):
                     app.screen._forward_event(event)
 

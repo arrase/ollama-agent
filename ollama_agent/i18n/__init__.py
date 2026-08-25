@@ -50,7 +50,7 @@ def detect_system_language() -> str:
             norm = _normalize_lang(loc)
             if norm in SUPPORTED_LOCALES:
                 return norm
-    except Exception:
+    except (OSError, ValueError):
         pass
 
     return DEFAULT_LOCALE

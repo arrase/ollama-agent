@@ -11,6 +11,7 @@ from ..core import RAGToolResult
 from ..i18n import _
 from ..rag import RAGError, RAGManager
 from .episodic_memory import (
+    HistoryError,
     format_past_conversations_context,
     search_past_conversations_in_db,
 )
@@ -70,11 +71,14 @@ async def rag_search(query: str, top_k: int | None = None) -> RAGToolResult:
 @tool
 async def search_past_conversations(query: str, limit: int = 3) -> str:
     """Search past conversation sessions and episodic memory by keywords, topics, or dates (e.g. 'yesterday', 'auth', 'database'). Returns timestamped excerpts of previous sessions."""
-    results = search_past_conversations_in_db(
-        query=query,
-        exclude_thread_id=get_active_thread_id(),
-        limit=limit,
-    )
+    try:
+        results = search_past_conversations_in_db(
+            query=query,
+            exclude_thread_id=get_active_thread_id(),
+            limit=limit,
+        )
+    except HistoryError as exc:
+        return _("Error searching past conversations: {exc}", exc=exc)
     return format_past_conversations_context(results)
 
 

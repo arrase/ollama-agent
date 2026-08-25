@@ -12,7 +12,6 @@ from ollama_agent.rag.commands import (
     AmbiguousRAGDatabaseError,
     RAGContext,
     RAGDatabaseNotFoundError,
-    add_rag_file,
     create_rag_database,
     delete_rag_database,
     list_rag_databases,
@@ -167,8 +166,9 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(RAGError):
             await self.manager.add_directory(str(f1))
 
-        # Batch failure during add_directory
-        with patch.object(RAGManager, "_get_embeddings", AsyncMock(side_effect=RuntimeError("Ollama connection failed"))):
+        # Batch failure during add_directory: embeddings raise before any
+        # deletion happens, so no indexed content is lost.
+        with patch.object(RAGManager, "_get_embeddings", AsyncMock(side_effect=RAGError("Ollama connection failed"))):
             res = await self.manager.add_directory(str(sub_dir))
             self.assertEqual(res["added"], 0)
             self.assertEqual(res["failed"], 2)

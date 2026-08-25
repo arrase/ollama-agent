@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import re
 from collections.abc import Iterator
@@ -18,7 +19,6 @@ from textual.screen import Screen
 from textual.widgets import OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 from textual.worker import Worker
-from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.types import Command
 
 from .clipboard import copy_to_system_clipboard, get_system_clipboard
@@ -34,6 +34,7 @@ from .tui_components import (
 
 from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager, set_tool_timeout
+from ..agent.episodic_memory import HistoryError
 from ..core.common import extract_text
 from ..i18n import _
 from ..rag import RAGContext, RAGManager, load_rag_database
@@ -55,21 +56,19 @@ _AT_MENTION_RE = re.compile(
     r"""(?:^|[\s\(\[\{<])@(?:"([^"]*)|'([^']*)|([^\s"'\(\[\{<>,;]*))$"""
 )
 
-# Textual workaround: prevent crash when clicking/dragging on unmounted/detached widgets during text selection
-_original_screen_forward_event = Screen._forward_event
 
+class MainScreen(Screen):
+    """Default screen with a guard against Textual crashes when text selection
+    ends over a widget detached mid-drag (``parent`` is ``None``)."""
 
-def _safe_screen_forward_event(self: Screen, event: events.Event) -> None:
-    try:
-        _original_screen_forward_event(self, event)
-    except AttributeError as err:
-        if "'NoneType' object has no attribute 'region'" in str(err):
-            self._select_state = None
-            return
-        raise
-
-
-Screen._forward_event = _safe_screen_forward_event
+    def _forward_event(self, event: events.Event) -> None:
+        try:
+            super()._forward_event(event)
+        except AttributeError as err:
+            if "'NoneType' object has no attribute 'region'" in str(err):
+                self._select_state = None
+                return
+            raise
 
 
 def _get_root_commands() -> list[tuple[str, str]]:
@@ -104,6 +103,7 @@ def _get_subcommands() -> dict[str, list[tuple[str, str]]]:
             ("list", _("List all past sessions")),
             ("search", _("Search past sessions by keyword")),
             ("resume", _("Resume a previous session")),
+            ("switch", _("Switch to a previous session (alias for resume)")),
             ("new", _("Start a new session")),
             ("export", _("Export session to Markdown")),
             ("delete", _("Delete a session from history")),
@@ -243,6 +243,9 @@ class OllamaAgentApp(App):
         selected_text = self.screen.get_selected_text()
         if selected_text:
             self.copy_to_clipboard(selected_text)
+
+    def get_default_screen(self) -> Screen:
+        return MainScreen(id="_default")
 
     CSS_PATH = "repl.css"
 
@@ -392,7 +395,11 @@ class OllamaAgentApp(App):
                 ]
 
             if root_cmd == "/session" and sub_cmd in ("resume", "switch", "delete"):
-                sessions = get_available_sessions()
+                try:
+                    sessions = get_available_sessions()
+                except HistoryError as exc:
+                    logging.warning("Session autocomplete unavailable: %s", exc)
+                    return []
                 return [
                     (
                         f"{root_cmd} {sub_cmd} {s['thread_id']}",
@@ -598,35 +605,28 @@ class OllamaAgentApp(App):
                 scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Usage: /session resume <session_id>')}[/bold #f87171]"))
                 self._deferred_scroll()
                 return
-            resolved = resume_session(self.repl.console, args[1])
+            try:
+                resolved = resume_session(self.repl.console, args[1])
+            except HistoryError as exc:
+                scroll.mount(SystemMessage(f"[red]{exc}[/red]"))
+                self._deferred_scroll()
+                return
             if resolved:
                 self.repl.runtime.thread_id = resolved
                 await scroll.remove_children()
-                if self.repl.runtime.graph is not None:
-                    config = {"configurable": {"thread_id": resolved}}
-                    state = await self.repl.runtime.graph.aget_state(config)
-                    if state and state.values and "messages" in state.values:
-                        messages = state.values["messages"]
-                        event = state.values.get("_summarization_event")
-                        effective = (
-                            self.repl.runtime._summarization_mw._apply_event_to_messages(
-                                messages, event
-                            )
-                            if self.repl.runtime._summarization_mw
-                            else messages
-                        )
-                        self.repl.runtime.last_context_tokens = (
-                            count_tokens_approximately(effective)
-                        )
-                        for msg in messages:
-                            role = getattr(msg, "type", "unknown")
-                            content = extract_text(getattr(msg, "content", ""))
-                            if not content:
-                                continue
-                            if role in ("human", "user"):
-                                scroll.mount(UserMessage(content))
-                            elif role in ("ai", "assistant"):
-                                scroll.mount(AgentResponse(initial_text=content))
+                messages = await self.repl.runtime.get_thread_messages(resolved)
+                self.repl.runtime.last_context_tokens = (
+                    await self.repl.runtime.count_effective_tokens(resolved)
+                )
+                for msg in messages:
+                    role = getattr(msg, "type", "unknown")
+                    content = extract_text(getattr(msg, "content", ""))
+                    if not content:
+                        continue
+                    if role in ("human", "user"):
+                        scroll.mount(UserMessage(content))
+                    elif role in ("ai", "assistant"):
+                        scroll.mount(AgentResponse(initial_text=content))
                 scroll.mount(SystemMessage(f"[bold #38bdf8]✓ {_('Resumed session: {session_id}', session_id=f'{resolved[:8]} ({resolved})')}[/bold #38bdf8]"))
                 self.query_one(AgentHeader).update_header()
                 self._deferred_scroll()
@@ -636,12 +636,17 @@ class OllamaAgentApp(App):
             return
 
         if cmd == "/session" and args and args[0] == "export":
-            out_file = await export_session(
-                self.repl.console,
-                self.repl.runtime,
-                self.repl.runtime.thread_id,
-                output_path=args[1] if len(args) > 1 else None,
-            )
+            try:
+                out_file = await export_session(
+                    self.repl.console,
+                    self.repl.runtime,
+                    self.repl.runtime.thread_id,
+                    output_path=args[1] if len(args) > 1 else None,
+                )
+            except HistoryError as exc:
+                scroll.mount(SystemMessage(f"[red]{exc}[/red]"))
+                self._deferred_scroll()
+                return
             if out_file:
                 scroll.mount(SystemMessage(f"[bold #38bdf8]✓ {_('Session exported to: {path}', path=out_file)}[/bold #38bdf8]"))
             else:
@@ -704,7 +709,7 @@ class OllamaAgentApp(App):
                 return
             try:
                 tid, t = self.repl._task_ctx._find_or_exit(target_id)
-            except (TaskError, SystemExit) as exc:
+            except TaskError as exc:
                 scroll.mount(SystemMessage(f"[red]{exc}[/red]"))
                 self._deferred_scroll()
                 return
@@ -733,10 +738,10 @@ class OllamaAgentApp(App):
 
         spec = commands[cmd]
         scroll_w = scroll.size.width if scroll.size.width > 10 else self.size.width
-        self.repl.console._width = max(40, scroll_w - 6)
-        self.repl.console._height = 25
+        self.repl.console.width = max(40, scroll_w - 6)
+        self.repl.console.height = 25
         with self.repl.console.capture() as capture:
-            await safe_call(spec.handler, args)
+            await safe_call(spec.handler, args, console=self.repl.console)
         output = capture.get()
         if output:
             scroll.mount(SystemMessage(Text.from_ansi(output)))
@@ -884,10 +889,7 @@ class OllamaREPL:
     async def run(self) -> None:
         rag_ctx = self._get_rag_ctx()
         if self._initial_rag_database:
-            try:
-                load_rag_database(rag_ctx, self._initial_rag_database)
-            except SystemExit:
-                pass
+            load_rag_database(rag_ctx, self._initial_rag_database)
 
         set_tool_timeout(self.runtime.settings.runtime.builtin_tool_timeout)
         await self.runtime.reload()

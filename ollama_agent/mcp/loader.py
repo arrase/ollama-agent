@@ -12,10 +12,14 @@ from typing import Any
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
+from ..i18n import _
 from ..settings import MCP_PATH, MCP_SERVERS_PATH, SubAgentMCPServer
-
 _log = logging.getLogger(__name__)
 _ENV_RE = re.compile(r"\$\{([^}]+)\}|%([^%]+)%")
+
+
+class MCPConfigError(RuntimeError):
+    """Raised when the MCP configuration file is unreadable or invalid."""
 
 
 def get_mcp_config_path() -> Path:
@@ -86,7 +90,10 @@ def _build_mcp_connection(cfg: dict[str, Any]) -> dict[str, Any] | None:
 
 
 async def load_main_mcp_tools() -> list[Any]:
-    """Load flat MCP tools for the main agent from mcp.json / mcp_servers.json."""
+    """Load flat MCP tools for the main agent from mcp.json / mcp_servers.json.
+
+    Raises MCPConfigError when the config file exists but cannot be parsed.
+    """
     config_path = get_mcp_config_path()
     if not config_path.exists():
         return []
@@ -95,8 +102,14 @@ async def load_main_mcp_tools() -> list[Any]:
         raw_json = await asyncio.to_thread(config_path.read_text, encoding="utf-8")
         data = json.loads(raw_json)
     except (json.JSONDecodeError, OSError) as exc:
-        _log.error("Failed to load MCP config %s: %s", config_path, exc)
-        return []
+        raise MCPConfigError(
+            _("Failed to load MCP config {config_path}: {exc}", config_path=config_path, exc=exc)
+        ) from exc
+
+    if not isinstance(data, dict):
+        raise MCPConfigError(
+            _("Invalid MCP config {config_path}: expected a JSON object", config_path=config_path)
+        )
 
     servers_cfg = data.get("mcpServers") or data.get("servers") or {}
     if not isinstance(servers_cfg, dict) or not servers_cfg:

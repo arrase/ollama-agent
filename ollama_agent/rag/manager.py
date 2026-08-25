@@ -16,7 +16,6 @@ from qdrant_client.models import (
     FieldCondition,
     Filter,
     MatchAny,
-    MatchValue,
     PointStruct,
     VectorParams,
 )
@@ -262,19 +261,8 @@ class RAGManager:
         if not valid_files:
             return results
 
-        # Delete existing points for all valid files in a single operation
-        filt = Filter(
-            must=[FieldCondition(key="source", match=MatchAny(any=valid_files))]
-        )
-        try:
-            client.delete(
-                collection_name=self.COLLECTION_NAME, points_selector=filt, wait=True
-            )
-        except Exception as e:
-            logger.warning(
-                "Failed to delete existing points for directory batch: %s", e
-            )
-            raise RAGError(_("Failed to clear existing points for directory batch: {e}", e=e)) from e
+        if not valid_files:
+            return results
 
         # Prepare a flat list of chunk data
         flat_chunks_data = []
@@ -285,43 +273,47 @@ class RAGManager:
             for i, chunk in enumerate(chunks):
                 flat_chunks_data.append((source, fname, chunk, i, total_chunks))
 
-        # Process in batches
+        # Process in batches. Old points are deleted only after the batch
+        # embeddings succeed, so a failure never loses already-indexed content.
         BATCH_SIZE = 100
         failed_sources: set[str] = set()
         for i in range(0, len(flat_chunks_data), BATCH_SIZE):
             batch = flat_chunks_data[i : i + BATCH_SIZE]
             batch_texts = [b[2] for b in batch]
+            batch_sources = {b[0] for b in batch}
             try:
                 embeddings = await self._get_embeddings(batch_texts)
-                points = []
-                for (
-                    (source, fname, chunk, chunk_idx, total_chunks),
-                    embedding,
-                ) in zip(batch, embeddings, strict=True):
-                    point_id = self._generate_point_id(source, chunk_idx)
-                    points.append(
-                        PointStruct(
-                            id=point_id,
-                            vector=embedding,
-                            payload={
-                                "content": chunk,
-                                "source": source,
-                                "filename": fname,
-                                "chunk_index": chunk_idx,
-                                "total_chunks": total_chunks,
-                            },
-                        )
-                    )
-                if points:
-                    client.upsert(collection_name=self.COLLECTION_NAME, points=points)
-            except Exception as e:
+            except RAGError as e:
                 logger.warning(
-                    "Failed to process batch embeddings/upsert starting at index %d: %s",
+                    "Failed to generate embeddings for batch starting at index %d: %s",
                     i,
                     e,
                 )
-                for source, *_rest in batch:
-                    failed_sources.add(source)
+                failed_sources.update(batch_sources)
+                continue
+
+            self._delete_sources_points(client, batch_sources)
+
+            points = []
+            for (
+                (source, fname, chunk, chunk_idx, total_chunks),
+                embedding,
+            ) in zip(batch, embeddings, strict=True):
+                point_id = self._generate_point_id(source, chunk_idx)
+                points.append(
+                    PointStruct(
+                        id=point_id,
+                        vector=embedding,
+                        payload={
+                            "content": chunk,
+                            "source": source,
+                            "filename": fname,
+                            "chunk_index": chunk_idx,
+                            "total_chunks": total_chunks,
+                        },
+                    )
+                )
+            client.upsert(collection_name=self.COLLECTION_NAME, points=points)
 
         # Populate results for successful files
         for fpath, chunks in all_file_chunks:
@@ -412,8 +404,12 @@ class RAGManager:
 
     def _delete_source_points(self, client: QdrantClient, source: str) -> None:
         """Delete all points previously indexed for a given source path."""
+        self._delete_sources_points(client, {source})
+
+    def _delete_sources_points(self, client: QdrantClient, sources: set[str]) -> None:
+        """Delete all points previously indexed for the given source paths."""
         filt = Filter(
-            must=[FieldCondition(key="source", match=MatchValue(value=source))]
+            must=[FieldCondition(key="source", match=MatchAny(any=sorted(sources)))]
         )
         try:
             client.delete(
@@ -421,7 +417,7 @@ class RAGManager:
             )
         except Exception as e:
             raise RAGError(
-                _("Failed to delete existing points for source '{source}': {e}", source=source, e=e)
+                _("Failed to delete existing points for source '{source}': {e}", source=sorted(sources)[0], e=e)
             ) from e
 
     def _chunk_text(self, text: str) -> list[str]:

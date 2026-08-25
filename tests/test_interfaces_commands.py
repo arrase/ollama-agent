@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from rich.console import Console
 
+from ollama_agent.agent.episodic_memory import HistoryError
 from ollama_agent.core.models import ModelCapabilityError
 from ollama_agent.interfaces.cli import handle_cli_commands
 from ollama_agent.interfaces.dispatch import build_repl_handlers, safe_call
@@ -51,13 +52,21 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(called_async)
 
     async def test_safe_call_silences_expected_errors(self) -> None:
-        def raise_exit() -> None:
-            raise SystemExit(1)
-        await safe_call(raise_exit)  # Should not raise
-
         def raise_skill_error() -> None:
             raise SkillError("Skill failed")
         await safe_call(raise_skill_error)  # Should not raise
+
+        def raise_history_error() -> None:
+            raise HistoryError("History DB broken")
+        console = Console(file=io.StringIO(), record=True)
+        await safe_call(raise_history_error, console=console)  # Should not raise
+        self.assertIn("History DB broken", console.export_text())
+
+    async def test_safe_call_propagates_unexpected_errors(self) -> None:
+        def raise_exit() -> None:
+            raise SystemExit(1)
+        with self.assertRaises(SystemExit):
+            await safe_call(raise_exit)
 
     async def test_list_models_empty(self) -> None:
         console = Console(file=io.StringIO(), record=True)
@@ -219,6 +228,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime.effective_model_params = {
             "temperature": (0.8, "default"),
         }
+        switch_mock = AsyncMock()
 
         handlers = build_repl_handlers(
             task_ctx=MagicMock(),
@@ -227,7 +237,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             console=console,
             current_model=lambda: "llama3.2:3b",
             base_url=lambda: "http://localhost:11434",
-            switch_model=AsyncMock(),
+            switch_model=switch_mock,
             handle_exit=lambda _: None,
             handle_new=AsyncMock(),
             handle_task_create=lambda _: None,
@@ -241,23 +251,18 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         out = console.export_text()
         self.assertIn("Active Model Parameters", out)
 
-        # /params list
-        console = Console(file=io.StringIO(), record=True)
+        # /params list (handlers print to the console they were built with,
+        # so all following assertions check the accumulated output)
         handlers["/params"].handler(["list"])
-        out_list = console.export_text()
-        self.assertIn("Active Model Parameters", out_list)
+        self.assertIn("Active Model Parameters", console.export_text())
 
         # /params set with missing args
-        console = Console(file=io.StringIO(), record=True)
         handlers["/params"].handler(["set", "temperature"])
-        out_missing = console.export_text()
-        self.assertIn("Usage: /params set", out_missing)
+        self.assertIn("Usage: /params set", console.export_text())
 
-        # /model does not handle params
-        console = Console(file=io.StringIO(), record=True)
-        handlers["/model"].handler(["params"])
-        out_model = console.export_text()
-        self.assertIn("Usage: /model", out_model)
+        # /model <name> routes to switch_model (single arg is treated as a model name)
+        handlers["/model"].handler(["some-model"])
+        switch_mock.assert_called_once_with("some-model")
 
     def test_effort_dispatch(self) -> None:
         console = Console(file=io.StringIO(), record=True)
@@ -325,7 +330,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         switch_model.assert_awaited_with("llama3:8b")
 
         # 1b. /effort handler
-        with patch("ollama_agent.interfaces.dispatch.show_effort") as mock_show_effort:
+        with patch("ollama_agent.interfaces.dispatch.show_effort"):
             handlers["/effort"].handler([])
             out_effort = console.export_text()
             self.assertIn("Current reasoning effort", out_effort)

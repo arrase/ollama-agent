@@ -327,22 +327,20 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
     async def test_compact_context_empty_or_too_few(self) -> None:
         settings = Settings()
         runtime = AgentRuntime(settings=settings)
+        runtime._model = MagicMock()
         mock_graph = MagicMock()
         mock_state_empty = MagicMock(values={})
         mock_graph.aget_state = AsyncMock(return_value=mock_state_empty)
         runtime.graph = mock_graph
-        runtime._summarization_mw = MagicMock()
-        runtime._backend = MagicMock()
 
         # Empty messages
         res = await runtime.compact_context("thread-1")
         self.assertFalse(res["success"])
         self.assertIn("No messages", res["message"])
 
-        # 1 message (< 2)
-        mock_state_single = MagicMock(values={"messages": [MagicMock(content="hello")]})
+        # 1 message (< keep threshold)
+        mock_state_single = MagicMock(values={"messages": [HumanMessage(content="hello")]})
         mock_graph.aget_state = AsyncMock(return_value=mock_state_single)
-        runtime._summarization_mw._apply_event_to_messages.return_value = [MagicMock(content="hello")]
         res2 = await runtime.compact_context("thread-1")
         self.assertFalse(res2["success"])
         self.assertIn("Not enough messages", res2["message"])
@@ -350,40 +348,93 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
     async def test_compact_context_success(self) -> None:
         settings = Settings()
         runtime = AgentRuntime(settings=settings)
-        mock_graph = MagicMock()
+        runtime._backend = MagicMock()
+        runtime._model = MagicMock()
+
         msg1 = HumanMessage(content="First prompt")
-        msg2 = AIMessage(content="First answer")
+        msg2 = AIMessage(content="First answer", tool_calls=[])
         msg3 = HumanMessage(content="Second prompt")
         msg4 = AIMessage(content="Second answer")
 
-        mock_state = MagicMock(values={"messages": [msg1, msg2, msg3, msg4], "_summarization_event": None})
+        mock_state = MagicMock(
+            values={
+                "messages": [msg1, msg2, msg3, msg4],
+                "_summarization_event": None,
+            }
+        )
+        mock_graph = MagicMock()
         mock_graph.aget_state = AsyncMock(return_value=mock_state)
         mock_graph.aupdate_state = AsyncMock()
         runtime.graph = mock_graph
 
-        mock_mw = MagicMock()
-        mock_mw._apply_event_to_messages.return_value = [msg1, msg2, msg3, msg4]
-        mock_mw._determine_cutoff_index.return_value = 2
-        mock_mw._partition_messages.return_value = ([msg1, msg2], [msg3, msg4])
-        mock_mw._aoffload_to_backend = AsyncMock(return_value="/conversation_history/thread-1.md")
-        mock_mw._acreate_summary = AsyncMock(return_value="Summary of first turn")
-        summary_human_msg = HumanMessage(content="Condensed summary")
-        mock_mw._build_new_messages_with_path.return_value = [summary_human_msg]
-        mock_mw._compute_state_cutoff.return_value = 2
+        async def fake_summary(model: Any, messages: list[Any]) -> str:
+            self.assertEqual(messages, [msg1, msg2])
+            return "Summary of first turn"
 
-        runtime._summarization_mw = mock_mw
-        runtime._backend = MagicMock()
+        async def fake_offload(backend: Any, messages: list[Any], path: str) -> str | None:
+            self.assertEqual(messages, [msg1, msg2])
+            return "/conversation_history/session-abc.md"
 
-        res = await runtime.compact_context("thread-1")
+        with patch("ollama_agent.agent.agent.generate_summary", side_effect=fake_summary), \
+             patch("ollama_agent.agent.agent.offload_history", side_effect=fake_offload):
+            res = await runtime.compact_context("thread-1")
+
         self.assertTrue(res["success"])
         self.assertEqual(res["messages_summarized"], 2)
         self.assertEqual(res["messages_preserved"], 2)
-        self.assertEqual(res["file_path"], "/conversation_history/thread-1.md")
+        self.assertEqual(res["file_path"], "/conversation_history/session-abc.md")
         self.assertEqual(res["summary"], "Summary of first turn")
 
         mock_graph.aupdate_state.assert_awaited_once()
         update_call = mock_graph.aupdate_state.call_args
         self.assertEqual(update_call[0][0], {"configurable": {"thread_id": "thread-1"}})
-        self.assertEqual(update_call[0][1]["_summarization_event"]["cutoff_index"], 2)
+        new_event = update_call[0][1]["_summarization_event"]
+        self.assertEqual(new_event["cutoff_index"], 2)
+        self.assertEqual(new_event["file_path"], "/conversation_history/session-abc.md")
+        self.assertIn("session-abc.md", new_event["summary_message"].content)
         self.assertGreater(runtime.last_context_tokens, 0)
+
+    async def test_compact_context_chained_prior_event(self) -> None:
+        """A second compaction must translate the cutoff to absolute state index."""
+        settings = Settings()
+        runtime = AgentRuntime(settings=settings)
+        runtime._backend = MagicMock()
+        runtime._model = MagicMock()
+
+        prior_summary = HumanMessage(
+            content="prior summary", additional_kwargs={"lc_source": "summarization"}
+        )
+        msg3 = HumanMessage(content="Third prompt")
+        msg4 = AIMessage(content="Third answer")
+        msg5 = HumanMessage(content="Fourth prompt")
+        msg6 = AIMessage(content="Fourth answer")
+
+        prior_event = {
+            "cutoff_index": 2,
+            "summary_message": prior_summary,
+            "file_path": "/conversation_history/s.md",
+        }
+        mock_state = MagicMock(
+            values={
+                # Raw state: [old1, old2, summary, msg3..msg6]; effective starts at the summary.
+                "messages": ["old1", "old2", prior_summary, msg3, msg4, msg5, msg6],
+                "_summarization_event": prior_event,
+                "_summarization_session_id": "session_fixed",
+            }
+        )
+        mock_graph = MagicMock()
+        mock_graph.aget_state = AsyncMock(return_value=mock_state)
+        mock_graph.aupdate_state = AsyncMock()
+        runtime.graph = mock_graph
+
+        with patch("ollama_agent.agent.agent.generate_summary", AsyncMock(return_value="new summary")), \
+             patch("ollama_agent.agent.agent.offload_history", AsyncMock(return_value=None)):
+            res = await runtime.compact_context("t")
+
+        self.assertTrue(res["success"])
+        # Effective = [prior_summary, summary, msg3, msg4, msg5, msg6]; keep 2
+        # -> effective cutoff 4; absolute = 2 + 4 - 1 = 5
+        new_event = mock_graph.aupdate_state.call_args[0][1]["_summarization_event"]
+        self.assertEqual(new_event["cutoff_index"], 5)
+        self.assertIsNone(new_event["file_path"])
 
