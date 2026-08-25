@@ -24,6 +24,34 @@ def format_iso_timestamp(ts: str) -> str:
     return datetime.fromisoformat(ts).strftime("%Y-%m-%d %H:%M UTC")
 
 
+def load_past_user_prompts(db_path: Path = HISTORY_DB_PATH) -> list[str]:
+    """Load past user prompt strings from the SQLite history database in chronological order."""
+    if not db_path.exists():
+        return []
+
+    prompts: list[str] = []
+    seen: set[str] = set()
+    try:
+        with sqlite3.connect(str(db_path)) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT type, value FROM writes WHERE channel = 'messages' ORDER BY rowid ASC"
+            )
+            for typ, val in cursor.fetchall():
+                msgs = _serializer.loads_typed((typ, val))
+                if not isinstance(msgs, list):
+                    msgs = [msgs]
+                for msg in msgs:
+                    if getattr(msg, "type", "") in ("human", "user"):
+                        text = extract_text(getattr(msg, "content", "")).strip()
+                        if text and text not in seen:
+                            seen.add(text)
+                            prompts.append(text)
+    except (sqlite3.Error, OSError):
+        return []
+    return prompts
+
+
 def load_past_conversations(
     db_path: Path = HISTORY_DB_PATH,
     exclude_thread_id: str = "",
@@ -38,29 +66,32 @@ def load_past_conversations(
     thread_timestamps: dict[str, str] = {}
     thread_messages: defaultdict[str, list[Any]] = defaultdict(list)
 
-    with sqlite3.connect(str(db_path)) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT thread_id, type, checkpoint FROM checkpoints ORDER BY rowid ASC"
-        )
-        for tid, typ, chk in cursor.fetchall():
-            if exclude_thread_id and tid.startswith(exclude_thread_id):
-                continue
-            c = _serializer.loads_typed((typ, chk))
-            if isinstance(c, dict) and "ts" in c:
-                thread_timestamps[tid] = str(c["ts"])
+    try:
+        with sqlite3.connect(str(db_path)) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT thread_id, type, checkpoint FROM checkpoints ORDER BY rowid ASC"
+            )
+            for tid, typ, chk in cursor.fetchall():
+                if exclude_thread_id and tid.startswith(exclude_thread_id):
+                    continue
+                c = _serializer.loads_typed((typ, chk))
+                if isinstance(c, dict) and "ts" in c:
+                    thread_timestamps[tid] = str(c["ts"])
 
-        cursor.execute(
-            "SELECT thread_id, type, value FROM writes WHERE channel = 'messages' ORDER BY rowid ASC"
-        )
-        for tid, typ, val in cursor.fetchall():
-            if exclude_thread_id and tid.startswith(exclude_thread_id):
-                continue
-            msgs = _serializer.loads_typed((typ, val))
-            if isinstance(msgs, list):
-                thread_messages[tid].extend(msgs)
-            else:
-                thread_messages[tid].append(msgs)
+            cursor.execute(
+                "SELECT thread_id, type, value FROM writes WHERE channel = 'messages' ORDER BY rowid ASC"
+            )
+            for tid, typ, val in cursor.fetchall():
+                if exclude_thread_id and tid.startswith(exclude_thread_id):
+                    continue
+                msgs = _serializer.loads_typed((typ, val))
+                if isinstance(msgs, list):
+                    thread_messages[tid].extend(msgs)
+                else:
+                    thread_messages[tid].append(msgs)
+    except (sqlite3.Error, OSError):
+        return {}
 
     conversations: dict[str, dict[str, Any]] = {}
     for tid, msgs in thread_messages.items():

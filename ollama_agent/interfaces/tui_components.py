@@ -12,8 +12,8 @@ from textual.message import Message
 from textual.timer import Timer
 from textual.widgets import Button, Collapsible, Label, Markdown, OptionList, Static, TextArea
 
+from ..agent.episodic_memory import load_past_user_prompts
 from ..i18n import _
-from ..settings.paths import APP_DIR
 
 if TYPE_CHECKING:
     from .repl import OllamaREPL, OllamaAgentApp
@@ -152,23 +152,8 @@ class ReplInput(TextArea):
         self._update_height()
 
     async def _load_history(self) -> None:
-        history_path = APP_DIR / "tui_history.txt"
-        loaded_set: set[str] = set()
-        self._history = []
-
-        def _read_history() -> list[str]:
-            res: list[str] = []
-            if history_path.exists():
-                with open(history_path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        entry = line.rstrip("\r\n")
-                        if entry and not entry.startswith("/") and entry not in loaded_set:
-                            res.append(entry)
-                            loaded_set.add(entry)
-            return res
-
-        file_entries = await asyncio.to_thread(_read_history)
-        self._history.extend(file_entries)
+        db_entries = await asyncio.to_thread(load_past_user_prompts)
+        self._history = list(db_entries)
         self._history_index = len(self._history)
         self._temp_input = ""
 
@@ -182,11 +167,6 @@ class ReplInput(TextArea):
         self._history.append(entry)
         self._history_index = len(self._history)
         self._temp_input = ""
-
-        history_path = APP_DIR / "tui_history.txt"
-        history_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(history_path, "a", encoding="utf-8") as f:
-            f.write(entry + "\n")
 
     class Submitted(Message):
         """Emitted when the user submits the input."""

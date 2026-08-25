@@ -16,6 +16,7 @@ from ollama_agent.agent.builtin_tools import (
 from ollama_agent.agent.episodic_memory import (
     format_past_conversations_context,
     load_past_conversations,
+    load_past_user_prompts,
     search_past_conversations_in_db,
 )
 
@@ -117,6 +118,22 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
     def test_load_past_conversations_empty_db(self) -> None:
         convs = load_past_conversations(self.db_path)
         self.assertEqual(convs, {})
+
+    def test_load_past_user_prompts_empty_db(self) -> None:
+        prompts = load_past_user_prompts(self.db_path)
+        self.assertEqual(prompts, [])
+
+    def test_load_past_user_prompts_with_data(self) -> None:
+        self._seed_db()
+        prompts = load_past_user_prompts(self.db_path)
+        self.assertEqual(
+            prompts,
+            [
+                "How do I dockerize a FastAPI application?",
+                "Set up a React Vite project with TypeScript.",
+                "How to handle PostgreSQL migrations with Alembic?",
+            ],
+        )
 
     def test_load_past_conversations_with_data(self) -> None:
         self._seed_db()
