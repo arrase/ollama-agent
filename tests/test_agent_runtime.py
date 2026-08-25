@@ -170,8 +170,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         with patch.object(AgentRuntime, "_build_graph", AsyncMock(return_value=MagicMock())) as mock_bg, \
              patch("ollama_agent.agent.agent.load_instructions", return_value="instructions\n{FILESYSTEM_POLICY}\n{RAG_POLICY}"), \
              patch("ollama_agent.agent.agent.load_fs_policy_sandboxed", return_value="fs_policy"), \
-             patch("ollama_agent.agent.agent.ensure_memory_file"), \
-             patch("ollama_agent.agent.agent.ensure_agents_file"):
+             patch("ollama_agent.agent.agent.ensure_memory_file"):
             set_rag_manager(None)
             await runtime.reload()
             self.assertIsNotNone(runtime.graph)
@@ -206,8 +205,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
              patch("ollama_agent.agent.agent.load_instructions", return_value="base\n{FILESYSTEM_POLICY}\n{RAG_POLICY}"), \
              patch("ollama_agent.agent.agent.load_fs_policy_sandboxed", return_value="fs_sandbox"), \
              patch("ollama_agent.agent.agent.load_rag_policy", return_value="rag_policy_content"), \
-             patch("ollama_agent.agent.agent.ensure_memory_file"), \
-             patch("ollama_agent.agent.agent.ensure_agents_file"):
+             patch("ollama_agent.agent.agent.ensure_memory_file"):
             await runtime.reload()
             self.assertIn("rag_policy_content", runtime._instructions)
             self.assertIn("fs_sandbox", runtime._instructions)

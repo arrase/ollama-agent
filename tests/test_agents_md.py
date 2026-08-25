@@ -16,7 +16,6 @@ from ollama_agent.agent import AgentRuntime
 from ollama_agent.settings import (
     AGENTS_MD_NAME,
     Settings,
-    ensure_agents_file,
     find_agents_file,
 )
 
@@ -81,15 +80,6 @@ class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
         empty_dir = self.base_path / "empty"
         empty_dir.mkdir()
         self.assertIsNone(find_agents_file(empty_dir))
-
-    def test_ensure_agents_file_creates_scaffold(self) -> None:
-        target = self.base_path / "custom" / "AGENTS.md"
-        self.assertFalse(target.exists())
-
-        created = ensure_agents_file(target)
-        self.assertEqual(created, target)
-        self.assertTrue(target.exists())
-        self.assertIn("Agent Guidelines", target.read_text(encoding="utf-8"))
 
     def test_memory_middleware_loads_agents_md_into_system_prompt(self) -> None:
         project_dir = self.base_path / "project"

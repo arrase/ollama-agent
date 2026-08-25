@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import io
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from textual import events
@@ -143,31 +141,28 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(sys_msgs), 2)
 
     async def test_repl_input_history_and_keys(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            hist_file = Path(tmpdir) / "tui_history.txt"
-            with patch("ollama_agent.interfaces.tui_components.APP_DIR", Path(tmpdir)):
-                inp = ReplInput()
-                inp.add_history_entry("first message")
-                inp.add_history_entry("second message")
-                inp.add_history_entry("second message")  # duplicate should not append
+        inp = ReplInput()
+        inp.add_history_entry("first message")
+        inp.add_history_entry("second message")
+        inp.add_history_entry("second message")  # duplicate should not append
 
-                self.assertEqual(len(inp._history), 2)
-                self.assertEqual(inp._history[-1], "second message")
+        self.assertEqual(len(inp._history), 2)
+        self.assertEqual(inp._history[-1], "second message")
 
-                # Test history navigation keys
-                up_event = events.Key("up", "up")
-                handled_up = inp._handle_history_key(up_event)
-                self.assertTrue(handled_up)
-                self.assertEqual(inp.text, "second message")
+        # Test history navigation keys
+        up_event = events.Key("up", "up")
+        handled_up = inp._handle_history_key(up_event)
+        self.assertTrue(handled_up)
+        self.assertEqual(inp.text, "second message")
 
-                handled_up2 = inp._handle_history_key(up_event)
-                self.assertTrue(handled_up2)
-                self.assertEqual(inp.text, "first message")
+        handled_up2 = inp._handle_history_key(up_event)
+        self.assertTrue(handled_up2)
+        self.assertEqual(inp.text, "first message")
 
-                down_event = events.Key("down", "down")
-                handled_down = inp._handle_history_key(down_event)
-                self.assertTrue(handled_down)
-                self.assertEqual(inp.text, "second message")
+        down_event = events.Key("down", "down")
+        handled_down = inp._handle_history_key(down_event)
+        self.assertTrue(handled_down)
+        self.assertEqual(inp.text, "second message")
 
     async def test_repl_input_multiline_and_keys(self) -> None:
         class InputApp(App):

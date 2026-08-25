@@ -177,7 +177,7 @@ The prompt input box (`ReplInput`) provides intuitive editing, history navigatio
 * **Insert Newline (`\ + Enter`)**: End any line with a backslash `\` and press `Enter`. The trailing backslash is automatically removed, inserting a clean newline. The input container dynamically expands up to 8 lines.
 * **Submit Prompt (`Enter`)**: Press `Enter` without a trailing backslash to submit your message.
 * **Cursor Navigation (`↑` / `↓`)**: Move freely between lines in multiline text.
-* **Command History**: Pressing `↑` at the beginning `(row 0, col 0)` recalls prior inputs; pressing `↓` at the end navigates forward. History is persisted across sessions in `~/.ollama-agent/tui_history.txt`.
+* **Command History**: Pressing `↑` at the beginning `(row 0, col 0)` recalls prior inputs; pressing `↓` at the end navigates forward. Past inputs are loaded directly from the SQLite conversation checkpoints in `~/.ollama-agent/history.db`.
 * **Tab Autocompletion (`Tab`)**: Activates 3-level autocompletion:
   1. *Level 0*: Root slash commands (`/mo` -> `/model`).
   2. *Level 1*: Subcommands (`/task ` -> `list`, `create`, `run`, `delete`).
