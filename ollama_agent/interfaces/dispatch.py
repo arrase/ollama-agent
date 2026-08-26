@@ -9,6 +9,7 @@ from typing import Awaitable, Callable, Any
 
 from rich.console import Console
 
+from ..agent import list_subagents
 from ..agent.episodic_memory import HistoryError
 from ..i18n import _
 from ..mcp import list_mcp_servers, reload_mcp_servers
@@ -142,6 +143,10 @@ def build_cli_handlers(
             Console(),
             settings=settings,
         ),
+        ("agents", "list"): lambda: list_subagents(
+            Console(),
+            settings=settings,
+        ),
     }
 
 
@@ -165,6 +170,13 @@ def build_repl_handlers(
     (/exit, /quit, /clear, /new, /compact, /session new|resume|switch|export,
     /task create|run and /skill create are handled by OllamaAgentApp).
     """
+
+    def handle_agents(args: list[str]) -> object:
+        if not args or args[0] == "list":
+            return list_subagents(console, settings=get_runtime().settings)
+        err_msg = _("Unknown agents subcommand '{sub}'. Usage: /agents [list]", sub=args[0])
+        console.print(f"[red]{err_msg}[/red]")
+        return None
 
     def handle_mcp(args: list[str]) -> object:
         if not args or args[0] in ("list", "status"):
@@ -369,6 +381,12 @@ def build_repl_handlers(
             "MCP (Model Context Protocol)",
             _("Usage: /mcp [list | reload]"),
             handle_mcp,
+        ),
+        "/agents": REPLCommand(
+            _("Manage configured subagents"),
+            "Subagents Management",
+            _("Usage: /agents [list]"),
+            handle_agents,
         ),
     }
     return cmds

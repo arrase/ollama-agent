@@ -432,13 +432,30 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             await safe_call(handlers["/mcp"].handler, ["reload"], console=console)
             self.assertIn("Malformed mcp.json", console.export_text())
 
-        handlers["/mcp"].handler(["unknown_cmd"])
-        self.assertIn("Unknown mcp subcommand 'unknown_cmd'", console.export_text())
+        # 7. /agents handler
+        with patch("ollama_agent.interfaces.dispatch.list_subagents") as mock_list_subagents:
+            await safe_call(handlers["/agents"].handler, [], console=console)
+            mock_list_subagents.assert_called_once_with(console, settings=runtime.settings)
+
+            mock_list_subagents.reset_mock()
+            await safe_call(handlers["/agents"].handler, ["list"], console=console)
+            mock_list_subagents.assert_called_once_with(console, settings=runtime.settings)
+
+        handlers["/agents"].handler(["unknown_cmd"])
+        self.assertIn("Unknown agents subcommand 'unknown_cmd'", console.export_text())
 
     def test_handle_cli_commands_subcommand(self) -> None:
         args = argparse.Namespace(command="task", subcommand="list", prompt=None, yolo=False, rag=None)
         settings = Settings()
         with patch("ollama_agent.interfaces.dispatch.list_tasks") as mock_list:
+            handled = handle_cli_commands(args, settings)
+            self.assertTrue(handled)
+            mock_list.assert_called_once()
+
+    def test_handle_cli_commands_agents_list(self) -> None:
+        args = argparse.Namespace(command="agents", subcommand="list", prompt=None, yolo=False, rag=None)
+        settings = Settings()
+        with patch("ollama_agent.interfaces.dispatch.list_subagents") as mock_list:
             handled = handle_cli_commands(args, settings)
             self.assertTrue(handled)
             mock_list.assert_called_once()

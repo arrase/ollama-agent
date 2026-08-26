@@ -401,5 +401,17 @@
   "Usage: /mcp [list | reload]": "Uso: /mcp [list | reload]",
   "Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]": "Subcomando mcp desconocido '{sub}'. Uso: /mcp [list | reload]",
   "Reload MCP servers and rebuild tool graph": "Recargar servidores MCP y reconstruir el grafo de herramientas",
-  "MCP servers reloaded successfully.": "Servidores MCP recargados correctamente."
+  "MCP servers reloaded successfully.": "Servidores MCP recargados correctamente.",
+  "Manage configured subagents": "Gestionar subagentes configurados",
+  "List configured subagents and their properties": "Listar subagentes configurados y sus propiedades",
+  "List all configured subagents": "Listar todos los subagentes configurados",
+  "Usage: /agents [list]": "Uso: /agents [list]",
+  "Unknown agents subcommand '{sub}'. Usage: /agents [list]": "Subcomando de agentes desconocido '{sub}'. Uso: /agents [list]",
+  "No subagents configured.": "No hay subagentes configurados.",
+  "Configure subagents in {path}": "Configura subagentes en {path}",
+  "Configured Subagents": "Subagentes configurados",
+  "Context": "Contexto",
+  "MCP Servers": "Servidores MCP",
+  "inherited": "heredado",
+  "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "Ejecute 'ollama-agent agents <subcommand> -h' para más detalles sobre un subcomando."
 }

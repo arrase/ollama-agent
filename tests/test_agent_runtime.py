@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import unittest
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -9,13 +10,15 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessageChunk
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
 
+from rich.console import Console
+
 from ollama_agent.agent.agent import AgentRuntime, _process_message_chunk
 from ollama_agent.agent.builtin_tools import rag_search, set_rag_manager
 from ollama_agent.agent.middleware import _stream_tool_events
-from ollama_agent.agent.subagents import build_subagents
+from ollama_agent.agent.subagents import build_subagents, list_subagents
 from test_compaction import make_summarization_engine
 from ollama_agent.core.prompt_processor import PromptProcessingError
-from ollama_agent.settings.config import ModelSettings, Settings, SubAgentSettings
+from ollama_agent.settings.config import ModelSettings, Settings, SubAgentMCPServer, SubAgentSettings
 
 
 class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
@@ -145,6 +148,67 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(ValueError):
             await build_subagents(sa_list, model_settings=ms)
+
+    def test_list_subagents_empty(self) -> None:
+        console = Console(file=io.StringIO(), record=True, width=120)
+        list_subagents(console, None)
+        output = console.export_text()
+        self.assertIn("No subagents configured.", output)
+        self.assertIn("Configure subagents in", output)
+
+        console_empty = Console(file=io.StringIO(), record=True, width=120)
+        settings = Settings()
+        list_subagents(console_empty, settings)
+        output_empty = console_empty.export_text()
+        self.assertIn("No subagents configured.", output_empty)
+
+    def test_list_subagents_populated(self) -> None:
+        console = Console(file=io.StringIO(), record=True, width=120)
+        settings = Settings()
+        settings.subagents = [
+            SubAgentSettings(
+                name="researcher",
+                description="Web research specialist",
+                system_prompt="You are a research analyst.",
+                model="gemma4:26b",
+                context_window=32768,
+                mcp_servers=[
+                    SubAgentMCPServer(name="brave-search", command="npx"),
+                    SubAgentMCPServer(name="fetch", command="uvx"),
+                ],
+            ),
+        ]
+        list_subagents(console, settings)
+        output = console.export_text()
+        self.assertIn("Configured Subagents", output)
+        self.assertIn("researcher", output)
+        self.assertIn("Web research", output)
+        self.assertIn("gemma4:26b", output)
+        self.assertIn("32768", output)
+        self.assertIn("brave-search, fetch", output)
+
+    def test_list_subagents_inherited_fields(self) -> None:
+        console = Console(file=io.StringIO(), record=True, width=120)
+        settings = Settings()
+        settings.model.name = "qwen3.8:27b"
+        settings.model.context_window = 10000
+        settings.subagents = [
+            SubAgentSettings(
+                name="coder",
+                description="Code writer",
+                system_prompt="You write code.",
+                model="",
+                context_window=0,
+                mcp_servers=[],
+            )
+        ]
+        list_subagents(console, settings)
+        output = console.export_text()
+        self.assertIn("Configured Subagents", output)
+        self.assertIn("coder", output)
+        self.assertIn("qwen3.8:27b (inherited)", output)
+        self.assertIn("10000 (inherited)", output)
+        self.assertIn("-", output)
 
     async def test_rag_search_uninitialized(self) -> None:
         set_rag_manager(None)

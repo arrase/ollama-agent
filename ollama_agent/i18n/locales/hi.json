@@ -401,5 +401,17 @@
   "Usage: /mcp [list | reload]": "उपयोग: /mcp [list | reload]",
   "Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]": "अज्ञात mcp उप-कमांड '{sub}'। उपयोग: /mcp [list | reload]",
   "Reload MCP servers and rebuild tool graph": "MCP सर्वर पुनः लोड करें और टूल ग्राफ़ का पुनर्निर्माण करें",
-  "MCP servers reloaded successfully.": "MCP सर्वर सफलतापूर्वक पुनः लोड किए गए।"
+  "MCP servers reloaded successfully.": "MCP सर्वर सफलतापूर्वक पुनः लोड किए गए।",
+  "Manage configured subagents": "कॉन्फ़िगर किए गए सब-एजेंट प्रबंधित करें",
+  "List configured subagents and their properties": "कॉन्फ़िगर किए गए सब-एजेंट और उनके गुण सूचीबद्ध करें",
+  "List all configured subagents": "सभी कॉन्फ़िगर किए गए सब-एजेंट सूचीबद्ध करें",
+  "Usage: /agents [list]": "उपयोग: /agents [list]",
+  "Unknown agents subcommand '{sub}'. Usage: /agents [list]": "अज्ञात agents उप-कमांड '{sub}'। उपयोग: /agents [list]",
+  "No subagents configured.": "कोई सब-एजेंट कॉन्फ़िगर नहीं है।",
+  "Configure subagents in {path}": "{path} में सब-एजेंट कॉन्फ़िगर करें",
+  "Configured Subagents": "कॉन्फ़िगर किए गए सब-एजेंट",
+  "Context": "संदर्भ",
+  "MCP Servers": "MCP सर्वर",
+  "inherited": "विरासत में मिला",
+  "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "उप-कमांड पर अधिक विवरण देखने के लिए 'ollama-agent agents <subcommand> -h' चलाएँ।"
 }

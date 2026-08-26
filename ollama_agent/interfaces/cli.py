@@ -230,6 +230,17 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
 
     mcp_sub.add_parser("list", help=_("List configured MCP servers and check their status"))
 
+    # Agents commands
+    agents_parser = subparsers.add_parser(
+        "agents",
+        help=_("Manage configured subagents"),
+        description=_("Manage configured subagents"),
+        epilog=_("Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand."),
+    )
+    agents_sub = agents_parser.add_subparsers(dest="subcommand", required=True)
+
+    agents_sub.add_parser("list", help=_("List all configured subagents"))
+
 
 def create_argument_parser() -> argparse.ArgumentParser:
     """Create and configure argument parser."""

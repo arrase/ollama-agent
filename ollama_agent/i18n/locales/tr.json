@@ -401,5 +401,17 @@
   "Usage: /mcp [list | reload]": "Kullanım: /mcp [list | reload]",
   "Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]": "Bilinmeyen mcp alt komutu '{sub}'. Kullanım: /mcp [list | reload]",
   "Reload MCP servers and rebuild tool graph": "MCP sunucularını yeniden yükle ve araç grafiğini yeniden oluştur",
-  "MCP servers reloaded successfully.": "MCP sunucuları başarıyla yeniden yüklendi."
+  "MCP servers reloaded successfully.": "MCP sunucuları başarıyla yeniden yüklendi.",
+  "Manage configured subagents": "Yapılandırılmış alt aracıları yönet",
+  "List configured subagents and their properties": "Yapılandırılmış alt aracıları ve özelliklerini listele",
+  "List all configured subagents": "Yapılandırılmış tüm alt aracıları listele",
+  "Usage: /agents [list]": "Kullanım: /agents [list]",
+  "Unknown agents subcommand '{sub}'. Usage: /agents [list]": "Bilinmeyen agents alt komutu '{sub}'. Kullanım: /agents [list]",
+  "No subagents configured.": "Yapılandırılmış alt aracı yok.",
+  "Configure subagents in {path}": "Alt aracıları {path} içinde yapılandırın",
+  "Configured Subagents": "Yapılandırılmış Alt Aracılar",
+  "Context": "Bağlam",
+  "MCP Servers": "MCP Sunucuları",
+  "inherited": "devralındı",
+  "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "Bir alt komut hakkında daha fazla ayrıntı için 'ollama-agent agents <subcommand> -h' komutunu çalıştırın."
 }

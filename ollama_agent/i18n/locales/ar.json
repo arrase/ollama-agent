@@ -401,5 +401,17 @@
   "Usage: /mcp [list | reload]": "الاستخدام: /mcp [list | reload]",
   "Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]": "أمر فرعي غير معروف لـ mcp '{sub}'. الاستخدام: /mcp [list | reload]",
   "Reload MCP servers and rebuild tool graph": "إعادة تحميل خوادم MCP وإعادة بناء مخطط الأدوات",
-  "MCP servers reloaded successfully.": "تمت إعادة تحميل خوادم MCP بنجاح."
+  "MCP servers reloaded successfully.": "تمت إعادة تحميل خوادم MCP بنجاح.",
+  "Manage configured subagents": "إدارة الوكلاء الفرعيين الذين تم تكوينهم",
+  "List configured subagents and their properties": "سرد الوكلاء الفرعيين المكونين وخصائصهم",
+  "List all configured subagents": "سرد كافة الوكلاء الفرعيين المكونين",
+  "Usage: /agents [list]": "الاستخدام: /agents [list]",
+  "Unknown agents subcommand '{sub}'. Usage: /agents [list]": "أمر فرعي غير معروف لـ agents '{sub}'. الاستخدام: /agents [list]",
+  "No subagents configured.": "لم يتم تكوين أي وكلاء فرعيين.",
+  "Configure subagents in {path}": "تكوين الوكلاء الفرعيين في {path}",
+  "Configured Subagents": "الوكلاء الفرعيون المكونون",
+  "Context": "السياق",
+  "MCP Servers": "خوادم MCP",
+  "inherited": "موروث",
+  "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "قم بتشغيل 'ollama-agent agents <subcommand> -h' لمزيد من التفاصيل حول أمر فرعي."
 }

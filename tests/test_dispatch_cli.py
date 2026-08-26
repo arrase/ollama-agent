@@ -89,6 +89,7 @@ class TestDispatchAndCLI(unittest.TestCase):
         self.assertIn(("rag", "list"), handlers)
         self.assertIn(("skill", "list"), handlers)
         self.assertIn(("mcp", "list"), handlers)
+        self.assertIn(("agents", "list"), handlers)
 
     def test_build_cli_handlers_requires_settings(self) -> None:
         parser = create_argument_parser()
@@ -100,6 +101,12 @@ class TestDispatchAndCLI(unittest.TestCase):
                 rag_ctx=RAGContext(rag_manager=RAGManager(RAGSettings()), console=_console()),
                 skills_ctx=SkillsContext(console=_console()),
             )
+
+    def test_argument_parser_agents_subcommand(self) -> None:
+        parser = create_argument_parser()
+        args = parser.parse_args(["agents", "list"])
+        self.assertEqual(args.command, "agents")
+        self.assertEqual(args.subcommand, "list")
 
     def test_build_repl_handlers_registry(self) -> None:
         async def dummy_async_str(_: str) -> None:
@@ -133,6 +140,7 @@ class TestDispatchAndCLI(unittest.TestCase):
         self.assertIn("/skill", handlers)
         self.assertIn("/rag", handlers)
         self.assertIn("/mcp", handlers)
+        self.assertIn("/agents", handlers)
 
     def test_build_repl_handlers_intercepted_subcommands_removed(self) -> None:
         async def dummy_async(_: object) -> None:

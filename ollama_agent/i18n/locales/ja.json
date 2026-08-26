@@ -401,5 +401,17 @@
   "Usage: /mcp [list | reload]": "使用法: /mcp [list | reload]",
   "Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]": "不明な mcp サブコマンド '{sub}' です。使用法: /mcp [list | reload]",
   "Reload MCP servers and rebuild tool graph": "MCPサーバーを再読み込みし、ツールグラフを再構築",
-  "MCP servers reloaded successfully.": "MCPサーバーが正常に再読み込みされました。"
+  "MCP servers reloaded successfully.": "MCPサーバーが正常に再読み込みされました。",
+  "Manage configured subagents": "設定されたサブエージェントを管理",
+  "List configured subagents and their properties": "設定されたサブエージェントとそのプロパティを一覧表示",
+  "List all configured subagents": "設定されているすべてのサブエージェントを一覧表示",
+  "Usage: /agents [list]": "使用法: /agents [list]",
+  "Unknown agents subcommand '{sub}'. Usage: /agents [list]": "不明な agents サブコマンド '{sub}' です。使用法: /agents [list]",
+  "No subagents configured.": "サブエージェントが設定されていません。",
+  "Configure subagents in {path}": "{path} でサブエージェントを設定してください",
+  "Configured Subagents": "設定済みサブエージェント",
+  "Context": "コンテキスト",
+  "MCP Servers": "MCP サーバー",
+  "inherited": "継承",
+  "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "サブコマンドの詳細については、'ollama-agent agents <subcommand> -h' を実行してください。"
 }
