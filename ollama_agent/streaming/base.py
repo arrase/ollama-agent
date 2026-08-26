@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..agent import AgentRuntime
+
+_log = logging.getLogger(__name__)
 
 
 class StreamingRenderer(ABC):
@@ -15,9 +18,13 @@ class StreamingRenderer(ABC):
     def on_event(self, event: dict[str, Any]) -> None:
         """Dispatch event to type-specific handler (on_<type>)."""
         etype = event.get("type")
-        handler = getattr(self, f"on_{etype}", None) if etype else None
-        if handler is None:
-            raise ValueError(f"Unhandled event type: {etype}")
+        if not etype or etype == "event":
+            _log.debug("Skipping event with unroutable type: %s", etype)
+            return
+        handler = getattr(self, f"on_{etype}", None)
+        if not callable(handler):
+            _log.debug("Unhandled event type skipped: %s", etype)
+            return
         handler(event)
 
     @abstractmethod

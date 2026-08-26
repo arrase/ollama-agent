@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import sqlite3
 from collections import defaultdict
 from datetime import datetime
@@ -21,12 +22,18 @@ class HistoryError(RuntimeError):
     """Raised when the conversation history database cannot be read."""
 
 
-def connect_history(db_path: Path) -> sqlite3.Connection:
-    """Open the history database, raising HistoryError when unreadable."""
+@contextlib.contextmanager
+def connect_history(db_path: Path):
+    """Open the history database as a context manager that closes on exit."""
     try:
-        return sqlite3.connect(str(db_path))
+        conn = sqlite3.connect(str(db_path))
     except sqlite3.Error as e:
         raise HistoryError(_("Failed to open history database {db_path}: {e}", db_path=db_path, e=e)) from e
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def format_iso_timestamp(ts: str) -> str:
@@ -147,6 +154,7 @@ def search_past_conversations_in_db(
         snippets: list[str] = []
         match_count = 0
         total_chars = 0
+        snippets_full = False
 
         match_count += sum(formatted_date.lower().count(t) for t in terms)
 
@@ -162,12 +170,13 @@ def search_past_conversations_in_db(
             term_hits = sum(text.lower().count(t) for t in terms)
             if term_hits > 0:
                 match_count += term_hits
-                truncated = text if len(text) <= 300 else f"{text[:297]}..."
-                role_label = _("User") if role in ("human", "user") else _("Assistant")
-                snippets.append(f"[{role_label}]: {truncated}")
-                total_chars += len(truncated)
-                if total_chars > 1200:
-                    break
+                if not snippets_full:
+                    truncated = text if len(text) <= 300 else f"{text[:297]}..."
+                    role_label = _("User") if role in ("human", "user") else _("Assistant")
+                    snippets.append(f"[{role_label}]: {truncated}")
+                    total_chars += len(truncated)
+                    if total_chars > 1200:
+                        snippets_full = True
 
         if match_count > 0:
             scored_results.append({

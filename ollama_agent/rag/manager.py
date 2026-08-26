@@ -263,8 +263,11 @@ class RAGManager:
             for i, chunk in enumerate(chunks):
                 flat_chunks_data.append((source, fname, chunk, i, total_chunks))
 
-        # Process in batches. Old points are deleted only after the batch
-        # embeddings succeed, so a failure never loses already-indexed content.
+        # Delete old points for all sources up-front, before batch processing.
+        all_sources = {str(fpath) for fpath, _ in all_file_chunks}
+        self._delete_sources_points(client, all_sources)
+
+        # Process in batches.
         BATCH_SIZE = 100
         failed_sources: set[str] = set()
         for i in range(0, len(flat_chunks_data), BATCH_SIZE):
@@ -281,8 +284,6 @@ class RAGManager:
                 )
                 failed_sources.update(batch_sources)
                 continue
-
-            self._delete_sources_points(client, batch_sources)
 
             points = []
             for (
@@ -403,7 +404,7 @@ class RAGManager:
         chunk_size = self.settings.chunk_size
         overlap = self.settings.chunk_overlap
 
-        if chunk_size <= 0 or overlap < 0:
+        if chunk_size <= 0 or overlap < 0 or overlap >= chunk_size:
             raise RAGError(
                 _("Invalid chunk configuration: chunk_size={chunk_size}, chunk_overlap={chunk_overlap}", chunk_size=chunk_size, chunk_overlap=overlap)
             )

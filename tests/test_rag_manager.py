@@ -62,9 +62,8 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
     def test_chunk_text_monotonic_forward_progress(self) -> None:
         self.settings.chunk_size = 50
         self.settings.chunk_overlap = 60
-        text = "Paragraph one with some detailed words.\n\nParagraph two with more details here."
-        chunks = self.manager._chunk_text(text)
-        self.assertTrue(len(chunks) > 1)
+        with self.assertRaises(RAGError):
+            self.manager._chunk_text("Paragraph one with some detailed words.\n\nParagraph two with more details here.")
 
     def test_chunk_text_long_paragraphs(self) -> None:
         text = "Sentence 1. Sentence 2. Sentence 3. Sentence 4. Sentence 5. Sentence 6."

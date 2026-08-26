@@ -48,7 +48,6 @@ def detect_system_language() -> str:
                     norm = _normalize_lang(part)
                     if norm in SUPPORTED_LOCALES:
                         return norm
-            return DEFAULT_LOCALE
 
     loc = locale.getlocale()[0]
     if loc:
@@ -92,11 +91,7 @@ def get_text(message: str, **kwargs: Any) -> str:
     if _current_locale == DEFAULT_LOCALE:
         template = message
     else:
-        if message not in _translations:
-            raise KeyError(
-                f"Missing translation for {message!r} in locale {_current_locale}"
-            )
-        template = _translations[message]
+        template = _translations.get(message, message)
     if kwargs:
         return template.format(**kwargs)
     return template
