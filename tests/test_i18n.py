@@ -59,7 +59,7 @@ class TestI18nDetection(unittest.TestCase):
                 self.assertEqual(detect_system_language(), expected, f"Failed for {env_val}")
 
     def test_detect_unsupported_language_fallback_to_english(self) -> None:
-        test_cases = ["pl_PL.UTF-8", "sv_SE", "nl_NL", "ar_EG", "unknown", "C", "POSIX"]
+        test_cases = ["sv_SE", "ca_ES", "da_DK", "fi_FI", "el_GR", "he_IL", "th_TH", "vi_VN", "unknown", "C", "POSIX"]
         for env_val in test_cases:
             with patch.dict(os.environ, {"LANG": env_val}, clear=True):
                 self.assertEqual(detect_system_language(), "en", f"Failed for {env_val}")
@@ -88,6 +88,12 @@ class TestI18nLocaleManagement(unittest.TestCase):
         self.assertIn("ja", locales)
         self.assertIn("ru", locales)
         self.assertIn("hi", locales)
+        self.assertIn("ko", locales)
+        self.assertIn("ar", locales)
+        self.assertIn("tr", locales)
+        self.assertIn("pl", locales)
+        self.assertIn("nl", locales)
+        self.assertIn("uk", locales)
 
     def test_set_and_get_valid_locale(self) -> None:
         for loc in SUPPORTED_LOCALES:
@@ -179,6 +185,36 @@ class TestI18nTranslations(unittest.TestCase):
         self.assertEqual(_("Manage saved tasks"), "सहेजे गए कार्य प्रबंधित करें")
         self.assertEqual(_("Exit the REPL"), "REPL से बाहर निकलें")
         self.assertEqual(_("No skills found."), "कोई कौशल नहीं मिला।")
+
+    def test_korean_translation(self) -> None:
+        set_locale("ko")
+        self.assertEqual(_("Manage saved tasks"), "저장된 작업 관리")
+        self.assertEqual(_("Exit the REPL"), "REPL 종료")
+
+    def test_arabic_translation(self) -> None:
+        set_locale("ar")
+        self.assertEqual(_("Manage saved tasks"), "إدارة المهام المحفوظة")
+        self.assertEqual(_("Exit the REPL"), "اخرج من REPL")
+
+    def test_turkish_translation(self) -> None:
+        set_locale("tr")
+        self.assertEqual(_("Manage saved tasks"), "Kaydedilen görevleri yönet")
+        self.assertEqual(_("Exit the REPL"), "REPL'den çık")
+
+    def test_polish_translation(self) -> None:
+        set_locale("pl")
+        self.assertEqual(_("Manage saved tasks"), "Zarządzaj zapisanymi zadaniami")
+        self.assertEqual(_("Exit the REPL"), "Zakończ działanie REPL")
+
+    def test_dutch_translation(self) -> None:
+        set_locale("nl")
+        self.assertEqual(_("Manage saved tasks"), "Opgeslagen taken beheren")
+        self.assertEqual(_("Exit the REPL"), "Sluit de REPL af")
+
+    def test_ukrainian_translation(self) -> None:
+        set_locale("uk")
+        self.assertEqual(_("Manage saved tasks"), "Керування збереженими завданнями")
+        self.assertEqual(_("Exit the REPL"), "Вийти з REPL")
 
     def test_parameter_interpolation(self) -> None:
         set_locale("en")
