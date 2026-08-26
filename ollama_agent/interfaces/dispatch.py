@@ -11,7 +11,8 @@ from rich.console import Console
 
 from ..agent.episodic_memory import HistoryError
 from ..i18n import _
-from ..mcp import list_mcp_servers
+from ..mcp import list_mcp_servers, reload_mcp_servers
+from ..mcp.loader import MCPConfigError
 from ..settings import Settings
 from ..rag import (
     RAGContext,
@@ -61,15 +62,15 @@ async def safe_call(
 ) -> None:
     """Call *fn*(*args, **kwargs), awaiting if necessary.
 
-    Domain errors (SkillError, TaskError, RAGError, HistoryError) carry the
-    full user-facing message and are reported here exactly once; raisers
-    print nothing themselves.
+    Domain errors (SkillError, TaskError, RAGError, HistoryError, MCPConfigError)
+    carry the full user-facing message and are reported here exactly once;
+    raisers print nothing themselves.
     """
     try:
         result = fn(*args, **kwargs)
         if inspect.isawaitable(result):
             await result
-    except (SkillError, TaskError, RAGError, HistoryError) as exc:
+    except (SkillError, TaskError, RAGError, HistoryError, MCPConfigError) as exc:
         console.print(f"[red]{exc}[/red]")
 
 
@@ -168,7 +169,9 @@ def build_repl_handlers(
     def handle_mcp(args: list[str]) -> object:
         if not args or args[0] in ("list", "status"):
             return list_mcp_servers(console, settings=get_runtime().settings)
-        err_msg = _("Unknown mcp subcommand '{sub}'. Usage: /mcp [list]", sub=args[0])
+        if args[0] == "reload":
+            return reload_mcp_servers(console, runtime=get_runtime())
+        err_msg = _("Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]", sub=args[0])
         console.print(f"[red]{err_msg}[/red]")
         return None
 
@@ -362,9 +365,9 @@ def build_repl_handlers(
             handle_rag,
         ),
         "/mcp": REPLCommand(
-            _("List configured MCP servers and check their status"),
+            _("Manage and check MCP servers"),
             "MCP (Model Context Protocol)",
-            _("Usage: /mcp [list]"),
+            _("Usage: /mcp [list | reload]"),
             handle_mcp,
         ),
     }

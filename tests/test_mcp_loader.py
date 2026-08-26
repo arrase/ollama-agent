@@ -12,6 +12,7 @@ from rich.console import Console
 from ollama_agent.mcp.commands import (
     check_mcp_server,
     list_mcp_servers,
+    reload_mcp_servers,
 )
 from ollama_agent.mcp.loader import (
     MCPConfigError,
@@ -357,3 +358,35 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("tavily_search", out)
         finally:
             tmp_path.unlink(missing_ok=True)
+
+    async def test_reload_mcp_servers_success(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.reload = AsyncMock()
+        runtime.settings = Settings()
+
+        with patch("ollama_agent.mcp.commands.list_mcp_servers", AsyncMock()) as mock_list:
+            await reload_mcp_servers(console, runtime)
+            runtime.reload.assert_awaited_once()
+            mock_list.assert_awaited_once_with(console, settings=runtime.settings)
+            self.assertIn("MCP servers reloaded successfully.", console.export_text())
+
+    async def test_reload_mcp_servers_config_error(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.reload = AsyncMock(side_effect=MCPConfigError("Invalid JSON in mcp.json"))
+        runtime.settings = Settings()
+
+        with self.assertRaisesRegex(MCPConfigError, "Invalid JSON in mcp.json"):
+            await reload_mcp_servers(console, runtime)
+        runtime.reload.assert_awaited_once()
+
+    async def test_reload_mcp_servers_generic_error(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.reload = AsyncMock(side_effect=RuntimeError("Connection failed"))
+        runtime.settings = Settings()
+
+        with self.assertRaises(RuntimeError):
+            await reload_mcp_servers(console, runtime)
+        runtime.reload.assert_awaited_once()

@@ -136,6 +136,7 @@ def _get_subcommands() -> dict[str, list[tuple[str, str]]]:
         ],
         "/mcp": [
             ("list", _("List configured MCP servers and their status")),
+            ("reload", _("Reload MCP servers and rebuild tool graph")),
         ],
         "/yolo": [
             ("on", _("Enable YOLO mode (bypasses confirmations)")),

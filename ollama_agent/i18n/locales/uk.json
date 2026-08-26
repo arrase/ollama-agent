@@ -334,7 +334,6 @@
   "Manage and check MCP servers": "Керування серверами MCP та перевірка їхнього стану",
   "List configured MCP servers and their status": "Показати список налаштованих серверів MCP та їхній статус",
   "List configured MCP servers and check their status": "Показати список налаштованих серверів MCP і перевірити їхній статус",
-  "Usage: /mcp [list]": "Використання: /mcp [list]",
   "Model Context Protocol (MCP) Servers": "Сервери Model Context Protocol (MCP)",
   "Server": "Сервер",
   "Type": "Тип",
@@ -347,7 +346,6 @@
   "Connection timed out ({timeout}s)": "Час очікування з'єднання вичерпано ({timeout} с)",
   "Failed to load MCP config {config_path}: {exc}": "Не вдалося завантажити конфігурацію MCP {config_path}: {exc}",
   "Invalid MCP config {config_path}: expected a JSON object": "Недійсна конфігурація MCP {config_path}: очікувався JSON-об'єкт",
-  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list]": "Невідома підкоманда mcp '{sub}'. Використання: /mcp [list]",
   "Run 'ollama-agent <command> -h' for more details on a specific command.": "Запустіть 'ollama-agent <command> -h', щоб дізнатися більше про конкретну команду.",
   "Run 'ollama-agent task <subcommand> -h' for more details on a subcommand.": "Запустіть 'ollama-agent task <subcommand> -h', щоб дізнатися більше про підкоманду.",
   "Run 'ollama-agent rag <subcommand> -h' for more details on a subcommand.": "Запустіть 'ollama-agent rag <subcommand> -h', щоб дізнатися більше про підкоманду.",
@@ -399,5 +397,9 @@
   "Usage: /session [list | search <query> | delete <id>]": "Використання: /session [list | search <запит> | delete <id>]",
   "Unknown session subcommand '{sub}'. Usage: /session [list | search <query> | delete <id>]": "Невідома підкоманда сесії '{sub}'. Використання: /session [list | search <запит> | delete <id>]",
   "Task": "Завдання",
-  "Skill": "Навичка"
+  "Skill": "Навичка",
+  "Usage: /mcp [list | reload]": "Використання: /mcp [list | reload]",
+  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]": "Невідома підкоманда mcp '{sub}'. Використання: /mcp [list | reload]",
+  "Reload MCP servers and rebuild tool graph": "Перезавантажити сервери MCP та перебудувати граф інструментів",
+  "MCP servers reloaded successfully.": "Сервери MCP успішно перезавантажено."
 }

@@ -21,9 +21,10 @@ from ollama_agent.interfaces.model_commands import (
     show_model_params,
 )
 from ollama_agent.interfaces.session_commands import new_session
+from ollama_agent.mcp.loader import MCPConfigError
+from ollama_agent.rag import RAGError
 from ollama_agent.settings.config import Settings
 from ollama_agent.skills import SkillError
-from ollama_agent.rag import RAGError
 from ollama_agent.tasks.commands import TaskError
 
 
@@ -85,6 +86,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             TaskError("Task failed"),
             RAGError("RAG failed"),
             HistoryError("History DB broken"),
+            MCPConfigError("MCP config invalid"),
         ):
             with self.subTest(exc=type(exc).__name__):
                 console = Console(file=io.StringIO(), record=True)
@@ -412,6 +414,26 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         with patch("ollama_agent.interfaces.dispatch.delete_session") as mock_del_sess:
             handlers["/session"].handler(["delete", "session-1234"])
             mock_del_sess.assert_called_once_with(console, "session-1234")
+
+        # 6. /mcp handler
+        with patch("ollama_agent.interfaces.dispatch.list_mcp_servers", AsyncMock()) as mock_list_mcp:
+            await safe_call(handlers["/mcp"].handler, [], console=console)
+            mock_list_mcp.assert_awaited_once_with(console, settings=runtime.settings)
+
+            mock_list_mcp.reset_mock()
+            await safe_call(handlers["/mcp"].handler, ["list"], console=console)
+            mock_list_mcp.assert_awaited_once_with(console, settings=runtime.settings)
+
+        with patch("ollama_agent.interfaces.dispatch.reload_mcp_servers", AsyncMock()) as mock_reload_mcp:
+            await safe_call(handlers["/mcp"].handler, ["reload"], console=console)
+            mock_reload_mcp.assert_awaited_once_with(console, runtime=runtime)
+
+        with patch("ollama_agent.interfaces.dispatch.reload_mcp_servers", AsyncMock(side_effect=MCPConfigError("Malformed mcp.json"))):
+            await safe_call(handlers["/mcp"].handler, ["reload"], console=console)
+            self.assertIn("Malformed mcp.json", console.export_text())
+
+        handlers["/mcp"].handler(["unknown_cmd"])
+        self.assertIn("Unknown mcp subcommand 'unknown_cmd'", console.export_text())
 
     def test_handle_cli_commands_subcommand(self) -> None:
         args = argparse.Namespace(command="task", subcommand="list", prompt=None, yolo=False, rag=None)

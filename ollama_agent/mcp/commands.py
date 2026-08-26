@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from rich import box
 from rich.console import Console
@@ -15,6 +15,9 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from ..i18n import _
 from ..settings import MCP_PATH, Settings
 from .loader import MCPConfigError, _build_mcp_connection, _read_main_config
+
+if TYPE_CHECKING:
+    from ..agent import AgentRuntime
 
 
 @dataclass(slots=True)
@@ -142,3 +145,14 @@ async def list_mcp_servers(
         )
 
     console.print(table)
+
+
+async def reload_mcp_servers(
+    console: Console,
+    runtime: AgentRuntime,
+) -> None:
+    """Reload MCP servers and rebuild the agent graph."""
+    await runtime.reload()
+    console.print(f"[green]✓ {_('MCP servers reloaded successfully.')}[/green]")
+    await list_mcp_servers(console, settings=runtime.settings)
+

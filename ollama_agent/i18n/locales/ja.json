@@ -334,7 +334,6 @@
   "Manage and check MCP servers": "MCP サーバーの管理と確認",
   "List configured MCP servers and their status": "設定された MCP サーバーとそのステータスを一覧表示",
   "List configured MCP servers and check their status": "設定された MCP サーバーを一覧表示しステータスを確認",
-  "Usage: /mcp [list]": "使用法: /mcp [list]",
   "Model Context Protocol (MCP) Servers": "Model Context Protocol (MCP) サーバー",
   "Server": "サーバー",
   "Type": "タイプ",
@@ -347,7 +346,6 @@
   "Connection timed out ({timeout}s)": "接続がタイムアウトしました ({timeout}秒)",
   "Failed to load MCP config {config_path}: {exc}": "MCP設定 {config_path} の読み込みに失敗しました: {exc}",
   "Invalid MCP config {config_path}: expected a JSON object": "無効なMCP設定 {config_path}: JSONオブジェクトが必要です",
-  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list]": "不明な mcp サブコマンド '{sub}' です。使用法: /mcp [list]",
   "Run 'ollama-agent <command> -h' for more details on a specific command.": "特定のコマンドの詳細ヘルプを表示するには 'ollama-agent <command> -h' を実行してください。",
   "Run 'ollama-agent task <subcommand> -h' for more details on a subcommand.": "サブコマンドの詳細を表示するには 'ollama-agent task <subcommand> -h' を実行してください。",
   "Run 'ollama-agent rag <subcommand> -h' for more details on a subcommand.": "サブコマンドの詳細を表示するには 'ollama-agent rag <subcommand> -h' を実行してください。",
@@ -399,5 +397,9 @@
   "Usage: /session [list | search <query> | delete <id>]": "使用法: /session [list | search <クエリ> | delete <ID>]",
   "Unknown session subcommand '{sub}'. Usage: /session [list | search <query> | delete <id>]": "不明なセッションサブコマンド '{sub}'。使用法: /session [list | search <クエリ> | delete <ID>]",
   "Task": "タスク",
-  "Skill": "スキル"
+  "Skill": "スキル",
+  "Usage: /mcp [list | reload]": "使用法: /mcp [list | reload]",
+  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]": "不明な mcp サブコマンド '{sub}' です。使用法: /mcp [list | reload]",
+  "Reload MCP servers and rebuild tool graph": "MCPサーバーを再読み込みし、ツールグラフを再構築",
+  "MCP servers reloaded successfully.": "MCPサーバーが正常に再読み込みされました。"
 }

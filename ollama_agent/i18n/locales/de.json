@@ -334,7 +334,6 @@
   "Manage and check MCP servers": "MCP-Server verwalten und überprüfen",
   "List configured MCP servers and their status": "Konfigurierte MCP-Server und deren Status auflisten",
   "List configured MCP servers and check their status": "Konfigurierte MCP-Server auflisten und deren Status überprüfen",
-  "Usage: /mcp [list]": "Verwendung: /mcp [list]",
   "Model Context Protocol (MCP) Servers": "Model Context Protocol (MCP) Server",
   "Server": "Server",
   "Type": "Typ",
@@ -347,7 +346,6 @@
   "Connection timed out ({timeout}s)": "Verbindungszeitüberschreitung ({timeout}s)",
   "Failed to load MCP config {config_path}: {exc}": "MCP-Konfiguration {config_path} konnte nicht geladen werden: {exc}",
   "Invalid MCP config {config_path}: expected a JSON object": "Ungültige MCP-Konfiguration {config_path}: JSON-Objekt erwartet",
-  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list]": "Unbekannter MCP-Unterbefehl '{sub}'. Verwendung: /mcp [list]",
   "Run 'ollama-agent <command> -h' for more details on a specific command.": "Führen Sie 'ollama-agent <command> -h' aus, um weitere Details zu einem bestimmten Befehl anzuzeigen.",
   "Run 'ollama-agent task <subcommand> -h' for more details on a subcommand.": "Führen Sie 'ollama-agent task <subcommand> -h' aus, um weitere Details zu einem Unterbefehl anzuzeigen.",
   "Run 'ollama-agent rag <subcommand> -h' for more details on a subcommand.": "Führen Sie 'ollama-agent rag <subcommand> -h' aus, um weitere Details zu einem Unterbefehl anzuzeigen.",
@@ -399,5 +397,9 @@
   "Usage: /session [list | search <query> | delete <id>]": "Verwendung: /session [list | search <Abfrage> | delete <ID>]",
   "Unknown session subcommand '{sub}'. Usage: /session [list | search <query> | delete <id>]": "Unbekannter Sitzungs-Unterbefehl '{sub}'. Verwendung: /session [list | search <Abfrage> | delete <ID>]",
   "Task": "Aufgabe",
-  "Skill": "Fähigkeit"
+  "Skill": "Fähigkeit",
+  "Usage: /mcp [list | reload]": "Verwendung: /mcp [list | reload]",
+  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]": "Unbekannter MCP-Unterbefehl '{sub}'. Verwendung: /mcp [list | reload]",
+  "Reload MCP servers and rebuild tool graph": "MCP-Server neu laden und Werkzeuggraph neu aufbauen",
+  "MCP servers reloaded successfully.": "MCP-Server erfolgreich neu geladen."
 }

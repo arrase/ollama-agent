@@ -167,7 +167,7 @@ The REPL provides built-in slash commands for managing models, sessions, tasks, 
 | `/task` | `/task [list \| create [<id>] \| run <id> [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` initiates an interactive conversational creation flow with the agent. |
 | `/skill` | `/skill [list \| show <id> \| create [<id>] \| delete <id>]` | Manage agent skills. `/skill create` initiates an interactive conversational creation flow with the agent. |
 | `/rag` | `/rag [status \| list \| create <name> \| load <name> \| unload \| add <path> [--dir] \| delete <name>]` | Manage local RAG vector databases, index files/directories, and toggle active knowledge bases. |
-| `/mcp` | `/mcp [list]` | List configured MCP servers and display real-time connection status with color-coded indicators. |
+| `/mcp` | `/mcp [list \| reload]` | List configured MCP servers, check connection status, or reload MCP servers and rebuild tool graph mid-session. |
 | `/yolo` | `/yolo [on \| off]` | Toggle YOLO mode or explicitly enable/disable it to bypass tool confirmations. |
 | `/new` | `/new` (alias: `/clear`) | Start a clean new session with fresh context and clear the screen (alias for `/session new`). |
 | `/clear` | `/clear` | Clear the screen and start a clean new session (alias for `/new`). |
@@ -646,7 +646,7 @@ Global MCP servers are defined in JSON format under the `"mcpServers"` object in
 #### Key Features:
 - **Environment Variable Expansion**: Values in `"env"` blocks and `"headers"` support `${VAR_NAME}` and `%VAR_NAME%` syntax, resolved dynamically from `os.environ`. Unset variables trigger immediate fail-fast errors to prevent silent configuration issues.
 - **Built-in `mcp-configurator` Skill**: The agent is equipped with a built-in system skill that guides you through adding, updating, and troubleshooting MCP servers interactively.
-- **Server Health & Tool Inspection**: Run `/mcp` (or `/mcp list`) in the REPL or `ollama-agent mcp list` in the CLI to inspect connection health, transports, and discovered tools with color-coded badges (`● Active` / `● Failed`).
+- **Server Health & Dynamic Reloading**: Run `/mcp` (or `/mcp list`) in the REPL or `ollama-agent mcp list` in the CLI to inspect connection health. Run `/mcp reload` in the REPL to immediately re-read MCP configurations and rebuild the tool graph without restarting the session.
 
 ---
 

@@ -334,7 +334,6 @@
   "Manage and check MCP servers": "إدارة خوادم MCP وفحصها",
   "List configured MCP servers and their status": "اعرض خوادم MCP المضبوطة وحالتها",
   "List configured MCP servers and check their status": "اعرض خوادم MCP المضبوطة وتحقق من حالتها",
-  "Usage: /mcp [list]": "الاستخدام: /mcp [list]",
   "Model Context Protocol (MCP) Servers": "خوادم بروتوكول سياق النموذج (MCP)",
   "Server": "الخادم",
   "Type": "النوع",
@@ -347,7 +346,6 @@
   "Connection timed out ({timeout}s)": "انتهت مهلة الاتصال ({timeout} ثانية)",
   "Failed to load MCP config {config_path}: {exc}": "فشل تحميل إعداد MCP {config_path}: {exc}",
   "Invalid MCP config {config_path}: expected a JSON object": "إعداد MCP غير صالح {config_path}: كان متوقعًا كائن JSON",
-  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list]": "أمر فرعي غير معروف لـ mcp '{sub}'. الاستخدام: /mcp [list]",
   "Run 'ollama-agent <command> -h' for more details on a specific command.": "شغّل 'ollama-agent <الأمر> -h' لمزيد من التفاصيل حول أمر معين.",
   "Run 'ollama-agent task <subcommand> -h' for more details on a subcommand.": "شغّل 'ollama-agent task <الأمر الفرعي> -h' لمزيد من التفاصيل حول أمر فرعي.",
   "Run 'ollama-agent rag <subcommand> -h' for more details on a subcommand.": "شغّل 'ollama-agent rag <الأمر الفرعي> -h' لمزيد من التفاصيل حول أمر فرعي.",
@@ -399,5 +397,9 @@
   "Usage: /session [list | search <query> | delete <id>]": "الاستخدام: /session [list | search <استعلام> | delete <id>]",
   "Unknown session subcommand '{sub}'. Usage: /session [list | search <query> | delete <id>]": "أمر فرعي غير معروف للجلسة '{sub}'. الاستخدام: /session [list | search <استعلام> | delete <id>]",
   "Task": "المهمة",
-  "Skill": "المهارة"
+  "Skill": "المهارة",
+  "Usage: /mcp [list | reload]": "الاستخدام: /mcp [list | reload]",
+  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]": "أمر فرعي غير معروف لـ mcp '{sub}'. الاستخدام: /mcp [list | reload]",
+  "Reload MCP servers and rebuild tool graph": "إعادة تحميل خوادم MCP وإعادة بناء مخطط الأدوات",
+  "MCP servers reloaded successfully.": "تمت إعادة تحميل خوادم MCP بنجاح."
 }
