@@ -8,17 +8,20 @@ from unittest.mock import AsyncMock, patch
 
 from rich.console import Console
 
+from ollama_agent.settings import load_settings
 from ollama_agent.tasks.commands import (
     AmbiguousTaskError,
     TasksContext,
+    TaskError,
     TaskNotFoundError,
     ValidationError,
+    apply_task_settings,
     create_task,
     delete_task,
     list_tasks,
     run_task,
 )
-from ollama_agent.tasks.manager import TaskManager
+from ollama_agent.tasks.manager import Task, TaskManager
 
 
 class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
@@ -37,6 +40,13 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.ctx._require("  valid title  ", "Title"), "valid title")
         with self.assertRaises(ValidationError):
             self.ctx._require("   ", "Title")
+
+    def test_apply_task_settings(self) -> None:
+        task = Task(title="T", prompt="P", model="llama3:8b", reasoning_effort="high")
+        settings = load_settings(settings_path=Path(self.temp_dir.name) / "settings.yaml")
+        apply_task_settings(settings, task)
+        self.assertEqual(settings.model.name, "llama3:8b")
+        self.assertEqual(settings.model.reasoning_effort, "high")
 
     def test_create_and_list_task(self) -> None:
         create_task(
@@ -65,7 +75,8 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
             model="gemma4:26b",
         )
         delete_task(self.ctx, "cleanup-task")
-        self.assertIsNone(self.mgr.get("cleanup-task"))
+        with self.assertRaises(FileNotFoundError):
+            self.mgr.get("cleanup-task")
 
     async def test_run_task(self) -> None:
         create_task(
@@ -75,7 +86,7 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
             prompt="summarize file",
             model="gemma4:26b",
         )
-        with patch("ollama_agent.tasks.commands.run_non_interactive", AsyncMock()) as mock_run:
+        with patch("ollama_agent.tasks.commands.run_non_interactive", AsyncMock(return_value=True)) as mock_run:
             with patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()):
                 with patch("ollama_agent.tasks.commands.AgentRuntime") as mock_runtime_cls:
                     mock_instance = AsyncMock()
@@ -87,6 +98,53 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
                     mock_runtime_cls.assert_called_once()
                     self.assertTrue(mock_runtime_cls.call_args.kwargs.get("yolo_mode"))
                     mock_run.assert_awaited_once()
+
+    async def test_run_task_raises_when_execution_fails(self) -> None:
+        create_task(
+            self.ctx,
+            "failing-task",
+            title="Failing Task",
+            prompt="boom",
+            model="gemma4:26b",
+        )
+        with patch("ollama_agent.tasks.commands.run_non_interactive", AsyncMock(return_value=False)):
+            with patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()):
+                with patch("ollama_agent.tasks.commands.AgentRuntime") as mock_runtime_cls:
+                    mock_instance = AsyncMock()
+                    mock_runtime_cls.return_value = mock_instance
+                    mock_instance.__aenter__.return_value = mock_instance
+                    mock_instance.__aexit__.return_value = None
+
+                    with self.assertRaises(TaskError):
+                        await run_task(self.ctx, "failing-task")
+
+    def test_create_task_rejects_empty_reasoning_effort(self) -> None:
+        with self.assertRaises(ValidationError):
+            create_task(
+                self.ctx,
+                "bad-effort",
+                title="Bad Effort",
+                prompt="p",
+                model="gemma4:26b",
+                reasoning_effort="",
+            )
+
+    def test_create_existing_task_raises(self) -> None:
+        create_task(
+            self.ctx,
+            "dupe-task",
+            title="Dupe",
+            prompt="p",
+            model="gemma4:26b",
+        )
+        with self.assertRaises(TaskError):
+            create_task(
+                self.ctx,
+                "dupe-task",
+                title="Dupe",
+                prompt="p",
+                model="gemma4:26b",
+            )
 
     def test_find_or_exit_errors(self) -> None:
         with self.assertRaises(TaskNotFoundError):

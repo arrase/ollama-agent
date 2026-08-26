@@ -6,7 +6,6 @@ Renderers consume those payloads.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Iterable
 
@@ -56,16 +55,10 @@ async def stream_agent_events(
                 completed = False
 
             break
-    except asyncio.CancelledError:
-        raise
     except KeyboardInterrupt:
         completed = False
         logger.info("Agent run interrupted by user")
         renderer.on_warning({"type": "warning", "content": _("Execution interrupted by user.")})
-    except Exception as exc:
-        completed = False
-        logger.exception("Error streaming agent events: %s", exc)
-        renderer.on_error({"type": "error", "content": str(exc)})
     finally:
         if auto_close:
             renderer.close()
@@ -84,6 +77,5 @@ async def run_non_interactive(
         prompt,
         ConsoleStreamingRenderer(Console()),
         thread_id=thread_id,
-        ignore={"agent_update"},
     )
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
 import io
 import unittest
@@ -10,7 +11,6 @@ from rich.console import Console
 from ollama_agent.core import ModelCapabilityError
 from ollama_agent.interfaces.cli import create_argument_parser
 from ollama_agent.interfaces.dispatch import (
-    REPL_SECTIONS,
     build_cli_handlers,
     build_repl_handlers,
 )
@@ -19,7 +19,21 @@ from ollama_agent.rag.commands import RAGContext
 from ollama_agent.rag import RAGManager, RAGSettings
 from ollama_agent.settings.config import Settings
 from ollama_agent.skills.commands import SkillsContext
-from ollama_agent.tasks.commands import CLIContext
+from ollama_agent.tasks.commands import TasksContext
+
+
+def _console() -> Console:
+    return Console(file=io.StringIO())
+
+
+def _build_cli_handlers(args: argparse.Namespace) -> dict[tuple[str, str], object]:
+    return build_cli_handlers(
+        args,
+        task_ctx=TasksContext(console=_console()),
+        rag_ctx=RAGContext(rag_manager=RAGManager(RAGSettings()), console=_console()),
+        skills_ctx=SkillsContext(console=_console()),
+        settings=Settings(),
+    )
 
 
 class TestDispatchAndCLI(unittest.TestCase):
@@ -59,58 +73,108 @@ class TestDispatchAndCLI(unittest.TestCase):
         self.assertEqual(args3.task_id, "my-task")
         self.assertFalse(args3.yolo)
 
+    def test_argument_parser_language_choices(self) -> None:
+        parser = create_argument_parser()
+        args = parser.parse_args(["-l", "es"])
+        self.assertEqual(args.language, "es")
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["-l", "klingon"])
+
     def test_build_cli_handlers_registry(self) -> None:
         parser = create_argument_parser()
         args = parser.parse_args(["task", "list"])
-        handlers = build_cli_handlers(
-            args,
-            task_ctx=CLIContext(console=Console(file=io.StringIO())),
-            rag_ctx=RAGContext(rag_manager=RAGManager(RAGSettings()), console=Console(file=io.StringIO())),
-            skills_ctx=SkillsContext(console=Console(file=io.StringIO())),
-        )
+        handlers = _build_cli_handlers(args)
         self.assertIn(("task", "list"), handlers)
         self.assertIn(("task", "create"), handlers)
         self.assertIn(("rag", "list"), handlers)
         self.assertIn(("skill", "list"), handlers)
         self.assertIn(("mcp", "list"), handlers)
 
+    def test_build_cli_handlers_requires_settings(self) -> None:
+        parser = create_argument_parser()
+        args = parser.parse_args(["task", "list"])
+        with self.assertRaises(TypeError):
+            build_cli_handlers(
+                args,
+                task_ctx=TasksContext(console=_console()),
+                rag_ctx=RAGContext(rag_manager=RAGManager(RAGSettings()), console=_console()),
+                skills_ctx=SkillsContext(console=_console()),
+            )
+
     def test_build_repl_handlers_registry(self) -> None:
         async def dummy_async_str(_: str) -> None:
             pass
 
-        async def dummy_async_list(_: list[str]) -> None:
-            pass
-
         handlers = build_repl_handlers(
-            task_ctx=CLIContext(console=Console(file=io.StringIO())),
-            skills_ctx=SkillsContext(console=Console(file=io.StringIO())),
-            get_rag_ctx=lambda: RAGContext(rag_manager=RAGManager(RAGSettings()), console=Console(file=io.StringIO())),
-            console=Console(file=io.StringIO()),
+            task_ctx=TasksContext(console=_console()),
+            skills_ctx=SkillsContext(console=_console()),
+            get_rag_ctx=lambda: RAGContext(rag_manager=RAGManager(RAGSettings()), console=_console()),
+            console=_console(),
             current_model=lambda: "gemma4:26b",
             base_url=lambda: "http://localhost:11434",
             switch_model=dummy_async_str,
-            handle_exit=lambda _: None,
-            handle_new=dummy_async_list,
-            handle_task_create=lambda _: None,
-            handle_skill_create=lambda _: None,
             handle_yolo=lambda _: None,
+            get_runtime=lambda: MagicMock(),
+            current_thread_id=lambda: "",
+            switch_effort=dummy_async_str,
         )
 
         self.assertNotIn("/help", handlers)
+        self.assertNotIn("/exit", handlers)
+        self.assertNotIn("/quit", handlers)
+        self.assertNotIn("/clear", handlers)
+        self.assertNotIn("/new", handlers)
+        self.assertNotIn("/compact", handlers)
         self.assertIn("/model", handlers)
         self.assertIn("/effort", handlers)
         self.assertIn("/yolo", handlers)
-        self.assertIn("/new", handlers)
-        self.assertIn("/compact", handlers)
+        self.assertIn("/session", handlers)
         self.assertIn("/task", handlers)
         self.assertIn("/skill", handlers)
         self.assertIn("/rag", handlers)
         self.assertIn("/mcp", handlers)
-        self.assertIn("/clear", handlers)
-        self.assertIn("/exit", handlers)
 
-        for cmd in handlers.values():
-            self.assertIn(cmd.section, REPL_SECTIONS)
+    def test_build_repl_handlers_intercepted_subcommands_removed(self) -> None:
+        async def dummy_async(_: object) -> None:
+            pass
+
+        out = io.StringIO()
+        console = Console(file=out)
+        handlers = build_repl_handlers(
+            task_ctx=TasksContext(console=_console()),
+            skills_ctx=SkillsContext(console=_console()),
+            get_rag_ctx=lambda: RAGContext(rag_manager=RAGManager(RAGSettings()), console=_console()),
+            console=console,
+            current_model=lambda: "gemma4:26b",
+            base_url=lambda: "http://localhost:11434",
+            switch_model=dummy_async,
+            handle_yolo=lambda _: None,
+            get_runtime=lambda: MagicMock(),
+            current_thread_id=lambda: "",
+            switch_effort=dummy_async,
+        )
+
+        # Inline-intercepted branches are gone from the registry handlers.
+        task_handler = handlers["/task"].handler
+        skill_handler = handlers["/skill"].handler
+        session_handler = handlers["/session"].handler
+
+        # /task create and /task run now report unknown subcommand.
+        task_handler(["create", "my-task"])
+        self.assertIn("Unknown task subcommand 'create'", out.getvalue())
+        task_handler(["run", "my-task"])
+        self.assertIn("Unknown task subcommand 'run'", out.getvalue())
+
+        # /skill create reports unknown subcommand.
+        skill_handler(["create", "my-skill"])
+        self.assertIn("Unknown skill subcommand 'create'", out.getvalue())
+
+        # /session new/resume/export report unknown subcommand.
+        for sub in ("new", "resume", "switch", "export"):
+            session_handler([sub, "x"])
+        rendered = out.getvalue()
+        for sub in ("new", "resume", "switch", "export"):
+            self.assertIn(f"Unknown session subcommand '{sub}'", rendered)
 
     def test_main_config_reset(self) -> None:
         # Patch set_locale so the system language does not leak into other tests.
@@ -129,6 +193,13 @@ class TestDispatchAndCLI(unittest.TestCase):
              patch("ollama_agent.main.handle_cli_commands", return_value=True) as mock_handle:
             main()
             mock_handle.assert_called_once()
+
+    def test_main_rejects_prompt_with_subcommand(self) -> None:
+        with patch("sys.argv", ["ollama-agent", "task", "list", "-p", "hello"]), \
+             patch("ollama_agent.main.set_locale", return_value="en"):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+        self.assertEqual(cm.exception.code, 2)
 
     def test_main_repl_flow(self) -> None:
         mock_settings = Settings()
@@ -169,12 +240,7 @@ class TestDispatchAndCLI(unittest.TestCase):
         with patch("ollama_agent.interfaces.dispatch.load_rag_database", mock_load), \
              patch("ollama_agent.interfaces.dispatch.add_rag_file", mock_add_file), \
              patch("ollama_agent.interfaces.dispatch.add_rag_directory", mock_add_dir):
-            handlers = build_cli_handlers(
-                args_file,
-                task_ctx=CLIContext(console=Console(file=io.StringIO())),
-                rag_ctx=RAGContext(rag_manager=RAGManager(RAGSettings()), console=Console(file=io.StringIO())),
-                skills_ctx=SkillsContext(console=Console(file=io.StringIO())),
-            )
+            handlers = _build_cli_handlers(args_file)
             asyncio.run(handlers[("rag", "add")]())
             mock_load.assert_called_once()
             mock_add_file.assert_called_once()
@@ -188,12 +254,7 @@ class TestDispatchAndCLI(unittest.TestCase):
         with patch("ollama_agent.interfaces.dispatch.load_rag_database", mock_load), \
              patch("ollama_agent.interfaces.dispatch.add_rag_file", mock_add_file), \
              patch("ollama_agent.interfaces.dispatch.add_rag_directory", mock_add_dir):
-            handlers = build_cli_handlers(
-                args_dir,
-                task_ctx=CLIContext(console=Console(file=io.StringIO())),
-                rag_ctx=RAGContext(rag_manager=RAGManager(RAGSettings()), console=Console(file=io.StringIO())),
-                skills_ctx=SkillsContext(console=Console(file=io.StringIO())),
-            )
+            handlers = _build_cli_handlers(args_dir)
             asyncio.run(handlers[("rag", "add")]())
             mock_load.assert_called_once()
             mock_add_file.assert_not_called()
@@ -205,12 +266,7 @@ class TestDispatchAndCLI(unittest.TestCase):
         args._runtime = AsyncMock()
 
         with patch("ollama_agent.interfaces.dispatch.export_session", AsyncMock()) as mock_export:
-            handlers = build_cli_handlers(
-                args,
-                task_ctx=CLIContext(console=Console(file=io.StringIO())),
-                rag_ctx=RAGContext(rag_manager=RAGManager(RAGSettings()), console=Console(file=io.StringIO())),
-                skills_ctx=SkillsContext(console=Console(file=io.StringIO())),
-            )
+            handlers = _build_cli_handlers(args)
             asyncio.run(handlers[("session", "export")]())
             mock_export.assert_called_once()
 

@@ -1,12 +1,12 @@
 """Tasks management package."""
 
 from .commands import (
-    CLIContext,
     TasksContext,
     TaskError,
     TaskNotFoundError,
     AmbiguousTaskError,
     ValidationError,
+    apply_task_settings,
     create_task,
     delete_task,
     list_tasks,
@@ -18,14 +18,13 @@ __all__ = [
     "Task",
     "TaskManager",
     "TasksContext",
-    "CLIContext",
     "TaskError",
     "TaskNotFoundError",
     "AmbiguousTaskError",
     "ValidationError",
+    "apply_task_settings",
     "create_task",
     "delete_task",
     "list_tasks",
     "run_task",
 ]
-

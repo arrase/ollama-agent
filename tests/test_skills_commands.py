@@ -68,7 +68,8 @@ class TestSkillsCommands(unittest.TestCase):
         self.assertIn("Skill A", out)
 
         delete_skill(self.ctx, "skill-a")
-        self.assertIsNone(self.mgr.get("skill-a"))
+        with self.assertRaises(FileNotFoundError):
+            self.mgr.get("skill-a")
 
     def test_find_or_exit_errors(self) -> None:
         with self.assertRaises(SkillNotFoundError):

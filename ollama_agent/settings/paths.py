@@ -21,7 +21,6 @@ MEMORY_PATH = APP_DIR / "MEMORY.md"
 AGENTS_MD_NAME = "AGENTS.md"
 AGENTS_PATH = APP_DIR / AGENTS_MD_NAME
 MCP_PATH = APP_DIR / "mcp.json"
-MCP_SERVERS_PATH = APP_DIR / "mcp_servers.json"
 
 TASKS_DIR = APP_DIR / "tasks"
 RAG_DIR = APP_DIR / "rag"

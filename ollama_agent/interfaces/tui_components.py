@@ -159,6 +159,9 @@ class ReplInput(TextArea):
             db_entries = await asyncio.to_thread(load_past_user_prompts)
         except HistoryError as exc:
             _log.warning("Prompt history unavailable: %s", exc)
+            self.app.query_one("#chat-scroll").mount(
+                SystemMessage(f"[yellow]⚠ {_('Prompt history unavailable: {exc}', exc=exc)}[/yellow]")
+            )
             db_entries = []
         self._history = list(db_entries)
         self._history_index = len(self._history)
@@ -360,8 +363,7 @@ class AgentResponse(Container):
     def append_thinking(self, delta: str) -> None:
         self.current_text_widget = None
         if self.current_thinking is None:
-            app_ref = getattr(self.app, "repl", None)
-            collapse_default = app_ref.runtime.settings.runtime.collapse_thinking if app_ref else True
+            collapse_default = self.app.repl.runtime.settings.runtime.collapse_thinking
             self.current_thinking_text = Static("", classes="msg-content thinking-body")
             self._thinking_chunks = []
             self.current_thinking = Collapsible(

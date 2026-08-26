@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Callable
 
+import httpx
 import ollama
 from rich import box
 from rich.console import Console
@@ -248,7 +249,7 @@ def ensure_model_configured(
     try:
         models = _list_models_sync(base_url)
         available_models = [m for m in models if m.model]
-    except Exception as exc:
+    except (httpx.HTTPError, ollama.ResponseError, OSError) as exc:
         raise ModelCapabilityError(
             _("Could not connect to Ollama at '{base_url}': {exc}", base_url=base_url, exc=exc)
         ) from exc

@@ -1,25 +1,34 @@
-"""Manual conversation compaction built on deepagents' public contracts.
+"""Manual conversation compaction interoperable with deepagents' SummarizationMiddleware.
 
-Interoperates with deepagents' ``SummarizationMiddleware`` through the
-documented state contract: the ``_summarization_event`` key holds a
-``SummarizationEvent`` TypedDict and the effective conversation the model
-sees is ``[summary_message] + messages[cutoff_index:]``. History offload
-appends to a single markdown file per session under
-``/conversation_history/`` (deepagents' default prefix).
+The pure state-arithmetic helpers delegate to a live ``SummarizationMiddleware``
+instance so the logic exists in exactly one place (upstream). This module keeps
+only what deepagents does not provide or deliberately does differently: strict
+fail-loud validation of summarization events (deepagents warns and continues),
+history offloading that refuses to lose data (``HistoryOffloadError``), the
+tool-safe cutoff search, and summary generation.
+
+Interop contract (guarded by ``tests/test_compaction_interop.py``): state key
+``SUMMARIZATION_STATE_KEY`` holds a ``SummarizationEvent`` TypedDict, the
+summary ``HumanMessage`` carries ``lc_source='summarization'``, session id
+persists under ``SUMMARIZATION_SESSION_ID_KEY``, and history appends to
+``/conversation_history/<session_id>.md``.
 """
 
 from __future__ import annotations
 
-import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from deepagents.middleware.summarization import DEEPAGENTS_DEFAULT_SUMMARY_PROMPT
+from deepagents.backends.protocol import FILE_NOT_FOUND
+from deepagents.middleware.summarization import (
+    DEEPAGENTS_DEFAULT_SUMMARY_PROMPT,
+    SummarizationMiddleware,
+)
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.messages.utils import get_buffer_string
 
-_log = logging.getLogger(__name__)
+from ..i18n import _
 
 #: Path prefix used by deepagents to store conversation history files.
 HISTORY_PATH_PREFIX = "/conversation_history"
@@ -29,41 +38,59 @@ KEEP_RECENT_MESSAGES = 2
 
 _SUMMARY_SOURCE = "summarization"
 
+#: State keys of deepagents' SummarizationMiddleware private contract.
+SUMMARIZATION_STATE_KEY = "_summarization_event"
+SUMMARIZATION_SESSION_ID_KEY = "_summarization_session_id"
+
+
+class HistoryOffloadError(RuntimeError):
+    """Raised when conversation history cannot be persisted to the backend."""
+
 
 def is_summary_message(msg: Any) -> bool:
     """Check whether *msg* is a summary HumanMessage produced by compaction."""
     return isinstance(msg, HumanMessage) and msg.additional_kwargs.get("lc_source") == _SUMMARY_SOURCE
 
 
-def apply_summarization_event(messages: list[Any], event: dict[str, Any] | None) -> list[Any]:
+def apply_summarization_event(
+    engine: SummarizationMiddleware,
+    messages: list[Any],
+    event: dict[str, Any] | None,
+) -> list[Any]:
     """Reconstruct the effective message list from raw state and a prior event.
 
     The effective conversation is ``[summary_message] + messages[cutoff:]``.
-    Malformed events fall back to the full raw list (matching deepagents).
+    The slicing itself is delegated to *engine* so upstream owns the semantics;
+    malformed events raise ``ValueError`` before delegation instead of hitting
+    deepagents' warn-and-continue path.
     """
     if event is None:
         return list(messages)
     try:
-        summary_msg = event["summary_message"]
-        cutoff = event["cutoff_index"]
+        event["summary_message"]
+        event["cutoff_index"]
     except (KeyError, TypeError) as exc:
-        _log.warning("Malformed summarization event (%s); using full history", exc)
-        return list(messages)
-    if cutoff > len(messages):
-        return [summary_msg]
-    return [summary_msg, *messages[cutoff:]]
+        raise ValueError(_("Malformed summarization event: {detail}", detail=str(exc))) from exc
+    return engine._apply_event_to_messages(messages, event)
 
 
-def compute_state_cutoff(prior_event: dict[str, Any] | None, effective_cutoff: int) -> int:
+def compute_state_cutoff(
+    engine: SummarizationMiddleware, prior_event: dict[str, Any] | None, effective_cutoff: int
+) -> int:
     """Translate an effective-list cutoff into an absolute state index.
 
     The summary message occupies effective index 0 but no state slot,
-    hence the ``-1`` adjustment when a prior event exists.
+    hence the ``-1`` adjustment when a prior event exists. Arithmetic is
+    delegated to *engine*; malformed priors raise ``ValueError``.
     """
     if prior_event is None:
         return effective_cutoff
     prior = prior_event.get("cutoff_index")
-    return prior + effective_cutoff - 1 if isinstance(prior, int) else effective_cutoff
+    if not isinstance(prior, int):
+        raise ValueError(
+            _("Malformed summarization event: {detail}", detail=f"invalid cutoff_index {prior!r}")
+        )
+    return engine._compute_state_cutoff(prior_event, effective_cutoff)
 
 
 def find_safe_cutoff(messages: list[Any], keep: int) -> int:
@@ -97,19 +124,13 @@ def find_safe_cutoff(messages: list[Any], keep: int) -> int:
     return idx
 
 
-def build_summary_message(summary: str, file_path: str | None) -> HumanMessage:
-    """Build the HumanMessage that replaces the summarized history."""
-    if file_path is not None:
-        content = (
-            "You are in the middle of a conversation that has been summarized.\n\n"
-            f"The full conversation history has been saved to {file_path} should you "
-            "need to refer back to it for details.\n\n"
-            "A condensed summary follows:\n\n"
-            f"<summary>\n{summary}\n</summary>"
-        )
-    else:
-        content = f"Here is a summary of the conversation to date:\n\n{summary}"
-    return HumanMessage(content=content, additional_kwargs={"lc_source": _SUMMARY_SOURCE})
+def build_summary_message(engine: SummarizationMiddleware, summary: str, file_path: str) -> HumanMessage:
+    """Build the HumanMessage that replaces the summarized history.
+
+    Delegated to *engine*: the wording and the ``lc_source`` marker are
+    upstream's contract, so they must not be duplicated here.
+    """
+    return engine._build_new_messages_with_path(summary, file_path)[0]
 
 
 async def generate_summary(model: Any, messages: list[Any]) -> str:
@@ -120,33 +141,39 @@ async def generate_summary(model: Any, messages: list[Any]) -> str:
     return response.text.strip()
 
 
-async def offload_history(backend: Any, messages: list[Any], path: str) -> str | None:
+async def offload_history(backend: Any, messages: list[Any], path: str) -> str:
     """Append *messages* to the session history markdown file on *backend*.
 
-    Returns the file path on success, or None when offloading fails
-    (non-fatal: compaction proceeds with the summary alone).
+    Returns the file path on success. Raises ``HistoryOffloadError`` when the
+    backend refuses the read-modify-write cycle: manual compaction must never
+    proceed against a stale or missing history file, otherwise the summary
+    would reference history that was silently lost or overwritten.
     """
     filtered = [m for m in messages if not is_summary_message(m)]
     timestamp = datetime.now(UTC).isoformat()
     section = f"## Summarized at {timestamp}\n\n{get_buffer_string(filtered, format='xml')}\n\n"
 
+    # Backends report recoverable failures through FileDownloadResponse.error
+    # instead of raising; only "file_not_found" means there is nothing to append to.
+    response = (await backend.adownload_files([path]))[0]
     existing = ""
-    try:
-        responses = await backend.adownload_files([path])
-        if responses and responses[0].content is not None and responses[0].error is None:
-            existing = responses[0].content.decode("utf-8")
-    except Exception as exc:
-        _log.debug("No existing history at %s (%s): %s", path, type(exc).__name__, exc)
+    if response.error is None:
+        existing = response.content.decode("utf-8")
+    elif response.error != FILE_NOT_FOUND:
+        raise HistoryOffloadError(
+            _("Failed to offload conversation history to {path}: {error}", path=path, error=response.error)
+        )
 
     combined = existing + section
     result = await backend.aedit(path, existing, combined) if existing else await backend.awrite(path, combined)
-    if result is None or getattr(result, "error", None):
-        _log.warning("Failed to offload conversation history to %s", path)
-        return None
+    if result.error:
+        raise HistoryOffloadError(
+            _("Failed to offload conversation history to {path}: {error}", path=path, error=result.error)
+        )
     return path
 
 
 def new_session_id(state_values: dict[str, Any]) -> str:
     """Reuse the persisted summarization session id or create a fresh one."""
-    existing = state_values.get("_summarization_session_id")
+    existing = state_values.get(SUMMARIZATION_SESSION_ID_KEY)
     return existing if isinstance(existing, str) and existing else f"session_{uuid.uuid4().hex}"

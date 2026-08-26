@@ -6,18 +6,16 @@ import argparse
 import asyncio
 import inspect
 
-from rich.console import Console
-
 from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager
 from ..agent.episodic_memory import HistoryError
 from ..core import ALLOWED_REASONING_EFFORTS
-from ..i18n import _
+from ..i18n import SUPPORTED_LOCALES, _
 from ..rag import RAGContext, RAGManager, RAGError, load_rag_database
 from ..settings import Settings
 from ..skills import SkillManager, SkillsContext, SkillError
 from ..streaming import run_non_interactive
-from ..tasks.commands import CLIContext, TaskError
+from ..tasks.commands import TaskError, TasksContext
 from .dispatch import build_cli_handlers
 
 
@@ -66,7 +64,8 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         "--language",
         type=str,
         dest="language",
-        help=_("Set interface language (e.g. en, es, fr, de, it, pt, zh, ja, ru, hi, ko, ar, tr, pl, nl, uk)"),
+        choices=SUPPORTED_LOCALES,
+        help=_("Set interface language"),
     )
     parser.add_argument(
         "--config-reset",
@@ -249,7 +248,7 @@ def handle_cli_commands(
     args: argparse.Namespace, settings: Settings
 ) -> bool:
     """Handle CLI commands and return True if a command was handled."""
-    ctx = CLIContext()
+    ctx = TasksContext()
     rag_ctx = RAGContext(rag_manager=RAGManager(settings.rag))
     skills_ctx = SkillsContext(skill_manager=SkillManager())
 
@@ -271,11 +270,9 @@ def handle_cli_commands(
                 result = handlers[handler_key]()
                 if inspect.isawaitable(result):
                     asyncio.run(result)  # type: ignore[arg-type]
-            except (SkillError, TaskError, RAGError):
-                raise SystemExit(1)
-            except HistoryError as exc:
-                Console().print(f"[red]{exc}[/red]")
-                raise SystemExit(1)
+            except (SkillError, TaskError, RAGError, HistoryError) as exc:
+                ctx.console.print(f"[red]{exc}[/red]")
+                raise SystemExit(1) from exc
             return True
 
     if args.prompt:
@@ -289,8 +286,9 @@ def handle_cli_commands(
                     set_rag_manager(rag_ctx.rag_manager)
                     try:
                         load_rag_database(rag_ctx, args.rag)
-                    except RAGError:
-                        raise SystemExit(1)
+                    except RAGError as exc:
+                        rag_ctx.console.print(f"[red]{exc}[/red]")
+                        raise SystemExit(1) from exc
                 await runtime.reload()
                 completed = await run_non_interactive(runtime, args.prompt)
 

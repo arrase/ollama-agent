@@ -28,6 +28,11 @@ if TYPE_CHECKING:
 _serializer = JsonPlusSerializer()
 
 
+def is_current(thread_id: str, current_thread_id: str) -> bool:
+    """Return whether *thread_id* is the current session (exact match or prefix match)."""
+    return thread_id == current_thread_id or bool(current_thread_id and thread_id.startswith(current_thread_id))
+
+
 def new_session(console: Console) -> str:
     """Start a new session by generating a new thread ID.
 
@@ -90,8 +95,8 @@ def list_sessions(
         tid = s["thread_id"]
         ts = s["timestamp"]
         steps = str(s["steps"])
-        is_current = tid == current_thread_id or (current_thread_id and tid.startswith(current_thread_id))
-        marker = f"[green]◀ {_('current')}[/green]" if is_current else ""
+        is_current_session = is_current(tid, current_thread_id)
+        marker = f"[green]◀ {_('current')}[/green]" if is_current_session else ""
         table.add_row(tid, ts, steps, marker)
 
     console.print(table)
@@ -183,7 +188,11 @@ async def export_session(
 ) -> Path | None:
     """Export conversation messages from a session to a Markdown file."""
     sessions = get_available_sessions(db_path)
-    resolved = resolve_session_id(target_id, sessions) or target_id
+    resolved = resolve_session_id(target_id, sessions)
+    if resolved is None:
+        not_found_msg = _("Session '{target_id}' not found.", target_id=target_id)
+        console.print(f"[red]{not_found_msg}[/red]")
+        return None
 
     messages = await runtime.get_thread_messages(resolved)
 
@@ -288,8 +297,8 @@ def search_sessions(
 
     for item in results:
         tid = item["thread_id"]
-        is_current = tid == current_thread_id or (current_thread_id and tid.startswith(current_thread_id))
-        tid_display = f"{tid[:8]}" + (f" [green]◀ {_('current')}[/green]" if is_current else "")
+        is_current_session = is_current(tid, current_thread_id)
+        tid_display = f"{tid[:8]}" + (f" [green]◀ {_('current')}[/green]" if is_current_session else "")
         ts_display = item["formatted_date"]
         score_display = str(item["score"])
         cleaned_snippets = []

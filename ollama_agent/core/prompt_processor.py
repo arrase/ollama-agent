@@ -7,7 +7,7 @@ import mimetypes
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 from urllib.parse import unquote, urlparse
 from urllib.request import url2pathname
 
@@ -61,9 +61,17 @@ def get_file_type(file_path: Path) -> str:
     return mime or ""
 
 
-def classify_multimodal_file(file_path: Path) -> str | None:
-    """Classify a file into a LangChain multimodal type, or None if it should be treated as text."""
-    mime = get_file_type(file_path)
+class ResolvedContext(NamedTuple):
+    """Result of resolving a @mention target into context data."""
+
+    text_contents: dict[Path, str]
+    attachments: list[dict[str, Any]]
+    classifications: dict[Path, str]
+    warnings: list[str]
+
+
+def _multimodal_kind(mime: str) -> str | None:
+    """Map a MIME type to a LangChain multimodal type, or None for text."""
     if mime.startswith("image/"):
         return "image"
     if mime.startswith("video/"):
@@ -77,6 +85,11 @@ def classify_multimodal_file(file_path: Path) -> str | None:
     ):
         return "file"
     return None
+
+
+def classify_multimodal_file(file_path: Path) -> str | None:
+    """Classify a file into a LangChain multimodal type, or None if it should be treated as text."""
+    return _multimodal_kind(get_file_type(file_path))
 
 
 def is_binary_file(file_path: Path) -> bool:
@@ -132,26 +145,27 @@ def resolve_context_files(
     max_file_size: int = 1024 * 1024,
     max_files: int = 100,
     max_total_size: int = 10 * 1024 * 1024,
-) -> tuple[dict[Path, str], list[dict[str, Any]]]:
+) -> ResolvedContext:
     """Resolve a target file or directory into context data."""
     text_contents: dict[Path, str] = {}
     binary_attachments: list[dict[str, Any]] = []
+    classifications: dict[Path, str] = {}
+    warnings: list[str] = []
     total_size = 0
 
-    def add_file(file_path: Path, ignore_errors: bool = False) -> None:
+    def add_file(file_path: Path) -> None:
         nonlocal total_size
 
         try:
             size = file_path.stat().st_size
         except OSError as e:
-            if ignore_errors:
-                return
             raise PromptProcessingError(_("Failed to read file {file_path}: {e}", file_path=file_path, e=e)) from e
 
-        attachment_type = classify_multimodal_file(file_path)
-        if attachment_type is None and is_binary_file(file_path):
-            if ignore_errors:
-                return
+        mime = get_file_type(file_path)
+        attachment_type = _multimodal_kind(mime)
+        if attachment_type is not None:
+            classifications[file_path] = attachment_type
+        elif is_binary_file(file_path):
             raise PromptProcessingError(_("Cannot read binary file as text: {file_path}", file_path=file_path))
 
         if len(text_contents) + len(binary_attachments) >= max_files:
@@ -164,36 +178,34 @@ def resolve_context_files(
                 _("Total context size limit of {max_total_size} bytes exceeded.", max_total_size=max_total_size)
             )
 
-        try:
-            if attachment_type is not None:
-                mime = get_file_type(file_path) or f"{attachment_type}/*"
-                b64_data = read_binary_file_b64(file_path, max_file_size)
-                binary_attachments.append({
-                    "type": attachment_type,
-                    "base64": b64_data,
-                    "mime_type": mime,
-                })
-            else:
-                content = read_file_content(file_path, max_file_size)
-                text_contents[file_path] = content
-            total_size += size
-        except PromptProcessingError:
-            if ignore_errors:
-                return
-            raise
+        if attachment_type is not None:
+            b64_data = read_binary_file_b64(file_path, max_file_size)
+            binary_attachments.append({
+                "type": attachment_type,
+                "base64": b64_data,
+                "mime_type": mime or f"{attachment_type}/*",
+            })
+        else:
+            text_contents[file_path] = read_file_content(file_path, max_file_size)
+        total_size += size
 
     if target_path.is_file():
-        add_file(target_path, ignore_errors=False)
-        return text_contents, binary_attachments
+        add_file(target_path)
+        return ResolvedContext(text_contents, binary_attachments, classifications, warnings)
 
     if not target_path.is_dir():
-        return text_contents, binary_attachments
+        raise PromptProcessingError(
+            _("Path is neither a file nor a directory: {file_path}", file_path=target_path)
+        )
 
     for root, _dirs, files in os.walk(target_path):
         for file_name in files:
-            add_file(Path(root) / file_name, ignore_errors=True)
+            try:
+                add_file(Path(root) / file_name)
+            except PromptProcessingError as exc:
+                warnings.append(str(exc))
 
-    return text_contents, binary_attachments
+    return ResolvedContext(text_contents, binary_attachments, classifications, list(dict.fromkeys(warnings)))
 
 
 def process_prompt_mentions(
@@ -201,7 +213,7 @@ def process_prompt_mentions(
     max_file_size: int = 1024 * 1024,
     max_files: int = 100,
     max_total_size: int = 10 * 1024 * 1024,
-) -> tuple[str, list[dict[str, Any]]]:
+) -> tuple[str, list[dict[str, Any]], list[str]]:
     """Find all @<path> mentions, resolve their contents, and attach/append them.
 
     If a mention looks like a path but does not exist, raises PromptProcessingError.
@@ -210,6 +222,7 @@ def process_prompt_mentions(
         tuple containing:
         - The processed prompt string (with text context appended and binary placeholders replaced).
         - A list of binary attachment dicts (suitable for HumanMessage content list).
+        - A list of formatted warnings for files skipped during directory resolution.
     """
     pattern = re.compile(
         r'(?:^|(?<=[\s\(\[\{<]))@(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'\(\[\{<>,;]+))'
@@ -219,6 +232,8 @@ def process_prompt_mentions(
     resolved_paths: set[Path] = set()
     all_context_contents: dict[Path, str] = {}
     all_binary_attachments: list[dict[str, Any]] = []
+    all_classifications: dict[Path, str] = {}
+    all_warnings: list[str] = []
 
     # Map of match range or original mention text -> replacement placeholder
     replacements: list[tuple[int, int, str]] = []
@@ -261,16 +276,18 @@ def process_prompt_mentions(
         if candidate_path.exists():
             if candidate_path not in resolved_paths:
                 resolved_paths.add(candidate_path)
-                text_content, bin_attachments = resolve_context_files(
+                context = resolve_context_files(
                     candidate_path,
                     max_file_size=max_file_size,
                     max_files=max_files,
                     max_total_size=max_total_size,
                 )
-                all_context_contents.update(text_content)
-                all_binary_attachments.extend(bin_attachments)
+                all_context_contents.update(context.text_contents)
+                all_binary_attachments.extend(context.attachments)
+                all_classifications.update(context.classifications)
+                all_warnings.extend(context.warnings)
 
-            attachment_type = classify_multimodal_file(candidate_path)
+            attachment_type = all_classifications.get(candidate_path)
             if candidate_path.is_file() and attachment_type is not None:
                 replacements.append((start, end, f"[{attachment_type}: {path_str}]"))
         else:
@@ -288,7 +305,7 @@ def process_prompt_mentions(
         processed_prompt = processed_prompt[:start] + placeholder + processed_prompt[end:]
 
     if not all_context_contents:
-        return processed_prompt, all_binary_attachments
+        return processed_prompt, all_binary_attachments, all_warnings
 
     context_blocks = []
     cwd = Path.cwd()
@@ -310,4 +327,4 @@ def process_prompt_mentions(
         f"{context_str}\n"
         f"--- End of Attached Context ---"
     )
-    return processed_prompt, all_binary_attachments
+    return processed_prompt, all_binary_attachments, all_warnings

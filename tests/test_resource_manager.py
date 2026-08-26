@@ -10,9 +10,11 @@ from ollama_agent.core.resource_manager import BaseFileStoreManager
 class DummyFileManager(BaseFileStoreManager[str]):
     _ext = ".txt"
 
-    def get(self, item_id: str) -> str | None:
+    def get(self, item_id: str) -> str:
         path = self._path(item_id)
-        return path.read_text() if path.is_file() else None
+        if not path.is_file():
+            raise FileNotFoundError(str(path))
+        return path.read_text()
 
     def find_matches(self, prefix: str) -> list[tuple[str, str]]:
         return []
@@ -20,12 +22,8 @@ class DummyFileManager(BaseFileStoreManager[str]):
     def list_all(self) -> list[tuple[str, str]]:
         return []
 
-    def delete(self, item_id: str) -> bool:
-        path = self._path(item_id)
-        if path.is_file():
-            path.unlink()
-            return True
-        return False
+    def delete(self, item_id: str) -> None:
+        self._path(item_id).unlink()
 
 
 class TestResourceManager(unittest.TestCase):

@@ -103,6 +103,11 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
 
     async def test_agent_response_workflow(self) -> None:
         class AgentResponseTestApp(App):
+            def __init__(self) -> None:
+                super().__init__()
+                self.repl = MagicMock()
+                self.repl.runtime.settings.runtime.collapse_thinking = True
+
             def compose(self) -> ComposeResult:
                 yield AgentResponse()
 
@@ -389,6 +394,12 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(autolist.display)
             self.assertEqual(autolist.option_count, 2)  # /model, /mcp
 
+            # Aliases are documented for autocomplete
+            app.update_autocomplete("/")
+            all_ids = {autolist.get_option_at_index(i).id for i in range(autolist.option_count)}
+            self.assertIn("/compress", all_ids)
+            self.assertIn("/quit", all_ids)
+
             # Hide autocomplete
             app.hide_autocomplete()
             self.assertFalse(autolist.display)
@@ -608,7 +619,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(repl_mock.runtime.settings.model.reasoning_effort, "high")
 
             # 6. /task create conversational dispatch
-            with patch.object(app, "_stream_chat", new_callable=AsyncMock) as mock_stream:
+            with patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream:
                 await app._run_slash_command("/task create my-new-task")
                 mock_stream.assert_called_once()
                 prompt_arg = mock_stream.call_args[0][0]
@@ -616,12 +627,42 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("my-new-task", prompt_arg)
 
             # 7. /skill create conversational dispatch
-            with patch.object(app, "_stream_chat", new_callable=AsyncMock) as mock_stream:
+            with patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream:
                 await app._run_slash_command("/skill create git-commit-helper")
                 mock_stream.assert_called_once()
                 prompt_arg = mock_stream.call_args[0][0]
                 self.assertIn("skill-creator", prompt_arg)
                 self.assertIn("git-commit-helper", prompt_arg)
+
+    async def test_task_run_restores_runtime_settings(self) -> None:
+        repl_mock = MagicMock()
+        repl_mock.console = Console(file=io.StringIO())
+        repl_mock.runtime.settings.model.name = "chat-model"
+        repl_mock.runtime.settings.model.reasoning_effort = "medium"
+        repl_mock.runtime.yolo_mode = False
+        repl_mock.runtime.reload = AsyncMock()
+        repl_mock._rag_ctx = None
+        repl_mock._get_commands.return_value = {}
+
+        task = MagicMock(title="My Task", model="task-model", reasoning_effort="high", prompt="Do things")
+        repl_mock._task_ctx._find_or_exit.return_value = ("my-task", task)
+
+        app = OllamaAgentApp(repl_mock)
+        async with app.run_test() as pilot:
+            with patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream, \
+                 patch("ollama_agent.interfaces.repl.apply_task_settings") as mock_apply:
+                await app._run_slash_command("/task run my-task -y")
+                await pilot.pause()
+
+            mock_apply.assert_called_once_with(repl_mock.runtime.settings, task)
+            mock_stream.assert_awaited_once()
+            self.assertEqual(mock_stream.call_args[0][0], "Do things")
+
+            # Runtime values are restored after the task finished (nothing persists).
+            self.assertEqual(repl_mock.runtime.settings.model.name, "chat-model")
+            self.assertEqual(repl_mock.runtime.settings.model.reasoning_effort, "medium")
+            self.assertFalse(repl_mock.runtime.yolo_mode)
+            self.assertEqual(repl_mock.runtime.reload.await_count, 2)
 
     async def test_tui_streaming_renderer_events(self) -> None:
         repl_mock = MagicMock()

@@ -50,14 +50,11 @@ def detect_system_language() -> str:
                         return norm
             return DEFAULT_LOCALE
 
-    try:
-        loc = locale.getlocale()[0]
-        if loc:
-            norm = _normalize_lang(loc)
-            if norm in SUPPORTED_LOCALES:
-                return norm
-    except (OSError, ValueError):
-        pass
+    loc = locale.getlocale()[0]
+    if loc:
+        norm = _normalize_lang(loc)
+        if norm in SUPPORTED_LOCALES:
+            return norm
 
     return DEFAULT_LOCALE
 
@@ -66,15 +63,12 @@ def _load_translations(lang: str) -> dict[str, str]:
     """Load translation mapping for a given language code."""
     if lang == DEFAULT_LOCALE:
         return {}
-    try:
-        data = (
-            resources.files(__package__)
-            .joinpath(f"locales/{lang}.json")
-            .read_text(encoding="utf-8")
-        )
-        return json.loads(data)
-    except (FileNotFoundError, TypeError):
-        return {}
+    data = (
+        resources.files(__package__)
+        .joinpath(f"locales/{lang}.json")
+        .read_text(encoding="utf-8")
+    )
+    return json.loads(data)
 
 
 def set_locale(lang: str | None = None) -> str:
@@ -84,26 +78,25 @@ def set_locale(lang: str | None = None) -> str:
         target = detect_system_language()
     else:
         norm = _normalize_lang(lang)
-        target = norm if norm in SUPPORTED_LOCALES else DEFAULT_LOCALE
+        if norm not in SUPPORTED_LOCALES:
+            raise ValueError(f"Unsupported language: {lang}")
+        target = norm
 
     _current_locale = target
     _translations = _load_translations(target)
     return _current_locale
 
 
-def get_locale() -> str:
-    """Get the active application locale code."""
-    return _current_locale
-
-
-def get_supported_locales() -> tuple[str, ...]:
-    """Return all supported locale codes."""
-    return SUPPORTED_LOCALES
-
-
 def get_text(message: str, **kwargs: Any) -> str:
     """Translate a message string with optional format arguments."""
-    template = _translations.get(message, message)
+    if _current_locale == DEFAULT_LOCALE:
+        template = message
+    else:
+        if message not in _translations:
+            raise KeyError(
+                f"Missing translation for {message!r} in locale {_current_locale}"
+            )
+        template = _translations[message]
     if kwargs:
         return template.format(**kwargs)
     return template

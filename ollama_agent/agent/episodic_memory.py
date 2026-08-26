@@ -32,7 +32,7 @@ def connect_history(db_path: Path) -> sqlite3.Connection:
 def format_iso_timestamp(ts: str) -> str:
     """Format ISO timestamp into a human-readable UTC string (YYYY-MM-DD HH:MM UTC)."""
     if not ts:
-        return ""
+        return _("unknown")
     return datetime.fromisoformat(ts).strftime("%Y-%m-%d %H:%M UTC")
 
 
@@ -60,9 +60,7 @@ def load_past_user_prompts(db_path: Path | None = None) -> list[str]:
                         if text and text not in seen:
                             seen.add(text)
                             prompts.append(text)
-    except sqlite3.Error as e:
-        raise HistoryError(_("Failed to read history database {db_path}: {e}", db_path=db_path, e=e)) from e
-    except OSError as e:
+    except (sqlite3.Error, OSError) as e:
         raise HistoryError(_("Failed to read history database {db_path}: {e}", db_path=db_path, e=e)) from e
     return prompts
 
@@ -106,9 +104,7 @@ def load_past_conversations(
                     thread_messages[tid].extend(msgs)
                 else:
                     thread_messages[tid].append(msgs)
-    except sqlite3.Error as e:
-        raise HistoryError(_("Failed to read history database {db_path}: {e}", db_path=db_path, e=e)) from e
-    except OSError as e:
+    except (sqlite3.Error, OSError) as e:
         raise HistoryError(_("Failed to read history database {db_path}: {e}", db_path=db_path, e=e)) from e
 
     conversations: dict[str, dict[str, Any]] = {}
@@ -198,8 +194,7 @@ def format_past_conversations_context(results: list[dict[str, Any]]) -> str:
     for idx, item in enumerate(results, start=1):
         tid = item["thread_id"]
         short_id = tid[:8]
-        date_str = item["formatted_date"]
-        header_date = f" - [{_('Date:')} {date_str}]" if date_str else ""
+        header_date = f" - [{_('Date:')} {item['formatted_date']}]"
         lines.append(
             f"### {_('Session')} #{idx} ({short_id}){header_date} - [{_('Total messages:')} {item['total_messages']}]"
         )

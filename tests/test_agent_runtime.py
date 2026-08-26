@@ -6,12 +6,14 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessageChunk
+from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
 
 from ollama_agent.agent.agent import AgentRuntime, _process_message_chunk
 from ollama_agent.agent.builtin_tools import rag_search, set_rag_manager
-from ollama_agent.agent.middleware import _extract_tool_name, _stream_tool_events
+from ollama_agent.agent.middleware import _stream_tool_events
 from ollama_agent.agent.subagents import build_subagents
+from test_compaction import make_summarization_engine
 from ollama_agent.core.prompt_processor import PromptProcessingError
 from ollama_agent.settings.config import ModelSettings, Settings, SubAgentSettings
 
@@ -46,27 +48,6 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         real_tool_chunk = ToolMessageChunk(content="output", tool_call_id="call-1")
         self.assertIsNone(_process_message_chunk(real_tool_chunk))
 
-    def test_extract_tool_name(self) -> None:
-        # From request.name
-        req1 = MagicMock(spec=["name"])
-        req1.name = "search"
-        self.assertEqual(_extract_tool_name(req1), "search")
-
-        # From tool object
-        tool_obj = MagicMock()
-        tool_obj.name = "calc"
-        req2 = MagicMock(spec=["tool"], tool=tool_obj)
-        self.assertEqual(_extract_tool_name(req2), "calc")
-
-        # From tool_call dict
-        req3 = MagicMock(spec=["tool_call"], tool_call={"name": "bash"})
-        self.assertEqual(_extract_tool_name(req3), "bash")
-
-        # Invalid request raises ValueError
-        req4 = MagicMock(spec=[])
-        with self.assertRaises(ValueError):
-            _extract_tool_name(req4)
-
     async def test_stream_tool_events_emits_events_and_result(self) -> None:
         mock_runtime = MagicMock()
         mock_runtime.stream_writer = MagicMock()
@@ -74,11 +55,12 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         async def dummy_handler(req: Any) -> Any:
             return MagicMock(content="done")
 
-        req = MagicMock(
+        req = ToolCallRequest(
+            tool_call={"name": "web_search", "args": {"q": "python"}, "id": "call-1"},
+            tool=None,
+            state={},
             runtime=mock_runtime,
-            tool_call={"name": "web_search", "args": {"q": "python"}},
         )
-        req.name = "web_search"
 
         with patch("ollama_agent.agent.middleware.get_tool_timeout", return_value=5):
             res = await _stream_tool_events(req, dummy_handler)
@@ -90,13 +72,43 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(call_args_list[0][0][0]["name"], "web_search")
             self.assertEqual(call_args_list[1][0][0]["type"], "tool_output")
 
+    async def test_stream_tool_events_task_agent_name_from_metadata(self) -> None:
+        mock_runtime = MagicMock()
+
+        async def dummy_handler(req: Any) -> Any:
+            return MagicMock(content="ok")
+
+        req = ToolCallRequest(
+            tool_call={
+                "name": "task",
+                "args": {"name": "researcher"},
+                "id": "call-2",
+                "metadata": {"lc_agent_name": "meta_agent"},
+            },
+            tool=None,
+            state={},
+            runtime=mock_runtime,
+        )
+
+        with patch("ollama_agent.agent.middleware.get_tool_timeout", return_value=5):
+            await _stream_tool_events(req, dummy_handler)
+
+        call_event = mock_runtime.stream_writer.call_args_list[0][0][0]
+        self.assertEqual(call_event["agent_name"], "researcher")
+        out_event = mock_runtime.stream_writer.call_args_list[1][0][0]
+        self.assertEqual(out_event["agent_name"], "researcher")
+
     async def test_stream_tool_events_timeout_raises(self) -> None:
         async def slow_handler(req: Any) -> Any:
             await asyncio.sleep(0.5)
             return "done"
 
-        req = MagicMock(runtime=None, tool_call=None)
-        req.name = "slow_tool"
+        req = ToolCallRequest(
+            tool_call={"name": "slow_tool", "args": {}, "id": "call-3"},
+            tool=None,
+            state={},
+            runtime=MagicMock(),
+        )
 
         with patch("ollama_agent.agent.middleware.get_tool_timeout", return_value=0.01):
             with self.assertRaises(TimeoutError):
@@ -123,6 +135,13 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
     async def test_build_subagents_invalid_name_raises(self) -> None:
         ms = ModelSettings(name="gemma4:26b", base_url="http://localhost:11434")
         sa_list = [SubAgentSettings(name="", description="Missing name")]
+
+        with self.assertRaises(ValueError):
+            await build_subagents(sa_list, model_settings=ms)
+
+    async def test_build_subagents_missing_system_prompt_raises(self) -> None:
+        ms = ModelSettings(name="gemma4:26b", base_url="http://localhost:11434")
+        sa_list = [SubAgentSettings(name="coder", description="Writes code", system_prompt="")]
 
         with self.assertRaises(ValueError):
             await build_subagents(sa_list, model_settings=ms)
@@ -328,6 +347,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         settings = Settings()
         runtime = AgentRuntime(settings=settings)
         runtime._model = MagicMock()
+        runtime._summarization_engine = make_summarization_engine()
         mock_graph = MagicMock()
         mock_state_empty = MagicMock(values={})
         mock_graph.aget_state = AsyncMock(return_value=mock_state_empty)
@@ -350,6 +370,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         runtime = AgentRuntime(settings=settings)
         runtime._backend = MagicMock()
         runtime._model = MagicMock()
+        runtime._summarization_engine = make_summarization_engine()
 
         msg1 = HumanMessage(content="First prompt")
         msg2 = AIMessage(content="First answer", tool_calls=[])
@@ -371,7 +392,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(messages, [msg1, msg2])
             return "Summary of first turn"
 
-        async def fake_offload(backend: Any, messages: list[Any], path: str) -> str | None:
+        async def fake_offload(backend: Any, messages: list[Any], path: str) -> str:
             self.assertEqual(messages, [msg1, msg2])
             return "/conversation_history/session-abc.md"
 
@@ -400,6 +421,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         runtime = AgentRuntime(settings=settings)
         runtime._backend = MagicMock()
         runtime._model = MagicMock()
+        runtime._summarization_engine = make_summarization_engine()
 
         prior_summary = HumanMessage(
             content="prior summary", additional_kwargs={"lc_source": "summarization"}
@@ -428,7 +450,10 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         runtime.graph = mock_graph
 
         with patch("ollama_agent.agent.agent.generate_summary", AsyncMock(return_value="new summary")), \
-             patch("ollama_agent.agent.agent.offload_history", AsyncMock(return_value=None)):
+             patch(
+                 "ollama_agent.agent.agent.offload_history",
+                 AsyncMock(return_value="/conversation_history/session_fixed.md"),
+             ):
             res = await runtime.compact_context("t")
 
         self.assertTrue(res["success"])
@@ -436,5 +461,6 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         # -> effective cutoff 4; absolute = 2 + 4 - 1 = 5
         new_event = mock_graph.aupdate_state.call_args[0][1]["_summarization_event"]
         self.assertEqual(new_event["cutoff_index"], 5)
-        self.assertIsNone(new_event["file_path"])
+        self.assertEqual(new_event["file_path"], "/conversation_history/session_fixed.md")
+        self.assertIn("session_fixed.md", new_event["summary_message"].content)
 

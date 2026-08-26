@@ -11,8 +11,6 @@ from ollama_agent.i18n import (
     SUPPORTED_LOCALES,
     _,
     detect_system_language,
-    get_locale,
-    get_supported_locales,
     set_locale,
 )
 from ollama_agent.interfaces.cli import create_argument_parser
@@ -71,13 +69,13 @@ class TestI18nDetection(unittest.TestCase):
 
 
 class TestI18nLocaleManagement(unittest.TestCase):
-    """Test setting, getting, and querying supported locales."""
+    """Test setting the active locale and the supported locales registry."""
 
     def tearDown(self) -> None:
         set_locale("en")
 
     def test_supported_locales_list(self) -> None:
-        locales = get_supported_locales()
+        locales = SUPPORTED_LOCALES
         self.assertIn("en", locales)
         self.assertIn("es", locales)
         self.assertIn("fr", locales)
@@ -95,24 +93,19 @@ class TestI18nLocaleManagement(unittest.TestCase):
         self.assertIn("nl", locales)
         self.assertIn("uk", locales)
 
-    def test_set_and_get_valid_locale(self) -> None:
+    def test_set_valid_locale(self) -> None:
         for loc in SUPPORTED_LOCALES:
-            set_locale(loc)
-            self.assertEqual(get_locale(), loc)
+            self.assertEqual(set_locale(loc), loc)
 
     def test_set_locale_with_region_suffix(self) -> None:
-        set_locale("es_ES.UTF-8")
-        self.assertEqual(get_locale(), "es")
-        set_locale("fr-FR")
-        self.assertEqual(get_locale(), "fr")
-        set_locale("hi_IN.UTF-8")
-        self.assertEqual(get_locale(), "hi")
-        set_locale("zh_CN")
-        self.assertEqual(get_locale(), "zh")
+        self.assertEqual(set_locale("es_ES.UTF-8"), "es")
+        self.assertEqual(set_locale("fr-FR"), "fr")
+        self.assertEqual(set_locale("hi_IN.UTF-8"), "hi")
+        self.assertEqual(set_locale("zh_CN"), "zh")
 
-    def test_set_unsupported_locale_falls_back_to_english(self) -> None:
-        set_locale("unsupported_lang")
-        self.assertEqual(get_locale(), "en")
+    def test_set_unsupported_locale_raises_value_error(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unsupported language: unsupported_lang"):
+            set_locale("unsupported_lang")
 
 
 class TestI18nTranslations(unittest.TestCase):
@@ -219,29 +212,35 @@ class TestI18nTranslations(unittest.TestCase):
     def test_parameter_interpolation(self) -> None:
         set_locale("en")
         self.assertEqual(
-            _("Create Task: {task_id}", task_id="demo"),
-            "Create Task: demo",
+            _("Settings file must contain a YAML mapping: {path}", path="demo"),
+            "Settings file must contain a YAML mapping: demo",
         )
         set_locale("es")
         self.assertEqual(
-            _("Create Task: {task_id}", task_id="demo"),
-            "Crear Tarea: demo",
+            _("Settings file must contain a YAML mapping: {path}", path="demo"),
+            "El archivo de ajustes debe contener un mapeo YAML: demo",
         )
         set_locale("fr")
         self.assertEqual(
-            _("Create Task: {task_id}", task_id="demo"),
-            "Créer une Tâche : demo",
+            _("Settings file must contain a YAML mapping: {path}", path="demo"),
+            "Le fichier de paramètres doit contenir un mappage YAML : demo",
         )
         set_locale("hi")
         self.assertEqual(
-            _("Create Task: {task_id}", task_id="demo"),
-            "कार्य बनाएं: demo",
+            _("Settings file must contain a YAML mapping: {path}", path="demo"),
+            "सेटिंग्स फ़ाइल में YAML मैपिंग होनी चाहिए: demo",
         )
 
-    def test_unregistered_string_returns_original(self) -> None:
-        set_locale("es")
+    def test_unknown_string_in_english_is_source_language(self) -> None:
+        set_locale("en")
         unknown = "This is a non-registered string"
         self.assertEqual(_(unknown), unknown)
+
+    def test_missing_translation_in_non_default_locale_raises_key_error(self) -> None:
+        set_locale("es")
+        unknown = "This is a non-registered string"
+        with self.assertRaisesRegex(KeyError, "Missing translation for .* in locale es"):
+            _(unknown)
 
 
 class TestCatalogCompleteness(unittest.TestCase):

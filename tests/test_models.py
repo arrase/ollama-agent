@@ -7,6 +7,7 @@ from ollama_agent.core.models import (
     ModelCapabilityError,
     ModelContextWindowError,
     OLLAMA_PARAM_DEFAULTS,
+    _get_model_info,
     _model_context_length,
     _parse_modelfile_param,
     _parse_num_ctx,
@@ -62,6 +63,30 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         caps = await get_model_capabilities("test-model", "http://localhost:11434")
         self.assertEqual(caps, {"tools", "thinking"})
 
+    @patch("ollama_agent.core.models._show_model")
+    async def test_get_model_capabilities_unknown_shape_raises(self, mock_show: AsyncMock) -> None:
+        for bad_caps in ("tools", None, 42):
+            with self.subTest(caps=bad_caps):
+                mock_show.return_value = MagicMock(capabilities=bad_caps)
+                with self.assertRaises(ModelCapabilityError):
+                    await get_model_capabilities("test-model", "http://localhost:11434")
+
+    @patch("ollama_agent.core.models._show_model")
+    async def test_get_model_capabilities_dict_shape(self, mock_show: AsyncMock) -> None:
+        mock_show.return_value = MagicMock(capabilities={"capabilities": ["tools"]})
+        caps = await get_model_capabilities("test-model", "http://localhost:11434")
+        self.assertEqual(caps, {"tools"})
+
+    def test_get_model_info_requires_dict(self) -> None:
+        response = MagicMock(model_info={"llama.context_length": 4096}, modelinfo=None)
+        self.assertEqual(_get_model_info(response), {"llama.context_length": 4096})
+
+        response_sdk = MagicMock(model_info=None, modelinfo={"gemma.context_length": 8192})
+        self.assertEqual(_get_model_info(response_sdk), {"gemma.context_length": 8192})
+
+        with self.assertRaises(ModelCapabilityError):
+            _get_model_info(MagicMock(model_info="nope", modelinfo=None))
+
     @patch("ollama_agent.core.models.get_model_capabilities")
     async def test_model_supports_tools(self, mock_caps: AsyncMock) -> None:
         mock_caps.return_value = {"tools"}
@@ -78,49 +103,56 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
     @patch("ollama_agent.core.models.ensure_model_supports_tools")
     @patch("ollama_agent.core.models.get_model_capabilities")
     async def test_resolve_ollama_reasoning(self, mock_caps: AsyncMock, mock_ensure: AsyncMock) -> None:
+        warnings_log: list[str] = []
+        warn = warnings_log.append
         mock_caps.return_value = {"thinking"}
-        res = await resolve_ollama_reasoning("qwen:32b", "high", "http://localhost:11434")
+        res = await resolve_ollama_reasoning("qwen:32b", "high", "http://localhost:11434", warn)
         self.assertTrue(res)
 
         # Non-thinking model
         mock_caps.return_value = set()
-        res = await resolve_ollama_reasoning("llama3:8b", "high", "http://localhost:11434")
+        res = await resolve_ollama_reasoning("llama3:8b", "high", "http://localhost:11434", warn)
         self.assertIsNone(res)
 
         # qwen3.8 model with official reasoning_effort support
-        res_qwen_xhigh = await resolve_ollama_reasoning("qwen3.8:27b", "xhigh", "http://localhost:11434")
+        res_qwen_xhigh = await resolve_ollama_reasoning("qwen3.8:27b", "xhigh", "http://localhost:11434", warn)
         self.assertEqual(res_qwen_xhigh, "xhigh")
-        res_qwen_med = await resolve_ollama_reasoning("qwen3.8:27b", "medium", "http://localhost:11434")
+        res_qwen_med = await resolve_ollama_reasoning("qwen3.8:27b", "medium", "http://localhost:11434", warn)
         self.assertEqual(res_qwen_med, "medium")
-        res_qwen_low = await resolve_ollama_reasoning("qwen3.8:27b", "low", "http://localhost:11434")
+        res_qwen_low = await resolve_ollama_reasoning("qwen3.8:27b", "low", "http://localhost:11434", warn)
         self.assertEqual(res_qwen_low, "low")
-        res_qwen_enabled = await resolve_ollama_reasoning("qwen3.8:27b", "enabled", "http://localhost:11434")
+        res_qwen_enabled = await resolve_ollama_reasoning("qwen3.8:27b", "enabled", "http://localhost:11434", warn)
         self.assertEqual(res_qwen_enabled, "xhigh")
-        res_qwen_hide = await resolve_ollama_reasoning("qwen3.8:27b", "hide", "http://localhost:11434")
+        res_qwen_hide = await resolve_ollama_reasoning("qwen3.8:27b", "hide", "http://localhost:11434", warn)
         self.assertTrue(res_qwen_hide)
-        res_qwen_disabled = await resolve_ollama_reasoning("qwen3.8:27b", "disabled", "http://localhost:11434")
+        res_qwen_disabled = await resolve_ollama_reasoning("qwen3.8:27b", "disabled", "http://localhost:11434", warn)
         self.assertFalse(res_qwen_disabled)
 
         # gpt-oss special model
-        res = await resolve_ollama_reasoning("gpt-oss:latest", "high", "http://localhost:11434")
+        res = await resolve_ollama_reasoning("gpt-oss:latest", "high", "http://localhost:11434", warn)
         self.assertEqual(res, "high")
-        res_xhigh = await resolve_ollama_reasoning("gpt-oss:latest", "xhigh", "http://localhost:11434")
+        res_xhigh = await resolve_ollama_reasoning("gpt-oss:latest", "xhigh", "http://localhost:11434", warn)
         self.assertEqual(res_xhigh, "xhigh")
-        res_enabled = await resolve_ollama_reasoning("gpt-oss:latest", "enabled", "http://localhost:11434")
+        res_enabled = await resolve_ollama_reasoning("gpt-oss:latest", "enabled", "http://localhost:11434", warn)
         self.assertEqual(res_enabled, "medium")
-        res_hide = await resolve_ollama_reasoning("gpt-oss:latest", "hide", "http://localhost:11434")
+        res_hide = await resolve_ollama_reasoning("gpt-oss:latest", "hide", "http://localhost:11434", warn)
         self.assertIsNone(res_hide)
-        res_disabled = await resolve_ollama_reasoning("gpt-oss:latest", "disabled", "http://localhost:11434")
+
+        # No warnings so far; 'disabled' on a thinking-only model must warn loud.
+        self.assertEqual(warnings_log, [])
+        res_disabled = await resolve_ollama_reasoning("gpt-oss:latest", "disabled", "http://localhost:11434", warn)
         self.assertIsNone(res_disabled)
+        self.assertEqual(len(warnings_log), 1)
+        self.assertIn("gpt-oss:latest", warnings_log[0])
 
         # Thinking-capable models
         mock_caps.return_value = {"thinking"}
         for effort_level in ("low", "medium", "high", "xhigh", "enabled", "hide"):
             self.assertTrue(
-                await resolve_ollama_reasoning("any-thinking-model", effort_level, "http://localhost:11434")
+                await resolve_ollama_reasoning("any-thinking-model", effort_level, "http://localhost:11434", warn)
             )
         self.assertFalse(
-            await resolve_ollama_reasoning("any-thinking-model", "disabled", "http://localhost:11434")
+            await resolve_ollama_reasoning("any-thinking-model", "disabled", "http://localhost:11434", warn)
         )
 
     @patch("ollama_agent.core.models.model_supports_tools")
@@ -207,6 +239,7 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
             min_p=0.05,
             presence_penalty=0.5,
             repeat_penalty=1.2,
+            warn_callback=lambda _msg: None,
         )
         self.assertIsNotNone(model)
         self.assertEqual(model.model, "gemma4:26b")
@@ -241,6 +274,7 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
             parameters="temperature 0.65\ntop_p 0.85\nrepetition_penalty 1.25",
             modelfile=None,
         )
+        warnings_log: list[str] = []
 
         # 1. User overrides temperature; top_p and repeat_penalty resolve from metadata; others from defaults
         resolved = await resolve_model_parameters(
@@ -252,6 +286,7 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
             min_p=None,
             presence_penalty=None,
             repeat_penalty=None,
+            warn_callback=warnings_log.append,
         )
 
         # User value
@@ -263,6 +298,26 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resolved["top_k"], (OLLAMA_PARAM_DEFAULTS["top_k"], "default"))
         self.assertEqual(resolved["min_p"], (OLLAMA_PARAM_DEFAULTS["min_p"], "default"))
         self.assertEqual(resolved["presence_penalty"], (OLLAMA_PARAM_DEFAULTS["presence_penalty"], "default"))
+        self.assertEqual(warnings_log, [])
+
+    @patch("ollama_agent.core.models._show_model")
+    async def test_resolve_model_parameters_invalid_value_warns(self, mock_show: AsyncMock) -> None:
+        mock_show.return_value = MagicMock(
+            parameters="temperature not-a-number",
+            modelfile="",
+        )
+        warnings_log: list[str] = []
+
+        resolved = await resolve_model_parameters(
+            "test-model",
+            "http://localhost:11434",
+            warn_callback=warnings_log.append,
+        )
+
+        self.assertEqual(resolved["temperature"], (OLLAMA_PARAM_DEFAULTS["temperature"], "default"))
+        self.assertEqual(len(warnings_log), 1)
+        self.assertIn("not-a-number", warnings_log[0])
+        self.assertIn("temperature", warnings_log[0])
 
     @patch("ollama_agent.core.models._show_model")
     @patch("ollama_agent.core.models.resolve_context_window", AsyncMock(return_value=4096))
@@ -278,6 +333,7 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
             base_url="http://localhost:11434",
             context_window=4096,
             reasoning_effort="disabled",
+            warn_callback=lambda _msg: None,
         )
         self.assertEqual(model.temperature, 0.8)
         self.assertEqual(model.top_p, 0.9)

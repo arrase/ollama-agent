@@ -18,65 +18,37 @@ from ..i18n import _
 from .builtin_tools import get_tool_timeout
 
 
-def _extract_tool_name(request: Any) -> str:
-    """Extract tool name from a middleware request."""
-    if hasattr(request, "name") and request.name:
-        return str(request.name)
-    if hasattr(request, "tool_call") and request.tool_call:
-        tool_call = request.tool_call
-        if isinstance(tool_call, dict):
-            return str(tool_call["name"])
-        return str(tool_call.name)
-    if hasattr(request, "tool") and request.tool:
-        return str(request.tool.name)
-    raise ValueError("Unable to extract tool name from request")
-
-
 async def _stream_tool_events(request: Any, handler: Any) -> Any:
     """Emit tool_call / tool_output events and enforce tool timeout."""
-    runtime = getattr(request, "runtime", None)
-    tool_name = _extract_tool_name(request)
-    agent_name: str | None = None
+    runtime = request.runtime
+    tool_name = str(request.tool_call["name"])
+    agent_name = None
 
-    tool_call = getattr(request, "tool_call", None)
-    if isinstance(tool_call, dict):
-        args = tool_call.get("args")
-        if isinstance(args, dict) and tool_name == "task":
-            agent_name = args.get("name")
-        meta = tool_call.get("metadata")
-        if isinstance(meta, dict) and not agent_name:
-            agent_name = meta.get("lc_agent_name")
+    args = request.tool_call.get("args")
+    if isinstance(args, dict) and tool_name == "task":
+        agent_name = args.get("name")
+    meta = request.tool_call.get("metadata")
+    if isinstance(meta, dict) and not agent_name:
+        agent_name = meta.get("lc_agent_name")
 
-    if runtime is not None:
-        event: dict[str, Any] = {"type": "tool_call", "name": tool_name}
-        if agent_name:
-            event["agent_name"] = agent_name
-        runtime.stream_writer(event)
+    event: dict[str, Any] = {"type": "tool_call", "name": tool_name}
+    if agent_name:
+        event["agent_name"] = agent_name
+    runtime.stream_writer(event)
 
     timeout_s = float(get_tool_timeout())
     try:
-        if timeout_s > 0:
-            result = await asyncio.wait_for(handler(request), timeout=timeout_s)
-        else:
-            result = await handler(request)
+        result = await asyncio.wait_for(handler(request), timeout=timeout_s)
     except asyncio.TimeoutError as exc:
-        raise TimeoutError(_("Tool '{tool_name}' timed out after {timeout_s}s", tool_name=tool_name, timeout_s=timeout_s)) from exc
+        raise TimeoutError(
+            _("Tool '{tool_name}' timed out after {timeout_s}s", tool_name=tool_name, timeout_s=timeout_s)
+        ) from exc
 
-    if runtime is not None:
-        content = getattr(result, "content", result)
-        content_str = str(content)
-        if not agent_name:
-            meta = getattr(result, "response_metadata", None) or getattr(result, "additional_kwargs", None)
-            if isinstance(meta, dict):
-                agent_name = meta.get("lc_agent_name")
-
-        out_event: dict[str, Any] = {
-            "type": "tool_output",
-            "output_len": len(content_str),
-        }
-        if agent_name:
-            out_event["agent_name"] = agent_name
-        runtime.stream_writer(out_event)
+    content_str = str(getattr(result, "content", result))
+    out_event: dict[str, Any] = {"type": "tool_output", "output_len": len(content_str)}
+    if agent_name:
+        out_event["agent_name"] = agent_name
+    runtime.stream_writer(out_event)
     return result
 
 
