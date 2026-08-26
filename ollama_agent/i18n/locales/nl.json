@@ -334,7 +334,6 @@
   "Manage and check MCP servers": "MCP-servers beheren en controleren",
   "List configured MCP servers and their status": "Toon geconfigureerde MCP-servers en hun status",
   "List configured MCP servers and check their status": "Toon geconfigureerde MCP-servers en controleer hun status",
-  "Usage: /mcp [list]": "Gebruik: /mcp [list]",
   "Model Context Protocol (MCP) Servers": "Model Context Protocol (MCP)-servers",
   "Server": "Server",
   "Type": "Type",
@@ -347,7 +346,6 @@
   "Connection timed out ({timeout}s)": "Time-out bij verbinding ({timeout}s)",
   "Failed to load MCP config {config_path}: {exc}": "Laden van de MCP-configuratie {config_path} mislukt: {exc}",
   "Invalid MCP config {config_path}: expected a JSON object": "Ongeldige MCP-configuratie {config_path}: er wordt een JSON-object verwacht",
-  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list]": "Onbekende mcp-subopdracht '{sub}'. Gebruik: /mcp [list]",
   "Run 'ollama-agent <command> -h' for more details on a specific command.": "Voer 'ollama-agent <opdracht> -h' uit voor meer details over een specifieke opdracht.",
   "Run 'ollama-agent task <subcommand> -h' for more details on a subcommand.": "Voer 'ollama-agent task <subopdracht> -h' uit voor meer details over een subopdracht.",
   "Run 'ollama-agent rag <subcommand> -h' for more details on a subcommand.": "Voer 'ollama-agent rag <subopdracht> -h' uit voor meer details over een subopdracht.",
@@ -399,5 +397,9 @@
   "Usage: /session [list | search <query> | delete <id>]": "Gebruik: /session [list | search <query> | delete <id>]",
   "Unknown session subcommand '{sub}'. Usage: /session [list | search <query> | delete <id>]": "Onbekende sessie-subopdracht '{sub}'. Gebruik: /session [list | search <query> | delete <id>]",
   "Task": "Taak",
-  "Skill": "Vaardigheid"
+  "Skill": "Vaardigheid",
+  "Usage: /mcp [list | reload]": "Gebruik: /mcp [list | reload]",
+  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]": "Onbekende mcp-subopdracht '{sub}'. Gebruik: /mcp [list | reload]",
+  "Reload MCP servers and rebuild tool graph": "Herlaad MCP-servers en herbouw toolgraaf",
+  "MCP servers reloaded successfully.": "MCP-servers succesvol herladen."
 }

@@ -334,7 +334,6 @@
   "Manage and check MCP servers": "MCP 서버 관리 및 상태 확인",
   "List configured MCP servers and their status": "구성된 MCP 서버 및 상태 목록 표시",
   "List configured MCP servers and check their status": "구성된 MCP 서버 목록 표시 및 상태 확인",
-  "Usage: /mcp [list]": "사용법: /mcp [list]",
   "Model Context Protocol (MCP) Servers": "모델 컨텍스트 프로토콜(MCP) 서버",
   "Server": "서버",
   "Type": "유형",
@@ -347,7 +346,6 @@
   "Connection timed out ({timeout}s)": "연결 시간 초과 ({timeout}초)",
   "Failed to load MCP config {config_path}: {exc}": "MCP 구성 {config_path}을(를) 로드하지 못했습니다: {exc}",
   "Invalid MCP config {config_path}: expected a JSON object": "잘못된 MCP 구성 {config_path}: JSON 객체가 필요합니다",
-  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list]": "알 수 없는 mcp 서브커맨드 '{sub}'입니다. 사용법: /mcp [list]",
   "Run 'ollama-agent <command> -h' for more details on a specific command.": "특정 명령에 대한 자세한 내용은 'ollama-agent <명령> -h'를 실행하세요.",
   "Run 'ollama-agent task <subcommand> -h' for more details on a subcommand.": "서브커맨드에 대한 자세한 내용은 'ollama-agent task <서브커맨드> -h'를 실행하세요.",
   "Run 'ollama-agent rag <subcommand> -h' for more details on a subcommand.": "서브커맨드에 대한 자세한 내용은 'ollama-agent rag <서브커맨드> -h'를 실행하세요.",
@@ -399,5 +397,9 @@
   "Usage: /session [list | search <query> | delete <id>]": "사용법: /session [list | search <검색어> | delete <id>]",
   "Unknown session subcommand '{sub}'. Usage: /session [list | search <query> | delete <id>]": "알 수 없는 세션 서브커맨드 '{sub}'입니다. 사용법: /session [list | search <검색어> | delete <id>]",
   "Task": "작업",
-  "Skill": "스킬"
+  "Skill": "스킬",
+  "Usage: /mcp [list | reload]": "사용법: /mcp [list | reload]",
+  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]": "알 수 없는 mcp 서브커맨드 '{sub}'입니다. 사용법: /mcp [list | reload]",
+  "Reload MCP servers and rebuild tool graph": "MCP 서버를 다시 로드하고 도구 그래프를 재구성",
+  "MCP servers reloaded successfully.": "MCP 서버가 성공적으로 다시 로드되었습니다."
 }

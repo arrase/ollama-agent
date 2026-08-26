@@ -166,7 +166,7 @@ Slash commands provide full application control directly within the REPL:
 | `/task` | `/task [list \| create [<id>] \| run <id> [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` launches an interactive conversational creation flow with the agent. |
 | `/skill` | `/skill [list \| show <id> \| create [<id>] \| delete <id>]` | Manage agent skills. `/skill create` launches an interactive conversational creation flow with the agent. |
 | `/rag` | `/rag [status \| list \| create <name> \| load <name> \| unload \| add <path> [--dir] \| delete <name>]` | Manage local RAG databases, index documents, and toggle active knowledge bases. |
-| `/mcp` | `/mcp [list]` | List configured MCP servers and display real-time connection status with color-coded indicators. |
+| `/mcp` | `/mcp [list \| reload]` | List configured MCP servers, check connection status, or reload MCP servers and rebuild tool graph mid-session. |
 | `/yolo` | `/yolo [on \| off]` | Toggle YOLO mode or set it explicitly to bypass tool execution confirmation prompts. |
 | `/new` | `/new` (alias: `/clear`) | Start a clean session with fresh context and clear the screen (alias for `/session new`). |
 | `/clear` | `/clear` | Clear the screen and start a clean session (alias for `/new`). |

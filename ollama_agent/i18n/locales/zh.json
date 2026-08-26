@@ -334,7 +334,6 @@
   "Manage and check MCP servers": "管理和检查 MCP 服务器",
   "List configured MCP servers and their status": "列出已配置的 MCP 服务器及其状态",
   "List configured MCP servers and check their status": "列出已配置的 MCP 服务器并检查其状态",
-  "Usage: /mcp [list]": "用法: /mcp [list]",
   "Model Context Protocol (MCP) Servers": "模型上下文协议 (MCP) 服务器",
   "Server": "服务器",
   "Type": "类型",
@@ -347,7 +346,6 @@
   "Connection timed out ({timeout}s)": "连接超时 ({timeout}秒)",
   "Failed to load MCP config {config_path}: {exc}": "加载 MCP 配置 {config_path} 失败：{exc}",
   "Invalid MCP config {config_path}: expected a JSON object": "无效的 MCP 配置 {config_path}：应为 JSON 对象",
-  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list]": "未知的 mcp 子命令 '{sub}'。用法: /mcp [list]",
   "Run 'ollama-agent <command> -h' for more details on a specific command.": "运行 'ollama-agent <command> -h' 查看特定命令的详细帮助。",
   "Run 'ollama-agent task <subcommand> -h' for more details on a subcommand.": "运行 'ollama-agent task <subcommand> -h' 查看子命令的详细帮助。",
   "Run 'ollama-agent rag <subcommand> -h' for more details on a subcommand.": "运行 'ollama-agent rag <subcommand> -h' 查看子命令的详细帮助。",
@@ -399,5 +397,9 @@
   "Usage: /session [list | search <query> | delete <id>]": "用法：/session [list | search <查询> | delete <会话ID>]",
   "Unknown session subcommand '{sub}'. Usage: /session [list | search <query> | delete <id>]": "未知的会话子命令 '{sub}'。用法：/session [list | search <查询> | delete <会话ID>]",
   "Task": "任务",
-  "Skill": "技能"
+  "Skill": "技能",
+  "Usage: /mcp [list | reload]": "用法: /mcp [list | reload]",
+  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]": "未知的 mcp 子命令 '{sub}'。用法: /mcp [list | reload]",
+  "Reload MCP servers and rebuild tool graph": "重新加载 MCP 服务器并重建工具图",
+  "MCP servers reloaded successfully.": "MCP 服务器重新加载成功。"
 }

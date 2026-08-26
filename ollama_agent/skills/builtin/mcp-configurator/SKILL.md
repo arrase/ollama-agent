@@ -133,6 +133,7 @@ Users can test connections and verify discovered tools:
   ```text
   /mcp
   /mcp list
+  /mcp reload
   ```
 - **In the Terminal CLI**:
   ```bash
@@ -161,7 +162,8 @@ When a user requests adding, modifying, or troubleshooting an MCP server:
 3. **Format & Write Configuration**:
    - Use `write_file` or `edit_file` to update `/agent/mcp.json` or `/agent/settings.yaml`.
    - Ensure the JSON/YAML is valid and properly structured.
-4. **Confirm & Guide**:
-   - Confirm what server was added/modified.
-   - Instruct the user on testing connectivity with `/mcp list` (in REPL) or `ollama-agent mcp list` (in CLI).
-   - Remind the user that MCP tools are automatically loaded when starting a new session or reloading the runtime.
+4. **Confirm & Prompt for `/mcp reload`**:
+   - Confirm what server was added, updated, or removed.
+   - **Mandatory Step**: Explicitly instruct the user to run `/mcp reload` in the chat to immediately reload the MCP servers and rebuild the tool graph in the current session.
+   - Mention that `/mcp reload` will verify connections and display the updated list of available tools.
+

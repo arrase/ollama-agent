@@ -334,7 +334,6 @@
   "Manage and check MCP servers": "Gérer et vérifier les serveurs MCP",
   "List configured MCP servers and their status": "Lister les serveurs MCP configurés et leur statut",
   "List configured MCP servers and check their status": "Lister les serveurs MCP configurés et vérifier leur statut",
-  "Usage: /mcp [list]": "Utilisation : /mcp [list]",
   "Model Context Protocol (MCP) Servers": "Serveurs Model Context Protocol (MCP)",
   "Server": "Serveur",
   "Type": "Type",
@@ -347,7 +346,6 @@
   "Connection timed out ({timeout}s)": "Délai de connexion dépassé ({timeout}s)",
   "Failed to load MCP config {config_path}: {exc}": "Échec du chargement de la configuration MCP {config_path} : {exc}",
   "Invalid MCP config {config_path}: expected a JSON object": "Configuration MCP non valide {config_path} : objet JSON attendu",
-  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list]": "Sous-commande mcp inconnue '{sub}'. Utilisation : /mcp [list]",
   "Run 'ollama-agent <command> -h' for more details on a specific command.": "Exécutez 'ollama-agent <command> -h' pour plus de détails sur une commande spécifique.",
   "Run 'ollama-agent task <subcommand> -h' for more details on a subcommand.": "Exécutez 'ollama-agent task <subcommand> -h' pour plus de détails sur une sous-commande.",
   "Run 'ollama-agent rag <subcommand> -h' for more details on a subcommand.": "Exécutez 'ollama-agent rag <subcommand> -h' pour plus de détails sur une sous-commande.",
@@ -399,5 +397,9 @@
   "Usage: /session [list | search <query> | delete <id>]": "Utilisation : /session [list | search <query> | delete <id>]",
   "Unknown session subcommand '{sub}'. Usage: /session [list | search <query> | delete <id>]": "Sous-commande de session inconnue '{sub}'. Utilisation : /session [list | search <query> | delete <id>]",
   "Task": "Tâche",
-  "Skill": "Compétence"
+  "Skill": "Compétence",
+  "Usage: /mcp [list | reload]": "Utilisation : /mcp [list | reload]",
+  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]": "Sous-commande mcp inconnue '{sub}'. Utilisation : /mcp [list | reload]",
+  "Reload MCP servers and rebuild tool graph": "Recharger les serveurs MCP et reconstruire le graphe d'outils",
+  "MCP servers reloaded successfully.": "Serveurs MCP rechargés avec succès."
 }

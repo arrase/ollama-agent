@@ -334,7 +334,6 @@
   "Manage and check MCP servers": "Gestisci e controlla i server MCP",
   "List configured MCP servers and their status": "Elenca i server MCP configurati e il loro stato",
   "List configured MCP servers and check their status": "Elenca i server MCP configurati e controlla il loro stato",
-  "Usage: /mcp [list]": "Utilizzo: /mcp [list]",
   "Model Context Protocol (MCP) Servers": "Server Model Context Protocol (MCP)",
   "Server": "Server",
   "Type": "Tipo",
@@ -347,7 +346,6 @@
   "Connection timed out ({timeout}s)": "Timeout di connessione ({timeout}s)",
   "Failed to load MCP config {config_path}: {exc}": "Impossibile caricare la configurazione MCP {config_path}: {exc}",
   "Invalid MCP config {config_path}: expected a JSON object": "Configurazione MCP non valida {config_path}: previsto un oggetto JSON",
-  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list]": "Sottocomando mcp sconosciuto '{sub}'. Utilizzo: /mcp [list]",
   "Run 'ollama-agent <command> -h' for more details on a specific command.": "Esegui 'ollama-agent <command> -h' per maggiori dettagli su un comando specifico.",
   "Run 'ollama-agent task <subcommand> -h' for more details on a subcommand.": "Esegui 'ollama-agent task <subcommand> -h' per maggiori dettagli su un sottocomando.",
   "Run 'ollama-agent rag <subcommand> -h' for more details on a subcommand.": "Esegui 'ollama-agent rag <subcommand> -h' per maggiori dettagli su un sottocomando.",
@@ -399,5 +397,9 @@
   "Usage: /session [list | search <query> | delete <id>]": "Uso: /session [list | search <query> | delete <id>]",
   "Unknown session subcommand '{sub}'. Usage: /session [list | search <query> | delete <id>]": "Sottocomando sessione sconosciuto '{sub}'. Uso: /session [list | search <query> | delete <id>]",
   "Task": "Attività",
-  "Skill": "Abilità"
+  "Skill": "Abilità",
+  "Usage: /mcp [list | reload]": "Utilizzo: /mcp [list | reload]",
+  "Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]": "Sottocomando mcp sconosciuto '{sub}'. Utilizzo: /mcp [list | reload]",
+  "Reload MCP servers and rebuild tool graph": "Ricarica i server MCP e ricostruisci il grafo degli strumenti",
+  "MCP servers reloaded successfully.": "Server MCP ricaricati con successo."
 }

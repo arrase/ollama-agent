@@ -54,12 +54,19 @@ Global MCP servers for the main agent are declared in JSON format at `~/.ollama-
 }
 ```
 
-### Inspecting Servers (`/mcp` Slash Command & CLI)
+### Inspecting & Reloading Servers (`/mcp` Slash Command & CLI)
 
-You can check configured MCP servers, test connectivity, and inspect available tools directly from the REPL with `/mcp`:
+You can check configured MCP servers, test connectivity, and inspect available tools directly from the REPL with `/mcp` or `/mcp list`:
 
 ```text
 /mcp
+/mcp list
+```
+
+If you add or update an MCP server configuration during an active chat session, reload the servers and rebuild the agent tool graph instantly with:
+
+```text
+/mcp reload
 ```
 
 Or via CLI:
