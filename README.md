@@ -168,6 +168,7 @@ The REPL provides built-in slash commands for managing models, sessions, tasks, 
 | `/skill` | `/skill [list \| show <id> \| create [<id>] \| delete <id>]` | Manage agent skills. `/skill create` initiates an interactive conversational creation flow with the agent. |
 | `/rag` | `/rag [status \| list \| create <name> \| load <name> \| unload \| add <path> [--dir] \| delete <name>]` | Manage local RAG vector databases, index files/directories, and toggle active knowledge bases. |
 | `/mcp` | `/mcp [list \| reload]` | List configured MCP servers, check connection status, or reload MCP servers and rebuild tool graph mid-session. |
+| `/agents` | `/agents [list]` | List configured specialized subagents, inspecting their models, context windows, and dedicated MCP tool servers. |
 | `/yolo` | `/yolo [on \| off]` | Toggle YOLO mode or explicitly enable/disable it to bypass tool confirmations. |
 | `/new` | `/new` (alias: `/clear`) | Start a clean new session with fresh context and clear the screen (alias for `/session new`). |
 | `/clear` | `/clear` | Clear the screen and start a clean new session (alias for `/new`). |
@@ -352,6 +353,7 @@ In addition to top-level flags, Ollama Agent provides dedicated CLI subcommands 
 | | `rag add` | `ollama-agent rag add docs-kb ./docs --dir` | Index a file or directory into a RAG collection. |
 | | `rag delete` | `ollama-agent rag delete docs-kb` | Delete a RAG database. |
 | **MCP** | `mcp list` | `ollama-agent mcp list` | List configured MCP servers and check their connection health. |
+| **Agents** | `agents list` | `ollama-agent agents list` | List all configured specialized subagents. |
 
 ---
 
@@ -676,6 +678,8 @@ subagents:
         command: "uvx"
         args: ["mcp-server-sqlite", "--db-path", "./data/analytics.db"]
 ```
+
+Inspect configured subagents anytime with `/agents` (or `/agents list`) in the REPL, or `ollama-agent agents list` from the CLI.
 
 ---
 

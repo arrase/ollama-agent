@@ -167,6 +167,21 @@ subagents:
         args: ["mcp-server-sqlite", "--db-path", "./data/analytics.db"]
 ```
 
+### Inspecting Configured Subagents (`/agents` Slash Command & CLI)
+
+You can inspect all configured subagents, their model overrides, context windows, and dedicated MCP tool servers directly from the REPL with `/agents` or `/agents list`:
+
+```text
+/agents
+/agents list
+```
+
+From the command line, run:
+
+```bash
+ollama-agent agents list
+```
+
 ### Configuration Fields Reference
 
 | Field | Type | Default | Description |

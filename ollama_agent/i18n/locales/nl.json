@@ -401,5 +401,17 @@
   "Usage: /mcp [list | reload]": "Gebruik: /mcp [list | reload]",
   "Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]": "Onbekende mcp-subopdracht '{sub}'. Gebruik: /mcp [list | reload]",
   "Reload MCP servers and rebuild tool graph": "Herlaad MCP-servers en herbouw toolgraaf",
-  "MCP servers reloaded successfully.": "MCP-servers succesvol herladen."
+  "MCP servers reloaded successfully.": "MCP-servers succesvol herladen.",
+  "Manage configured subagents": "Geconfigureerde subagenten beheren",
+  "List configured subagents and their properties": "Geconfigureerde subagenten en hun eigenschappen weergeven",
+  "List all configured subagents": "Alle geconfigureerde subagenten weergeven",
+  "Usage: /agents [list]": "Gebruik: /agents [list]",
+  "Unknown agents subcommand '{sub}'. Usage: /agents [list]": "Onbekende agents-subopdracht '{sub}'. Gebruik: /agents [list]",
+  "No subagents configured.": "Geen subagenten geconfigureerd.",
+  "Configure subagents in {path}": "Configureer subagenten in {path}",
+  "Configured Subagents": "Geconfigureerde subagenten",
+  "Context": "Context",
+  "MCP Servers": "MCP-servers",
+  "inherited": "overgeërfd",
+  "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "Voer 'ollama-agent agents <subcommand> -h' uit voor meer details over een subopdracht."
 }

@@ -6,13 +6,72 @@ import asyncio
 import logging
 from typing import Any
 
+from rich import box
+from rich.console import Console
+from rich.table import Table
+
 from ..core import create_ollama_chat_model, validate_reasoning_effort
 from ..i18n import _
 from ..mcp import load_subagent_mcp_tools
-from ..settings import ModelSettings, SubAgentSettings
+from ..settings import SETTINGS_PATH, ModelSettings, Settings, SubAgentSettings
 from .environment import SKILL_ROOTS, environment_block
 
 _log = logging.getLogger(__name__)
+
+
+def list_subagents(
+    console: Console,
+    settings: Settings | None = None,
+) -> None:
+    """List all configured subagents and their properties in a table."""
+    if not settings or not settings.subagents:
+        console.print(
+            f"[yellow]{_('No subagents configured.')}[/yellow]\n"
+            f"[dim]{_('Configure subagents in {path}', path=SETTINGS_PATH)}[/dim]"
+        )
+        return
+
+    table = Table(
+        title=_("Configured Subagents"),
+        box=box.ROUNDED,
+        show_header=True,
+        header_style="bold magenta",
+    )
+    table.add_column(_("Name"), style="bold cyan", no_wrap=True)
+    table.add_column(_("Description"), style="white")
+    table.add_column(_("Model"), style="green", no_wrap=True)
+    table.add_column(_("Context"), style="yellow", no_wrap=True)
+    table.add_column(_("MCP Servers"), style="blue")
+
+    for sa in settings.subagents:
+        if sa.model:
+            model_str = sa.model
+        elif settings.model.name:
+            model_str = f"[dim]{settings.model.name} ({_('inherited')})[/dim]"
+        else:
+            model_str = f"[dim]{_('inherited')}[/dim]"
+
+        if sa.context_window:
+            ctx_str = str(sa.context_window)
+        elif settings.model.context_window:
+            ctx_str = f"[dim]{settings.model.context_window} ({_('inherited')})[/dim]"
+        else:
+            ctx_str = f"[dim]{_('inherited')}[/dim]"
+
+        if sa.mcp_servers:
+            mcp_str = ", ".join(srv.name for srv in sa.mcp_servers if srv.name)
+        else:
+            mcp_str = "[dim]-[/dim]"
+
+        table.add_row(
+            sa.name,
+            sa.description,
+            model_str,
+            ctx_str,
+            mcp_str,
+        )
+
+    console.print(table)
 
 
 async def build_subagents(

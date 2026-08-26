@@ -456,6 +456,14 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(autolist.display)
             self.assertEqual(autolist.option_count, 7)  # list, search, resume, switch, new, export, delete
 
+            # 1c. Level 1: Subcommands for /agents
+            app.update_autocomplete("/agents ")
+            self.assertTrue(autolist.display)
+            self.assertEqual(autolist.option_count, 1)  # list
+            app.accept_completion(0)
+            inp = app.query_one(ReplInput)
+            self.assertEqual(inp.text, "/agents list ")
+
             app.update_autocomplete("/session sea")
             self.assertEqual(autolist.option_count, 1)
             app.accept_completion(0)
