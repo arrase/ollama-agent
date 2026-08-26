@@ -173,46 +173,48 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
                 self.query_one("#autocomplete-list", OptionList).display = False
 
         app = InputApp()
-        async with app.run_test() as pilot:
-            inp = app.query_one(ReplInput)
-            inp.add_history_entry("prev command")
+        with patch("ollama_agent.interfaces.tui_components.load_past_user_prompts", return_value=[]):
+            async with app.run_test() as pilot:
+                await pilot.pause()
+                inp = app.query_one(ReplInput)
+                inp.add_history_entry("prev command")
 
-            # 1. Height adjusts on multiline text
-            inp.text = "line 1\nline 2\nline 3"
-            await pilot.pause()
-            assert inp.styles.height is not None
-            self.assertEqual(inp.styles.height.value, 3)
+                # 1. Height adjusts on multiline text
+                inp.text = "line 1\nline 2\nline 3"
+                await pilot.pause()
+                assert inp.styles.height is not None
+                self.assertEqual(inp.styles.height.value, 3)
 
-            # 2. Text reset resets height to default minimum (2)
-            inp.text = ""
-            await pilot.pause()
-            assert inp.styles.height is not None
-            self.assertEqual(inp.styles.height.value, 2)
+                # 2. Text reset resets height to default minimum (2)
+                inp.text = ""
+                await pilot.pause()
+                assert inp.styles.height is not None
+                self.assertEqual(inp.styles.height.value, 2)
 
-            # 3. Backslash continuation (\ + Enter) inserts newline
-            inp.text = "SELECT * FROM test \\"
-            inp.action_cursor_line_end()
-            inp.on_key(events.Key("enter", "\r"))
-            await pilot.pause()
-            self.assertEqual(inp.text, "SELECT * FROM test \n")
-            assert inp.styles.height is not None
-            self.assertEqual(inp.styles.height.value, 2)
+                # 3. Backslash continuation (\ + Enter) inserts newline
+                inp.text = "SELECT * FROM test \\"
+                inp.action_cursor_line_end()
+                inp.on_key(events.Key("enter", "\r"))
+                await pilot.pause()
+                self.assertEqual(inp.text, "SELECT * FROM test \n")
+                assert inp.styles.height is not None
+                self.assertEqual(inp.styles.height.value, 2)
 
-            # 4. Multiline navigation vs history
-            inp.text = "first line\nsecond line"
-            await pilot.pause()
-            inp.cursor_location = (1, 0)
-            # Up on second line should NOT trigger history
-            self.assertFalse(inp._handle_history_key(events.Key("up", "up")))
+                # 4. Multiline navigation vs history
+                inp.text = "first line\nsecond line"
+                await pilot.pause()
+                inp.cursor_location = (1, 0)
+                # Up on second line should NOT trigger history
+                self.assertFalse(inp._handle_history_key(events.Key("up", "up")))
 
-            # Up on first line but col > 0 should move cursor to (0, 0)
-            inp.cursor_location = (0, 5)
-            self.assertTrue(inp._handle_history_key(events.Key("up", "up")))
-            self.assertEqual(inp.cursor_location, (0, 0))
+                # Up on first line but col > 0 should move cursor to (0, 0)
+                inp.cursor_location = (0, 5)
+                self.assertTrue(inp._handle_history_key(events.Key("up", "up")))
+                self.assertEqual(inp.cursor_location, (0, 0))
 
-            # Up on (0, 0) should trigger history
-            self.assertTrue(inp._handle_history_key(events.Key("up", "up")))
-            self.assertEqual(inp.text, "prev command")
+                # Up on (0, 0) should trigger history
+                self.assertTrue(inp._handle_history_key(events.Key("up", "up")))
+                self.assertEqual(inp.text, "prev command")
 
     async def test_tool_approval_widget_keyboard_and_decisions(self) -> None:
         app_ref_mock = MagicMock()

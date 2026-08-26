@@ -66,7 +66,7 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         "--language",
         type=str,
         dest="language",
-        help=_("Set interface language (e.g. en, es, fr, de, it, pt, zh, ja, ru, hi)"),
+        help=_("Set interface language (e.g. en, es, fr, de, it, pt, zh, ja, ru, hi, ko, ar, tr, pl, nl, uk)"),
     )
     parser.add_argument(
         "--config-reset",
@@ -280,8 +280,10 @@ def handle_cli_commands(
 
     if args.prompt:
         runtime = AgentRuntime(settings=settings, yolo_mode=args.yolo)
+        completed = True
 
         async def _run():
+            nonlocal completed
             async with runtime:
                 if args.rag:
                     set_rag_manager(rag_ctx.rag_manager)
@@ -290,9 +292,11 @@ def handle_cli_commands(
                     except RAGError:
                         raise SystemExit(1)
                 await runtime.reload()
-                await run_non_interactive(runtime, args.prompt)
+                completed = await run_non_interactive(runtime, args.prompt)
 
         asyncio.run(_run())
+        if not completed:
+            raise SystemExit(1)
         return True
 
     return False

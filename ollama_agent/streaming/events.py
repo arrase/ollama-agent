@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Iterable
 from langgraph.types import Command
 from rich.console import Console
 
+from ..i18n import _
 from .console_renderer import ConsoleStreamingRenderer
 
 if TYPE_CHECKING:
@@ -30,9 +31,11 @@ async def stream_agent_events(
     thread_id: str = "",
     ignore: Iterable[str] = (),
     auto_close: bool = True,
-) -> None:
+) -> bool:
+    """Stream agent events, returning whether the run completed without aborting."""
     ignored = set(ignore)
     current_prompt = prompt
+    completed = True
     try:
         while True:
             interrupted = False
@@ -50,23 +53,33 @@ async def stream_agent_events(
                 if decisions is not None:
                     current_prompt = Command(resume={"decisions": decisions})
                     continue
+                completed = False
 
             break
     except asyncio.CancelledError:
         raise
+    except KeyboardInterrupt:
+        completed = False
+        logger.info("Agent run interrupted by user")
+        renderer.on_warning({"type": "warning", "content": _("Execution interrupted by user.")})
     except Exception as exc:
+        completed = False
         logger.exception("Error streaming agent events: %s", exc)
         renderer.on_error({"type": "error", "content": str(exc)})
     finally:
         if auto_close:
             renderer.close()
+    return completed
 
 
 async def run_non_interactive(
     runtime: AgentRuntime, prompt: str | Command, *, thread_id: str = ""
-) -> None:
-    """Stream agent output to the console (non-interactive mode)."""
-    await stream_agent_events(
+) -> bool:
+    """Stream agent output to the console (non-interactive mode).
+
+    Returns whether the run finished completely (no abort, cancellation or error).
+    """
+    return await stream_agent_events(
         runtime,
         prompt,
         ConsoleStreamingRenderer(Console()),

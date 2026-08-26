@@ -19,6 +19,12 @@ SUPPORTED_LOCALES: tuple[str, ...] = (
     "ja",
     "ru",
     "hi",
+    "ko",
+    "ar",
+    "tr",
+    "pl",
+    "nl",
+    "uk",
 )
 DEFAULT_LOCALE = "en"
 

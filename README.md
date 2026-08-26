@@ -67,7 +67,7 @@
 - 🛡️ **Human-in-the-Loop (HITL) & YOLO Mode**: Interactive terminal approval widget before executing shell commands or editing files, with full bypass available via YOLO mode (`-y` or `/yolo`).
 - 📁 **Interactive `@-mentions`**: Reference local files or entire directory trees directly in prompts (e.g. `@src/main.py`, `@"data folder"`, `@.`) with path autocompletion, multimodal encoding, and binary safety.
 - 💾 **SQLite-Backed Sessions**: Durable conversation checkpoints in `~/.ollama-agent/history.db` with instant resumption (`/session resume <id>`), markdown export (`/session export`), and history management.
-- 📋 **Saved Tasks**: Save reusable prompts as YAML templates and execute them on demand via CLI (`task run`) or interactive REPL modals (`/task run`).
+- 📋 **Saved Tasks**: Save reusable prompts as YAML templates and execute them on demand via CLI (`task run`) or interactive REPL commands (`/task run`).
 - 🧩 **Agent Skills Standard**: Extend the agent with modular skills following the [Agent Skills specification](https://agentskills.io/specification) using progressive disclosure.
 - 📚 **Local RAG Engine**: Embed and index documents into local Qdrant vector collections with automated semantic retrieval via the agent's `rag_search` tool.
 - 🧠 **Persistent Memory & Guidelines**: Cross-session user memory (`MEMORY.md`), automatic discovery of project-level guidelines (`AGENTS.md`), and **Episodic Memory** to search past conversations and solutions (`search_past_conversations` tool and `/session search`).
@@ -132,7 +132,7 @@ ollama-agent -m "gemma4:26b" -e "high" -y -p "Refactor src/utils.py to follow PE
 
 ## Interactive REPL Interface
 
-The interactive REPL is a full-featured terminal UI built on Textual and Rich, providing a persistent chat session with markdown rendering, status gauges, and modal workflows.
+The interactive REPL is a full-featured terminal UI built on Textual and Rich, providing a persistent chat session with markdown rendering, status gauges, and interactive workflows.
 
 ```text
 ● ollama-agent │ Model: gemma4:26b │ Context: 2.1k/10.0k (21%) │ Effort: medium │ YOLO: OFF
@@ -163,8 +163,8 @@ The REPL provides built-in slash commands for managing models, sessions, tasks, 
 | `/params` | `/params [list \| set <parameter> <value>]` | Inspect active sampling parameters and resolution sources, or dynamically update parameter values for the active session. |
 | `/session` | `/session [list \| search <query> \| resume <id> \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume previous threads, export to Markdown, or delete history. |
 | `/compact` | `/compact` (alias: `/compress`) | Manually compact conversation history into a structured summary to reclaim context window tokens. |
-| `/task` | `/task [list \| create <id> \| run <id> [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` initiates an interactive conversational creation flow with the agent. |
-| `/skill` | `/skill [list \| show <id> \| create <id> \| delete <id>]` | Manage agent skills. `/skill create` initiates an interactive conversational creation flow with the agent. |
+| `/task` | `/task [list \| create [<id>] \| run <id> [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` initiates an interactive conversational creation flow with the agent. |
+| `/skill` | `/skill [list \| show <id> \| create [<id>] \| delete <id>]` | Manage agent skills. `/skill create` initiates an interactive conversational creation flow with the agent. |
 | `/rag` | `/rag [status \| list \| create <name> \| load <name> \| unload \| add <path> [--dir] \| delete <name>]` | Manage local RAG vector databases, index files/directories, and toggle active knowledge bases. |
 | `/mcp` | `/mcp [list]` | List configured MCP servers and display real-time connection status with color-coded indicators. |
 | `/yolo` | `/yolo [on \| off]` | Toggle YOLO mode or explicitly enable/disable it to bypass tool confirmations. |
@@ -408,13 +408,13 @@ All conversations are saved to a local SQLite database at `~/.ollama-agent/histo
 | :--- | :--- | :--- | :--- |
 | **List Sessions** | `/session list` | `ollama-agent session list` | Display saved sessions with thread IDs, step counts, and active status. |
 | **Search Sessions** | `/session search <query>` | `ollama-agent session search <query>` | Search across past chat sessions and conversations by keyword. |
-| **Resume Session** | `/session resume <id>` | — | Resume a past conversation by exact ID or prefix, restoring message history into the viewport. |
+| **Resume Session** | `/session resume <id>` (alias: `/session switch`) | — | Resume a past conversation by exact ID or prefix, restoring message history into the viewport. |
 | **New Session** | `/session new` (or `/new`, `/clear`) | — | Initialize a fresh conversation session with a new thread ID and clear the screen. |
 | **Export Session** | `/session export [path]` | `ollama-agent session export <id> [-o path]` | Export conversation history to a structured Markdown document. |
 | **Delete Session** | `/session delete <id>` | `ollama-agent session delete <id>` | Delete session checkpoints and metadata from the SQLite database. |
 
 > [!TIP]
-> In the REPL, typing `/session resume ` or `/session delete ` dynamically lists and autocompletes available session IDs.
+> In the REPL, typing `/session resume ` or `/session delete ` dynamically lists and autocompletes available session IDs. User prompt history (accessed via `↑`/`↓` arrow keys) is also persisted in and loaded from `history.db`.
 
 ### 5. Episodic Memory & Conversation Recall
 Allows the AI agent to search and recall past conversation sessions, past troubleshooting steps, and previous architectural decisions stored in `~/.ollama-agent/history.db`:
@@ -607,7 +607,8 @@ Create `~/.ollama-agent/mcp.json` (or `mcp_servers.json`):
 
 - **Supported Transports**: `stdio` (subprocess execution), `http`, and `sse` (remote endpoints).
 - **Environment Substitution**: `${VAR_NAME}` (and `%VAR_NAME%`) syntax injects host environment variables; servers with missing required variables are skipped gracefully with a log warning.
-- **Server Status Inspection**: Run `/mcp` in the interactive REPL or `ollama-agent mcp list` from the CLI to check connection status, health, and discovered tools with color-coded status badges (`● Active` / `● Failed`).
+- **Parallel Tool Loading & Fault Isolation**: MCP servers are initialized concurrently in the background; unreachable or invalid servers fail gracefully without interrupting agent startup or blocking other servers.
+- **Server Status Inspection**: Run `/mcp` in the interactive REPL or `ollama-agent mcp list` from the CLI to check connection status, health, and discovered tools with color-coded status badges (`● Active` / `● Failed`) for both main orchestrator and subagent MCP servers.
 
 ---
 
@@ -664,6 +665,7 @@ runtime:
   builtin_tool_timeout: 30
   collapse_thinking: true
   inherit_env: true
+  # language: ""               # Interface language code (e.g. en, es, fr, de; auto-detects if unset)
 rag:
   rag_dir: ~/.ollama-agent/rag
   embedder_model: nomic-embed-text:latest
@@ -710,6 +712,8 @@ subagents: []
 | `mentions.max_files` | `int` | `100` | Maximum number of files processed during directory mentions. |
 | `mentions.max_total_size` | `int` | `10485760` | Maximum total context size for prompt attachments (10 MB). |
 | `mentions.max_completions` | `int` | `200` | Maximum autocompletion candidates for `@-mentions`. |
+| `subagents` | `list` | `[]` | List of specialized subagent definitions (see [Custom Subagents](#custom-subagents)). |
+| `langsmith` | `dict` | *(omitted)* | Optional LangSmith tracing credentials (see [LangSmith Tracing](#langsmith-tracing)). |
 
 ---
 

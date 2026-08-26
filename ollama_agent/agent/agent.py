@@ -84,7 +84,13 @@ def _prepare_instructions(settings: Settings) -> str:
         instructions = instructions.replace("{RAG_POLICY}", "")
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-    os_info = f"\n\n# ENVIRONMENT\nOperating System: {platform.system()} ({platform.release()})\nCurrent Date & Time: {now_str}\n"
+    cwd = Path.cwd().resolve()
+    os_info = (
+        "\n\n# ENVIRONMENT\n"
+        f"Operating System: {platform.system()} ({platform.release()})\n"
+        f"Current Date & Time: {now_str}\n"
+        f'Working Directory: {cwd} (directory where shell commands start in; this is what execute(command="pwd") reports)\n'
+    )
     ensure_memory_file(MEMORY_PATH)
     return instructions + os_info
 

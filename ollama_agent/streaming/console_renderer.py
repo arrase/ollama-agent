@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
@@ -137,6 +138,13 @@ class ConsoleStreamingRenderer(StreamingRenderer):
             self.console.print(f"  {_('Tool:')} [bold]{name}[/bold]")
             self.console.print(f"  {_('Arguments:')} {args}")
 
+        if sys.stdin is None or not sys.stdin.isatty():
+            hint = _(
+                "Cannot request tool approval in a non-interactive session. Re-run with -y (--yolo) to auto-approve sensitive tools."
+            )
+            self.console.print(f"  [red]❌ {hint}[/red]")
+            return None
+
         try:
             while True:
                 prompt_msg = f"  {_('Choose action: Approve (y) / Reject (n) / Allow Session (a) / Cancel (c): ')}"
@@ -156,13 +164,13 @@ class ConsoleStreamingRenderer(StreamingRenderer):
                     return [{"type": "approve"} for _ in action_requests]
                 elif choice == "c":
                     self.console.print(f"  [red]✗ {_('Cancelled')}[/red]\n")
-                    raise KeyboardInterrupt()
+                    return None
                 else:
                     invalid_msg = _("Invalid choice. Please enter 'y', 'n', 'a', or 'c'.")
                     self.console.print(f"  [red]{invalid_msg}[/red]")
         except (EOFError, KeyboardInterrupt):
             self.console.print(f"  [red]✗ {_('Cancelled')}[/red]\n")
-            raise KeyboardInterrupt()
+            return None
 
     def close(self) -> None:
         self._toggle_live(False)
