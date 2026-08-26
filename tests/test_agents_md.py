@@ -154,6 +154,7 @@ class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
         mock_deep_agent = MagicMock()
         mock_model = MagicMock(spec=BaseChatModel)
         mock_model.profile = None
+        mock_model.num_ctx = 8192
         mock_model.effective_params = {}
 
         with patch("pathlib.Path.cwd", return_value=sub_dir), \

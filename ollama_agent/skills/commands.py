@@ -9,6 +9,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
+from ..core.resource_manager import require_text, resolve_unique_match
 from ..i18n import _
 from .manager import SkillInfo, SkillManager
 
@@ -37,22 +38,16 @@ class SkillsContext:
     skill_manager: SkillManager = field(default_factory=SkillManager)
 
     def _find_or_exit(self, skill_id: str) -> tuple[str, SkillInfo]:
-        matches = self.skill_manager.find_matches(skill_id)
-        if len(matches) == 1:
-            return matches[0]
-        msg = (
-            _("Skill not found: {skill_id}", skill_id=skill_id)
-            if not matches
-            else _("Ambiguous prefix: {name} -> {matches}", name=skill_id, matches=", ".join(t[0] for t in matches))
+        return resolve_unique_match(
+            self.skill_manager.find_matches(skill_id),
+            skill_id,
+            label=_("Skill"),
+            not_found_error=SkillNotFoundError,
+            ambiguous_error=AmbiguousSkillError,
         )
-        if not matches:
-            raise SkillNotFoundError(msg)
-        raise AmbiguousSkillError(msg)
 
     def _require(self, value: str, name: str) -> str:
-        if not (cleaned := value.strip()):
-            raise ValidationError(_("{name} cannot be empty.", name=name))
-        return cleaned
+        return require_text(value, name, ValidationError)
 
 
 def list_skills(ctx: SkillsContext) -> None:
@@ -64,7 +59,7 @@ def list_skills(ctx: SkillsContext) -> None:
     for col, style in [(_("ID"), "cyan"), (_("Name"), "green"), (_("Description"), "blue")]:
         table.add_column(col, style=style)
     for sid, s in skills:
-        table.add_row(sid, s.name, s.description[:80] or "-")
+        table.add_row(sid, s.name, s.description[:80])
     ctx.console.print(table)
 
 
@@ -83,38 +78,31 @@ def create_skill(
     name: str,
     description: str,
     instructions: str,
-    module: str | None = None,
     force: bool = False,
 ) -> None:
     """Create a new skill."""
-    metadata = {}
-    if module:
-        metadata["module"] = module
-
+    name = ctx._require(name, _("Name"))
+    description = ctx._require(description, _("Description"))
+    instructions = ctx._require(instructions, _("Instructions"))
     try:
         created = ctx.skill_manager.create(
             skill_id,
-            name=ctx._require(name, _("Name")),
-            description=ctx._require(description, _("Description")),
-            instructions=ctx._require(instructions, _("Instructions")),
+            name=name,
+            description=description,
+            instructions=instructions,
             overwrite=force,
-            metadata=metadata,
         )
-        ctx.console.print(f"[green]✓ {_('Skill created: {name} ({created})', name=name, created=created)}[/green]")
     except FileExistsError as exc:
-        ctx.console.print(
-            f"[red]{_('Skill already exists: {skill_id} (use --force to overwrite)', skill_id=skill_id)}[/red]"
-        )
-        raise SkillError(_("Skill already exists: {skill_id}", skill_id=skill_id)) from exc
+        raise SkillError(
+            _("Skill already exists: {skill_id} (use --force to overwrite)", skill_id=skill_id)
+        ) from exc
     except ValueError as exc:
-        ctx.console.print(f"[red]{exc}[/red]")
         raise ValidationError(str(exc)) from exc
+    ctx.console.print(f"[green]✓ {_('Skill created: {name} ({created})', name=name, created=created)}[/green]")
 
 
 def delete_skill(ctx: SkillsContext, skill_id: str) -> None:
     """Delete an existing skill."""
     sid, info = ctx._find_or_exit(skill_id)
-    if not ctx.skill_manager.delete(sid):
-        ctx.console.print(f"[red]{_('Error deleting skill: {sid}', sid=sid)}[/red]")
-        raise SkillError(_("Error deleting skill: {sid}", sid=sid))
+    ctx.skill_manager.delete(sid)
     ctx.console.print(f"[green]✓ {_('Skill deleted: {name} ({sid})', name=info.name, sid=sid)}[/green]")

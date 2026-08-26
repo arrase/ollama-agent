@@ -35,6 +35,25 @@ class TestTaskManager(unittest.TestCase):
         self.assertEqual(loaded.title, "Run tests")
         self.assertEqual(loaded.prompt, "pytest -v")
 
+    def test_get_missing_task_raises(self) -> None:
+        with self.assertRaises(FileNotFoundError):
+            self.mgr.get("missing-task")
+
+    def test_get_corrupted_task_raises(self) -> None:
+        (self.tasks_dir / "broken.yaml").write_text(
+            "title: Broken\nprompt: x\nmodel: m\n", encoding="utf-8"
+        )
+        with self.assertRaises(KeyError):
+            self.mgr.get("broken")
+
+    def test_find_matches_rejects_invalid_prefix(self) -> None:
+        with self.assertRaises(ValueError):
+            self.mgr.find_matches("../escape")
+        with self.assertRaises(ValueError):
+            self.mgr.get("../escape")
+        with self.assertRaises(ValueError):
+            self.mgr.delete("../escape")
+
     def test_save_existing_task_without_overwrite_raises(self) -> None:
         t = Task(title="T1", prompt="P1", model="M1")
         self.mgr.save("task-1", t)
@@ -57,9 +76,12 @@ class TestTaskManager(unittest.TestCase):
     def test_delete_task(self) -> None:
         t = Task(title="Temporary", prompt="Temp", model="M1")
         self.mgr.save("temp-task", t)
-        self.assertTrue(self.mgr.delete("temp-task"))
-        self.assertIsNone(self.mgr.get("temp-task"))
-        self.assertFalse(self.mgr.delete("temp-task"))
+        self.mgr.delete("temp-task")
+        self.assertFalse((self.tasks_dir / "temp-task.yaml").exists())
+        with self.assertRaises(FileNotFoundError):
+            self.mgr.get("temp-task")
+        with self.assertRaises(FileNotFoundError):
+            self.mgr.delete("temp-task")
 
     def test_list_all_sorted_by_title(self) -> None:
         self.mgr.save("t-b", Task(title="Beta Task", prompt="p", model="m"))

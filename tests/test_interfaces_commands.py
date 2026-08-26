@@ -22,7 +22,28 @@ from ollama_agent.interfaces.model_commands import (
 )
 from ollama_agent.interfaces.session_commands import new_session
 from ollama_agent.settings.config import Settings
-from ollama_agent.skills.commands import SkillError
+from ollama_agent.skills import SkillError
+from ollama_agent.rag import RAGError
+from ollama_agent.tasks.commands import TaskError
+
+
+def _repl_handler_kwargs(**overrides: object) -> dict:
+    """Mandatory keyword arguments for build_repl_handlers."""
+    kwargs: dict = {
+        "task_ctx": MagicMock(),
+        "skills_ctx": MagicMock(),
+        "get_rag_ctx": MagicMock(),
+        "console": Console(file=io.StringIO()),
+        "current_model": lambda: "gemma4:26b",
+        "base_url": lambda: "http://localhost:11434",
+        "switch_model": AsyncMock(),
+        "handle_yolo": lambda _: None,
+        "get_runtime": lambda: MagicMock(),
+        "current_thread_id": lambda: "",
+        "switch_effort": AsyncMock(),
+    }
+    kwargs.update(overrides)
+    return kwargs
 
 
 class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
@@ -35,12 +56,13 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         self.assertIn("New session started", console.export_text())
 
     async def test_safe_call_sync_and_async(self) -> None:
+        console = Console(file=io.StringIO())
         # Sync fn
         called_sync = False
         def sync_fn() -> None:
             nonlocal called_sync
             called_sync = True
-        await safe_call(sync_fn)
+        await safe_call(sync_fn, console=console)
         self.assertTrue(called_sync)
 
         # Async fn
@@ -48,25 +70,35 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         async def async_fn() -> None:
             nonlocal called_async
             called_async = True
-        await safe_call(async_fn)
+        await safe_call(async_fn, console=console)
         self.assertTrue(called_async)
 
-    async def test_safe_call_silences_expected_errors(self) -> None:
-        def raise_skill_error() -> None:
-            raise SkillError("Skill failed")
-        await safe_call(raise_skill_error)  # Should not raise
+    async def test_safe_call_requires_console(self) -> None:
+        def sync_fn() -> None:
+            pass
+        with self.assertRaises(TypeError):
+            await safe_call(sync_fn)
 
-        def raise_history_error() -> None:
-            raise HistoryError("History DB broken")
-        console = Console(file=io.StringIO(), record=True)
-        await safe_call(raise_history_error, console=console)  # Should not raise
-        self.assertIn("History DB broken", console.export_text())
+    async def test_safe_call_reports_domain_errors(self) -> None:
+        for exc in (
+            SkillError("Skill failed"),
+            TaskError("Task failed"),
+            RAGError("RAG failed"),
+            HistoryError("History DB broken"),
+        ):
+            with self.subTest(exc=type(exc).__name__):
+                console = Console(file=io.StringIO(), record=True)
+                def raiser(exc: Exception = exc) -> None:
+                    raise exc
+                await safe_call(raiser, console=console)  # Should not raise
+                self.assertIn(str(exc), console.export_text())
 
     async def test_safe_call_propagates_unexpected_errors(self) -> None:
+        console = Console(file=io.StringIO())
         def raise_exit() -> None:
             raise SystemExit(1)
         with self.assertRaises(SystemExit):
-            await safe_call(raise_exit)
+            await safe_call(raise_exit, console=console)
 
     async def test_list_models_empty(self) -> None:
         console = Console(file=io.StringIO(), record=True)
@@ -231,19 +263,12 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         switch_mock = AsyncMock()
 
         handlers = build_repl_handlers(
-            task_ctx=MagicMock(),
-            skills_ctx=MagicMock(),
-            get_rag_ctx=MagicMock(),
-            console=console,
-            current_model=lambda: "llama3.2:3b",
-            base_url=lambda: "http://localhost:11434",
-            switch_model=switch_mock,
-            handle_exit=lambda _: None,
-            handle_new=AsyncMock(),
-            handle_task_create=lambda _: None,
-            handle_skill_create=lambda _: None,
-            handle_yolo=lambda _: None,
-            get_runtime=lambda: runtime,
+            **_repl_handler_kwargs(
+                console=console,
+                current_model=lambda: "llama3.2:3b",
+                switch_model=switch_mock,
+                get_runtime=lambda: runtime,
+            )
         )
 
         # /params
@@ -269,23 +294,14 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime = MagicMock()
         runtime.settings.model.reasoning_effort = "medium"
         runtime.settings.model.name = "llama3.2:3b"
+        switch_effort = AsyncMock()
 
         handlers = build_repl_handlers(
-            task_ctx=MagicMock(),
-            skills_ctx=MagicMock(),
-            get_rag_ctx=MagicMock(),
-            console=console,
-            current_model=lambda: "llama3.2:3b",
-            base_url=lambda: "http://localhost:11434",
-            switch_model=AsyncMock(),
-            handle_exit=lambda _: None,
-            handle_new=AsyncMock(),
-            handle_task_create=lambda _: None,
-            handle_skill_create=lambda _: None,
-            handle_yolo=lambda _: None,
-            get_runtime=lambda: runtime,
-            current_effort=lambda: "medium",
-            switch_effort=AsyncMock(),
+            **_repl_handler_kwargs(
+                console=console,
+                get_runtime=lambda: runtime,
+                switch_effort=switch_effort,
+            )
         )
 
         # /effort without args
@@ -294,70 +310,63 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Current reasoning effort", out)
         self.assertIn("medium", out)
 
+        # /effort <level>
+        handlers["/effort"].handler(["high"])
+        switch_effort.assert_called_once_with("high")
+
     async def test_unified_repl_handlers(self) -> None:
         console = Console(file=io.StringIO(), record=True)
         task_ctx = MagicMock()
         skills_ctx = MagicMock()
         rag_ctx = MagicMock()
+        runtime = MagicMock()
         switch_model = AsyncMock()
         switch_effort = AsyncMock()
-        handle_task_create = MagicMock()
-        handle_skill_create = MagicMock()
 
         handlers = build_repl_handlers(
-            task_ctx=task_ctx,
-            skills_ctx=skills_ctx,
-            get_rag_ctx=lambda: rag_ctx,
-            console=console,
-            current_model=lambda: "gemma4:26b",
-            base_url=lambda: "http://localhost:11434",
-            switch_model=switch_model,
-            handle_exit=lambda _: None,
-            handle_new=AsyncMock(),
-            handle_task_create=handle_task_create,
-            handle_skill_create=handle_skill_create,
-            handle_yolo=lambda _: None,
-            current_effort=lambda: "medium",
-            switch_effort=switch_effort,
+            **_repl_handler_kwargs(
+                task_ctx=task_ctx,
+                skills_ctx=skills_ctx,
+                get_rag_ctx=lambda: rag_ctx,
+                console=console,
+                current_model=lambda: "gemma4:26b",
+                base_url=lambda: "http://localhost:11434",
+                switch_model=switch_model,
+                handle_yolo=lambda _: None,
+                get_runtime=lambda: runtime,
+                switch_effort=switch_effort,
+            )
         )
 
         # 1. /model handler
         with patch("ollama_agent.interfaces.dispatch.list_models", AsyncMock()) as mock_list_models:
-            await safe_call(handlers["/model"].handler, ["list"])
+            await safe_call(handlers["/model"].handler, ["list"], console=console)
             mock_list_models.assert_awaited_once()
 
-        await safe_call(handlers["/model"].handler, ["set", "llama3:8b"])
+        await safe_call(handlers["/model"].handler, ["set", "llama3:8b"], console=console)
         switch_model.assert_awaited_with("llama3:8b")
 
         # 1b. /effort handler
-        with patch("ollama_agent.interfaces.dispatch.show_effort"):
+        with patch("ollama_agent.interfaces.dispatch.show_effort") as mock_show_effort:
             handlers["/effort"].handler([])
-            out_effort = console.export_text()
-            self.assertIn("Current reasoning effort", out_effort)
+            mock_show_effort.assert_called_once_with(console, runtime)
 
-        await safe_call(handlers["/effort"].handler, ["set", "high"])
+        await safe_call(handlers["/effort"].handler, ["set", "high"], console=console)
         switch_effort.assert_awaited_with("high")
 
-        await safe_call(handlers["/effort"].handler, ["low"])
+        await safe_call(handlers["/effort"].handler, ["low"], console=console)
         switch_effort.assert_awaited_with("low")
 
-        # 2. /task handler
+        # 2. /task handler (create/run are intercepted inline by the TUI app)
         with patch("ollama_agent.interfaces.dispatch.list_tasks") as mock_list_tasks:
             handlers["/task"].handler([])
             mock_list_tasks.assert_called_once()
-
-        handlers["/task"].handler(["create", "my-task"])
-        handle_task_create.assert_called_once_with(["my-task"])
-
-        with patch("ollama_agent.interfaces.dispatch.run_task", MagicMock(return_value=None)) as mock_run_task:
-            handlers["/task"].handler(["run", "my-task", "-y"])
-            mock_run_task.assert_called_once_with(task_ctx, "my-task", yolo=True)
 
         with patch("ollama_agent.interfaces.dispatch.delete_task") as mock_del_task:
             handlers["/task"].handler(["delete", "my-task"])
             mock_del_task.assert_called_once_with(task_ctx, "my-task")
 
-        # 3. /skill handler
+        # 3. /skill handler (create is intercepted inline by the TUI app)
         with patch("ollama_agent.interfaces.dispatch.list_skills") as mock_list_skills:
             handlers["/skill"].handler([])
             mock_list_skills.assert_called_once()
@@ -365,9 +374,6 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         with patch("ollama_agent.interfaces.dispatch.show_skill") as mock_show_skill:
             handlers["/skill"].handler(["show", "my-skill"])
             mock_show_skill.assert_called_once_with(skills_ctx, "my-skill")
-
-        handlers["/skill"].handler(["create", "my-skill"])
-        handle_skill_create.assert_called_once_with(["my-skill"])
 
         with patch("ollama_agent.interfaces.dispatch.delete_skill") as mock_del_skill:
             handlers["/skill"].handler(["delete", "my-skill"])
@@ -394,13 +400,10 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             handlers["/rag"].handler(["unload"])
             mock_unload_db.assert_called_once_with(rag_ctx)
 
-        # 5. /session handler
+        # 5. /session handler (new/resume/switch/export are intercepted inline)
         with patch("ollama_agent.interfaces.dispatch.list_sessions") as mock_list_sess:
             handlers["/session"].handler([])
             mock_list_sess.assert_called_once()
-
-        await safe_call(handlers["/session"].handler, ["new"])
-        await safe_call(handlers["/session"].handler, ["resume", "session-1234"])
 
         with patch("ollama_agent.interfaces.dispatch.search_sessions") as mock_search_sess:
             handlers["/session"].handler(["search", "my-query"])

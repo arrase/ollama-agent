@@ -8,9 +8,10 @@ from rich.console import Console
 from rich.table import Table
 
 from ..agent import AgentRuntime
-from ..core import DEFAULT_REASONING_EFFORT, validate_reasoning_effort
+from ..core import DEFAULT_REASONING_EFFORT
+from ..core.resource_manager import require_text, resolve_unique_match
 from ..i18n import _
-from ..settings import load_settings
+from ..settings import Settings, load_settings
 from ..streaming import run_non_interactive
 from .manager import Task, TaskManager
 
@@ -39,26 +40,26 @@ class TasksContext:
     task_manager: TaskManager = field(default_factory=TaskManager)
 
     def _find_or_exit(self, task_id: str) -> tuple[str, Task]:
-        matches = self.task_manager.find_matches(task_id)
-        if len(matches) == 1:
-            return matches[0]
-        msg = (
-            _("Task not found: {task_id}", task_id=task_id)
-            if not matches
-            else _("Ambiguous prefix: {name} -> {matches}", name=task_id, matches=", ".join(t[0] for t in matches))
+        try:
+            matches = self.task_manager.find_matches(task_id)
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+        return resolve_unique_match(
+            matches,
+            task_id,
+            label=_("Task"),
+            not_found_error=TaskNotFoundError,
+            ambiguous_error=AmbiguousTaskError,
         )
-        if not matches:
-            raise TaskNotFoundError(msg)
-        raise AmbiguousTaskError(msg)
 
     def _require(self, value: str, name: str) -> str:
-        if not (cleaned := value.strip()):
-            raise ValidationError(_("{name} cannot be empty.", name=name))
-        return cleaned
+        return require_text(value, name, ValidationError)
 
 
-# Backward-compatible alias
-CLIContext = TasksContext
+def apply_task_settings(settings: Settings, task: Task) -> None:
+    """Apply the task's model and reasoning effort onto *settings*."""
+    settings.model.name = task.model
+    settings.model.reasoning_effort = task.reasoning_effort
 
 
 def list_tasks(ctx: TasksContext) -> None:
@@ -84,19 +85,17 @@ async def run_task(ctx: TasksContext, task_id: str, *, yolo: bool = False) -> No
         _("Executing: {title} ({tid})\nPrompt: {prompt}\nModel: {model} | Effort: {effort}", title=t.title, tid=tid, prompt=t.prompt, model=t.model, effort=t.reasoning_effort)
     )
     settings = load_settings()
-    settings.model.name = t.model
-    settings.model.reasoning_effort = t.reasoning_effort
+    apply_task_settings(settings, t)
     runtime = AgentRuntime(settings=settings, yolo_mode=yolo)
     async with runtime:
         await runtime.reload()
-        await run_non_interactive(runtime, t.prompt)
+        if not await run_non_interactive(runtime, t.prompt):
+            raise TaskError(_("Task execution failed: {tid}", tid=tid))
 
 
 def delete_task(ctx: TasksContext, task_id: str) -> None:
     tid, t = ctx._find_or_exit(task_id)
-    if not ctx.task_manager.delete(tid):
-        ctx.console.print(f"[red]{_('Error deleting task: {tid}', tid=tid)}[/red]")
-        raise TaskError(_("Error deleting task: {tid}", tid=tid))
+    ctx.task_manager.delete(tid)
     ctx.console.print(f"[green]✓ {_('Task deleted: {title} ({tid})', title=t.title, tid=tid)}[/green]")
 
 
@@ -110,22 +109,19 @@ def create_task(
     reasoning_effort: str | None = None,
     force: bool = False,
 ) -> None:
-    task = Task(
-        ctx._require(title, _("Title")),
-        ctx._require(prompt, _("Prompt")),
-        ctx._require(model, _("Model")),
-        validate_reasoning_effort(reasoning_effort or DEFAULT_REASONING_EFFORT),
-    )
+    title = ctx._require(title, _("Title"))
+    prompt_text = ctx._require(prompt, _("Prompt"))
+    model_name = ctx._require(model, _("Model"))
+    effort = DEFAULT_REASONING_EFFORT if reasoning_effort is None else reasoning_effort
     try:
+        task = Task(title, prompt_text, model_name, reasoning_effort=effort)
         saved_id = ctx.task_manager.save(task_id, task, overwrite=force)
-        ctx.console.print(
-            f"[green]✓ {_('Task created: {title} ({task_id})', title=task.title, task_id=saved_id)}[/green]"
-        )
     except FileExistsError as exc:
-        ctx.console.print(
-            f"[red]{_('Task already exists: {task_id} (use --force to overwrite)', task_id=task_id)}[/red]"
-        )
-        raise TaskError(_("Task already exists: {task_id}", task_id=task_id)) from exc
+        raise TaskError(
+            _("Task already exists: {task_id} (use --force to overwrite)", task_id=task_id)
+        ) from exc
     except ValueError as e:
-        ctx.console.print(f"[red]{e}[/red]")
         raise ValidationError(str(e)) from e
+    ctx.console.print(
+        f"[green]✓ {_('Task created: {title} ({task_id})', title=task.title, task_id=saved_id)}[/green]"
+    )

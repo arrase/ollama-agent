@@ -16,7 +16,7 @@
 model:
   name: "qwen3.8:27b"                     # Active Ollama model tag (must support tools)
   base_url: "http://localhost:11434"     # Ollama API server endpoint
-  context_window: 10000                  # Context window size in tokens (num_ctx)
+  context_window: 10000                  # Context window size in tokens (num_ctx), or 'max'
   reasoning_effort: "medium"             # Reasoning effort: low, medium, high, xhigh, disabled, hide, enabled
   # Optional sampling parameter overrides (omitted by default to resolve dynamically):
   # temperature: 0.8                     # Sampling temperature (higher = creative, lower = deterministic)
@@ -24,10 +24,11 @@ model:
   # top_k: 40                            # Limits token selection pool to top K candidates
   # min_p: 0.0                           # Minimum probability threshold relative to most likely token
   # presence_penalty: 0.0                # Penalizes tokens if already present in text
-  # repeat_penalty: 1.1                  # Penalizes token repetitions (alias: repetition_penalty)
+  # repeat_penalty: 1.1                  # Penalizes token repetitions
 
 # Agent Runtime Behavior & Security Policies
 runtime:
+  language: ""                           # Language code (e.g. en, es, fr, de; auto-detects system locale if unset)
   allow_traversal: false                 # Allow agent filesystem traversal outside the working directory
   builtin_tool_timeout: 30               # Tool execution timeout in seconds
   collapse_thinking: true                # Automatically collapse thinking blocks in REPL TUI
@@ -50,12 +51,12 @@ mentions:
   max_total_size: 10485760                # Maximum total context payload size in bytes (10 MB)
   max_completions: 200                    # Maximum autocompletion candidates displayed in REPL
 
-# Telemetry & Tracing via LangSmith
-langsmith:
-  api_key: ""                            # LangSmith API key (e.g. "lsv2_pt_...")
-  tracing: "true"                        # Enable LangChain / LangGraph tracing ("true" / "false")
-  project: "ollama-agent"                # LangSmith project name
-  endpoint: "https://api.smith.langchain.com" # LangSmith API endpoint URL
+# Telemetry & Tracing via LangSmith (Optional, omitted by default if unset)
+# langsmith:
+#   api_key: ""                          # LangSmith API key (e.g. "lsv2_pt_...")
+#   tracing: "true"                      # Enable LangChain / LangGraph tracing ("true" / "false")
+#   project: "ollama-agent"              # LangSmith project name
+#   endpoint: "https://api.smith.langchain.com" # LangSmith API endpoint URL
 
 # Specialized Subagents Configuration
 subagents:
@@ -85,9 +86,10 @@ subagents:
 | `model.top_k` | `int` | *(dynamic)* | Optional top-k candidates limit override (40 engine default if unset). |
 | `model.min_p` | `float` | *(dynamic)* | Optional minimum probability threshold override (0.0 default if unset). |
 | `model.presence_penalty` | `float` | *(dynamic)* | Optional presence penalty override (0.0 default if unset). |
-| `model.repeat_penalty` | `float` | *(dynamic)* | Optional repetition penalty override (1.1 engine default; alias: `repetition_penalty`). |
+| `model.repeat_penalty` | `float` | *(dynamic)* | Optional repetition penalty override (1.1 default; `repetition_penalty` accepted as alias in Modelfile metadata and `/params set`). |
 | `model.context_window` | `int` \| `str` | `10000` | Context window token limit (`num_ctx`), or `'max'` to auto-detect model maximum. |
 | `model.reasoning_effort` | `str` | `medium` | Default reasoning effort (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
+| `runtime.language` | `str` | `""` | Interface language code (e.g. `en`, `es`, `fr`, `de`; auto-detects system locale if unset). |
 | `runtime.allow_traversal` | `bool` | `false` | If true, permits filesystem operations outside project working directory. |
 | `runtime.builtin_tool_timeout` | `int` | `30` | Execution timeout in seconds for tool and shell commands. |
 | `runtime.collapse_thinking` | `bool` | `true` | If true, collapses reasoning blocks by default in REPL output. |
@@ -103,10 +105,11 @@ subagents:
 | `mentions.max_files` | `int` | `100` | Maximum number of files processed during directory mentions. |
 | `mentions.max_total_size` | `int` | `10485760` | Maximum total context size for prompt attachments (10 MB). |
 | `mentions.max_completions` | `int` | `200` | Maximum autocomplete suggestions displayed in REPL dropdown. |
-| `langsmith.api_key` | `str` | `""` | API key for LangSmith tracing platform. |
+| `langsmith.api_key` | `str` | `""` | API key for LangSmith tracing platform (optional). |
 | `langsmith.tracing` | `str` | `""` | Enable tracing (`"true"` / `"false"`). |
 | `langsmith.project` | `str` | `""` | LangSmith project name for traces. |
 | `langsmith.endpoint` | `str` | `""` | API endpoint for LangSmith telemetry. |
+| `subagents` | `list` | `[]` | List of specialized subagent definitions (`name`, `description`, `system_prompt`, `model`, etc.). |
 
 ---
 

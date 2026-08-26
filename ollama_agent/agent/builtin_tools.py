@@ -26,7 +26,10 @@ def set_tool_timeout(timeout: int) -> None:
 
 
 def get_tool_timeout() -> int:
-    return _tool_timeout.get()
+    timeout = _tool_timeout.get()
+    if timeout <= 0:
+        raise ValueError(_("Tool timeout must be greater than 0, got {timeout_s}", timeout_s=timeout))
+    return timeout
 
 
 def set_rag_manager(mgr: RAGManager | None) -> None:
@@ -35,6 +38,11 @@ def set_rag_manager(mgr: RAGManager | None) -> None:
 
 def get_rag_manager() -> RAGManager | None:
     return _rag_manager.get()
+
+
+def is_rag_active() -> bool:
+    mgr = get_rag_manager()
+    return mgr is not None and mgr.current_database is not None
 
 
 def set_active_thread_id(thread_id: str) -> None:

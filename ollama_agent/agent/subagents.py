@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import asyncio
-import platform
+import logging
 from typing import Any
 
 from ..core import create_ollama_chat_model, validate_reasoning_effort
 from ..i18n import _
 from ..mcp import load_subagent_mcp_tools
 from ..settings import ModelSettings, SubAgentSettings
+from .environment import SKILL_ROOTS, environment_block
+
+_log = logging.getLogger(__name__)
 
 
 async def build_subagents(
@@ -35,14 +38,15 @@ async def _build_spec(
         raise ValueError(_("Subagent configuration error: name cannot be empty"))
     if not sa.description:
         raise ValueError(_("Subagent '{name}' configuration error: description cannot be empty", name=sa.name))
-
-    base_prompt = sa.system_prompt or sa.description
-    os_info = f"\n\n# ENVIRONMENT\nOperating System: {platform.system()} ({platform.release()})\n"
+    if not sa.system_prompt:
+        raise ValueError(
+            _("Subagent '{name}' configuration error: system_prompt cannot be empty", name=sa.name)
+        )
 
     spec: dict[str, Any] = {
         "name": sa.name,
         "description": sa.description,
-        "system_prompt": base_prompt + os_info,
+        "system_prompt": sa.system_prompt + environment_block(include_cwd=False),
     }
 
     name = sa.model or model_settings.name
@@ -58,9 +62,10 @@ async def _build_spec(
         min_p=model_settings.min_p,
         presence_penalty=model_settings.presence_penalty,
         repeat_penalty=model_settings.repeat_penalty,
+        warn_callback=_log.warning,
     )
 
-    spec["skills"] = ["/system_skills/", "/skills/"]
+    spec["skills"] = SKILL_ROOTS
 
     if sa.mcp_servers:
         tools = await load_subagent_mcp_tools(sa.name, sa.mcp_servers)

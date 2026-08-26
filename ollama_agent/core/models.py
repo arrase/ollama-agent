@@ -67,7 +67,9 @@ async def get_model_capabilities(model: str, base_url: str) -> set[str]:
         caps = caps.get("capabilities", [])
     if isinstance(caps, list):
         return {str(c).lower() for c in caps}
-    return set()
+    raise ModelCapabilityError(
+        _("Unexpected capabilities format for model '{model}': {type}", model=model, type=type(caps).__name__)
+    )
 
 
 async def model_supports_tools(model: str, base_url: str) -> bool:
@@ -84,6 +86,15 @@ async def ensure_model_supports_tools(model: str, base_url: str) -> None:
 async def model_supports_thinking(model: str, base_url: str) -> bool:
     """Detection of Ollama thinking support for a model."""
     return "thinking" in await get_model_capabilities(model, base_url)
+
+
+def _get_model_info(response: Any) -> dict[str, Any]:
+    """Return the model metadata dict from the supported SDK attribute shapes."""
+    for attr in ("model_info", "modelinfo"):
+        info = getattr(response, attr, None)
+        if isinstance(info, dict):
+            return info
+    raise ModelCapabilityError(_("Model metadata has no 'model_info' or 'modelinfo' dict attribute."))
 
 
 async def resolve_context_window(
@@ -110,12 +121,10 @@ async def resolve_context_window(
 
     response = await _show_model(model, base_url)
 
-    # 1. Structured info is the most reliable (modern Ollama)
-    model_info = getattr(response, "model_info", None) or getattr(response, "modelinfo", None)
-    if isinstance(model_info, dict) and (resolved := _model_context_length(model_info)):
+    model_info = _get_model_info(response)
+    if resolved := _model_context_length(model_info):
         return resolved
 
-    # 2. Fallback to parameters or modelfile regex
     for field_name in ("parameters", "modelfile"):
         if resolved := _parse_num_ctx(getattr(response, field_name, None)):
             return resolved
@@ -129,7 +138,7 @@ async def resolve_ollama_reasoning(
     model: str,
     effort: ReasoningEffortValue,
     base_url: str,
-    warn_callback: Callable[[str], None] = lambda _msg: None,
+    warn_callback: Callable[[str], None],
 ) -> bool | str | None:
     """Translate reasoning_effort to Ollama's native reasoning setting."""
     lower_name = model.lower()
@@ -182,6 +191,7 @@ async def resolve_model_parameters(
     min_p: float | None = None,
     presence_penalty: float | None = None,
     repeat_penalty: float | None = None,
+    warn_callback: Callable[[str], None],
 ) -> dict[str, tuple[Any, str]]:
     """Resolve model sampling parameters with precedence: User > Modelfile > Ollama Default."""
     user_inputs: dict[str, Any] = {
@@ -217,7 +227,9 @@ async def resolve_model_parameters(
                     found_val = int(raw) if is_int else float(raw)
                     break
                 except ValueError:
-                    pass
+                    warn_callback(
+                        _("Ignoring invalid value '{raw}' for parameter '{param}'.", raw=raw, param=param)
+                    )
 
         if found_val is not None:
             resolved[param] = (found_val, "modelfile")
@@ -241,7 +253,7 @@ class OllamaChatModel(ChatOllama):
         **kwargs: Any,
     ) -> dict[str, Any]:
         params = super()._chat_params(messages, stop=stop, **kwargs)
-        options = params.setdefault("options", {})
+        options = params["options"]
         if self.min_p is not None:
             options["min_p"] = self.min_p
         if self.presence_penalty is not None:
@@ -261,7 +273,7 @@ async def create_ollama_chat_model(
     min_p: float | None = None,
     presence_penalty: float | None = None,
     repeat_penalty: float | None = None,
-    warn_callback: Callable[[str], None] = lambda _msg: None,
+    warn_callback: Callable[[str], None],
 ) -> OllamaChatModel:
     """Create a native ChatOllama model with resolved runtime settings."""
     host = base_url.rstrip("/")
@@ -278,6 +290,7 @@ async def create_ollama_chat_model(
         min_p=min_p,
         presence_penalty=presence_penalty,
         repeat_penalty=repeat_penalty,
+        warn_callback=warn_callback,
     )
 
     kwargs: dict[str, Any] = {

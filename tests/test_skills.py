@@ -36,6 +36,22 @@ class TestSkillsManager(unittest.TestCase):
         self.assertEqual(meta, {})
         self.assertEqual(body, text)
 
+    def test_parse_frontmatter_invalid_yaml_raises(self) -> None:
+        text = "---\nname: [unclosed\n---\nbody"
+        with self.assertRaises(ValueError):
+            _parse_frontmatter(text)
+
+    def test_parse_frontmatter_unclosed_raises(self) -> None:
+        text = "---\nname: X\nno closing delimiter"
+        with self.assertRaises(ValueError):
+            _parse_frontmatter(text)
+
+    def test_parse_frontmatter_closing_delimiter_requires_line_start(self) -> None:
+        text = "---\nname: X\ndescription: uses --- as separator\n---\nbody"
+        meta, body = _parse_frontmatter(text)
+        self.assertEqual(meta["description"], "uses --- as separator")
+        self.assertEqual(body, "body")
+
     def test_create_and_get_skill(self) -> None:
         created_id = self.mgr.create(
             "git-helper",
@@ -57,6 +73,19 @@ class TestSkillsManager(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             self.mgr.create("s1", name="N1", description="D1", instructions="I1", overwrite=False)
 
+    def test_get_missing_skill_raises(self) -> None:
+        with self.assertRaises(FileNotFoundError):
+            self.mgr.get("nonexistent-skill")
+
+    def test_read_skill_requires_name_and_description(self) -> None:
+        skill_dir = self.skills_dir / "incomplete"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: Only Name\n---\nbody", encoding="utf-8"
+        )
+        with self.assertRaises(ValueError):
+            _read_skill(skill_dir)
+
     def test_find_matches_prefix(self) -> None:
         self.mgr.create("py-lint", name="Python Linter", description="Lints code", instructions="Run ruff")
         self.mgr.create("py-test", name="Python Tester", description="Runs tests", instructions="Run pytest")
@@ -66,9 +95,10 @@ class TestSkillsManager(unittest.TestCase):
 
     def test_delete_skill(self) -> None:
         self.mgr.create("temp-skill", name="T", description="D", instructions="I")
-        self.assertTrue(self.mgr.delete("temp-skill"))
-        self.assertIsNone(self.mgr.get("temp-skill"))
-        self.assertFalse(self.mgr.delete("temp-skill"))
+        self.mgr.delete("temp-skill")
+        self.assertFalse((self.skills_dir / "temp-skill").exists())
+        with self.assertRaises(FileNotFoundError):
+            self.mgr.delete("temp-skill")
 
     def test_list_all_sorted(self) -> None:
         self.mgr.create("b-skill", name="Beta Skill", description="d", instructions="i")

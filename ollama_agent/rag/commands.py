@@ -8,7 +8,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ..i18n import _
-from .manager import RAGManager, RAGError, RAGDatabaseExistsError, RAGNotLoadedError
+from .manager import RAGError, RAGManager
 
 
 class RAGDatabaseNotFoundError(RAGError):
@@ -37,14 +37,11 @@ class RAGContext:
             matches = [c for c in names if c.lower().startswith(target.lower())]
         if len(matches) == 1:
             return matches[0]
-        msg = (
-            _("Database not found: {name}", name=name)
-            if not matches
-            else _("Ambiguous prefix: {name} -> {matches}", name=name, matches=", ".join(matches))
-        )
         if not matches:
-            raise RAGDatabaseNotFoundError(msg)
-        raise AmbiguousRAGDatabaseError(msg)
+            raise RAGDatabaseNotFoundError(_("Database not found: {name}", name=name))
+        raise AmbiguousRAGDatabaseError(
+            _("Ambiguous prefix: {name} -> {matches}", name=name, matches=", ".join(matches))
+        )
 
 
 def list_rag_databases(ctx: RAGContext) -> None:
@@ -68,43 +65,29 @@ def list_rag_databases(ctx: RAGContext) -> None:
 
 def create_rag_database(ctx: RAGContext, name: str) -> None:
     """Create a new RAG database."""
-    try:
-        created = ctx.rag_manager.create_database(name)
-        ctx.console.print(
-            f"[green]✓ {_('RAG database created: {created}', created=created)}[/green]"
-        )
-        ctx.console.print(f"[dim]{_('Load it with /rag load {created}', created=created)}[/dim]")
-    except RAGDatabaseExistsError:
-        ctx.console.print(f"[red]{_('Database already exists: {name}', name=name)}[/red]")
-        raise
-    except RAGError as e:
-        ctx.console.print(f"[red]{e}[/red]")
-        raise
+    created = ctx.rag_manager.create_database(name)
+    ctx.console.print(
+        f"[green]✓ {_('RAG database created: {created}', created=created)}[/green]"
+    )
+    ctx.console.print(f"[dim]{_('Load it with /rag load {created}', created=created)}[/dim]")
 
 
 def delete_rag_database(ctx: RAGContext, name: str) -> None:
     """Delete a RAG database."""
     full_name = ctx._find_or_exit(name)
-    if ctx.rag_manager.delete_database(full_name):
-        ctx.console.print(
-            f"[green]✓ {_('Deleted RAG database: {full_name}', full_name=full_name)}[/green]"
-        )
-    else:
-        ctx.console.print(f"[red]{_('Failed to delete database: {full_name}', full_name=full_name)}[/red]")
-        raise RAGError(_("Failed to delete database: {full_name}", full_name=full_name))
+    ctx.rag_manager.delete_database(full_name)
+    ctx.console.print(
+        f"[green]✓ {_('Deleted RAG database: {full_name}', full_name=full_name)}[/green]"
+    )
 
 
 def load_rag_database(ctx: RAGContext, name: str) -> None:
     """Load a RAG database."""
     full_name = ctx._find_or_exit(name)
-    try:
-        ctx.rag_manager.load_database(full_name)
-        ctx.console.print(
-            f"[green]✓ {_('Loaded RAG database: {full_name}', full_name=full_name)}[/green]"
-        )
-    except RAGError as e:
-        ctx.console.print(f"[red]{e}[/red]")
-        raise
+    ctx.rag_manager.load_database(full_name)
+    ctx.console.print(
+        f"[green]✓ {_('Loaded RAG database: {full_name}', full_name=full_name)}[/green]"
+    )
 
 
 def unload_rag_database(ctx: RAGContext) -> None:
@@ -119,36 +102,18 @@ def unload_rag_database(ctx: RAGContext) -> None:
 
 async def add_rag_file(ctx: RAGContext, file_path: str) -> None:
     """Add a file to the current RAG database."""
-    try:
-        result = await ctx.rag_manager.add_file(file_path)
-        ctx.console.print(
-            f"[green]✓ {_('Added to RAG: {file} ({chunks} chunks)', file=result['file'], chunks=result['chunks'])}[/green]"
-        )
-    except RAGNotLoadedError:
-        ctx.console.print(
-            f"[red]{_('No RAG database loaded. Use /rag load <name> first.')}[/red]"
-        )
-        raise
-    except RAGError as e:
-        ctx.console.print(f"[red]{e}[/red]")
-        raise
+    result = await ctx.rag_manager.add_file(file_path)
+    ctx.console.print(
+        f"[green]✓ {_('Added to RAG: {file} ({chunks} chunks)', file=result['file'], chunks=result['chunks'])}[/green]"
+    )
 
 
 async def add_rag_directory(ctx: RAGContext, dir_path: str) -> None:
     """Add all files from a directory to the current RAG database."""
-    try:
-        result = await ctx.rag_manager.add_directory(dir_path)
-        ctx.console.print(
-            f"[green]✓ {_('Added {added} files (skipped: {skipped}, failed: {failed})', added=result['added'], skipped=result['skipped'], failed=result['failed'])}[/green]"
-        )
-    except RAGNotLoadedError:
-        ctx.console.print(
-            f"[red]{_('No RAG database loaded. Use /rag load <name> first.')}[/red]"
-        )
-        raise
-    except RAGError as e:
-        ctx.console.print(f"[red]{e}[/red]")
-        raise
+    result = await ctx.rag_manager.add_directory(dir_path)
+    ctx.console.print(
+        f"[green]✓ {_('Added {added} files (skipped: {skipped}, failed: {failed})', added=result['added'], skipped=result['skipped'], failed=result['failed'])}[/green]"
+    )
 
 
 def show_rag_status(ctx: RAGContext) -> None:

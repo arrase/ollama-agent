@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import logging
-import os
+import re
 import shutil
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -15,10 +14,10 @@ from ..core import BaseFileStoreManager, validate_identifier
 from ..i18n import _
 from ..settings.paths import SKILLS_DIR
 
-logger = logging.getLogger(__name__)
-
 # Maximum SKILL.md size (10 MB) as per spec.
 _MAX_SKILL_SIZE = 10 * 1024 * 1024
+
+_FRONTMATTER_CLOSE = re.compile(r"^---\s*$", re.MULTILINE)
 
 
 @dataclass(slots=True)
@@ -28,56 +27,47 @@ class SkillInfo:
     name: str
     description: str
     content: str
-    path: Path
-    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     """Split a SKILL.md into YAML frontmatter dict and body markdown."""
-    if text.startswith("---") and (end := text.find("---", 3)) != -1:
-        try:
-            meta = yaml.safe_load(text[3:end])
-            if isinstance(meta, dict):
-                return meta, text[end + 3 :].lstrip("\n")
-        except yaml.YAMLError as exc:
-            logger.warning("Invalid YAML frontmatter in skill: %s", exc)
-    return {}, text
+    if not text.startswith("---"):
+        return {}, text
+    match = _FRONTMATTER_CLOSE.search(text, 3)
+    if match is None:
+        raise ValueError(_("Unclosed YAML frontmatter"))
+    try:
+        meta = yaml.safe_load(text[3 : match.start()])
+    except yaml.YAMLError as exc:
+        raise ValueError(_("Invalid YAML frontmatter: {exc}", exc=exc)) from exc
+    if not isinstance(meta, dict):
+        raise ValueError(_("YAML frontmatter must be a mapping"))
+    return meta, text[match.end() :].lstrip("\n")
 
 
-def _read_skill(skill_dir: Path) -> SkillInfo | None:
-    """Read and parse a SKILL.md inside *skill_dir*."""
+def _read_skill(skill_dir: Path) -> SkillInfo:
+    """Read and parse the SKILL.md inside *skill_dir*."""
     skill_file = skill_dir / "SKILL.md"
     if not skill_file.is_file():
         skill_file = skill_dir / "skill.md"
-        if not skill_file.is_file():
-            return None
+    if not skill_file.is_file():
+        raise ValueError(_("Missing SKILL.md: {path}", path=skill_dir))
     if skill_file.stat().st_size > _MAX_SKILL_SIZE:
-        logger.warning("Skipping skill %s: SKILL.md exceeds 10 MB", skill_dir.name)
-        return None
-    try:
-        raw = skill_file.read_text(encoding="utf-8")
-    except OSError as exc:
-        logger.error("Error reading %s: %s", skill_file, exc)
-        return None
-    meta, _ = _parse_frontmatter(raw)
-    return SkillInfo(
-        name=str(meta.get("name", skill_dir.name)),
-        description=str(meta.get("description", ""))[:1024],
-        content=raw,
-        path=skill_dir,
-        metadata=meta,
-    )
-
-
-def _remove_readonly(func: Any, path: str, exc: Any) -> None:
-    os.chmod(path, 0o777)
-    func(path)
+        raise ValueError(_("SKILL.md exceeds 10 MB: {path}", path=skill_file))
+    raw = skill_file.read_text(encoding="utf-8")
+    meta, _body = _parse_frontmatter(raw)
+    name = meta.get("name")
+    description = meta.get("description")
+    if not name or not description:
+        raise ValueError(
+            _("Skill frontmatter must define non-empty 'name' and 'description': {path}", path=skill_file)
+        )
+    return SkillInfo(name=str(name), description=str(description), content=raw)
 
 
 class SkillManager(BaseFileStoreManager[SkillInfo]):
     """Manages skills persisted as subdirectories with SKILL.md files."""
 
-    DEFAULT_DIR = SKILLS_DIR
     _ext: str = ""
 
     def __init__(self, skills_dir: Path = SKILLS_DIR) -> None:
@@ -88,31 +78,32 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
         """Validate skill_id: letters, numbers, underscore, dash only."""
         return validate_identifier(skill_id, "skill_id")
 
-    def get(self, item_id: str) -> SkillInfo | None:
-        """Load a single skill by ID."""
-        d = self._path(item_id)
-        if not d.is_dir():
-            return None
-        return _read_skill(d)
+    def get(self, item_id: str) -> SkillInfo:
+        """Load a single skill by ID. Raise FileNotFoundError if missing."""
+        skill_dir = self._path(self.validate_skill_id(item_id))
+        if not skill_dir.is_dir():
+            raise FileNotFoundError(str(skill_dir))
+        return _read_skill(skill_dir)
 
     def find_matches(self, prefix: str) -> list[tuple[str, SkillInfo]]:
         """Return all skills whose id starts with *prefix*."""
-        if not (prefix := prefix.strip()):
-            return []
-        if (skill := self.get(prefix)) is not None:
-            return [(prefix, skill)]
+        prefix = self.validate_skill_id(prefix)
+        try:
+            return [(prefix, self.get(prefix))]
+        except FileNotFoundError:
+            pass
         return [
-            (d.name, s)
+            (d.name, _read_skill(d))
             for d in self.base_dir.iterdir()
-            if d.is_dir() and d.name.startswith(prefix) and (s := _read_skill(d)) is not None
+            if d.is_dir() and d.name.startswith(prefix)
         ]
 
     def list_all(self) -> list[tuple[str, SkillInfo]]:
         """List all skills sorted by name."""
         skills = [
-            (d.name, s)
+            (d.name, _read_skill(d))
             for d in self.base_dir.iterdir()
-            if d.is_dir() and (s := _read_skill(d)) is not None
+            if d.is_dir()
         ]
         return sorted(skills, key=lambda x: x[1].name.lower())
 
@@ -124,7 +115,6 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
         description: str,
         instructions: str,
         overwrite: bool = False,
-        metadata: dict[str, Any] | None = None,
     ) -> str:
         """Create a skill directory with a SKILL.md and return the skill ID."""
         skill_id = self.validate_skill_id(skill_id)
@@ -133,12 +123,8 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
             raise FileExistsError(_("Skill already exists: {skill_id}", skill_id=skill_id))
         skill_dir.mkdir(parents=True, exist_ok=True)
 
-        meta = {"name": name, "description": description}
-        if metadata:
-            meta.update(metadata)
-
         frontmatter = yaml.safe_dump(
-            meta,
+            {"name": name, "description": description},
             allow_unicode=True,
             default_flow_style=False,
         ).strip()
@@ -147,14 +133,6 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
         (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
         return skill_id
 
-    def delete(self, item_id: str) -> bool:
-        """Delete a skill directory entirely."""
-        skill_dir = self._path(item_id)
-        if not skill_dir.is_dir():
-            return False
-        try:
-            shutil.rmtree(skill_dir, onexc=_remove_readonly)
-            return True
-        except OSError as exc:
-            logger.error("Error deleting skill %s: %s", item_id, exc)
-            return False
+    def delete(self, item_id: str) -> None:
+        """Delete a skill directory entirely. Raise FileNotFoundError if missing."""
+        shutil.rmtree(self._path(self.validate_skill_id(item_id)))

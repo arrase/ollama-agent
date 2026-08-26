@@ -23,9 +23,11 @@ class TestCommonUtilities(unittest.TestCase):
         payload = [{"text": "part 1"}, {"content": "part 2"}]
         self.assertEqual(extract_text(payload), "part 1 part 2")
 
-    def test_extract_text_empty_and_unknown_types(self) -> None:
-        self.assertEqual(extract_text(123), "")
-        self.assertEqual(extract_text(None), "")
+    def test_extract_text_unknown_types_raise_type_error(self) -> None:
+        for unknown in (123, None, 4.5, ("a", "b"), {"foo": "bar"}):
+            with self.subTest(value=unknown):
+                with self.assertRaises(TypeError):
+                    extract_text(unknown)
 
     def test_validate_identifier_valid_names(self) -> None:
         self.assertEqual(validate_identifier("valid_name-123"), "valid_name-123")

@@ -21,7 +21,7 @@ from textual.widgets.option_list import Option
 from textual.worker import Worker
 from langgraph.types import Command
 
-from .clipboard import copy_to_system_clipboard, get_system_clipboard
+from .clipboard import ClipboardError, copy_to_system_clipboard, get_system_clipboard
 from .tui_components import (
     AgentFooter,
     AgentHeader,
@@ -39,7 +39,7 @@ from ..core.common import extract_text
 from ..i18n import _
 from ..rag import RAGContext, RAGManager, load_rag_database
 from ..skills import SkillsContext
-from ..tasks.commands import CLIContext, TaskError
+from ..tasks.commands import TaskError, TasksContext, apply_task_settings
 from .dispatch import REPLCommand, build_repl_handlers, safe_call
 from .model_commands import _list_models_sync, set_effort, set_model
 from .session_commands import (
@@ -49,7 +49,7 @@ from .session_commands import (
     new_session,
     resume_session,
 )
-from ..streaming import StreamingRenderer, stream_agent_events
+from ..streaming import StreamingRenderer, extract_action_requests, stream_agent_events
 
 # @-mention regex: matches @"quoted", @'quoted', or @bare at word boundaries.
 _AT_MENTION_RE = re.compile(
@@ -66,6 +66,9 @@ class MainScreen(Screen):
             super()._forward_event(event)
         except AttributeError as err:
             if "'NoneType' object has no attribute 'region'" in str(err):
+                # Known upstream Textual crash: text selection released over a
+                # widget detached mid-drag. Keep observable via logging.
+                logging.warning("Worked around Textual detached-widget selection crash", exc_info=err)
                 self._select_state = None
                 return
             raise
@@ -78,6 +81,7 @@ def _get_root_commands() -> list[tuple[str, str]]:
         ("/params", _("Manage model sampling parameters")),
         ("/session", _("Manage chat sessions")),
         ("/compact", _("Compact conversation history into a summary")),
+        ("/compress", _("Compact conversation history into a summary (alias for /compact)")),
         ("/task", _("Manage saved tasks")),
         ("/skill", _("Manage skills")),
         ("/rag", _("Manage RAG databases")),
@@ -86,6 +90,7 @@ def _get_root_commands() -> list[tuple[str, str]]:
         ("/new", _("Start a new chat session and clear the screen")),
         ("/clear", _("Start a new chat session and clear the screen (alias for /new)")),
         ("/exit", _("Exit the REPL")),
+        ("/quit", _("Exit the REPL (alias for /exit)")),
     ]
 
 
@@ -230,11 +235,17 @@ class OllamaAgentApp(App):
 
     def copy_to_clipboard(self, text: str) -> None:
         super().copy_to_clipboard(text)
-        copy_to_system_clipboard(text)
+        try:
+            copy_to_system_clipboard(text)
+        except ClipboardError as exc:
+            self.notify(_("Failed to copy to system clipboard: {exc}", exc=exc), severity="warning")
 
     @property
     def clipboard(self) -> str:
-        sys_clip = get_system_clipboard()
+        try:
+            sys_clip = get_system_clipboard()
+        except ClipboardError:
+            return super().clipboard
         if sys_clip:
             return sys_clip
         return super().clipboard
@@ -307,7 +318,7 @@ class OllamaAgentApp(App):
             agent_msg = AgentResponse()
             scroll.mount(agent_msg)
             self._deferred_scroll()
-            self._current_worker = self.run_worker(self._stream_chat(val, scroll, agent_msg))
+            self._current_worker = self.run_worker(self._run_stream(val, scroll, agent_msg))
 
     # ── Autocomplete ──────────────────────────────────────────────────────
 
@@ -515,10 +526,7 @@ class OllamaAgentApp(App):
             for dirname in sorted(dirs):
                 if not show_hidden and dirname.startswith("."):
                     continue
-                try:
-                    rel = (root_path / dirname).relative_to(cwd).as_posix() + "/"
-                except ValueError:
-                    continue
+                rel = (root_path / dirname).relative_to(cwd).as_posix() + "/"
                 rel_lower = rel.lower()
                 if prefix_lower.startswith(rel_lower) or rel_lower.startswith(prefix_lower):
                     candidate_dirs.append((dirname, rel))
@@ -539,18 +547,16 @@ class OllamaAgentApp(App):
                     return
                 if not show_hidden and filename.startswith("."):
                     continue
-                try:
-                    rel = (root_path / filename).relative_to(cwd).as_posix()
-                except ValueError:
-                    continue
+                rel = (root_path / filename).relative_to(cwd).as_posix()
                 if not rel.lower().startswith(prefix_lower):
                     continue
-                meta = _("file")
                 try:
                     size_kb = (root_path / filename).stat().st_size / 1024
-                    meta = f"{size_kb:.1f} KB"
                 except OSError:
-                    pass
+                    # Unreadable file: fall back to the generic "file" label.
+                    meta = _("file")
+                else:
+                    meta = f"{size_kb:.1f} KB"
                 count += 1
                 yield rel, meta
 
@@ -584,19 +590,13 @@ class OllamaAgentApp(App):
         if cmd in ("/compact", "/compress"):
             scroll.mount(SystemMessage(f"[dim]⚡ {_('Compacting conversation context...')}[/dim]"))
             self._deferred_scroll()
-            res = await self.repl.runtime.compact_context()
+            with self.repl.console.capture() as capture:
+                res = await compact_session(self.repl.console, self.repl.runtime)
+            output = capture.get()
+            if output:
+                scroll.mount(SystemMessage(Text.from_ansi(output)))
             if res["success"]:
-                msg_text = (
-                    f"[bold #38bdf8]✓ {_('Context compacted successfully:')}[/bold #38bdf8]\n"
-                    f"  • [dim]{_('Messages summarized:')}[/dim] {res['messages_summarized']}\n"
-                    f"  • [dim]{_('Recent messages preserved:')}[/dim] {res['messages_preserved']}"
-                )
-                if res.get("file_path"):
-                    msg_text += f"\n  • [dim]{_('History offloaded to:')}[/dim] [cyan]{res['file_path']}[/cyan]"
-                scroll.mount(SystemMessage(msg_text))
                 self.query_one(AgentHeader).update_header()
-            else:
-                scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Compaction skipped:')}[/bold #f87171] {res.get('message', _('Failed to compact.'))}"))
             self._deferred_scroll()
             return
 
@@ -673,7 +673,7 @@ class OllamaAgentApp(App):
             agent_msg = AgentResponse()
             scroll.mount(agent_msg)
             self._deferred_scroll()
-            self._current_worker = self.run_worker(self._stream_chat(prompt_text, scroll, agent_msg))
+            self._current_worker = self.run_worker(self._run_stream(prompt_text, scroll, agent_msg))
             return
 
         if cmd == "/skill" and args and args[0] == "create":
@@ -697,7 +697,7 @@ class OllamaAgentApp(App):
             agent_msg = AgentResponse()
             scroll.mount(agent_msg)
             self._deferred_scroll()
-            self._current_worker = self.run_worker(self._stream_chat(prompt_text, scroll, agent_msg))
+            self._current_worker = self.run_worker(self._run_stream(prompt_text, scroll, agent_msg))
             return
 
         if cmd == "/task" and args and args[0] == "run":
@@ -722,12 +722,22 @@ class OllamaAgentApp(App):
             scroll.mount(agent_msg)
             self._deferred_scroll()
 
-            self.repl.runtime.settings.model.name = t.model
-            self.repl.runtime.settings.model.reasoning_effort = t.reasoning_effort
-            if "-y" in sub_args or "--yolo" in sub_args:
-                self.repl.runtime.yolo_mode = True
-            await self.repl.runtime.reload()
-            await self._stream_chat(t.prompt, scroll, agent_msg)
+            settings = self.repl.runtime.settings
+            prev_model = settings.model.name
+            prev_effort = settings.model.reasoning_effort
+            prev_yolo = self.repl.runtime.yolo_mode
+            try:
+                apply_task_settings(settings, t)
+                if "-y" in sub_args or "--yolo" in sub_args:
+                    self.repl.runtime.yolo_mode = True
+                await self.repl.runtime.reload()
+                await self._run_stream(t.prompt, scroll, agent_msg)
+            finally:
+                settings.model.name = prev_model
+                settings.model.reasoning_effort = prev_effort
+                self.repl.runtime.yolo_mode = prev_yolo
+                await self.repl.runtime.reload()
+                self.update_yolo_ui()
             return
 
         commands = self.repl._get_commands()
@@ -755,9 +765,6 @@ class OllamaAgentApp(App):
             self.query_one(AgentHeader).update_header()
 
     # ── Streaming chat ────────────────────────────────────────────────────
- 
-    async def _stream_chat(self, prompt: str, scroll: Any, agent_msg: AgentResponse) -> None:
-        await self._run_stream(prompt, scroll, agent_msg)
 
     async def _handle_approval_decision(self, decisions: list[dict[str, Any]], scroll: Any, agent_msg: AgentResponse) -> None:
         command: Command[Any] = Command(resume={"decisions": decisions})
@@ -779,33 +786,23 @@ class OllamaAgentApp(App):
                 inp.focus()
                 footer.set_approval(False)
                 raise
-            except Exception as e:
-                scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Error:')}[/bold #f87171] [red]{e}[/red]"))
-                self._deferred_scroll()
-                inp = self.query_one(ReplInput)
-                inp.disabled = False
-                inp.focus()
-                footer.set_approval(False)
-                return
 
             # Check if the execution got interrupted
             config = {"configurable": {"thread_id": self.repl.runtime.thread_id}}
             state = await self.repl.runtime.graph.aget_state(config)
             if state.interrupts:
-                interrupt_val = state.interrupts[0].value
-                action_requests = interrupt_val.get("action_requests", [])
-                if action_requests:
-                    inp = self.query_one(ReplInput)
-                    inp.disabled = True
-                    footer.set_approval(True)
-                    approval_widget = ToolApprovalWidget(
-                        action_requests=action_requests,
-                        app_ref=self,
-                        scroll=scroll,
-                        agent_msg=agent_msg,
-                    )
-                    agent_msg.mount(approval_widget)
-                    self._deferred_scroll()
+                action_requests = extract_action_requests({"interrupts": state.interrupts})
+                inp = self.query_one(ReplInput)
+                inp.disabled = True
+                footer.set_approval(True)
+                approval_widget = ToolApprovalWidget(
+                    action_requests=action_requests,
+                    app_ref=self,
+                    scroll=scroll,
+                    agent_msg=agent_msg,
+                )
+                agent_msg.mount(approval_widget)
+                self._deferred_scroll()
             else:
                 inp = self.query_one(ReplInput)
                 inp.disabled = False
@@ -829,7 +826,7 @@ class OllamaREPL:
     ):
         self.runtime = runtime
         self.console = Console(force_terminal=True, color_system="truecolor")
-        self._task_ctx = CLIContext(console=self.console)
+        self._task_ctx = TasksContext(console=self.console)
         self._skills_ctx = SkillsContext(console=self.console)
         self._initial_rag_database = rag_database
         self._rag_ctx: RAGContext | None = None
@@ -853,33 +850,12 @@ class OllamaREPL:
                 current_model=lambda: self.runtime.settings.model.name,
                 base_url=lambda: self.runtime.settings.model.base_url,
                 switch_model=self._switch_model,
-                handle_exit=lambda _args: None,
-                handle_new=self._handle_new_session,
-                handle_task_create=lambda _args: None,
-                handle_skill_create=lambda _args: None,
                 handle_yolo=self._handle_yolo_cmd,
-                current_thread_id=lambda: self.runtime.thread_id,
-                handle_session_resume=self._handle_session_resume,
-                handle_session_export=self._handle_session_export,
-                handle_compact=self._handle_compact,
                 get_runtime=lambda: self.runtime,
-                current_effort=lambda: self.runtime.settings.model.reasoning_effort,
+                current_thread_id=lambda: self.runtime.thread_id,
                 switch_effort=self._switch_effort,
             )
         return self._commands
-
-    async def _handle_compact(self, args: list[str]) -> None:
-        target_id = args[0] if args else self.runtime.thread_id
-        await compact_session(self.console, self.runtime, target_id)
-
-    async def _handle_session_resume(self, session_id: str) -> None:
-        resolved = resume_session(self.console, session_id)
-        if resolved:
-            self.runtime.thread_id = resolved
-
-    async def _handle_session_export(self, args: list[str]) -> None:
-        out_path = args[0] if args else None
-        await export_session(self.console, self.runtime, self.runtime.thread_id, output_path=out_path)
 
     async def cleanup(self) -> None:
         if self._rag_ctx:

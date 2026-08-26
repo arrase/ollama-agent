@@ -14,19 +14,26 @@ class StreamingRenderer(ABC):
 
     def on_event(self, event: dict[str, Any]) -> None:
         """Dispatch event to type-specific handler (on_<type>)."""
-        if (etype := event.get("type")) and (handler := getattr(self, f"on_{etype}", None)):
-            handler(event)
+        etype = event.get("type")
+        handler = getattr(self, f"on_{etype}", None) if etype else None
+        if handler is None:
+            raise ValueError(f"Unhandled event type: {etype}")
+        handler(event)
 
+    @abstractmethod
     def on_error(self, event: dict[str, Any]) -> None:
         """Handle an error event."""
-        pass
+        ...
 
+    @abstractmethod
     def on_warning(self, event: dict[str, Any]) -> None:
         """Handle a warning event."""
-        pass
+        ...
 
-    async def handle_interrupt(self, event: dict[str, Any], runtime: AgentRuntime) -> list[dict[str, Any]] | None:
-        """Handle an interrupt event. Default implementation does nothing."""
+    async def handle_interrupt(
+        self, event: dict[str, Any], runtime: AgentRuntime
+    ) -> list[dict[str, Any]] | None:
+        """Handle an interrupt event. Returning None aborts the run."""
         return None
 
     @abstractmethod

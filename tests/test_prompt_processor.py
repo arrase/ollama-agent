@@ -63,21 +63,75 @@ class TestPromptProcessor(unittest.TestCase):
         file = self.base_path / "notes.md"
         file.write_text("# Title\nNotes here", encoding="utf-8")
 
-        texts, bins = resolve_context_files(file)
-        self.assertIn(file, texts)
-        self.assertEqual(texts[file], "# Title\nNotes here")
-        self.assertEqual(len(bins), 0)
+        context = resolve_context_files(file)
+        self.assertIn(file, context.text_contents)
+        self.assertEqual(context.text_contents[file], "# Title\nNotes here")
+        self.assertEqual(context.attachments, [])
+        self.assertEqual(context.classifications, {})
+        self.assertEqual(context.warnings, [])
+
+    def test_resolve_context_files_multimodal_file_exposes_classification(self) -> None:
+        image = self.base_path / "pic.png"
+        image.write_bytes(b"\x89PNG\r\n\x1a\n")
+
+        context = resolve_context_files(image)
+        self.assertEqual(context.classifications, {image: "image"})
+        self.assertEqual(len(context.attachments), 1)
+
+    def test_resolve_context_files_neither_file_nor_dir_raises(self) -> None:
+        with self.assertRaises(PromptProcessingError):
+            resolve_context_files(self.base_path / "does_not_exist")
+
+    def test_resolve_context_files_directory_collects_warnings_for_skipped_files(self) -> None:
+        project = self.base_path / "project"
+        project.mkdir()
+        (project / "good.txt").write_text("ok", encoding="utf-8")
+        (project / "blob.bin").write_bytes(b"\x00\x01\x02")
+
+        context = resolve_context_files(project)
+        self.assertIn(project / "good.txt", context.text_contents)
+        self.assertEqual(context.attachments, [])
+        self.assertEqual(len(context.warnings), 1)
+        self.assertIn("blob.bin", context.warnings[0])
 
     def test_process_prompt_mentions_with_existing_file(self) -> None:
         file = self.base_path / "app.py"
         file.write_text("def run(): pass", encoding="utf-8")
 
         prompt = f"Check @{file} for bugs"
-        processed, attachments = process_prompt_mentions(prompt)
+        processed, attachments, warnings = process_prompt_mentions(prompt)
 
         self.assertIn("--- Attached Context ---", processed)
         self.assertIn("def run(): pass", processed)
         self.assertEqual(len(attachments), 0)
+        self.assertEqual(warnings, [])
+
+    def test_process_prompt_mentions_with_image_placeholder(self) -> None:
+        image = self.base_path / "photo.png"
+        image.write_bytes(b"\x89PNG\r\n\x1a\n")
+
+        prompt = f"Describe @{image} please"
+        processed, attachments, warnings = process_prompt_mentions(prompt)
+
+        self.assertNotIn("--- Attached Context ---", processed)
+        self.assertIn(f"[image: {image}]", processed)
+        self.assertEqual(len(attachments), 1)
+        self.assertEqual(attachments[0]["type"], "image")
+        self.assertEqual(warnings, [])
+
+    def test_process_prompt_mentions_surfaces_directory_warnings(self) -> None:
+        project = self.base_path / "proj"
+        project.mkdir()
+        (project / "main.py").write_text("print('hi')", encoding="utf-8")
+        (project / "data.bin").write_bytes(b"\x00\x01")
+
+        prompt = f"Review @{project}"
+        processed, attachments, warnings = process_prompt_mentions(prompt)
+
+        self.assertIn("print('hi')", processed)
+        self.assertEqual(attachments, [])
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("data.bin", warnings[0])
 
     def test_process_prompt_mentions_with_quoted_nonexistent_file_raises(self) -> None:
         prompt = 'Inspect @"/nonexistent/path/file.py" please'
@@ -86,13 +140,13 @@ class TestPromptProcessor(unittest.TestCase):
 
     def test_process_prompt_mentions_plain_prompt_without_mentions(self) -> None:
         prompt = "Hello agent, what is 2 + 2?"
-        processed, attachments = process_prompt_mentions(prompt)
+        processed, attachments, warnings = process_prompt_mentions(prompt)
         self.assertEqual(processed, prompt)
         self.assertEqual(attachments, [])
 
     def test_process_prompt_mentions_ignores_decorators_as_literal_text(self) -> None:
         prompt = "def func():\n    @staticmethod\n    @classmethod\n    @property\n    def helper(): pass"
-        processed, attachments = process_prompt_mentions(prompt)
+        processed, attachments, warnings = process_prompt_mentions(prompt)
         self.assertEqual(processed, prompt)
         self.assertEqual(attachments, [])
 
@@ -115,7 +169,7 @@ class TestPromptProcessor(unittest.TestCase):
 
         file_uri = file.as_uri()
         prompt = f"Analyze @{file_uri}"
-        processed, attachments = process_prompt_mentions(prompt)
+        processed, attachments, warnings = process_prompt_mentions(prompt)
 
         self.assertIn("--- Attached Context ---", processed)
         self.assertIn("class Service: pass", processed)

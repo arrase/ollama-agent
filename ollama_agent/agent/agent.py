@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from datetime import datetime
 import logging
-import platform
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -14,7 +12,10 @@ from typing import Any, AsyncGenerator, Self, cast
 
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
-from deepagents.middleware.summarization import create_summarization_tool_middleware
+from deepagents.middleware.summarization import (
+    SummarizationMiddleware,
+    create_summarization_tool_middleware,
+)
 from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
@@ -23,7 +24,6 @@ from ..core import (
     PromptProcessingError,
     create_ollama_chat_model,
     ensure_model_supports_tools,
-    extract_text,
     process_prompt_mentions,
     validate_reasoning_effort,
 )
@@ -49,14 +49,16 @@ from ..settings import (
 from ..streaming.parsers import streaming_reasoning, streaming_text
 from .builtin_tools import (
     BUILTIN_TOOLS,
-    get_rag_manager,
     get_tool_timeout,
+    is_rag_active,
     rag_search,
     set_active_thread_id,
 )
 from .compaction import (
     HISTORY_PATH_PREFIX,
     KEEP_RECENT_MESSAGES,
+    SUMMARIZATION_SESSION_ID_KEY,
+    SUMMARIZATION_STATE_KEY,
     apply_summarization_event,
     build_summary_message,
     compute_state_cutoff,
@@ -65,6 +67,7 @@ from .compaction import (
     new_session_id,
     offload_history,
 )
+from .environment import SKILL_ROOTS, environment_block
 from .middleware import stream_tool_events_mw
 from .subagents import build_subagents
 
@@ -77,20 +80,12 @@ def _prepare_instructions(settings: Settings) -> str:
     fs_policy = load_fs_policy_traversal() if settings.runtime.allow_traversal else load_fs_policy_sandboxed()
     instructions = base_instructions.replace("{FILESYSTEM_POLICY}", fs_policy)
 
-    rag_mgr = get_rag_manager()
-    if rag_mgr is not None and rag_mgr.current_database is not None:
+    if is_rag_active():
         instructions = instructions.replace("{RAG_POLICY}", load_rag_policy())
     else:
         instructions = instructions.replace("{RAG_POLICY}", "")
 
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-    cwd = Path.cwd().resolve()
-    os_info = (
-        "\n\n# ENVIRONMENT\n"
-        f"Operating System: {platform.system()} ({platform.release()})\n"
-        f"Current Date & Time: {now_str}\n"
-        f'Working Directory: {cwd} (directory where shell commands start in; this is what execute(command="pwd") reports)\n'
-    )
+    os_info = environment_block(include_cwd=True)
     ensure_memory_file(MEMORY_PATH)
     return instructions + os_info
 
@@ -109,6 +104,7 @@ class AgentRuntime:
     graph: Any = field(default=None, init=False, repr=False)
     _backend: Any = field(default=None, init=False, repr=False)
     _model: Any = field(default=None, init=False, repr=False)
+    _summarization_engine: SummarizationMiddleware | None = field(default=None, init=False, repr=False)
     _instructions: str = field(default="", init=False)
     _exit_stack: contextlib.AsyncExitStack = field(
         default_factory=contextlib.AsyncExitStack, init=False, repr=False
@@ -144,7 +140,7 @@ class AgentRuntime:
             repeat_penalty=ms.repeat_penalty,
             warn_callback=_log.warning,
         )
-        self.effective_context_window = getattr(model, "num_ctx", 0)
+        self.effective_context_window = model.num_ctx
         self.effective_model_params = model.effective_params
 
         # Backend: CWD for shell + APP_DIR for agent files (memory, etc.)
@@ -205,7 +201,7 @@ class AgentRuntime:
             routes=routes,
         )
 
-        # MCP flat tools (for main agent, from mcp_servers.json)
+        # MCP flat tools (for main agent, from mcp.json)
         mcp_tools = await load_main_mcp_tools()
 
         # Custom subagents (from settings.yaml)
@@ -226,13 +222,14 @@ class AgentRuntime:
         }
 
         tools: list[Any] = [*BUILTIN_TOOLS, *mcp_tools]
-        rag_mgr = get_rag_manager()
-        if rag_mgr is not None and rag_mgr.current_database is not None:
+        if is_rag_active():
             tools.append(rag_search)
 
         summarization_tool_mw = create_summarization_tool_middleware(model, backend)
         self._backend = backend
         self._model = model
+        # Live deepagents engine used by manual compaction (see compaction.py).
+        self._summarization_engine = summarization_tool_mw._summarization
 
         kwargs: dict[str, Any] = {
             "model": model,
@@ -240,7 +237,7 @@ class AgentRuntime:
             "system_prompt": self._instructions,
             "backend": backend,
             "memory": memory_sources,
-            "skills": ["/system_skills/", "/skills/"],
+            "skills": SKILL_ROOTS,
             "checkpointer": await self._sqlite_checkpointer(),
             "middleware": [
                 summarization_tool_mw,
@@ -258,6 +255,16 @@ class AgentRuntime:
         saver = AsyncSqliteSaver.from_conn_string(str(HISTORY_DB_PATH))
         return await self._exit_stack.enter_async_context(saver)
 
+    async def _ensure_graph(self, thread_id: str = "") -> tuple[Any, str, dict[str, Any]]:
+        """Resolve the thread, lazily build the graph, and return (graph, thread, config)."""
+        thread = thread_id or self.thread_id
+        if self.graph is None:
+            await self.reload()
+        if self.graph is None:
+            raise RuntimeError(_("Agent graph is not initialized"))
+        config: dict[str, Any] = {"configurable": {"thread_id": thread}}
+        return self.graph, thread, config
+
     # -------------------------------------------------------------------
     # Public API
     # -------------------------------------------------------------------
@@ -269,13 +276,8 @@ class AgentRuntime:
         thread_id: str = "",
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream agent events for the given prompt."""
-        thread = thread_id or self.thread_id
+        graph, thread, config = await self._ensure_graph(thread_id)
         set_active_thread_id(thread)
-        if self.graph is None:
-            await self.reload()
-        assert self.graph is not None
-
-        config = {"configurable": {"thread_id": thread}}
         hide_reasoning = self.settings.model.reasoning_effort in ("hide", "disabled")
 
         inputs: dict[str, Any] | Command
@@ -285,7 +287,7 @@ class AgentRuntime:
             # 1. Process prompt mentions
             try:
                 mentions_cfg = self.settings.mentions
-                processed_prompt, attachments = process_prompt_mentions(
+                processed_prompt, attachments, mention_warnings = process_prompt_mentions(
                     prompt,
                     max_file_size=mentions_cfg.max_file_size,
                     max_files=mentions_cfg.max_files,
@@ -294,6 +296,9 @@ class AgentRuntime:
             except PromptProcessingError as exc:
                 yield {"type": "error", "content": str(exc)}
                 return
+
+            for warning in mention_warnings:
+                _log.warning(warning)
 
             # 2. Construct user message (multimodal vs text-only)
             if attachments:
@@ -306,7 +311,7 @@ class AgentRuntime:
 
             inputs = {"messages": [user_msg]}
 
-        async for mode, event in self.graph.astream(
+        async for mode, event in graph.astream(
             inputs,
             config,
             stream_mode=["messages", "custom"],
@@ -318,6 +323,8 @@ class AgentRuntime:
             if mode == "messages":
                 chunk = event[0] if isinstance(event, tuple) and event else event
                 meta = getattr(chunk, "response_metadata", None)
+                # Usage metadata is the only trusted token source; when the
+                # host does not report it, last_context_tokens stays 0 (= unknown).
                 if isinstance(meta, dict) and "prompt_eval_count" in meta:
                     self.last_context_tokens = int(meta.get("eval_count", 0)) + int(meta["prompt_eval_count"])
                 result = _process_message_chunk(
@@ -326,31 +333,25 @@ class AgentRuntime:
                 if result:
                     yield result
 
-        # Check if we were interrupted
-        state = await self.graph.aget_state(config)
-        if state and state.values and "messages" in state.values:
-            total_chars = sum(len(extract_text(getattr(m, "content", m))) for m in state.values["messages"])
-            if total_chars > 0 and self.last_context_tokens == 0:
-                self.last_context_tokens = max(1, total_chars // 4)
+        # Surface pending interrupts (e.g. awaiting tool approval) after the stream ends.
+        state = await graph.aget_state(config)
         if state.interrupts:
             yield {"type": "interrupt", "interrupts": state.interrupts, "config": config}
 
     async def compact_context(self, thread_id: str = "") -> dict[str, Any]:
         """Compact conversation history for the specified thread into a summary."""
-        thread = thread_id or self.thread_id
-        if self.graph is None:
-            await self.reload()
-        assert self.graph is not None and self._model is not None
+        graph, _thread, config = await self._ensure_graph(thread_id)
+        if self._model is None:
+            raise RuntimeError(_("Agent model is not initialized"))
 
-        config = {"configurable": {"thread_id": thread}}
-        state = await self.graph.aget_state(config)
+        state = await graph.aget_state(config)
         values: dict[str, Any] = state.values if state and state.values else {}
         raw_messages = list(values.get("messages") or [])
         if not raw_messages:
             return {"success": False, "message": _("No messages in session to compact.")}
 
-        prior_event = values.get("_summarization_event")
-        effective = apply_summarization_event(raw_messages, prior_event)
+        prior_event = values.get(SUMMARIZATION_STATE_KEY)
+        effective = apply_summarization_event(self._summarization_engine, raw_messages, prior_event)
 
         cutoff = find_safe_cutoff(effective, KEEP_RECENT_MESSAGES)
         if cutoff <= 0:
@@ -368,13 +369,16 @@ class AgentRuntime:
         )
 
         new_event: dict[str, Any] = {
-            "cutoff_index": compute_state_cutoff(prior_event, cutoff),
-            "summary_message": build_summary_message(summary, file_path),
+            "cutoff_index": compute_state_cutoff(self._summarization_engine, prior_event, cutoff),
+            "summary_message": build_summary_message(self._summarization_engine, summary, file_path),
             "file_path": file_path,
         }
-        await self.graph.aupdate_state(
+        await graph.aupdate_state(
             config,
-            {"_summarization_event": new_event, "_summarization_session_id": session_id},
+            {
+                SUMMARIZATION_STATE_KEY: new_event,
+                SUMMARIZATION_SESSION_ID_KEY: session_id,
+            },
         )
 
         self.last_context_tokens = count_tokens_approximately(
@@ -391,24 +395,20 @@ class AgentRuntime:
 
     async def get_thread_messages(self, thread_id: str = "") -> list[Any]:
         """Return the raw stored messages for a thread (empty when unknown)."""
-        if self.graph is None:
-            await self.reload()
-        assert self.graph is not None
-        config = {"configurable": {"thread_id": thread_id or self.thread_id}}
-        state = await self.graph.aget_state(config)
+        graph, _thread, config = await self._ensure_graph(thread_id)
+        state = await graph.aget_state(config)
         values: dict[str, Any] = state.values if state and state.values else {}
         return list(values.get("messages") or [])
 
     async def count_effective_tokens(self, thread_id: str = "") -> int:
         """Count tokens of the effective context for a thread (after compaction)."""
-        if self.graph is None:
-            await self.reload()
-        assert self.graph is not None
-        config = {"configurable": {"thread_id": thread_id or self.thread_id}}
-        state = await self.graph.aget_state(config)
+        graph, _thread, config = await self._ensure_graph(thread_id)
+        state = await graph.aget_state(config)
         values: dict[str, Any] = state.values if state and state.values else {}
         effective = apply_summarization_event(
-            list(values.get("messages") or []), values.get("_summarization_event")
+            self._summarization_engine,
+            list(values.get("messages") or []),
+            values.get(SUMMARIZATION_STATE_KEY),
         )
         return count_tokens_approximately(effective)
 

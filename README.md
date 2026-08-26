@@ -71,7 +71,7 @@
 - 🧩 **Agent Skills Standard**: Extend the agent with modular skills following the [Agent Skills specification](https://agentskills.io/specification) using progressive disclosure.
 - 📚 **Local RAG Engine**: Embed and index documents into local Qdrant vector collections with automated semantic retrieval via the agent's `rag_search` tool.
 - 🧠 **Persistent Memory & Guidelines**: Cross-session user memory (`MEMORY.md`), automatic discovery of project-level guidelines (`AGENTS.md`), and **Episodic Memory** to search past conversations and solutions (`search_past_conversations` tool and `/session search`).
-- 🔌 **Model Context Protocol (MCP)**: Attach MCP servers (`mcp.json` or `mcp_servers.json`) directly to the main agent across `stdio`, `http`, and `sse` transports, with real-time status inspection via `/mcp` and `mcp list`.
+- 🔌 **Model Context Protocol (MCP)**: Attach MCP servers (`mcp.json`) directly to the main agent across `stdio`, `http`, and `sse` transports, with real-time status inspection via `/mcp` and `mcp list`.
 - 🤖 **Specialized Subagents**: Configure isolated subagents in `settings.yaml` with their own model, system prompt, and dedicated MCP tool servers.
 
 ---
@@ -148,7 +148,7 @@ The REPL prompt input supports convenient multiline editing, history recall, and
 - **Submit Prompt**: Press `Enter` without a trailing backslash to send your message.
 - **Cursor Navigation**: Use `↑` and `↓` arrow keys to move freely across lines in multiline prompts.
 - **Command History**: Pressing `↑` at the top-left `(row 0, col 0)` navigates to previous prompts; pressing `↓` at the end of the text navigates forward.
-- **Tab Autocompletion**: Press `Tab` to autocomplete slash commands, subcommands, entity IDs (sessions, tasks, skills, RAG databases), and `@-mention` file paths.
+- **Tab Autocompletion**: Press `Tab` to autocomplete slash commands, subcommands, entity IDs (models, sessions, tasks, skills, RAG databases), and `@-mention` file paths.
 
 ---
 
@@ -161,7 +161,7 @@ The REPL provides built-in slash commands for managing models, sessions, tasks, 
 | `/model` | `/model [list \| set <model>]` | List available Ollama models (with tool support indicators) or switch the active model for the current session. |
 | `/effort` | `/effort [<level>]` | Show current reasoning effort or switch the thinking/reasoning effort level (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`) for the active session. |
 | `/params` | `/params [list \| set <parameter> <value>]` | Inspect active sampling parameters and resolution sources, or dynamically update parameter values for the active session. |
-| `/session` | `/session [list \| search <query> \| resume <id> \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume previous threads, export to Markdown, or delete history. |
+| `/session` | `/session [list \| search <query> \| resume <id> (alias: switch) \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume previous threads, export to Markdown, or delete history. |
 | `/compact` | `/compact` (alias: `/compress`) | Manually compact conversation history into a structured summary to reclaim context window tokens. |
 | `/task` | `/task [list \| create [<id>] \| run <id> [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` initiates an interactive conversational creation flow with the agent. |
 | `/skill` | `/skill [list \| show <id> \| create [<id>] \| delete <id>]` | Manage agent skills. `/skill create` initiates an interactive conversational creation flow with the agent. |
@@ -241,7 +241,7 @@ Reference files or entire folder trees directly inside your prompts using `@` sy
 
 #### Supported Content Types
 - **Text Files**: Read as UTF-8 and attached as structured `<context_file path="...">...</context_file>` blocks.
-- **Multimodal Attachments**: Images (`.png`, `.jpg`, `.webp`, `.gif`, `.svg`), audio (`.mp3`, `.wav`, `.ogg`, `.flac`), video (`.mp4`, `.mov`, `.webm`), and documents (`.pdf`, `.pptx`) are base64-encoded and attached as native multimodal inputs.
+- **Multimodal Attachments**: Images (`.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.bmp`, `.svg`, `.heic`, `.heif`), audio (`.mp3`, `.wav`, `.ogg`, `.flac`, `.m4a`, `.aac`, `.aiff`), video (`.mp4`, `.mpeg`, `.mpg`, `.mov`, `.avi`, `.flv`, `.webm`, `.wmv`, `.3gpp`), and documents (`.pdf`, `.ppt`, `.pptx`) are base64-encoded and attached as native multimodal inputs.
 - **Binary Safety**: Non-multimodal binaries (e.g. `.zip`, `.exe`, `.pyc`) are skipped during directory traversal.
 
 #### Safety Limits & Configuration
@@ -266,17 +266,17 @@ To prevent conversation degradation and context overflow errors, Ollama Agent fe
 
 ```mermaid
 flowchart LR
-    A[Full Conversation Turns] -->|Auto at 85% num_ctx OR /compact| B[Summarization Engine]
+    A[Full Conversation Turns] -->|Auto at 85% context OR /compact| B[Summarization Engine]
     B --> C[Structured Summary\n• Session Intent\n• Key Decisions\n• Artifacts\n• Next Steps]
-    B --> D[Durable History Saved to\n/conversation_history/thread_id.md]
+    B --> D[Durable History Saved to\n/conversation_history/session_id.md]
     C --> E[Reclaimed Context Window]
 ```
 
 1. **Automatic Background Summarization**:
-   - **Threshold**: Triggers automatically when conversation tokens reach **85%** of the model's configured context window (`num_ctx`).
-   - **Retention**: Compresses older turns into a structured summary while keeping the most recent **10%** of tokens intact.
+   - **Threshold**: Triggers automatically when conversation tokens reach **85%** of the model's maximum input tokens (`max_input_tokens` from the model profile; models that do not report a profile fall back to a fixed 170,000-token trigger).
+   - **Retention**: Compresses older turns into a structured summary while keeping the most recent **10%** of tokens intact (or the last 6 messages for models without profile data).
    - **Tool Argument Pruning**: Older tool arguments (e.g. large file contents in `write_file` / `edit_file`) are truncated to 2,000 characters to reclaim space.
-   - **History Preservation**: Evicted turns are saved to `<cwd>/conversation_history/{thread_id}.md` for durable offline recovery.
+   - **History Preservation**: Evicted turns are saved to `<cwd>/conversation_history/{session_id}.md` (a dedicated `session_<uuid>` id, appended across repeated compactions of the same thread) for durable offline recovery.
    - **Overflow Recovery**: Catches context overflow errors dynamically, summarizes older turns, and retries the turn seamlessly.
 
 2. **On-Demand Compaction (`/compact` or `/compress`)**:
@@ -288,7 +288,7 @@ flowchart LR
 ✓ Context compacted successfully:
   • Messages summarized: 14
   • Recent messages preserved: 2
-  • History offloaded to: /conversation_history/4d7e2a1b.md
+  • History offloaded to: /conversation_history/session_9f86d081884c7d659a2feaa0c55ad015.md
 ```
 
 ---
@@ -307,7 +307,7 @@ flowchart LR
 | `--rag` | — | `str` | `None` | Preload a RAG database collection at startup. |
 | `--allow-traversal` | — | `flag` | `False` | Allow filesystem traversal outside current working directory. |
 | `--no-allow-traversal` | — | `flag` | `True` | Sandbox filesystem operations to current working directory (default). |
-| `--lang`, `--language` | `-l` | `str` | `auto` | Set interface language (e.g. `en`, `es`, `fr`, `de`, `it`, `pt`, `zh`, `ja`, `ru`, `hi`). |
+| `--lang`, `--language` | `-l` | `str` | `auto` | Set interface language (`en`, `es`, `fr`, `de`, `it`, `pt`, `zh`, `ja`, `ko`, `ru`, `hi`, `ar`, `tr`, `pl`, `nl`, `uk`). |
 | `--config-reset` | — | `str` | `None` | Reset configuration files: `all`, `system-prompt`, or `config-file`. |
 
 ---
@@ -554,7 +554,7 @@ Inside REPL:
 /rag add ./src --dir
 ```
 
-**Supported File Formats**: `.py`, `.js`, `.ts`, `.tsx`, `.jsx`, `.sh`, `.yaml`, `.yml`, `.json`, `.xml`, `.md`, `.txt`, `.toml`, `.c`, `.cpp`, `.h`, `.hpp`, `.go`, `.rs`, `.css`, `.html`, `.sql`, `.ini`, `.cfg`, `.properties`, `.java`, `.kt`, `.gradle`, `.bat`, `.ps1`, `.csv`, `.rst`, plus text/json/xml MIME fallbacks.
+**Supported File Formats**: `.py`, `.js`, `.ts`, `.tsx`, `.jsx`, `.sh`, `.yaml`, `.yml`, `.json`, `.xml`, `.md`, `.txt`, `.toml`, `.c`, `.cpp`, `.h`, `.hpp`, `.go`, `.rs`, `.css`, `.html`, `.sql`, `.ini`, `.cfg`, `.properties`, `.java`, `.kt`, `.gradle`, `.bat`, `.ps1`, `.csv`, `.rst`.
 
 #### 3. Automated RAG Retrieval
 
@@ -578,7 +578,7 @@ ollama-agent --rag project-docs -p "How is authentication handled in this projec
 
 Extend the primary agent with tools from external [Model Context Protocol](https://modelcontextprotocol.io/) servers. Configured tools are injected directly into the orchestrator.
 
-Create `~/.ollama-agent/mcp.json` (or `mcp_servers.json`):
+Create `~/.ollama-agent/mcp.json`:
 
 ```json
 {
@@ -605,9 +605,9 @@ Create `~/.ollama-agent/mcp.json` (or `mcp_servers.json`):
 }
 ```
 
-- **Supported Transports**: `stdio` (subprocess execution), `http`, and `sse` (remote endpoints).
-- **Environment Substitution**: `${VAR_NAME}` (and `%VAR_NAME%`) syntax injects host environment variables; servers with missing required variables are skipped gracefully with a log warning.
-- **Parallel Tool Loading & Fault Isolation**: MCP servers are initialized concurrently in the background; unreachable or invalid servers fail gracefully without interrupting agent startup or blocking other servers.
+- **Supported Transports**: `stdio` (subprocess execution), plus `http` (default for bare `url` entries), `sse`, `websocket`, and `streamable_http` (remote endpoints).
+- **Environment Substitution**: `${VAR_NAME}` (and `%VAR_NAME%`) syntax injects host environment variables; if a required variable is unset, loading fails with a configuration error.
+- **Parallel Tool Loading**: All configured MCP servers are initialized concurrently at startup; loading is fail-fast — an unreachable or misconfigured server aborts startup with an error.
 - **Server Status Inspection**: Run `/mcp` in the interactive REPL or `ollama-agent mcp list` from the CLI to check connection status, health, and discovered tools with color-coded status badges (`● Active` / `● Failed`) for both main orchestrator and subagent MCP servers.
 
 ---
@@ -665,7 +665,7 @@ runtime:
   builtin_tool_timeout: 30
   collapse_thinking: true
   inherit_env: true
-  # language: ""               # Interface language code (e.g. en, es, fr, de; auto-detects if unset)
+  language: ""                 # Interface language code (e.g. en, es, fr, de; auto-detects if unset)
 rag:
   rag_dir: ~/.ollama-agent/rag
   embedder_model: nomic-embed-text:latest
@@ -693,7 +693,7 @@ subagents: []
 | `model.top_k` | `int` | *(dynamic)* | Optional top-k candidates limit override (40 engine default if unset). |
 | `model.min_p` | `float` | *(dynamic)* | Optional minimum probability threshold override (0.0 default if unset). |
 | `model.presence_penalty` | `float` | *(dynamic)* | Optional presence penalty override (0.0 default if unset). |
-| `model.repeat_penalty` | `float` | *(dynamic)* | Optional repetition penalty override (1.1 engine default; alias: `repetition_penalty`). |
+| `model.repeat_penalty` | `float` | *(dynamic)* | Optional repetition penalty override (1.1 engine default; `repetition_penalty` accepted as an alias in Modelfile metadata and `/params set`, not as a `settings.yaml` key). |
 | `model.context_window` | `int` \| `str` | `10000` | Context window token limit (`num_ctx`), or `'max'` to auto-detect model maximum. |
 | `model.reasoning_effort` | `str` | `medium` | Default reasoning effort (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
 | `runtime.allow_traversal` | `bool` | `false` | If true, permits filesystem operations outside project working directory. |
@@ -750,10 +750,10 @@ flowchart TD
 The effective context window (`num_ctx`) is resolved automatically in the following hierarchy:
 
 1. `model.context_window` defined in `settings.yaml` (if explicitly configured as a positive number > 0).
-2. Dynamic resolution when set to `'max'` or omitted:
+2. Dynamic detection when explicitly set to `'max'`:
    - Structured metadata from `ollama show <model>` (e.g. `llama.context_length`, `qwen2.context_length`).
    - Modelfile parameter regex (`PARAMETER num_ctx <size>`) from `ollama show <model>`.
-3. If unresolved, the agent halts with a clear configuration prompt.
+3. If unresolved, the agent halts with an error instructing you to define `context_window`.
 
 ---
 

@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from rich.console import Console
 
+from ollama_agent.streaming import extract_action_requests
 from ollama_agent.streaming.base import StreamingRenderer
 from ollama_agent.streaming.console_renderer import ConsoleStreamingRenderer
 from ollama_agent.streaming.events import stream_agent_events
@@ -27,6 +28,12 @@ class DummyRenderer(StreamingRenderer):
     def on_text_delta(self, event: dict[str, Any]) -> None:
         pass
 
+    def on_reasoning_delta(self, event: dict[str, Any]) -> None:
+        pass
+
+    def on_tool_call(self, event: dict[str, Any]) -> None:
+        pass
+
     def on_warning(self, event: dict[str, Any]) -> None:
         self.warnings.append(event)
 
@@ -44,6 +51,22 @@ class TestStreamingSystem(unittest.IsolatedAsyncioTestCase):
         renderer = DummyRenderer()
         renderer.on_event({"type": "text_delta", "content": "hello"})
         self.assertEqual(len(renderer.events), 1)
+
+    def test_console_streaming_renderer_dispatches_unknown_type_loudly(self) -> None:
+        renderer = DummyRenderer()
+        with self.assertRaises(ValueError):
+            renderer.on_event({"type": "agent_update", "content": "state"})
+
+    def test_console_streaming_renderer_reasoning_is_pure_delta(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        renderer = ConsoleStreamingRenderer(console=console)
+
+        renderer.on_event({"type": "reasoning_delta", "content": "the"})
+        renderer.on_event({"type": "reasoning_delta", "content": "the"})
+        renderer.close()
+
+        out = console.export_text()
+        self.assertIn("thethe", out)
 
     def test_console_streaming_renderer_deltas(self) -> None:
         console = Console(file=io.StringIO(), record=True)
@@ -70,24 +93,17 @@ class TestStreamingSystem(unittest.IsolatedAsyncioTestCase):
 
         async def fake_stream(prompt: str, thread_id: str = "") -> AsyncGenerator[dict[str, Any], None]:
             yield {"type": "text_delta", "content": "Hello"}
-            yield {"type": "agent_update", "content": "state"}
+            yield {"type": "tool_call", "name": "search"}
             yield {"type": "text_delta", "content": "World"}
 
         mock_runtime.run_streamed = fake_stream
 
         renderer = DummyRenderer()
-        await stream_agent_events(
-            mock_runtime,
-            "test prompt",
-            renderer,
-            ignore={"agent_update"},
-            auto_close=True,
-        )
+        await stream_agent_events(mock_runtime, "test prompt", renderer, auto_close=True)
 
         self.assertTrue(renderer.closed)
         types = [e["type"] for e in renderer.events]
-        self.assertEqual(types, ["text_delta", "text_delta"])
-        self.assertNotIn("agent_update", types)
+        self.assertEqual(types, ["text_delta", "tool_call", "text_delta"])
 
     async def test_stream_agent_events_returns_completed_true(self) -> None:
         mock_runtime = MagicMock()
@@ -197,3 +213,60 @@ class TestInterruptHandling(unittest.IsolatedAsyncioTestCase):
         with patch.object(renderer, "handle_interrupt", return_value=None):
             completed = await stream_agent_events(mock_runtime, "p", renderer)
         self.assertFalse(completed)
+
+    async def test_stream_agent_events_propagates_renderer_exceptions(self) -> None:
+        mock_runtime = MagicMock()
+
+        async def fake_stream(prompt: str, thread_id: str = "") -> AsyncGenerator[dict[str, Any], None]:
+            yield {"type": "interrupt", "interrupts": [SimpleNamespace(value={"action_requests": []})]}
+
+        mock_runtime.run_streamed = fake_stream
+
+        class BrokenRenderer(DummyRenderer):
+            async def handle_interrupt(
+                self, event: dict[str, Any], runtime: Any
+            ) -> list[dict[str, Any]] | None:
+                raise ValueError("boom")
+
+        renderer = BrokenRenderer()
+        with self.assertRaises(ValueError):
+            await stream_agent_events(mock_runtime, "p", renderer)
+        self.assertTrue(renderer.closed)
+
+
+class TestExtractActionRequests(unittest.TestCase):
+    """Tests for the strict interrupt payload extraction helper."""
+
+    @staticmethod
+    def _event(action_requests: Any) -> dict[str, Any]:
+        return {
+            "type": "interrupt",
+            "interrupts": [SimpleNamespace(value={"action_requests": action_requests})],
+        }
+
+    def test_valid_payload(self) -> None:
+        requests = [{"name": "execute", "args": {"command": "ls"}}]
+        self.assertEqual(extract_action_requests(self._event(requests)), requests)
+
+    def test_missing_interrupts_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            extract_action_requests({"type": "interrupt"})
+
+    def test_empty_interrupts_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            extract_action_requests({"type": "interrupt", "interrupts": []})
+
+    def test_non_mapping_value_raises(self) -> None:
+        event = {"type": "interrupt", "interrupts": [SimpleNamespace(value=None)]}
+        with self.assertRaises(ValueError):
+            extract_action_requests(event)
+
+    def test_missing_or_empty_action_requests_raises(self) -> None:
+        for payload in ({}, {"action_requests": []}, {"action_requests": None}):
+            with self.subTest(payload=payload), self.assertRaises(ValueError):
+                extract_action_requests({"type": "interrupt", "interrupts": [SimpleNamespace(value=payload)]})
+
+    def test_malformed_action_request_raises(self) -> None:
+        for requests in ([{"name": "execute"}], [{"args": {}}], ["not-a-dict"]):
+            with self.subTest(requests=requests), self.assertRaises(ValueError):
+                extract_action_requests(self._event(requests))

@@ -50,6 +50,15 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
         chunks = self.manager._chunk_text(text)
         self.assertEqual(chunks, [text])
 
+    def test_chunk_text_invalid_configuration_raises(self) -> None:
+        self.settings.chunk_size = 0
+        with self.assertRaises(RAGError):
+            self.manager._chunk_text("some text")
+        self.settings.chunk_size = 50
+        self.settings.chunk_overlap = -1
+        with self.assertRaises(RAGError):
+            self.manager._chunk_text("some text")
+
     def test_chunk_text_monotonic_forward_progress(self) -> None:
         self.settings.chunk_size = 50
         self.settings.chunk_overlap = 60
@@ -68,10 +77,11 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
         f_utf8.write_text("Hello UTF-8 world!", encoding="utf-8")
         self.assertEqual(self.manager._read_file(f_utf8), "Hello UTF-8 world!")
 
-        # Latin-1
+        # Non-UTF-8 content fails loudly
         f_latin = self.rag_dir / "test_latin.txt"
         f_latin.write_bytes("Café".encode("latin-1"))
-        self.assertIn("Caf", self.manager._read_file(f_latin))
+        with self.assertRaises(RAGError):
+            self.manager._read_file(f_latin)
 
     def test_read_file_unsupported_extension(self) -> None:
         f_bin = self.rag_dir / "test.bin"
@@ -107,9 +117,12 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(self.manager.current_database)
 
             # Delete database
-            deleted = self.manager.delete_database("knowledge")
-            self.assertTrue(deleted)
+            self.manager.delete_database("knowledge")
             self.assertFalse((self.rag_dir / "knowledge").exists())
+
+            # Deleting a missing database raises
+            with self.assertRaises(RAGError):
+                self.manager.delete_database("knowledge")
 
     async def test_add_file_and_search(self) -> None:
         doc = self.rag_dir / "doc.txt"
@@ -140,6 +153,30 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(hits), 1)
                 self.assertEqual(hits[0]["filename"], "doc.txt")
                 self.assertEqual(hits[0]["score"], 0.92)
+
+                # top_k=0 is respected instead of silently becoming the default
+                await self.manager.search("LangGraph", top_k=0)
+                self.assertEqual(mock_client.query_points.call_args.kwargs["limit"], 0)
+
+    async def test_add_file_rejects_unsupported_extension(self) -> None:
+        doc = self.rag_dir / "data.xyz"
+        doc.write_text("content", encoding="utf-8")
+        self.manager._client = MagicMock()
+        self.manager._current_db = "test_db"
+        with self.assertRaises(RAGError):
+            await self.manager.add_file(str(doc))
+
+    async def test_add_file_keeps_points_when_embeddings_fail(self) -> None:
+        doc = self.rag_dir / "doc.txt"
+        doc.write_text("Some content for indexing.", encoding="utf-8")
+        self.manager._client = MagicMock()
+        self.manager._current_db = "test_db"
+
+        with patch.object(RAGManager, "_delete_source_points") as mock_delete:
+            with patch.object(RAGManager, "_get_embeddings", AsyncMock(side_effect=RAGError("Ollama down"))):
+                with self.assertRaises(RAGError):
+                    await self.manager.add_file(str(doc))
+                mock_delete.assert_not_called()
 
     async def test_add_directory_and_errors(self) -> None:
         sub_dir = self.rag_dir / "docs_dir"

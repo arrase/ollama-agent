@@ -7,188 +7,179 @@ import json
 import logging
 import os
 import re
-from pathlib import Path
 from typing import Any
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from ..i18n import _
-from ..settings import MCP_PATH, MCP_SERVERS_PATH, SubAgentMCPServer
+from ..settings import MCP_PATH, SubAgentMCPServer
 _log = logging.getLogger(__name__)
 _ENV_RE = re.compile(r"\$\{([^}]+)\}|%([^%]+)%")
+_KNOWN_TRANSPORTS = {"sse", "websocket", "http", "streamable_http", "streamable-http"}
 
 
 class MCPConfigError(RuntimeError):
-    """Raised when the MCP configuration file is unreadable or invalid."""
+    """Raised when the MCP configuration is unreadable or invalid."""
 
 
-def get_mcp_config_path() -> Path:
-    """Return the active MCP config path (mcp.json if present, else mcp_servers.json or mcp.json)."""
-    if MCP_PATH.exists():
-        return MCP_PATH
-    if MCP_SERVERS_PATH.exists():
-        return MCP_SERVERS_PATH
-    return MCP_PATH
-
-
-def _resolve_env(env: dict[str, str]) -> dict[str, str] | None:
+def _resolve_env(env: dict[str, str], server_name: str) -> dict[str, str]:
     """Resolve ``${VAR}`` and ``%VAR%`` patterns against ``os.environ``.
 
-    Returns the resolved dict (possibly empty) on success, or ``None``
-    when required environment variables are missing.
+    Raises MCPConfigError when a required environment variable is missing.
     """
     if not env:
         return {}
 
     def _replace(match: re.Match[str]) -> str:
-        return os.environ[match.group(1) or match.group(2)]
+        var = match.group(1) or match.group(2)
+        if var not in os.environ:
+            raise MCPConfigError(
+                _(
+                    "MCP server '{name}': missing environment variable '{var}'",
+                    name=server_name,
+                    var=var,
+                )
+            )
+        return os.environ[var]
 
-    resolved: dict[str, str] = {}
-    for key, value in env.items():
-        try:
-            resolved[key] = _ENV_RE.sub(_replace, value)
-        except KeyError as exc:
-            _log.warning("Missing environment variable: %s", exc)
-            return None
-    return resolved
+    return {key: _ENV_RE.sub(_replace, value) for key, value in env.items()}
 
 
-def _build_mcp_connection(cfg: dict[str, Any]) -> dict[str, Any] | None:
-    """Build a MultiServerMCPClient connection dict from a server config."""
+def _build_mcp_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, Any]:
+    """Build a MultiServerMCPClient connection dict from a server config.
+
+    Raises MCPConfigError when the config entry is malformed or declares an
+    unsupported transport.
+    """
     transport = cfg.get("transport") or cfg.get("type")
 
     if cfg.get("command"):
+        args = cfg.get("args", [])
+        if not isinstance(args, list):
+            raise MCPConfigError(
+                _("MCP server '{name}': 'args' must be a list", name=server_name)
+            )
         out: dict[str, Any] = {
             "transport": "stdio",
             "command": cfg["command"],
-            "args": cfg.get("args", []),
+            "args": args,
         }
         if "cwd" in cfg:
             out["cwd"] = cfg["cwd"]
         if "env" in cfg:
-            resolved = _resolve_env(cfg["env"])
-            if resolved is None:
-                return None
+            env = cfg["env"]
+            if not isinstance(env, dict):
+                raise MCPConfigError(
+                    _("MCP server '{name}': 'env' must be an object", name=server_name)
+                )
+            resolved = _resolve_env(env, server_name)
             if resolved:
                 out["env"] = resolved
         return out
 
     url = cfg.get("url") or cfg.get("httpUrl")
     if url:
-        conn_transport = (
-            transport
-            if transport in {"sse", "websocket", "http", "streamable_http", "streamable-http"}
-            else "http"
-        )
-        out = {"transport": conn_transport, "url": url}
+        if transport is not None and transport not in _KNOWN_TRANSPORTS:
+            raise MCPConfigError(
+                _(
+                    "MCP server '{name}': unsupported transport '{transport}'",
+                    name=server_name,
+                    transport=transport,
+                )
+            )
+        out = {"transport": transport if transport is not None else "http", "url": url}
         for k in ("headers", "timeout", "sse_read_timeout", "session_kwargs"):
             if k in cfg:
                 out[k] = cfg[k]
         return out
 
-    return None
+    raise MCPConfigError(
+        _("MCP server '{name}': requires either 'command' or 'url'", name=server_name)
+    )
 
 
-async def load_main_mcp_tools() -> list[Any]:
-    """Load flat MCP tools for the main agent from mcp.json / mcp_servers.json.
+async def _read_main_config() -> dict[str, dict[str, Any]]:
+    """Read and validate the canonical ``mcp.json`` configuration.
 
-    Raises MCPConfigError when the config file exists but cannot be parsed.
+    Returns the ``mcpServers`` mapping (empty when the file does not exist).
+    Raises MCPConfigError when the file exists but is unreadable or invalid.
     """
-    config_path = get_mcp_config_path()
-    if not config_path.exists():
-        return []
+    if not MCP_PATH.exists():
+        return {}
 
     try:
-        raw_json = await asyncio.to_thread(config_path.read_text, encoding="utf-8")
+        raw_json = await asyncio.to_thread(MCP_PATH.read_text, encoding="utf-8")
         data = json.loads(raw_json)
     except (json.JSONDecodeError, OSError) as exc:
         raise MCPConfigError(
-            _("Failed to load MCP config {config_path}: {exc}", config_path=config_path, exc=exc)
+            _("Failed to load MCP config {config_path}: {exc}", config_path=MCP_PATH, exc=exc)
         ) from exc
 
     if not isinstance(data, dict):
         raise MCPConfigError(
-            _("Invalid MCP config {config_path}: expected a JSON object", config_path=config_path)
+            _("Invalid MCP config {config_path}: expected a JSON object", config_path=MCP_PATH)
         )
 
-    servers_cfg = data.get("mcpServers") or data.get("servers") or {}
-    if not isinstance(servers_cfg, dict) or not servers_cfg:
-        return []
+    if "mcpServers" not in data:
+        return {}
 
-    # Build MultiServerMCPClient connection dict
+    servers_cfg = data["mcpServers"]
+    if not isinstance(servers_cfg, dict):
+        raise MCPConfigError(
+            _("Invalid MCP config {config_path}: 'mcpServers' must be an object", config_path=MCP_PATH)
+        )
+    return servers_cfg
+
+
+async def _connect_and_load(name: str, conn: dict[str, Any]) -> list[Any]:
+    """Connect to a single MCP server and return its tools.
+
+    Raises MCPConfigError when the connection or tool loading fails.
+    """
+    try:
+        client = MultiServerMCPClient({name: conn})  # type: ignore[dict-item,arg-type]
+        tools = await client.get_tools()
+    except Exception as exc:
+        raise MCPConfigError(
+            _("Failed to load tools from MCP server '{name}': {exc}", name=name, exc=exc)
+        ) from exc
+    _log.info("Loaded %d MCP tools from server '%s'", len(tools), name)
+    return tools
+
+
+async def load_main_mcp_tools() -> list[Any]:
+    """Load flat MCP tools for the main agent from mcp.json.
+
+    Raises MCPConfigError when the config is unreadable, malformed, or any
+    server fails to connect.
+    """
+    servers_cfg = await _read_main_config()
+
     connections: dict[str, dict[str, Any]] = {}
     for name, cfg in servers_cfg.items():
         if not isinstance(cfg, dict):
-            continue
-        conn = _build_mcp_connection(cfg)
-        if conn:
-            connections[name] = conn
-        else:
-            _log.warning(
-                "Skipping MCP server '%s': could not determine transport", name
+            raise MCPConfigError(
+                _("MCP server '{name}': configuration must be an object", name=name)
             )
+        connections[name] = _build_mcp_connection(name, cfg)
 
-    if not connections:
-        return []
-
-    async def _load_single_server(name: str, conn: dict[str, Any]) -> list[Any]:
-        """Helper to isolate errors and run in parallel."""
-        try:
-            client = MultiServerMCPClient({name: conn})  # type: ignore[dict-item,arg-type]
-            srv_tools = await client.get_tools()
-            _log.info(
-                "Loaded %d MCP tools from server '%s'",
-                len(srv_tools),
-                name,
-            )
-            return srv_tools
-        except Exception as exc:
-            _log.error("Failed to load tools from MCP server '%s': %s", name, exc)
-            return []
-
-    # Execute all loading tasks in parallel
-    tasks = [_load_single_server(name, conn) for name, conn in connections.items()]
-    results = await asyncio.gather(*tasks)
-
-    # Flatten the list of lists
-    tools: list[Any] = []
-    for tool_list in results:
-        tools.extend(tool_list)
-
-    return tools
+    results = await asyncio.gather(*[_connect_and_load(name, conn) for name, conn in connections.items()])
+    return [tool for chunk in results for tool in chunk]
 
 
 async def load_subagent_mcp_tools(
     subagent_name: str,
     mcp_servers: list[SubAgentMCPServer],
 ) -> list[Any]:
-    """Load MCP tools for a subagent's MCP servers."""
-    servers: dict[str, dict[str, Any]] = {}
-    for srv in mcp_servers:
-        env = _resolve_env(srv.env)
-        if env is None:
-            _log.warning(
-                "Subagent '%s': skipping MCP '%s' (unresolved env vars)",
-                subagent_name,
-                srv.name,
-            )
-            continue
-        entry: dict[str, Any] = {
-            "command": srv.command,
-            "args": srv.args,
-            "transport": "stdio",
-        }
-        if env:
-            entry["env"] = env
-        servers[srv.name] = entry
+    """Load MCP tools for a subagent's MCP servers (one client per server).
 
-    if not servers:
-        return []
-
-    try:
-        client = MultiServerMCPClient(servers)  # type: ignore[arg-type]
-        tools = await client.get_tools()
-        return tools
-    except Exception as exc:
-        _log.warning("Subagent '%s': MCP tools failed to load: %s", subagent_name, exc)
-        return []
+    Raises MCPConfigError when any server entry is malformed or fails to connect.
+    """
+    connections = {
+        srv.name: _build_mcp_connection(srv.name, {"command": srv.command, "args": srv.args, "env": srv.env})
+        for srv in mcp_servers
+    }
+    results = await asyncio.gather(*[_connect_and_load(name, conn) for name, conn in connections.items()])
+    tools = [tool for chunk in results for tool in chunk]
+    _log.info("Subagent '%s': loaded %d MCP tools", subagent_name, len(tools))
+    return tools

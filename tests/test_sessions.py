@@ -146,6 +146,7 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sessions_after[0]["thread_id"], "session-87654321")
 
     async def test_export_session(self) -> None:
+        self._init_sample_db()
         console = Console(file=io.StringIO(), record=True)
         runtime_mock = MagicMock()
 
@@ -165,6 +166,17 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         self.assertIn("How do I create a class?", content)
         self.assertIn("Assistant", content)
         self.assertIn("Use `class MyClass:` syntax.", content)
+
+    async def test_export_session_not_found(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime_mock = MagicMock()
+        runtime_mock.get_thread_messages = AsyncMock(return_value=[])
+
+        res = await export_session(console, runtime_mock, "nonexistent-id", db_path=self.db_path)
+
+        self.assertIsNone(res)
+        runtime_mock.get_thread_messages.assert_not_called()
+        self.assertIn("not found", console.export_text())
 
     async def test_compact_session_success(self) -> None:
         console = Console(file=io.StringIO(), record=True)

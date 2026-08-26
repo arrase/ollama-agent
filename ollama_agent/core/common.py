@@ -39,7 +39,7 @@ def extract_text(content: Any, *, sep: str = " ") -> str:
     if isinstance(content, dict):
         text_val = content.get("text") or content.get("content")
         return extract_text(text_val, sep=sep)
-    return ""
+    raise TypeError(f"Unsupported content shape for extract_text: {type(content).__name__}")
 
 
 _WINDOWS_RESERVED_NAMES: frozenset[str] = frozenset({

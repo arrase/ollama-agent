@@ -30,6 +30,9 @@ def main() -> None:
     parser = create_argument_parser()
     args = parser.parse_args()
 
+    if args.command and args.prompt:
+        parser.error(_("--prompt cannot be used together with a subcommand."))
+
     if args.config_reset:
         for msg in reset_config(args.config_reset):
             print(msg)
@@ -39,7 +42,7 @@ def main() -> None:
     settings.setup_environment()
 
     # Apply language overrides
-    if getattr(args, "language", None):
+    if args.language:
         settings.runtime.language = args.language
     if settings.runtime.language:
         set_locale(settings.runtime.language)
@@ -57,13 +60,10 @@ def main() -> None:
     set_tool_timeout(settings.runtime.builtin_tool_timeout)
 
     try:
-        if args.command:
-            handle_cli_commands(args, settings)
-            return
+        if not args.command:
+            ensure_model_configured(settings)
 
-        ensure_model_configured(settings)
-
-        if args.prompt:
+        if args.command or args.prompt:
             handle_cli_commands(args, settings)
             return
 
@@ -76,7 +76,7 @@ def main() -> None:
         try:
             asyncio.run(repl.run())
         except KeyboardInterrupt:
-            pass
+            raise SystemExit(130)
     except (ModelCapabilityError, ModelContextWindowError) as exc:
         console = Console()
         console.print(f"[red]{_('Error: {exc}', exc=exc)}[/red]")

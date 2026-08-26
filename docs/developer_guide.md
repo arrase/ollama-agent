@@ -20,12 +20,22 @@ source .venv/bin/activate
 
 ### 3. Install in Editable Mode
 ```bash
+# Basic installation
 pip install -e .
+
+# Development installation (includes ruff linter)
+pip install -e ".[dev]"
 ```
 
 ### 4. Optional: Install Documentation Dependencies
 ```bash
 pip install mkdocs-material
+```
+
+### 5. Code Quality & Linting
+Run Ruff to verify code formatting and compliance with project standards:
+```bash
+.venv/bin/ruff check .
 ```
 
 ---
@@ -49,8 +59,12 @@ tests/
 ├── test_agents_md.py              # Hierarchical AGENTS.md discovery up to .git root
 ├── test_clipboard.py              # Cross-platform clipboard backend integration
 ├── test_common.py                 # Payload text extraction & identifier validation
+├── test_compaction.py              # SummarizationMiddleware delegation, history offloading & cutoffs
+├── test_compaction_interop.py     # Interop contract with deepagents SummarizationMiddleware internals
 ├── test_config.py                 # Settings loading, dataclass conversions & env injection
 ├── test_dispatch_cli.py           # CLI command handlers and argument parsing
+├── test_episodic_memory.py        # Episodic memory search over stored conversations
+├── test_i18n.py                   # Locale catalog validation & translation loading
 ├── test_interfaces_commands.py    # Session, model, task, skill, and RAG dispatching
 ├── test_mcp_loader.py             # MCP server configs, env expansions & connection handling
 ├── test_models.py                 # Capability checks, context window resolution & reasoning
@@ -101,6 +115,9 @@ ollama-agent/
 │   ├── agent/               # DeepAgents graph orchestration, middleware, tools & subagents
 │   │   ├── agent.py         # AgentRuntime lifecycle, backend mounting, graph construction
 │   │   ├── builtin_tools.py # Built-in tools (rag_search) and runtime context variables
+│   │   ├── compaction.py    # Manual compaction delegating to deepagents SummarizationMiddleware
+│   │   ├── environment.py   # Shared prompt-environment helpers (OS, CWD, datetime)
+│   │   ├── episodic_memory.py # Episodic memory search engine over past conversations
 │   │   ├── middleware.py    # Tool call event streaming & execution timeout protection
 │   │   └── subagents.py     # SubAgentSettings to DeepAgents subagent specification builder
 │   ├── core/                # Model capability checks, context resolution, prompt processing
@@ -108,6 +125,9 @@ ollama-agent/
 │   │   ├── models.py        # ChatOllama initialization, tool checks, reasoning mapping
 │   │   ├── prompt_processor.py # @-mention parsing, path resolution, multimodal encoding
 │   │   └── resource_manager.py # Generic BaseFileStoreManager for tasks and skills
+│   ├── i18n/                # Internationalization engine and translation catalogs
+│   │   ├── __init__.py      # Translation loader, _() helper, locale negotiation
+│   │   └── locales/         # JSON translation catalogs (15 languages: ar, de, es, fr, hi, it, ja, ko, nl, pl, pt, ru, tr, uk, zh)
 │   ├── interfaces/          # User interface implementations (CLI & Textual REPL)
 │   │   ├── cli.py           # Argparse setup, command-line dispatch, non-interactive mode
 │   │   ├── clipboard.py     # OS clipboard integration (macOS, Wayland, X11, Windows)
@@ -118,14 +138,19 @@ ollama-agent/
 │   │   ├── repl.py          # Interactive Textual REPL application & autocomplete
 │   │   └── repl.css         # Styling for Textual REPL interface
 │   ├── mcp/                 # Model Context Protocol integration
+│   │   ├── commands.py      # MCP status inspection (/mcp and mcp list)
 │   │   └── loader.py        # MultiServerMCPClient loader with env expansion
 │   ├── rag/                 # Local RAG engine
 │   │   ├── commands.py      # CLI/REPL RAG command handlers
-│   │   ├── manager.py       # Qdrant client, chunking, Ollama embeddings pipeline
-│   │   └── settings.py      # RAGSettings dataclass
+│   │   └── manager.py       # Qdrant client, chunking, Ollama embeddings pipeline
 │   ├── settings/            # Configuration management
-│   │   ├── config.py        # YAML configuration loader, prompt scaffold, reset logic
-│   │   └── paths.py         # Centralized filesystem constants (~/.ollama-agent/)
+│   │   ├── config.py        # YAML configuration loader, dataclasses (ModelSettings, RAGSettings), reset logic
+│   │   ├── paths.py         # Centralized filesystem constants (~/.ollama-agent/)
+│   │   └── prompts/         # Bundled markdown prompt templates
+│   │       ├── default_instructions.md
+│   │       ├── fs_policy_sandboxed.md
+│   │       ├── fs_policy_traversal.md
+│   │       └── rag_policy.md
 │   ├── skills/              # Agent Skills implementation
 │   │   ├── builtin/         # Internal application skills (skill-creator, task-creator)
 │   │   ├── commands.py      # Skill CLI and REPL handlers
@@ -134,15 +159,17 @@ ollama-agent/
 │   │   ├── base.py          # Abstract StreamingRenderer
 │   │   ├── console_renderer.py # Rich live console renderer for CLI output
 │   │   ├── events.py        # stream_agent_events and non-interactive runner
+│   │   ├── interrupts.py    # Tool interrupt and human approval streaming handlers
 │   │   └── parsers.py       # streaming_text and streaming_reasoning chunk parsers
 │   └── tasks/               # Saved task management
 │       ├── commands.py      # Task CLI and REPL handlers
 │       └── manager.py       # TaskManager and Task YAML serializer
-├── tests/                   # Automated unit test suite
+├── tests/                   # Automated unit test suite (25 test modules)
 ├── docs/                    # MkDocs documentation source files
 ├── mkdocs.yml               # MkDocs configuration
 ├── AGENTS.md                # Development guidelines and coding conventions
 ├── pyproject.toml           # Project dependencies and packaging metadata
+├── LICENSE                  # MIT license file
 └── README.md                # Project documentation overview
 ```
 

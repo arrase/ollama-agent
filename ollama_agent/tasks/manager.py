@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import logging
 import os
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -19,8 +18,6 @@ from ..core import (
 )
 from ..i18n import _
 from ..settings.paths import TASKS_DIR
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -41,14 +38,13 @@ class Task:
             title=d["title"],
             prompt=d["prompt"],
             model=d["model"],
-            reasoning_effort=d.get("reasoning_effort", DEFAULT_REASONING_EFFORT),
+            reasoning_effort=d["reasoning_effort"],
         )
 
 
 class TaskManager(BaseFileStoreManager[Task]):
     """Manages task persistence using YAML files."""
 
-    DEFAULT_DIR = TASKS_DIR
     _ext: str = ".yaml"
 
     def __init__(self, tasks_dir: Path = TASKS_DIR) -> None:
@@ -74,46 +70,29 @@ class TaskManager(BaseFileStoreManager[Task]):
 
     def find_matches(self, prefix: str) -> list[tuple[str, Task]]:
         """Return all tasks whose id starts with prefix."""
-        if not (prefix := prefix.strip()):
-            return []
-        if (task := self.get(prefix)) is not None:  # Fast-path: exact match
-            return [(prefix, task)]
+        prefix = self.validate_task_id(prefix)
+        try:
+            return [(prefix, self.get(prefix))]
+        except FileNotFoundError:
+            pass
         return [
-            (p.stem, t)
-            for p in self.base_dir.iterdir()
-            if p.is_file() and p.suffix == ".yaml" and p.stem.startswith(prefix) and (t := self.get(p.stem)) is not None
+            (p.stem, self.get(p.stem))
+            for p in self.base_dir.glob(f"{prefix}*.yaml")
         ]
 
-    def get(self, item_id: str) -> Task | None:
-        """Retrieve a task by ID."""
-        path = self._path(item_id)
+    def get(self, item_id: str) -> Task:
+        """Retrieve a task by ID. Raise FileNotFoundError if missing."""
+        path = self._path(self.validate_task_id(item_id))
         if not path.exists():
-            return None
-        try:
-            raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-            if not isinstance(raw, dict):
-                return None
-            return Task.from_dict(raw)
-        except (yaml.YAMLError, KeyError, TypeError, OSError) as e:
-            logger.error("Error loading task %s: %s", item_id, e)
-            return None
+            raise FileNotFoundError(str(path))
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        return Task.from_dict(raw)
 
-    def delete(self, item_id: str) -> bool:
-        """Delete a task by ID."""
-        try:
-            self._path(item_id).unlink()
-            return True
-        except FileNotFoundError:
-            return False
-        except OSError as e:
-            logger.error("Error deleting task %s: %s", item_id, e)
-            return False
+    def delete(self, item_id: str) -> None:
+        """Delete a task by ID. Raise FileNotFoundError if missing."""
+        self._path(self.validate_task_id(item_id)).unlink()
 
     def list_all(self) -> list[tuple[str, Task]]:
         """List all tasks sorted by title."""
-        tasks = [
-            (p.stem, t)
-            for p in self.base_dir.glob("*.yaml")
-            if (t := self.get(p.stem)) is not None
-        ]
+        tasks = [(p.stem, self.get(p.stem)) for p in self.base_dir.glob("*.yaml")]
         return sorted(tasks, key=lambda x: x[1].title.lower())

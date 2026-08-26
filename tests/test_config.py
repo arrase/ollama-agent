@@ -100,15 +100,27 @@ class TestConfigManagement(unittest.TestCase):
         self.assertEqual(len(loaded.subagents[0].mcp_servers), 1)
         self.assertEqual(loaded.subagents[0].mcp_servers[0].name, "git")
 
-    def test_model_repetition_penalty_alias(self) -> None:
+    def test_unknown_setting_keys_raise_value_error(self) -> None:
         raw = {
             "model": {
                 "name": "llama3.2:3b",
                 "repetition_penalty": 1.3,
             }
         }
-        s = Settings.from_dict(raw)
-        self.assertEqual(s.model.repeat_penalty, 1.3)
+        with self.assertRaises(ValueError) as ctx:
+            Settings.from_dict(raw)
+        self.assertIn("repetition_penalty", str(ctx.exception))
+
+    def test_empty_rag_dir_raises_value_error(self) -> None:
+        with self.assertRaises(ValueError):
+            Settings.from_dict({"rag": {"rag_dir": ""}})
+
+    def test_load_settings_non_mapping_raises_value_error(self) -> None:
+        self.settings_file.write_text("just-a-scalar\n", encoding="utf-8")
+        with self.assertRaises(ValueError) as ctx:
+            load_settings(self.settings_file)
+        self.assertIn("YAML mapping", str(ctx.exception))
+        self.assertIn(str(self.settings_file), str(ctx.exception))
 
     def test_model_and_subagent_context_window_max(self) -> None:
         raw = {
@@ -237,6 +249,12 @@ class TestConfigManagement(unittest.TestCase):
         loaded = load_instructions(instructions_file)
         self.assertEqual(loaded, custom_prompt)
         self.assertEqual(instructions_file.read_text(encoding="utf-8"), custom_prompt)
+
+    def test_load_instructions_returns_empty_file_content_as_is(self) -> None:
+        instructions_file = Path(self.temp_dir.name) / "instructions.md"
+        instructions_file.write_text("", encoding="utf-8")
+
+        self.assertEqual(load_instructions(instructions_file), "")
 
     def test_reset_config_options(self) -> None:
         with self.assertRaises(ValueError):

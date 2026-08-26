@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import mimetypes
 import shutil
 import uuid
 from pathlib import Path
@@ -87,11 +86,8 @@ class RAGManager:
             is_active = path.name == self._current_db
             chunks = None
             if is_active and self._client is not None:
-                try:
-                    info = self._client.get_collection(self.COLLECTION_NAME)
-                    chunks = info.points_count
-                except Exception as e:
-                    logger.debug("Could not get points count for collection: %s", e)
+                info = self._client.get_collection(self.COLLECTION_NAME)
+                chunks = info.points_count
             dbs.append(
                 {
                     "name": path.name,
@@ -126,13 +122,13 @@ class RAGManager:
         logger.info("Created RAG database: %s", name)
         return name
 
-    def delete_database(self, name: str) -> bool:
+    def delete_database(self, name: str) -> None:
         """Delete a RAG database."""
         name = self._validate_name(name)
         db_path = self._db_path(name)
 
         if not db_path.exists():
-            return False
+            raise RAGError(_("Database '{name}' not found", name=name))
 
         # Unload if currently active
         if self._current_db == name:
@@ -141,7 +137,6 @@ class RAGManager:
         # Remove directory
         shutil.rmtree(db_path)
         logger.info("Deleted RAG database: %s", name)
-        return True
 
     def load_database(self, name: str) -> str:
         """Load a RAG database for use."""
@@ -183,15 +178,14 @@ class RAGManager:
         if not content.strip():
             raise RAGError(_("File is empty: {file_path}", file_path=file_path))
 
-        # Remove any previously indexed chunks for this file to avoid stale points
-        # when chunking changes (e.g., file edits, config changes).
-        self._delete_source_points(client, str(path))
-
         # Chunk the content
         chunks = self._chunk_text(content)
 
-        # Generate embeddings in batch and store
+        # Generate embeddings in batch and store. Old points are deleted only
+        # after embeddings succeed, so a failure never loses indexed content.
         embeddings = await self._get_embeddings(chunks)
+        self._delete_source_points(client, str(path))
+
         points: list[PointStruct] = []
         for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=True)):
             point_id = self._generate_point_id(str(path), i)
@@ -215,7 +209,6 @@ class RAGManager:
         return {
             "file": str(path),
             "chunks": len(chunks),
-            "database": self._current_db,
         }
 
     async def add_directory(
@@ -233,7 +226,7 @@ class RAGManager:
         if not path.is_dir():
             raise RAGError(_("Not a directory: {dir_path}", dir_path=dir_path))
 
-        results: dict[str, Any] = {"added": 0, "failed": 0, "skipped": 0, "files": []}
+        results: dict[str, Any] = {"added": 0, "failed": 0, "skipped": 0}
 
         all_file_chunks = []
         valid_files = []
@@ -257,9 +250,6 @@ class RAGManager:
             except Exception as e:
                 logger.warning("Failed to process %s: %s", file_path, e)
                 results["failed"] += 1
-
-        if not valid_files:
-            return results
 
         if not valid_files:
             return results
@@ -317,19 +307,11 @@ class RAGManager:
 
         # Populate results for successful files
         for fpath, chunks in all_file_chunks:
-            source_str = str(fpath)
-            if source_str in failed_sources:
+            if str(fpath) in failed_sources:
                 results["failed"] += 1
                 continue
 
             results["added"] += 1
-            results["files"].append(
-                {
-                    "file": source_str,
-                    "chunks": len(chunks),
-                    "database": self._current_db,
-                }
-            )
             logger.info(
                 "Added file to RAG from batch: %s (%d chunks)", fpath.name, len(chunks)
             )
@@ -341,7 +323,7 @@ class RAGManager:
     ) -> list[dict[str, Any]]:
         """Search the RAG database for relevant documents."""
         client = self._ensure_loaded()
-        limit = top_k or self.settings.default_top_k
+        limit = self.settings.default_top_k if top_k is None else top_k
 
         # Get query embedding
         query_embedding = await self._get_embedding(query)
@@ -353,7 +335,6 @@ class RAGManager:
             limit=limit,
             with_payload=True,
         )
-        results = response.points
 
         return [
             {
@@ -363,8 +344,7 @@ class RAGManager:
                 "score": hit.score,
                 "chunk_index": hit.payload["chunk_index"],
             }
-            for hit in results
-            if hit.payload is not None
+            for hit in response.points
         ]
 
     async def _get_embedding(self, text: str) -> list[float]:
@@ -374,8 +354,6 @@ class RAGManager:
 
     async def _get_embeddings(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a batch of texts using Ollama."""
-        if not texts:
-            return []
         try:
             client = ollama.AsyncClient(host=self.settings.embedder_base_url)
             response = await client.embed(
@@ -425,6 +403,11 @@ class RAGManager:
         chunk_size = self.settings.chunk_size
         overlap = self.settings.chunk_overlap
 
+        if chunk_size <= 0 or overlap < 0:
+            raise RAGError(
+                _("Invalid chunk configuration: chunk_size={chunk_size}, chunk_overlap={chunk_overlap}", chunk_size=chunk_size, chunk_overlap=overlap)
+            )
+
         if len(text) <= chunk_size:
             return [text]
 
@@ -454,22 +437,13 @@ class RAGManager:
         return chunks
 
     def _read_file(self, path: Path) -> str:
-        """Read file content, handling different encodings."""
-        # Check if it's a text/code file
+        """Read file content as UTF-8."""
         if path.suffix.lower() not in SUPPORTED_RAG_EXTENSIONS:
-            mime_type, _encoding = mimetypes.guess_type(str(path))
-            if mime_type and not mime_type.startswith(
-                ("text/", "application/json", "application/xml")
-            ):
-                raise RAGError(_("Unsupported file type: {mime_type}", mime_type=mime_type))
-
-        for encoding in ["utf-8", "cp1252", "latin-1"]:
-            try:
-                return path.read_text(encoding=encoding)
-            except UnicodeDecodeError:
-                continue
-
-        raise RAGError(_("Could not decode file: {path}", path=path))
+            raise RAGError(_("Unsupported file type: {file_path}", file_path=path))
+        try:
+            return path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as e:
+            raise RAGError(_("Could not decode file: {path}", path=path)) from e
 
     @staticmethod
     def _validate_name(name: str) -> str:

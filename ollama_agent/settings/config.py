@@ -90,10 +90,6 @@ class RAGSettings:
     chunk_size: int = 500
     chunk_overlap: int = 50
 
-    def __post_init__(self) -> None:
-        if not self.rag_dir:
-            self.rag_dir = str(RAG_DIR)
-
 
 @dataclass(slots=True)
 class SubAgentMCPServer:
@@ -145,9 +141,8 @@ class Settings:
     langsmith: LangSmithSettings = field(default_factory=LangSmithSettings)
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any] | None) -> Self:
-        raw = raw or {}
-        return cls(
+    def from_dict(cls, raw: dict[str, Any]) -> Self:
+        settings = cls(
             model=_dataclass_from_dict(ModelSettings, raw.get("model")),
             runtime=_dataclass_from_dict(RuntimeSettings, raw.get("runtime")),
             rag=_dataclass_from_dict(RAGSettings, raw.get("rag")),
@@ -155,13 +150,16 @@ class Settings:
             subagents=_subagents_from_list(raw.get("subagents")),
             langsmith=_dataclass_from_dict(LangSmithSettings, raw.get("langsmith")),
         )
+        if not settings.rag.rag_dir:
+            raise ValueError(_("Setting 'rag.rag_dir' must be a non-empty string"))
+        return settings
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["model"] = {k: v for k, v in d["model"].items() if v is not None}
         ls = d["langsmith"]
         if not any(ls.values()):
-            d.pop("langsmith", None)
+            d.pop("langsmith")
         return d
 
     def setup_environment(self) -> None:
@@ -184,11 +182,11 @@ class Settings:
 def _dataclass_from_dict(cls: type[Any], raw: dict[str, Any] | None) -> Any:
     if raw is None:
         return cls()
-    data = dict(raw)
-    if "repetition_penalty" in data and "repeat_penalty" not in data:
-        data["repeat_penalty"] = data.pop("repetition_penalty")
     valid = {f.name for f in fields(cls)}
-    return cls(**{k: v for k, v in data.items() if k in valid})
+    unknown = set(raw) - valid
+    if unknown:
+        raise ValueError(_("Unknown setting keys: {keys}", keys=sorted(unknown)))
+    return cls(**raw)
 
 
 def _subagents_from_list(
@@ -222,6 +220,10 @@ def load_settings(settings_path: Path = SETTINGS_PATH) -> Settings:
         return settings
 
     raw = yaml.safe_load(settings_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(raw, dict):
+        raise ValueError(
+            _("Settings file must contain a YAML mapping: {path}", path=settings_path)
+        )
     return Settings.from_dict(raw)
 
 
@@ -246,8 +248,7 @@ def _load_prompt_file(file_path: Path, default_factory: Callable[[], str]) -> st
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(default_text + "\n", encoding="utf-8")
         return default_text
-    content = file_path.read_text(encoding="utf-8").strip()
-    return content if content else default_factory()
+    return file_path.read_text(encoding="utf-8").strip()
 
 
 def load_instructions(instructions_path: Path = INSTRUCTIONS_PATH) -> str:

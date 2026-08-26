@@ -1,11 +1,8 @@
 """Skills management package."""
 
 from .commands import (
-    AmbiguousSkillError,
     SkillError,
-    SkillNotFoundError,
     SkillsContext,
-    ValidationError,
     create_skill,
     delete_skill,
     list_skills,
@@ -18,9 +15,6 @@ __all__ = [
     "SkillManager",
     "SkillsContext",
     "SkillError",
-    "SkillNotFoundError",
-    "AmbiguousSkillError",
-    "ValidationError",
     "create_skill",
     "delete_skill",
     "list_skills",

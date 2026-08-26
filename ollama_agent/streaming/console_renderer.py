@@ -13,6 +13,7 @@ from rich.padding import Padding
 
 from ..i18n import _
 from .base import StreamingRenderer
+from .interrupts import extract_action_requests
 
 if TYPE_CHECKING:
     from ..agent import AgentRuntime
@@ -28,7 +29,6 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         self._banner_shown = False
         self._reasoning = False
         self._live_active = False
-        self._rendered_reasoning = ""
 
     def _toggle_live(self, start: bool) -> None:
         if start and not self._live_active:
@@ -62,20 +62,8 @@ class ConsoleStreamingRenderer(StreamingRenderer):
             self.console.print(f"\n  [bold magenta]🧠 {_('Thinking')}[/bold magenta]")
             self.console.print("  [dim magenta]│[/dim magenta] ", end="")
             self._reasoning = True
-            self._rendered_reasoning = ""
 
-        # Determine the new delta to print (handles both cumulative and pure delta backends)
-        if self._rendered_reasoning and content.startswith(self._rendered_reasoning):
-            delta = content[len(self._rendered_reasoning):]
-            self._rendered_reasoning = content
-        else:
-            delta = content
-            self._rendered_reasoning += content
-
-        if not delta:
-            return
-
-        parts = delta.split("\n")
+        parts = content.split("\n")
         for i, part in enumerate(parts):
             if i > 0:
                 self.console.print("\n  [dim magenta]│[/dim magenta] ", end="")
@@ -98,9 +86,8 @@ class ConsoleStreamingRenderer(StreamingRenderer):
 
     def on_tool_output(self, event: dict[str, Any]) -> None:
         self._toggle_live(False)
-        out_len = event.get("output_len")
         prefix = self._agent_prefix(event)
-        suffix = f" ({_('{output_len} chars', output_len=out_len)})" if out_len is not None else ""
+        suffix = f" ({_('{output_len} chars', output_len=event['output_len'])})"
         self.console.print(
             f"  [dim cyan]✓ {prefix}{_('Tool output received')}{suffix}[/dim cyan]\n"
         )
@@ -123,18 +110,13 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         self._toggle_live(False)
         self._end_reasoning()
 
-        interrupts = event.get("interrupts", [])
-        if not interrupts:
-            return None
+        action_requests = extract_action_requests(event)
 
         self.console.print(f"\n  [bold yellow]⚠️ {_('Sensitive Tool Approval Required')}[/bold yellow]")
 
-        interrupt_val = interrupts[0].value
-        action_requests = interrupt_val.get("action_requests", [])
-
         for req in action_requests:
             name = req["name"]
-            args = req.get("args", {})
+            args = req["args"]
             self.console.print(f"  {_('Tool:')} [bold]{name}[/bold]")
             self.console.print(f"  {_('Arguments:')} {args}")
 
@@ -156,11 +138,11 @@ class ConsoleStreamingRenderer(StreamingRenderer):
                 elif choice == "n":
                     return [{
                         "type": "reject",
-                        "message": _("User rejected executing tool '{name}'.", name=r["name"])
-                    } for r in action_requests]
+                        "message": _("User rejected executing tool '{name}'.", name=req["name"])
+                    } for req in action_requests]
                 elif choice == "a":
-                    for req in action_requests:
-                        runtime.auto_approved_tools.add(req["name"])
+                    for r in action_requests:
+                        runtime.auto_approved_tools.add(r["name"])
                     return [{"type": "approve"} for _ in action_requests]
                 elif choice == "c":
                     self.console.print(f"  [red]✗ {_('Cancelled')}[/red]\n")

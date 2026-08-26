@@ -16,10 +16,14 @@ Subclasses must supply:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Generic, TypeVar
 
+from ..i18n import _
+
 T = TypeVar("T")
+E = TypeVar("E", bound=Exception)
 
 
 class BaseFileStoreManager(ABC, Generic[T]):
@@ -49,8 +53,8 @@ class BaseFileStoreManager(ABC, Generic[T]):
     # ------------------------------------------------------------------
 
     @abstractmethod
-    def get(self, item_id: str) -> T | None:
-        """Retrieve a resource by *item_id*, or return None if it doesn't exist."""
+    def get(self, item_id: str) -> T:
+        """Retrieve a resource by *item_id*. Raise FileNotFoundError if missing."""
 
     @abstractmethod
     def find_matches(self, prefix: str) -> list[tuple[str, T]]:
@@ -61,5 +65,30 @@ class BaseFileStoreManager(ABC, Generic[T]):
         """Return all items sorted."""
 
     @abstractmethod
-    def delete(self, item_id: str) -> bool:
-        """Delete item by id. Returns ``True`` on success."""
+    def delete(self, item_id: str) -> None:
+        """Delete item by id. Raise FileNotFoundError if it doesn't exist."""
+
+
+def require_text(value: str, name: str, error: type[E]) -> str:
+    """Return *value* stripped, raising *error* if it is empty."""
+    if not (cleaned := value.strip()):
+        raise error(_("{name} cannot be empty.", name=name))
+    return cleaned
+
+
+def resolve_unique_match(
+    matches: Sequence[tuple[str, T]],
+    prefix: str,
+    *,
+    label: str,
+    not_found_error: type[E],
+    ambiguous_error: type[E],
+) -> tuple[str, T]:
+    """Return the only match for *prefix* or raise the matching domain error."""
+    if len(matches) == 1:
+        return matches[0]
+    if not matches:
+        raise not_found_error(_("{label} not found: {prefix}", label=label, prefix=prefix))
+    raise ambiguous_error(
+        _("Ambiguous prefix: {name} -> {matches}", name=prefix, matches=", ".join(m[0] for m in matches))
+    )
