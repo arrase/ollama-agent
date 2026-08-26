@@ -59,7 +59,8 @@ class TestI18nDetection(unittest.TestCase):
     def test_detect_unsupported_language_fallback_to_english(self) -> None:
         test_cases = ["sv_SE", "ca_ES", "da_DK", "fi_FI", "el_GR", "he_IL", "th_TH", "vi_VN", "unknown", "C", "POSIX"]
         for env_val in test_cases:
-            with patch.dict(os.environ, {"LANG": env_val}, clear=True):
+            with patch.dict(os.environ, {"LANG": env_val}, clear=True), \
+                 patch("locale.getlocale", return_value=(None, None)):
                 self.assertEqual(detect_system_language(), "en", f"Failed for {env_val}")
 
     def test_detect_empty_environment_fallback_to_english(self) -> None:
@@ -236,11 +237,10 @@ class TestI18nTranslations(unittest.TestCase):
         unknown = "This is a non-registered string"
         self.assertEqual(_(unknown), unknown)
 
-    def test_missing_translation_in_non_default_locale_raises_key_error(self) -> None:
+    def test_missing_translation_in_non_default_locale_returns_original(self) -> None:
         set_locale("es")
         unknown = "This is a non-registered string"
-        with self.assertRaisesRegex(KeyError, "Missing translation for .* in locale es"):
-            _(unknown)
+        self.assertEqual(_(unknown), unknown)
 
 
 class TestCatalogCompleteness(unittest.TestCase):

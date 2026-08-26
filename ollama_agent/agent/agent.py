@@ -109,6 +109,7 @@ class AgentRuntime:
     _exit_stack: contextlib.AsyncExitStack = field(
         default_factory=contextlib.AsyncExitStack, init=False, repr=False
     )
+    _init_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
 
     async def __aenter__(self) -> Self:
         return self
@@ -258,10 +259,11 @@ class AgentRuntime:
     async def _ensure_graph(self, thread_id: str = "") -> tuple[Any, str, dict[str, Any]]:
         """Resolve the thread, lazily build the graph, and return (graph, thread, config)."""
         thread = thread_id or self.thread_id
-        if self.graph is None:
-            await self.reload()
-        if self.graph is None:
-            raise RuntimeError(_("Agent graph is not initialized"))
+        async with self._init_lock:
+            if self.graph is None:
+                await self.reload()
+            if self.graph is None:
+                raise RuntimeError(_("Agent graph is not initialized"))
         config: dict[str, Any] = {"configurable": {"thread_id": thread}}
         return self.graph, thread, config
 

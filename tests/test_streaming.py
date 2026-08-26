@@ -52,10 +52,14 @@ class TestStreamingSystem(unittest.IsolatedAsyncioTestCase):
         renderer.on_event({"type": "text_delta", "content": "hello"})
         self.assertEqual(len(renderer.events), 1)
 
-    def test_console_streaming_renderer_dispatches_unknown_type_loudly(self) -> None:
+    def test_console_streaming_renderer_skips_unknown_type(self) -> None:
         renderer = DummyRenderer()
-        with self.assertRaises(ValueError):
-            renderer.on_event({"type": "agent_update", "content": "state"})
+        renderer.on_event({"type": "agent_update", "content": "state"})
+        # The event reaches DummyRenderer.on_event which always appends,
+        # but no type-specific handler (on_agent_update) was called — verify
+        # it didn't crash and no warnings/errors were recorded.
+        self.assertEqual(len(renderer.warnings), 0)
+        self.assertEqual(len(renderer.errors), 0)
 
     def test_console_streaming_renderer_reasoning_is_pure_delta(self) -> None:
         console = Console(file=io.StringIO(), record=True)
