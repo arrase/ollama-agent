@@ -1,12 +1,14 @@
-# Skills, Tasks & Persistent Memory (`AGENTS.md` & `MEMORY.md`)
+# Skills, Tasks & Persistent Memory
 
-This document covers core capabilities that enable `ollama-agent` to adapt, automate repetitive routines, retain project context, preserve long-term user memory, and recall past experiences:
+This document covers core capabilities that enable `ollama-agent` to adapt, automate repetitive routines, retain project context, preserve long-term user memory, checkpoint chat sessions, and recall past experiences:
 
 1. **Agent Skills System** (Adhering to the Agent Skills specification)
 2. **Task Automation System** (Pre-configured prompt templates and models)
-3. **Project Agent Guidelines** (`AGENTS.md` standard integration)
-4. **Long-Term Persistent Memory** (`MEMORY.md` cross-session integration)
-5. **Episodic Memory & Past Conversations** (`search_past_conversations` tool and `/session search`)
+3. **Repository Project Guidelines** (`AGENTS.md` standard integration)
+4. **Global Agent Guidelines** (`~/.ollama-agent/AGENTS.md`)
+5. **Long-Term Persistent Memory** (`MEMORY.md` cross-session integration)
+6. **Session History & Checkpointing** (`history.db` SQLite persistence)
+7. **Episodic Memory & Past Conversations** (`search_past_conversations` tool and `/session search`)
 
 ---
 
@@ -17,12 +19,12 @@ This document covers core capabilities that enable `ollama-agent` to adapt, auto
 ### Progressive Disclosure Pattern
 To conserve context window budget, skill instructions are not loaded into the system prompt upfront. Instead:
 
-- **Level 1 (Discovery)**: The agent system prompt is mounted with access to the `/skills/` directory route. Only skill names and short descriptions (truncated to 1,024 characters) are exposed during prompt evaluation.
-- **Level 2 (Execution)**: When the agent determines that a task matches a skill's description, it reads the skill's `SKILL.md` file on-demand via filesystem tools to follow its instructions.
+- **Level 1 (Discovery)**: The agent system prompt is mounted with access to skill directories. Only skill names and short descriptions (truncated to 1,024 characters) are exposed during prompt evaluation.
+- **Level 2 (Execution)**: When the agent determines that a task matches a skill's description, it reads the skill's `SKILL.md` file (and executes helper scripts in `scripts/`) on-demand via filesystem tools.
 
-### `SKILL.md` Directory Format & YAML Frontmatter
+### `SKILL.md` Directory Format & Standard Layout
 
-Skills are stored as subdirectories containing a mandatory `SKILL.md` file:
+Skills are stored as modular directories containing a mandatory `SKILL.md` file and optional supporting assets:
 
 ```text
 ~/.ollama-agent/skills/
@@ -30,14 +32,19 @@ Skills are stored as subdirectories containing a mandatory `SKILL.md` file:
 │   └── SKILL.md
 └── web-scraper/
     ├── SKILL.md
-    └── scraper.py
+    ├── scripts/
+    │   └── scraper.py
+    ├── references/
+    │   └── schema.json
+    └── examples/
+        └── sample.html
 ```
 
 #### `SKILL.md` Example:
 ```markdown
 ---
 name: API Design Guidelines
-description: Guidelines and best practices for designing RESTful and OpenAPI compliant APIs.
+description: Guidelines and best practices for designing RESTful and OpenAPI compliant APIs. Use when creating or modifying REST endpoints.
 ---
 
 # API Design Guidelines
@@ -49,11 +56,16 @@ description: Guidelines and best practices for designing RESTful and OpenAPI com
 ```
 
 #### Specification Constraints:
-- **Maximum File Size**: `SKILL.md` files must not exceed 10 MB (`_MAX_SKILL_SIZE`).
+- **Maximum File Size**: `SKILL.md` files must not exceed 10 MB.
 - **YAML Frontmatter**: Placed between `---` delimiters at the very top of `SKILL.md`.
   - **`name`** (*string*, required): Human-readable name of the skill.
-  - **`description`** (*string*, required): Purpose of the skill (truncated to 1024 chars for discovery).
+  - **`description`** (*string*, required): Detailed description explaining what the skill does AND when to trigger it.
   - **`metadata`** (*object*, optional): Custom key-value pairs.
+
+### Virtual Skill Roots
+The runtime mounts two virtual skill routes in `CompositeBackend`:
+1. `/system_skills/`: Built-in application skills bundled with `ollama-agent` (`skill-creator`, `task-creator`).
+2. `/skills/`: User skills stored in `~/.ollama-agent/skills/`.
 
 ### Skill Management Commands
 
@@ -63,8 +75,13 @@ Skills can be managed via the CLI or REPL slash commands:
 | :--- | :--- | :--- | :--- |
 | **List Skills** | `ollama-agent skill list` | `/skill list` (or `/skill`) | List all available skills and descriptions. |
 | **Show Skill** | `ollama-agent skill show <id>` | `/skill show <id>` | View raw contents and instructions of `SKILL.md`. |
-| **Create Skill** | `ollama-agent skill create <id> --name <n> --description <d> --instructions <i> [--force]` | `/skill create <id>` *(conversational flow)* | Create a new skill directory and `SKILL.md`. |
+| **Create Skill** | `ollama-agent skill create <id> --name <n> --description <d> --instructions <i> [--force]` | `/skill create [<id>]` | Interactive conversational creation flow with the agent. |
 | **Delete Skill** | `ollama-agent skill delete <id>` | `/skill delete <id>` | Delete a skill directory permanently. |
+
+> [!TIP]
+> **Conversational Creation (`/skill create`)**: When you run `/skill create` in the REPL, the agent uses the built-in `skill-creator` system skill to interview you, determine if helper scripts are required, write `SKILL.md`, and scaffold directory assets automatically.
+>
+> **Tab Autocompletion**: In the REPL, `/skill show ` and `/skill delete ` autocomplete discovered skill IDs and names.
 
 ---
 
@@ -74,7 +91,7 @@ Tasks represent saved, re-executable automation routines containing pre-defined 
 
 ### Task Storage Format (`~/.ollama-agent/tasks/<task_id>.yaml`)
 
-Tasks are stored as individual YAML files under `~/.ollama-agent/tasks/`:
+Tasks are stored as individual YAML files under `~/.ollama-agent/tasks/` and mounted under the virtual route `/tasks/`:
 
 ```yaml
 title: "Repository Tree Analyzer"
@@ -86,7 +103,7 @@ reasoning_effort: "medium"
 #### Task Data Model Fields:
 - **`title`**: Descriptive title of the task.
 - **`prompt`**: Instruction prompt to execute.
-- **`model`**: Ollama model designated for this task.
+- **`model`**: Optional Ollama model designated for this task (inherits active session model if omitted).
 - **`reasoning_effort`**: Reasoning effort setting (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`).
 
 ### Task Management Commands
@@ -94,7 +111,7 @@ reasoning_effort: "medium"
 | Action | CLI Command | REPL Slash Command | Description |
 | :--- | :--- | :--- | :--- |
 | **List Tasks** | `ollama-agent task list` | `/task list` (or `/task`) | List all saved tasks. |
-| **Create Task** | `ollama-agent task create <id> --title <t> --task-prompt <p> [-m <model>] [-e <effort>] [--force]` | `/task create <id>` *(conversational flow)* | Save a new task template. |
+| **Create Task** | `ollama-agent task create <id> --title <t> --task-prompt <p> [--task-model <m>] [--task-effort <e>] [--force]` | `/task create [<id>]` | Save a new task template via CLI or interactive interview. |
 | **Run Task** | `ollama-agent task run <id> [-y]` | `/task run <id> [-y]` | Execute a saved task non-interactively or in REPL. |
 | **Delete Task** | `ollama-agent task delete <id>` | `/task delete <id>` | Delete a saved task definition. |
 
@@ -103,12 +120,13 @@ When running a task (`task run <id>` or `/task run <id>`):
 1. `TaskManager` resolves the task ID or prefix.
 2. The runtime temporarily overrides `settings.model.name` and `settings.model.reasoning_effort` with the values defined in the task.
 3. The prompt is streamed non-interactively or inside the interactive REPL session with live tool tracking.
+4. When execution finishes, prior session parameters and YOLO state are safely restored.
 
 ---
 
-## 3. Project Guidelines (`AGENTS.md`)
+## 3. Repository Project Guidelines (`AGENTS.md`)
 
-`ollama-agent` natively supports the open **`AGENTS.md` standard** (governed by the Agentic AI Foundation / Linux Foundation) for repository-level agent guidelines and coding standards.
+`ollama-agent` natively supports the open **`AGENTS.md` standard** for repository-level agent guidelines and coding standards.
 
 ```mermaid
 flowchart TD
@@ -133,13 +151,23 @@ When `AgentRuntime` starts or reloads:
 2. If not found in `cwd`, it traverses upward through parent directories until the repository root (marked by `.git`) or filesystem boundary.
 3. If found in an ancestor directory, `AgentRuntime` mounts the repository root to `/project/` in the virtual composite backend and loads `/project/AGENTS.md`.
 4. If found in `cwd`, it is loaded directly as `/AGENTS.md`.
-5. If a global `~/.ollama-agent/AGENTS.md` exists, it is loaded alongside project guidelines as `/agent/AGENTS.md`.
+5. If not found, `/AGENTS.md` is added to memory sources so the agent can create it if requested.
 
 ---
 
-## 4. Long-Term Persistent Memory (`MEMORY.md`)
+## 4. Global Agent Guidelines (`~/.ollama-agent/AGENTS.md`)
 
-`ollama-agent` supports persistent memory across sessions using a structured markdown file stored at `~/.ollama-agent/MEMORY.md`.
+For personal preferences and coding standards that apply across all projects, `ollama-agent` supports a global guidelines file:
+
+- **Location**: `~/.ollama-agent/AGENTS.md`
+- **Mount Route**: `/agent/AGENTS.md`
+- **Behavior**: Loaded into the agent's memory context on every run, complementing repository-specific `AGENTS.md` files without requiring modifications to individual git repositories.
+
+---
+
+## 5. Long-Term Persistent Memory (`MEMORY.md`)
+
+`ollama-agent` supports persistent user memory across sessions using a structured markdown file stored at `~/.ollama-agent/MEMORY.md`.
 
 ### Architecture & Mounting
 During startup (`AgentRuntime._build_graph`):
@@ -173,7 +201,30 @@ sequenceDiagram
 
 ---
 
-## 5. Episodic Memory & Past Conversations
+## 6. Session History & Checkpointing (`history.db`)
+
+Session persistence is handled by `AsyncSqliteSaver` from `langgraph-checkpoint-sqlite`, storing checkpoints and message history in `~/.ollama-agent/history.db`.
+
+### SQLite Checkpointer Architecture
+- **`checkpoints` Table**: Tracks graph state, thread configuration, and execution step versions.
+- **`writes` Table**: Stores channel updates (`messages`, task outputs) serialized via LangChain's `JsonPlusSerializer`.
+
+### Session Management Commands
+
+| Action | CLI Command | REPL Slash Command | Description |
+| :--- | :--- | :--- | :--- |
+| **List Sessions** | `ollama-agent session list` | `/session list` | List all saved chat sessions with step counts and timestamps. |
+| **Resume Session** | — | `/session resume <id>` (alias: `/session switch <id>`) | Resume a previous session by thread ID or prefix, restoring chat messages into the viewport. |
+| **New Session** | — | `/session new` (alias: `/new`, `/clear`) | Reset context to a fresh session ID and clear the viewport. |
+| **Export Session** | `ollama-agent session export <id> -o <path>` | `/session export [path]` | Export multi-turn conversation and tool calls to Markdown. |
+| **Delete Session** | `ollama-agent session delete <id>` | `/session delete <id>` | Delete checkpoints and writes for a session from SQLite. |
+
+### Prompt History Navigation
+User prompts stored in `history.db` are automatically loaded into the REPL input history at startup via `load_past_user_prompts()`, allowing seamless `↑` / `↓` recall across sessions.
+
+---
+
+## 7. Episodic Memory & Past Conversations
 
 Episodic memory captures records of past experiences, decisions, and troubleshooting dialogues across conversation threads. Unlike semantic memory (which distills preferences into files like `MEMORY.md`), episodic memory preserves conversation turns and actions so the agent can look back at *how* problems were solved previously.
 
