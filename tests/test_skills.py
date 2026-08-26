@@ -124,6 +124,7 @@ class TestSkillsManager(unittest.TestCase):
     def test_builtin_skills_present_and_valid(self) -> None:
         self.assertTrue((BUILTIN_SKILLS_DIR / "skill-creator" / "SKILL.md").is_file())
         self.assertTrue((BUILTIN_SKILLS_DIR / "task-creator" / "SKILL.md").is_file())
+        self.assertTrue((BUILTIN_SKILLS_DIR / "mcp-configurator" / "SKILL.md").is_file())
 
         sc = _read_skill(BUILTIN_SKILLS_DIR / "skill-creator")
         self.assertIsNotNone(sc)
@@ -138,6 +139,13 @@ class TestSkillsManager(unittest.TestCase):
         self.assertEqual(tc.name, "task-creator")
         self.assertTrue(len(tc.description) > 0)
         self.assertIn("task_id", tc.content)
+
+        mc = _read_skill(BUILTIN_SKILLS_DIR / "mcp-configurator")
+        self.assertIsNotNone(mc)
+        assert mc is not None
+        self.assertEqual(mc.name, "mcp-configurator")
+        self.assertTrue(len(mc.description) > 0)
+        self.assertIn("mcp.json", mc.content)
 
 
 if __name__ == "__main__":

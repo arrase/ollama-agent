@@ -64,7 +64,7 @@ description: Guidelines and best practices for designing RESTful and OpenAPI com
 
 ### Virtual Skill Roots
 The runtime mounts two virtual skill routes in `CompositeBackend`:
-1. `/system_skills/`: Built-in application skills bundled with `ollama-agent` (`skill-creator`, `task-creator`).
+1. `/system_skills/`: Built-in application skills bundled with `ollama-agent` (`skill-creator`, `task-creator`, `mcp-configurator`).
 2. `/skills/`: User skills stored in `~/.ollama-agent/skills/`.
 
 ### Skill Management Commands

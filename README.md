@@ -39,7 +39,8 @@
   - [Agent Skills Standard](#agent-skills-standard)
   - [Local RAG (Retrieval Augmented Generation)](#local-rag-retrieval-augmented-generation)
 - [Extensibility: MCP & Custom Subagents](#extensibility-mcp--custom-subagents)
-  - [MCP Servers (Main Agent)](#mcp-servers-main-agent)
+  - [MCP Servers & Scopes](#mcp-servers--scopes)
+  - [Main Agent MCP Configuration](#main-agent-mcp-configuration-ollama-agentmcpjson)
   - [Custom Subagents](#custom-subagents)
 - [Configuration & Customization](#configuration--customization)
   - [Configuration File (`settings.yaml`)](#configuration-file-settingsyaml)
@@ -574,22 +575,31 @@ ollama-agent --rag project-docs -p "How is authentication handled in this projec
 
 ## Extensibility: MCP & Custom Subagents
 
-### MCP Servers (Main Agent)
+### MCP Servers & Scopes
 
-Extend the primary agent with tools from external [Model Context Protocol](https://modelcontextprotocol.io/) servers. Configured tools are injected directly into the orchestrator.
+Extend Ollama Agent with external tools, databases, and third-party APIs via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). In `ollama-agent`, MCP servers can be configured in two distinct scopes:
 
-Create `~/.ollama-agent/mcp.json`:
+| Scope | Configuration File | Description |
+| :--- | :--- | :--- |
+| **Main Agent (Global)** | `~/.ollama-agent/mcp.json` | Tools loaded into the primary agent orchestrator and available in all general chat turns. |
+| **Subagents (Scoped)** | `~/.ollama-agent/settings.yaml` | Tools attached exclusively to specific subagents, isolating tool schemas and execution context. |
+
+---
+
+### Main Agent MCP Configuration (`~/.ollama-agent/mcp.json`)
+
+Global MCP servers are defined in JSON format under the `"mcpServers"` object in `~/.ollama-agent/mcp.json`:
 
 ```json
 {
   "mcpServers": {
-    "tavily-remote": {
-      "type": "http",
-      "url": "https://mcp.tavily.com/mcp/?tavilyApiKey=..."
-    },
     "filesystem": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/documents"]
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/documents"],
+      "cwd": "/home/user/documents",
+      "env": {
+        "DEBUG": "true"
+      }
     },
     "brave-search": {
       "command": "npx",
@@ -598,17 +608,45 @@ Create `~/.ollama-agent/mcp.json`:
         "BRAVE_API_KEY": "${BRAVE_API_KEY}"
       }
     },
-    "remote-server": {
-      "url": "http://localhost:8000/mcp"
+    "git": {
+      "command": "uvx",
+      "args": ["mcp-server-git"]
+    },
+    "remote-api": {
+      "type": "http",
+      "url": "https://mcp.example.com/api",
+      "headers": {
+        "Authorization": "Bearer ${API_KEY}"
+      },
+      "timeout": 30,
+      "sse_read_timeout": 300
+    },
+    "sse-server": {
+      "transport": "sse",
+      "url": "http://localhost:8000/sse"
     }
   }
 }
 ```
 
-- **Supported Transports**: `stdio` (subprocess execution), plus `http` (default for bare `url` entries), `sse`, `websocket`, and `streamable_http` (remote endpoints).
-- **Environment Substitution**: `${VAR_NAME}` (and `%VAR_NAME%`) syntax injects host environment variables; if a required variable is unset, loading fails with a configuration error.
-- **Parallel Tool Loading**: All configured MCP servers are initialized concurrently at startup; loading is fail-fast — an unreachable or misconfigured server aborts startup with an error.
-- **Server Status Inspection**: Run `/mcp` in the interactive REPL or `ollama-agent mcp list` from the CLI to check connection status, health, and discovered tools with color-coded status badges (`● Active` / `● Failed`) for both main orchestrator and subagent MCP servers.
+#### Supported Transports & Options:
+- **Standard I/O Subprocess (`stdio`)**:
+  - `command` (*string*, required): Executable command (e.g. `npx`, `uvx`, `python`, `node`, `docker`).
+  - `args` (*array of strings*, optional): Command-line arguments.
+  - `cwd` (*string*, optional): Working directory for the process.
+  - `env` (*object*, optional): Environment variables with dynamic `${VAR}` and `%VAR%` expansion.
+  - `transport` (*string*, optional): Defaults to `"stdio"` when `command` is present.
+- **Remote Network Transports (`http`, `sse`, `websocket`, `streamable_http`)**:
+  - `url` / `httpUrl` (*string*, required): Target server URL endpoint.
+  - `transport` / `type` (*string*, optional): `"http"`, `"sse"`, `"websocket"`, `"streamable_http"`, or `"streamable-http"` (defaults to `"http"`).
+  - `headers` (*object*, optional): Custom HTTP headers (e.g. authorization tokens).
+  - `timeout` (*number*, optional): Request timeout in seconds.
+  - `sse_read_timeout` (*number*, optional): SSE stream read timeout in seconds.
+
+#### Key Features:
+- **Environment Variable Expansion**: Values in `"env"` blocks and `"headers"` support `${VAR_NAME}` and `%VAR_NAME%` syntax, resolved dynamically from `os.environ`. Unset variables trigger immediate fail-fast errors to prevent silent configuration issues.
+- **Built-in `mcp-configurator` Skill**: The agent is equipped with a built-in system skill that guides you through adding, updating, and troubleshooting MCP servers interactively.
+- **Server Health & Tool Inspection**: Run `/mcp` (or `/mcp list`) in the REPL or `ollama-agent mcp list` in the CLI to inspect connection health, transports, and discovered tools with color-coded badges (`● Active` / `● Failed`).
 
 ---
 
