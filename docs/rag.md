@@ -10,15 +10,15 @@ The RAG subsystem is managed by `RAGManager` (`ollama_agent/rag/manager.py`) and
 
 ```mermaid
 flowchart LR
-    Docs["Source Files (.py, .md, .txt, etc.)"] -->|Strict UTF-8 Read| Text["Document Text"]
-    Text -->|Paragraph/Sentence Boundary Aware| Chunks["Text Chunks"]
-    Chunks -->|Ollama Async API| Embedder["nomic-embed-text (768d)"]
-    Embedder -->|Vector Embeddings| Qdrant[("Local Qdrant Storage (~/.ollama-agent/rag/)")]
+    Docs["Source Files (.py, .md, .txt, etc.)"] -->|"Strict UTF-8 Read"| Text["Document Text"]
+    Text -->|"Paragraph/Sentence Boundary Aware"| Chunks["Text Chunks"]
+    Chunks -->|"Ollama Async API"| Embedder["nomic-embed-text (768d)"]
+    Embedder -->|"Vector Embeddings"| Qdrant[("Local Qdrant Storage (~/.ollama-agent/rag/)")]
     
-    UserQuery["User Prompt"] -->|Agent Decision| ToolCall["rag_search Tool"]
-    ToolCall -->|Embed Query| Embedder
-    Embedder -->|Search Vector (Cosine)| Qdrant
-    Qdrant -->|Top-K Context Chunks| AgentContext["Agent Response Generator"]
+    UserQuery["User Prompt"] -->|"Agent Decision"| ToolCall["rag_search Tool"]
+    ToolCall -->|"Embed Query"| Embedder
+    Embedder -->|"Search Vector (Cosine)"| Qdrant
+    Qdrant -->|"Top-K Context Chunks"| AgentContext["Agent Response Generator"]
 ```
 
 ### Document Ingestion & Encoding Support

@@ -11,9 +11,9 @@ The Model Context Protocol (MCP) is an open standard that enables AI agents to s
 ```mermaid
 flowchart LR
     A["ollama-agent Orchestrator"] --> B["MultiServerMCPClient"]
-    B -->|stdio subprocess| C["Filesystem / Git MCP Server"]
-    B -->|stdio subprocess| D["Brave Search MCP Server"]
-    B -->|http / SSE / WebSocket| E["Remote Enterprise API MCP Server"]
+    B -->|"stdio subprocess"| C["Filesystem / Git MCP Server"]
+    B -->|"stdio subprocess"| D["Brave Search MCP Server"]
+    B -->|"http / SSE / WebSocket"| E["Remote Enterprise API MCP Server"]
 ```
 
 ### Configuration File: `~/.ollama-agent/mcp.json`
@@ -123,7 +123,7 @@ Subagents are auxiliary AI agent instances configured to handle specialized subt
 
 ```mermaid
 flowchart TD
-    MainAgent["Main Agent (ollama-agent)"] -->|Delegates Task| SubagentGraph["Subagent Graph"]
+    MainAgent["Main Agent (ollama-agent)"] -->|"Delegates Task"| SubagentGraph
     
     subgraph SubagentGraph ["Subagent Execution Environment"]
         SubModel["Custom Ollama Model Instance"]

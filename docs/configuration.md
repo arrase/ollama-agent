@@ -147,14 +147,14 @@ To guarantee optimal context utilization without exceeding model memory boundari
 
 ```mermaid
 flowchart TD
-    A[Start Context Resolution] --> B{Configured Value?}
-    B -- Explicit int > 0 --> C[Use Configured Value]
-    B -- 'max' / Unset --> D[Fetch Model Metadata via `ollama.show()`]
-    D --> E{Structured `model_info` Key?}
-    E -- Found `*.context_length` --> F[Use `context_length` Metadata]
-    E -- Not Found --> G{Modelfile / Parameter `num_ctx`?}
-    G -- Matched via Regex --> H[Use Parsed `num_ctx` Value]
-    G -- Not Found --> I[Raise `ModelContextWindowError`]
+    A["Start Context Resolution"] --> B{"Configured Value?"}
+    B -- "Explicit int > 0" --> C["Use Configured Value"]
+    B -- "'max' / Unset" --> D["Fetch Model Metadata via ollama.show()"]
+    D --> E{"Structured model_info Key?"}
+    E -- "Found *.context_length" --> F["Use context_length Metadata"]
+    E -- "Not Found" --> G{"Modelfile / Parameter num_ctx?"}
+    G -- "Matched via Regex" --> H["Use Parsed num_ctx Value"]
+    G -- "Not Found" --> I["Raise ModelContextWindowError"]
 ```
 
 1. **Explicit Numeric Configuration Override**: If `model.context_window` in `settings.yaml` (or CLI argument) is explicitly defined (> 0), its value is used directly.
