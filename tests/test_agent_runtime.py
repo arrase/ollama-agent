@@ -305,7 +305,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             await runtime._build_graph()
             kwargs = mock_cda.call_args.kwargs
             self.assertIn(rag_search, kwargs["tools"])
-            self.assertEqual(kwargs["skills"], ["/system_skills/", "/skills/"])
+            self.assertEqual(kwargs["skills"], [("/system_skills/", "Built-in"), ("/skills/", "User")])
 
         # When RAG is inactive
         mock_mgr.current_database = None

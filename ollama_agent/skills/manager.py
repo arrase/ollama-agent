@@ -12,7 +12,7 @@ import yaml  # type: ignore[import-untyped]
 
 from ..core import BaseFileStoreManager, validate_identifier
 from ..i18n import _
-from ..settings.paths import SKILLS_DIR
+from ..settings.paths import BUILTIN_SKILLS_DIR, SKILLS_DIR
 
 # Maximum SKILL.md size (10 MB) as per spec.
 _MAX_SKILL_SIZE = 10 * 1024 * 1024
@@ -70,20 +70,40 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
 
     _ext: str = ""
 
-    def __init__(self, skills_dir: Path = SKILLS_DIR) -> None:
+    def __init__(
+        self,
+        skills_dir: Path = SKILLS_DIR,
+        builtin_skills_dir: Path | None = BUILTIN_SKILLS_DIR,
+    ) -> None:
         super().__init__(skills_dir)
+        self.builtin_dir = builtin_skills_dir.resolve() if builtin_skills_dir is not None else None
 
     @staticmethod
     def validate_skill_id(skill_id: str) -> str:
         """Validate skill_id: letters, numbers, underscore, dash only."""
         return validate_identifier(skill_id, "skill_id")
 
+    def _collect_skills(self, prefix: str = "") -> dict[str, SkillInfo]:
+        """Collect all skills matching *prefix*, allowing user skills to override built-ins."""
+        skills: dict[str, SkillInfo] = {}
+        if self.builtin_dir is not None and self.builtin_dir.is_dir():
+            for d in self.builtin_dir.iterdir():
+                if d.is_dir() and d.name.startswith(prefix):
+                    skills[d.name] = _read_skill(d)
+        for d in self.base_dir.iterdir():
+            if d.is_dir() and d.name.startswith(prefix):
+                skills[d.name] = _read_skill(d)
+        return skills
+
     def get(self, item_id: str) -> SkillInfo:
         """Load a single skill by ID. Raise FileNotFoundError if missing."""
-        skill_dir = self._path(self.validate_skill_id(item_id))
-        if not skill_dir.is_dir():
-            raise FileNotFoundError(str(skill_dir))
-        return _read_skill(skill_dir)
+        valid_id = self.validate_skill_id(item_id)
+        user_dir = self._path(valid_id)
+        if user_dir.is_dir():
+            return _read_skill(user_dir)
+        if self.builtin_dir is not None and (self.builtin_dir / valid_id).is_dir():
+            return _read_skill(self.builtin_dir / valid_id)
+        raise FileNotFoundError(str(user_dir))
 
     def find_matches(self, prefix: str) -> list[tuple[str, SkillInfo]]:
         """Return all skills whose id starts with *prefix*."""
@@ -92,20 +112,11 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
             return [(prefix, self.get(prefix))]
         except FileNotFoundError:
             pass
-        return [
-            (d.name, _read_skill(d))
-            for d in self.base_dir.iterdir()
-            if d.is_dir() and d.name.startswith(prefix)
-        ]
+        return sorted(self._collect_skills(prefix).items(), key=lambda x: x[1].name.lower())
 
     def list_all(self) -> list[tuple[str, SkillInfo]]:
         """List all skills sorted by name."""
-        skills = [
-            (d.name, _read_skill(d))
-            for d in self.base_dir.iterdir()
-            if d.is_dir()
-        ]
-        return sorted(skills, key=lambda x: x[1].name.lower())
+        return sorted(self._collect_skills().items(), key=lambda x: x[1].name.lower())
 
     def create(
         self,
@@ -135,4 +146,11 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
 
     def delete(self, item_id: str) -> None:
         """Delete a skill directory entirely. Raise FileNotFoundError if missing."""
-        shutil.rmtree(self._path(self.validate_skill_id(item_id)))
+        valid_id = self.validate_skill_id(item_id)
+        user_dir = self._path(valid_id)
+        if user_dir.is_dir():
+            shutil.rmtree(user_dir)
+            return
+        if self.builtin_dir is not None and (self.builtin_dir / valid_id).is_dir():
+            raise ValueError(_("Built-in skills cannot be deleted: {name}", name=valid_id))
+        raise FileNotFoundError(str(user_dir))

@@ -18,7 +18,7 @@ class TestSkillsManager(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.skills_dir = Path(self.temp_dir.name)
-        self.mgr = SkillManager(self.skills_dir)
+        self.mgr = SkillManager(self.skills_dir, builtin_skills_dir=None)
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
@@ -146,6 +146,31 @@ class TestSkillsManager(unittest.TestCase):
         self.assertEqual(mc.name, "mcp-configurator")
         self.assertTrue(len(mc.description) > 0)
         self.assertIn("mcp.json", mc.content)
+
+    def test_builtin_skills_loading_and_override(self) -> None:
+        mgr_with_builtin = SkillManager(self.skills_dir, builtin_skills_dir=BUILTIN_SKILLS_DIR)
+        all_skills = mgr_with_builtin.list_all()
+        self.assertEqual(len(all_skills), 3)
+        self.assertEqual(mgr_with_builtin.get("skill-creator").name, "skill-creator")
+
+        # User skill overrides builtin skill with same ID
+        mgr_with_builtin.create(
+            "skill-creator",
+            name="Overridden Skill Creator",
+            description="Custom",
+            instructions="Custom instructions",
+        )
+        self.assertEqual(mgr_with_builtin.get("skill-creator").name, "Overridden Skill Creator")
+        self.assertEqual(len(mgr_with_builtin.list_all()), 3)
+
+        # Deleting the user override restores the built-in skill
+        mgr_with_builtin.delete("skill-creator")
+        self.assertEqual(mgr_with_builtin.get("skill-creator").name, "skill-creator")
+
+    def test_delete_builtin_skill_raises(self) -> None:
+        mgr_with_builtin = SkillManager(self.skills_dir, builtin_skills_dir=BUILTIN_SKILLS_DIR)
+        with self.assertRaises(ValueError):
+            mgr_with_builtin.delete("skill-creator")
 
 
 if __name__ == "__main__":

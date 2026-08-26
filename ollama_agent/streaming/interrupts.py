@@ -26,18 +26,18 @@ def extract_action_requests(interrupt_event: Mapping[str, Any]) -> list[dict[str
         ValueError: If the interrupt payload is malformed.
     """
     interrupts = interrupt_event.get("interrupts")
-    if not isinstance(interrupts, list) or not interrupts:
-        raise ValueError("Malformed interrupt event: 'interrupts' must be a non-empty list")
+    if not isinstance(interrupts, (list, tuple)) or not interrupts:
+        raise ValueError("Malformed interrupt event: 'interrupts' must be a non-empty list or tuple")
 
     value = getattr(interrupts[0], "value", None)
     if not isinstance(value, Mapping):
         raise ValueError("Malformed interrupt payload: first interrupt has no mapping 'value'")
 
     action_requests = value.get("action_requests")
-    if not isinstance(action_requests, list) or not action_requests:
-        raise ValueError("Malformed interrupt payload: 'action_requests' must be a non-empty list")
+    if not isinstance(action_requests, (list, tuple)) or not action_requests:
+        raise ValueError("Malformed interrupt payload: 'action_requests' must be a non-empty list or tuple")
 
     for req in action_requests:
         if not isinstance(req, dict) or "name" not in req or "args" not in req:
             raise ValueError(f"Malformed action request: {req!r}")
-    return action_requests
+    return list(action_requests)

@@ -413,5 +413,6 @@
   "Context": "संदर्भ",
   "MCP Servers": "MCP सर्वर",
   "inherited": "विरासत में मिला",
-  "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "उप-कमांड पर अधिक विवरण देखने के लिए 'ollama-agent agents <subcommand> -h' चलाएँ।"
+  "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "उप-कमांड पर अधिक विवरण देखने के लिए 'ollama-agent agents <subcommand> -h' चलाएँ।",
+  "Built-in skills cannot be deleted: {name}": "अंतर्निहित कौशल हटाए नहीं जा सकते: {name}"
 }

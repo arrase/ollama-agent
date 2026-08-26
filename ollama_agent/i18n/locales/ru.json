@@ -413,5 +413,6 @@
   "Context": "Контекст",
   "MCP Servers": "Серверы MCP",
   "inherited": "унаследовано",
-  "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "Запустите 'ollama-agent agents <subcommand> -h' для получения подробной информации о подкоманде."
+  "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "Запустите 'ollama-agent agents <subcommand> -h' для получения подробной информации о подкоманде.",
+  "Built-in skills cannot be deleted: {name}": "Встроенные навыки нельзя удалить: {name}"
 }

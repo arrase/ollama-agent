@@ -9,6 +9,7 @@ from rich.console import Console
 
 from ollama_agent.skills.commands import (
     AmbiguousSkillError,
+    SkillError,
     SkillNotFoundError,
     SkillsContext,
     ValidationError,
@@ -25,7 +26,7 @@ class TestSkillsCommands(unittest.TestCase):
 
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
-        self.mgr = SkillManager(skills_dir=Path(self.temp_dir.name))
+        self.mgr = SkillManager(skills_dir=Path(self.temp_dir.name), builtin_skills_dir=None)
         self.console = Console(file=io.StringIO(), record=True)
         self.ctx = SkillsContext(console=self.console, skill_manager=self.mgr)
 
@@ -75,8 +76,17 @@ class TestSkillsCommands(unittest.TestCase):
         with self.assertRaises(SkillNotFoundError):
             self.ctx._find_or_exit("nonexistent")
 
+        with self.assertRaises(ValidationError):
+            self.ctx._find_or_exit("invalid/name")
+
         create_skill(self.ctx, "test-1", name="T1", description="D1", instructions="I1")
         create_skill(self.ctx, "test-2", name="T2", description="D2", instructions="I2")
 
         with self.assertRaises(AmbiguousSkillError):
             self.ctx._find_or_exit("test")
+
+    def test_delete_builtin_skill_fails(self) -> None:
+        mgr = SkillManager(skills_dir=Path(self.temp_dir.name))
+        ctx = SkillsContext(console=self.console, skill_manager=mgr)
+        with self.assertRaises(SkillError):
+            delete_skill(ctx, "skill-creator")
