@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 #: Virtual skill mount points exposed by the CompositeBackend.
-SKILL_ROOTS: list[str] = ["/system_skills/", "/skills/"]
+SKILL_ROOTS: list[str | tuple[str, str]] = [("/system_skills/", "Built-in"), ("/skills/", "User")]
 
 
 def environment_block(*, include_cwd: bool) -> str:

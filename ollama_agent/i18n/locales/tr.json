@@ -413,5 +413,6 @@
   "Context": "Bağlam",
   "MCP Servers": "MCP Sunucuları",
   "inherited": "devralındı",
-  "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "Bir alt komut hakkında daha fazla ayrıntı için 'ollama-agent agents <subcommand> -h' komutunu çalıştırın."
+  "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "Bir alt komut hakkında daha fazla ayrıntı için 'ollama-agent agents <subcommand> -h' komutunu çalıştırın.",
+  "Built-in skills cannot be deleted: {name}": "Yerleşik beceriler silinemez: {name}"
 }

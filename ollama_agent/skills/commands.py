@@ -38,8 +38,12 @@ class SkillsContext:
     skill_manager: SkillManager = field(default_factory=SkillManager)
 
     def _find_or_exit(self, skill_id: str) -> tuple[str, SkillInfo]:
+        try:
+            matches = self.skill_manager.find_matches(skill_id)
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
         return resolve_unique_match(
-            self.skill_manager.find_matches(skill_id),
+            matches,
             skill_id,
             label=_("Skill"),
             not_found_error=SkillNotFoundError,
@@ -104,5 +108,8 @@ def create_skill(
 def delete_skill(ctx: SkillsContext, skill_id: str) -> None:
     """Delete an existing skill."""
     sid, info = ctx._find_or_exit(skill_id)
-    ctx.skill_manager.delete(sid)
+    try:
+        ctx.skill_manager.delete(sid)
+    except ValueError as exc:
+        raise SkillError(str(exc)) from exc
     ctx.console.print(f"[green]✓ {_('Skill deleted: {name} ({sid})', name=info.name, sid=sid)}[/green]")

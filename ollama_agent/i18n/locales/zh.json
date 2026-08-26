@@ -413,5 +413,6 @@
   "Context": "上下文",
   "MCP Servers": "MCP 服务器",
   "inherited": "继承",
-  "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "运行 'ollama-agent agents <subcommand> -h' 查看子命令的详细帮助。"
+  "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "运行 'ollama-agent agents <subcommand> -h' 查看子命令的详细帮助。",
+  "Built-in skills cannot be deleted: {name}": "无法删除内置技能：{name}"
 }

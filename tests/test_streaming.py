@@ -248,6 +248,14 @@ class TestExtractActionRequests(unittest.TestCase):
         requests = [{"name": "execute", "args": {"command": "ls"}}]
         self.assertEqual(extract_action_requests(self._event(requests)), requests)
 
+    def test_valid_tuple_payload(self) -> None:
+        requests = ({"name": "write_file", "args": {"file_path": "/test"}},)
+        event = {
+            "type": "interrupt",
+            "interrupts": (SimpleNamespace(value={"action_requests": requests}),),
+        }
+        self.assertEqual(extract_action_requests(event), list(requests))
+
     def test_missing_interrupts_raises(self) -> None:
         with self.assertRaises(ValueError):
             extract_action_requests({"type": "interrupt"})

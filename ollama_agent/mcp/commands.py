@@ -153,6 +153,5 @@ async def reload_mcp_servers(
 ) -> None:
     """Reload MCP servers and rebuild the agent graph."""
     await runtime.reload()
-    console.print(f"[green]✓ {_('MCP servers reloaded successfully.')}[/green]")
     await list_mcp_servers(console, settings=runtime.settings)
 

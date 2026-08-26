@@ -369,7 +369,6 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             await reload_mcp_servers(console, runtime)
             runtime.reload.assert_awaited_once()
             mock_list.assert_awaited_once_with(console, settings=runtime.settings)
-            self.assertIn("MCP servers reloaded successfully.", console.export_text())
 
     async def test_reload_mcp_servers_config_error(self) -> None:
         console = Console(file=io.StringIO(), record=True)

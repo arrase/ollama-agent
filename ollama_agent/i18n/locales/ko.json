@@ -413,5 +413,6 @@
   "Context": "컨텍스트",
   "MCP Servers": "MCP 서버",
   "inherited": "상속됨",
-  "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "서브커맨드에 대한 자세한 내용은 'ollama-agent agents <서브커맨드> -h'를 실행하세요."
+  "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "서브커맨드에 대한 자세한 내용은 'ollama-agent agents <서브커맨드> -h'를 실행하세요.",
+  "Built-in skills cannot be deleted: {name}": "기본 제공 스킬은 삭제할 수 없습니다: {name}"
 }

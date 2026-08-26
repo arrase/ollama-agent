@@ -413,5 +413,6 @@
   "Context": "السياق",
   "MCP Servers": "خوادم MCP",
   "inherited": "موروث",
-  "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "قم بتشغيل 'ollama-agent agents <subcommand> -h' لمزيد من التفاصيل حول أمر فرعي."
+  "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "قم بتشغيل 'ollama-agent agents <subcommand> -h' لمزيد من التفاصيل حول أمر فرعي.",
+  "Built-in skills cannot be deleted: {name}": "لا يمكن حذف المهارات المضمنة: {name}"
 }
