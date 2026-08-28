@@ -254,7 +254,9 @@ class AgentRuntime:
 
     async def _sqlite_checkpointer(self) -> Any:
         saver = AsyncSqliteSaver.from_conn_string(str(HISTORY_DB_PATH))
-        return await self._exit_stack.enter_async_context(saver)
+        checkpointer = await self._exit_stack.enter_async_context(saver)
+        await checkpointer.setup()
+        return checkpointer
 
     async def _ensure_graph(self, thread_id: str = "") -> tuple[Any, str, dict[str, Any]]:
         """Resolve the thread, lazily build the graph, and return (graph, thread, config)."""
