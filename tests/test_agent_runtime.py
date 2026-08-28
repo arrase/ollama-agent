@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import io
+import sqlite3
+import tempfile
 import unittest
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -527,4 +530,23 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(new_event["cutoff_index"], 5)
         self.assertEqual(new_event["file_path"], "/conversation_history/session_fixed.md")
         self.assertIn("session_fixed.md", new_event["summary_message"].content)
+
+    async def test_sqlite_checkpointer_initializes_tables(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "history.db"
+            runtime = AgentRuntime(settings=Settings())
+            with patch("ollama_agent.agent.agent.HISTORY_DB_PATH", db_path):
+                saver = await runtime._sqlite_checkpointer()
+                self.assertIsNotNone(saver)
+                self.assertTrue(db_path.exists())
+
+                conn = sqlite3.connect(str(db_path))
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+                tables = {row[0] for row in cursor.fetchall()}
+                conn.close()
+
+                self.assertIn("writes", tables)
+                self.assertIn("checkpoints", tables)
+            await runtime.aclose()
 
