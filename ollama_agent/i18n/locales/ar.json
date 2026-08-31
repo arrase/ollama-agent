@@ -414,5 +414,15 @@
   "MCP Servers": "خوادم MCP",
   "inherited": "موروث",
   "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "قم بتشغيل 'ollama-agent agents <subcommand> -h' لمزيد من التفاصيل حول أمر فرعي.",
-  "Built-in skills cannot be deleted: {name}": "لا يمكن حذف المهارات المضمنة: {name}"
+  "Built-in skills cannot be deleted: {name}": "لا يمكن حذف المهارات المضمنة: {name}",
+  "Set context window size in tokens (num_ctx) or 'max'": "عيّن حجم نافذة السياق بالرموز (num_ctx) أو 'max'",
+  "Context window set to {context_window}.": "تم ضبط نافذة السياق على {context_window}.",
+  "Show or set context window size (num_ctx)": "اعرض حجم نافذة السياق (num_ctx) أو اضبطه",
+  "Set context window size (e.g. 8192, 16384, max)": "اضبط حجم نافذة السياق (مثال: 8192, 16384, max)",
+  "Usage: /context [<size|max>]": "الاستخدام: /context [<الحجم|max>]",
+  "Current context window: {ctx} (effective: {effective} tokens, model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "نافذة السياق الحالية: {ctx} (الفعلي: {effective} رمزًا، النموذج: {model})\nالاستخدام: /context <الحجم|max> (مثال: 8192, 16384, 32768, max)",
+  "Current context window: {ctx} (model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "نافذة السياق الحالية: {ctx} (النموذج: {model})\nالاستخدام: /context <الحجم|max> (مثال: 8192, 16384, 32768, max)",
+  "Already using context window '{val}'.": "تستخدم نافذة السياق '{val}' بالفعل.",
+  "Switched context window from {current} to {val}{eff_info}\nConversation preserved. Continue chatting.": "تم تبديل نافذة السياق من {current} إلى {val}{eff_info}\nتم حفظ المحادثة. تابع الدردشة.",
+  "Failed to switch context window to '{val}': {exc}": "فشل تبديل نافذة السياق إلى '{val}': {exc}"
 }

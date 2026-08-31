@@ -414,5 +414,15 @@
   "MCP Servers": "MCP Sunucuları",
   "inherited": "devralındı",
   "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "Bir alt komut hakkında daha fazla ayrıntı için 'ollama-agent agents <subcommand> -h' komutunu çalıştırın.",
-  "Built-in skills cannot be deleted: {name}": "Yerleşik beceriler silinemez: {name}"
+  "Built-in skills cannot be deleted: {name}": "Yerleşik beceriler silinemez: {name}",
+  "Set context window size in tokens (num_ctx) or 'max'": "Bağlam penceresi boyutunu belirteç (num_ctx) veya 'max' olarak ayarlayın",
+  "Context window set to {context_window}.": "Bağlam penceresi {context_window} olarak ayarlandı.",
+  "Show or set context window size (num_ctx)": "Bağlam penceresi boyutunu (num_ctx) göster veya ayarla",
+  "Set context window size (e.g. 8192, 16384, max)": "Bağlam penceresi boyutunu ayarlayın (örn. 8192, 16384, max)",
+  "Usage: /context [<size|max>]": "Kullanım: /context [<boyut|max>]",
+  "Current context window: {ctx} (effective: {effective} tokens, model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "Geçerli bağlam penceresi: {ctx} (etkin: {effective} belirteç, model: {model})\nKullanım: /context <boyut|max> (örn. 8192, 16384, 32768, max)",
+  "Current context window: {ctx} (model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "Geçerli bağlam penceresi: {ctx} (model: {model})\nKullanım: /context <boyut|max> (örn. 8192, 16384, 32768, max)",
+  "Already using context window '{val}'.": "Zaten '{val}' bağlam penceresi kullanılıyor.",
+  "Switched context window from {current} to {val}{eff_info}\nConversation preserved. Continue chatting.": "Bağlam penceresi {current} değerinden {val}{eff_info} değerine geçirildi\nSohbet korundu. Sohbete devam edin.",
+  "Failed to switch context window to '{val}': {exc}": "Bağlam penceresi '{val}' değerine geçirilemedi: {exc}"
 }

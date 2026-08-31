@@ -414,5 +414,15 @@
   "MCP Servers": "MCP-Server",
   "inherited": "geerbt",
   "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "Führen Sie 'ollama-agent agents <subcommand> -h' aus, um weitere Details zu einem Unterbefehl anzuzeigen.",
-  "Built-in skills cannot be deleted: {name}": "Integrierte Fähigkeiten können nicht gelöscht werden: {name}"
+  "Built-in skills cannot be deleted: {name}": "Integrierte Fähigkeiten können nicht gelöscht werden: {name}",
+  "Set context window size in tokens (num_ctx) or 'max'": "Kontextfenstergröße in Tokens (num_ctx) oder 'max' festlegen",
+  "Context window set to {context_window}.": "Kontextfenster auf {context_window} gesetzt.",
+  "Show or set context window size (num_ctx)": "Kontextfenstergröße anzeigen oder einstellen (num_ctx)",
+  "Set context window size (e.g. 8192, 16384, max)": "Kontextfenstergröße festlegen (z. B. 8192, 16384, max)",
+  "Usage: /context [<size|max>]": "Verwendung: /context [<Größe|max>]",
+  "Current context window: {ctx} (effective: {effective} tokens, model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "Aktuelles Kontextfenster: {ctx} (effektiv: {effective} Tokens, Modell: {model})\nVerwendung: /context <Größe|max> (z. B. 8192, 16384, 32768, max)",
+  "Current context window: {ctx} (model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "Aktuelles Kontextfenster: {ctx} (Modell: {model})\nVerwendung: /context <Größe|max> (z. B. 8192, 16384, 32768, max)",
+  "Already using context window '{val}'.": "Kontextfenster '{val}' wird bereits verwendet.",
+  "Switched context window from {current} to {val}{eff_info}\nConversation preserved. Continue chatting.": "Kontextfenster von {current} zu {val}{eff_info} gewechselt\nGesprächsverlauf beibehalten. Chat fortsetzen.",
+  "Failed to switch context window to '{val}': {exc}": "Wechsel des Kontextfensters zu '{val}' fehlgeschlagen: {exc}"
 }

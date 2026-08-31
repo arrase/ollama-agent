@@ -414,5 +414,15 @@
   "MCP Servers": "MCP-servers",
   "inherited": "overgeërfd",
   "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "Voer 'ollama-agent agents <subcommand> -h' uit voor meer details over een subopdracht.",
-  "Built-in skills cannot be deleted: {name}": "Ingebouwde vaardigheden kunnen niet worden verwijderd: {name}"
+  "Built-in skills cannot be deleted: {name}": "Ingebouwde vaardigheden kunnen niet worden verwijderd: {name}",
+  "Set context window size in tokens (num_ctx) or 'max'": "Stel de contextvenstergrootte in tokens (num_ctx) of 'max' in",
+  "Context window set to {context_window}.": "Contextvenster ingesteld op {context_window}.",
+  "Show or set context window size (num_ctx)": "Toon of stel de contextvenstergrootte in (num_ctx)",
+  "Set context window size (e.g. 8192, 16384, max)": "Contextvenstergrootte instellen (bijv. 8192, 16384, max)",
+  "Usage: /context [<size|max>]": "Gebruik: /context [<grootte|max>]",
+  "Current context window: {ctx} (effective: {effective} tokens, model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "Huidig contextvenster: {ctx} (effectief: {effective} tokens, model: {model})\nGebruik: /context <grootte|max> (bijv. 8192, 16384, 32768, max)",
+  "Current context window: {ctx} (model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "Huidig contextvenster: {ctx} (model: {model})\nGebruik: /context <grootte|max> (bijv. 8192, 16384, 32768, max)",
+  "Already using context window '{val}'.": "Je gebruikt al contextvenster '{val}'.",
+  "Switched context window from {current} to {val}{eff_info}\nConversation preserved. Continue chatting.": "Contextvenster gewijzigd van {current} naar {val}{eff_info}\nGesprek behouden. Ga door met chatten.",
+  "Failed to switch context window to '{val}': {exc}": "Wijzigen van contextvenster naar '{val}' mislukt: {exc}"
 }
