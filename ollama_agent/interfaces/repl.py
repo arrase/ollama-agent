@@ -41,7 +41,12 @@ from ..rag import RAGContext, RAGManager, load_rag_database
 from ..skills import SkillsContext
 from ..tasks.commands import TaskError, TasksContext, apply_task_settings
 from .dispatch import REPLCommand, build_repl_handlers, safe_call
-from .model_commands import _list_models_sync, set_effort, set_model
+from .model_commands import (
+    _list_models_sync,
+    set_context_window,
+    set_effort,
+    set_model,
+)
 from .session_commands import (
     compact_session,
     export_session,
@@ -78,6 +83,7 @@ def _get_root_commands() -> list[tuple[str, str]]:
     return [
         ("/model", _("Manage models")),
         ("/effort", _("Show or set reasoning/thinking effort")),
+        ("/context", _("Show or set context window size (num_ctx)")),
         ("/params", _("Manage model sampling parameters")),
         ("/session", _("Manage chat sessions")),
         ("/compact", _("Compact conversation history into a summary")),
@@ -100,6 +106,9 @@ def _get_subcommands() -> dict[str, list[tuple[str, str]]]:
         "/model": [
             ("list", _("List available Ollama models")),
             ("set", _("Switch to a different model")),
+        ],
+        "/context": [
+            ("set", _("Set context window size (e.g. 8192, 16384, max)")),
         ],
         "/params": [
             ("list", _("Show active model parameters and resolution sources")),
@@ -386,6 +395,17 @@ class OllamaAgentApp(App):
                     )
                     for m in models
                     if m.model and m.model.startswith(arg_token)
+                ]
+
+            if root_cmd == "/context" and sub_cmd == "set":
+                presets = ["4096", "8192", "16384", "32768", "65536", "131072", "max"]
+                return [
+                    (
+                        f"{root_cmd} {sub_cmd} {p}",
+                        Text.from_markup(f"[bold #e6edf3]{p:<10}[/bold #e6edf3] [dim #8b949e]{_('tokens')}[/dim #8b949e]"),
+                    )
+                    for p in presets
+                    if p.startswith(arg_token)
                 ]
 
             if root_cmd == "/task" and sub_cmd in ("run", "delete"):
@@ -766,7 +786,7 @@ class OllamaAgentApp(App):
             self.update_yolo_ui()
         elif cmd == "/rag" and args and args[0] in ("load", "unload", "delete"):
             await self.repl.runtime.reload()
-        elif cmd in ("/model", "/effort"):
+        elif cmd in ("/model", "/effort", "/context"):
             self.query_one(AgentHeader).update_header()
 
     # ── Streaming chat ────────────────────────────────────────────────────
@@ -859,6 +879,7 @@ class OllamaREPL:
                 get_runtime=lambda: self.runtime,
                 current_thread_id=lambda: self.runtime.thread_id,
                 switch_effort=self._switch_effort,
+                switch_context_window=self._switch_context_window,
             )
         return self._commands
 
@@ -888,6 +909,9 @@ class OllamaREPL:
 
     async def _switch_effort(self, effort: str) -> None:
         await set_effort(self.console, effort, runtime=self.runtime)
+
+    async def _switch_context_window(self, context_window: str) -> None:
+        await set_context_window(self.console, context_window, runtime=self.runtime)
 
     async def _handle_new_session(self, args: list[str]) -> None:
         self.runtime.thread_id = new_session(self.console)

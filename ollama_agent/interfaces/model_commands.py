@@ -12,7 +12,12 @@ from rich.console import Console
 from rich.table import Table
 
 from ..agent import AgentRuntime
-from ..core import ALLOWED_REASONING_EFFORTS, ModelCapabilityError, model_supports_tools
+from ..core import (
+    ALLOWED_REASONING_EFFORTS,
+    ModelCapabilityError,
+    ModelContextWindowError,
+    model_supports_tools,
+)
 from ..i18n import _
 from ..settings import Settings, save_settings
 
@@ -165,6 +170,72 @@ async def set_effort(
         failed_msg = _("Failed to switch reasoning effort to '{norm_effort}': {exc}", norm_effort=norm_effort, exc=exc)
         console.print(f"[red]{failed_msg}[/red]")
         return current
+
+
+def show_context_window(console: Console, runtime: AgentRuntime) -> None:
+    """Print the current context window size and model."""
+    ctx = runtime.settings.model.context_window
+    effective = runtime.effective_context_window
+    model = runtime.settings.model.name
+    if effective and str(effective) != str(ctx):
+        console.print(
+            _(
+                "Current context window: {ctx} (effective: {effective} tokens, model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)",
+                ctx=ctx,
+                effective=effective,
+                model=model,
+            )
+        )
+    else:
+        console.print(
+            _(
+                "Current context window: {ctx} (model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)",
+                ctx=ctx,
+                model=model,
+            )
+        )
+
+
+async def set_context_window(
+    console: Console,
+    context_window: str,
+    *,
+    runtime: AgentRuntime,
+) -> str:
+    """Switch context window size, returning the new context window."""
+    norm = context_window.strip().lower()
+    val: int | str
+    if norm == "max":
+        val = "max"
+    elif norm.isdigit() and int(norm) > 0:
+        val = int(norm)
+    else:
+        err_msg = _("Invalid context_window '{value}'. Expected a positive integer or 'max'.", value=context_window)
+        console.print(f"[red]{err_msg}[/red]")
+        return str(runtime.settings.model.context_window)
+
+    current = runtime.settings.model.context_window
+    if val == current:
+        already_msg = _("Already using context window '{val}'.", val=val)
+        console.print(f"[yellow]{already_msg}[/yellow]")
+        return str(current)
+
+    try:
+        await runtime.set_context_window(val)
+        eff = runtime.effective_context_window
+        eff_info = f" ({eff} tokens)" if eff and str(eff) != str(val) else ""
+        switched_msg = _(
+            "Switched context window from {current} to {val}{eff_info}\nConversation preserved. Continue chatting.",
+            current=current,
+            val=val,
+            eff_info=eff_info,
+        )
+        console.print(f"[green]✓ {switched_msg}[/green]")
+        return str(val)
+    except (ollama.ResponseError, OSError, ValueError, ModelContextWindowError) as exc:
+        failed_msg = _("Failed to switch context window to '{val}': {exc}", val=val, exc=exc)
+        console.print(f"[red]{failed_msg}[/red]")
+        return str(current)
 
 
 def show_model_params(console: Console, runtime: AgentRuntime) -> None:

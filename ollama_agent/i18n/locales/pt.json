@@ -414,5 +414,15 @@
   "MCP Servers": "Servidores MCP",
   "inherited": "herdado",
   "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "Execute 'ollama-agent agents <subcommand> -h' para mais detalhes sobre um subcomando.",
-  "Built-in skills cannot be deleted: {name}": "Não é possível excluir habilidades integradas: {name}"
+  "Built-in skills cannot be deleted: {name}": "Não é possível excluir habilidades integradas: {name}",
+  "Set context window size in tokens (num_ctx) or 'max'": "Definir tamanho da janela de contexto em tokens (num_ctx) ou 'max'",
+  "Context window set to {context_window}.": "Janela de contexto definida como {context_window}.",
+  "Show or set context window size (num_ctx)": "Mostrar ou definir o tamanho da janela de contexto (num_ctx)",
+  "Set context window size (e.g. 8192, 16384, max)": "Definir tamanho da janela de contexto (ex.: 8192, 16384, max)",
+  "Usage: /context [<size|max>]": "Uso: /context [<tamanho|max>]",
+  "Current context window: {ctx} (effective: {effective} tokens, model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "Janela de contexto atual: {ctx} (efetiva: {effective} tokens, modelo: {model})\nUso: /context <tamanho|max> (ex.: 8192, 16384, 32768, max)",
+  "Current context window: {ctx} (model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "Janela de contexto atual: {ctx} (modelo: {model})\nUso: /context <tamanho|max> (ex.: 8192, 16384, 32768, max)",
+  "Already using context window '{val}'.": "Já está usando a janela de contexto '{val}'.",
+  "Switched context window from {current} to {val}{eff_info}\nConversation preserved. Continue chatting.": "Janela de contexto alterada de {current} para {val}{eff_info}\nConversa preservada. Continue conversando.",
+  "Failed to switch context window to '{val}': {exc}": "Falha ao alterar a janela de contexto para '{val}': {exc}"
 }

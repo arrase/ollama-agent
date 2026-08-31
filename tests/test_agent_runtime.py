@@ -550,3 +550,19 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("checkpoints", tables)
             await runtime.aclose()
 
+    async def test_agent_runtime_set_context_window(self) -> None:
+        settings = Settings()
+        runtime = AgentRuntime(settings=settings)
+
+        with patch.object(AgentRuntime, "reload", AsyncMock()) as mock_reload, \
+             patch("ollama_agent.agent.agent.save_settings") as mock_save:
+            res = await runtime.set_context_window(16384)
+            self.assertEqual(runtime.settings.model.context_window, 16384)
+            mock_save.assert_called_once_with(runtime.settings)
+            mock_reload.assert_awaited_once()
+            self.assertIn("16384", res)
+
+            res2 = await runtime.set_context_window("max")
+            self.assertEqual(runtime.settings.model.context_window, "max")
+            self.assertIn("max", res2)
+

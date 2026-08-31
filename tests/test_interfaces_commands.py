@@ -14,9 +14,11 @@ from ollama_agent.interfaces.dispatch import build_repl_handlers, safe_call
 from ollama_agent.interfaces.model_commands import (
     ensure_model_configured,
     list_models,
+    set_context_window,
     set_effort,
     set_model,
     set_model_param,
+    show_context_window,
     show_effort,
     show_model_params,
 )
@@ -42,6 +44,7 @@ def _repl_handler_kwargs(**overrides: object) -> dict:
         "get_runtime": lambda: MagicMock(),
         "current_thread_id": lambda: "",
         "switch_effort": AsyncMock(),
+        "switch_context_window": AsyncMock(),
     }
     kwargs.update(overrides)
     return kwargs
@@ -207,6 +210,95 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime.set_reasoning_effort.assert_awaited_once_with("high")
         self.assertIn("Switched reasoning effort", console.export_text())
 
+    def test_show_context_window(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.settings.model.context_window = "max"
+        runtime.effective_context_window = 131072
+        runtime.settings.model.name = "llama3.2:3b"
+
+        show_context_window(console, runtime)
+        out = console.export_text()
+        self.assertIn("Current context window: max", out)
+        self.assertIn("131072 tokens", out)
+        self.assertIn("llama3.2:3b", out)
+
+    async def test_set_context_window_invalid(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.settings.model.context_window = 10000
+
+        res = await set_context_window(console, "invalid_val", runtime=runtime)
+        self.assertEqual(res, "10000")
+        self.assertIn("Invalid context_window", console.export_text())
+
+        res2 = await set_context_window(console, "0", runtime=runtime)
+        self.assertEqual(res2, "10000")
+        self.assertIn("Invalid context_window", console.export_text())
+
+    async def test_set_context_window_same(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.settings.model.context_window = 16384
+
+        res = await set_context_window(console, "16384", runtime=runtime)
+        self.assertEqual(res, "16384")
+        self.assertIn("Already using context window", console.export_text())
+
+    async def test_set_context_window_success_int(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.settings.model.context_window = 10000
+        runtime.effective_context_window = 16384
+        runtime.set_context_window = AsyncMock()
+
+        res = await set_context_window(console, "16384", runtime=runtime)
+        self.assertEqual(res, "16384")
+        runtime.set_context_window.assert_awaited_once_with(16384)
+        self.assertIn("Switched context window", console.export_text())
+
+    async def test_set_context_window_success_max(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.settings.model.context_window = 10000
+        runtime.effective_context_window = 131072
+        runtime.set_context_window = AsyncMock()
+
+        res = await set_context_window(console, "max", runtime=runtime)
+        self.assertEqual(res, "max")
+        runtime.set_context_window.assert_awaited_once_with("max")
+        self.assertIn("Switched context window", console.export_text())
+
+    async def test_context_dispatch(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.settings.model.context_window = 10000
+        runtime.effective_context_window = 10000
+        runtime.settings.model.name = "llama3.2:3b"
+        switch_context_window = AsyncMock()
+
+        handlers = build_repl_handlers(
+            **_repl_handler_kwargs(
+                console=console,
+                get_runtime=lambda: runtime,
+                switch_context_window=switch_context_window,
+            )
+        )
+
+        # /context without args
+        handlers["/context"].handler([])
+        out = console.export_text()
+        self.assertIn("Current context window", out)
+        self.assertIn("10000", out)
+
+        # /context <size>
+        await safe_call(handlers["/context"].handler, ["16384"], console=console)
+        switch_context_window.assert_awaited_with("16384")
+
+        # /context max
+        await safe_call(handlers["/context"].handler, ["max"], console=console)
+        switch_context_window.assert_awaited_with("max")
+
     def test_show_model_params(self) -> None:
         console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
@@ -324,6 +416,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime = MagicMock()
         switch_model = AsyncMock()
         switch_effort = AsyncMock()
+        switch_context_window = AsyncMock()
 
         handlers = build_repl_handlers(
             **_repl_handler_kwargs(
@@ -337,6 +430,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
                 handle_yolo=lambda _: None,
                 get_runtime=lambda: runtime,
                 switch_effort=switch_effort,
+                switch_context_window=switch_context_window,
             )
         )
 
@@ -358,6 +452,17 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
 
         await safe_call(handlers["/effort"].handler, ["low"], console=console)
         switch_effort.assert_awaited_with("low")
+
+        # 1c. /context handler
+        with patch("ollama_agent.interfaces.dispatch.show_context_window") as mock_show_context:
+            handlers["/context"].handler([])
+            mock_show_context.assert_called_once_with(console, runtime)
+
+        await safe_call(handlers["/context"].handler, ["set", "16384"], console=console)
+        switch_context_window.assert_awaited_with("16384")
+
+        await safe_call(handlers["/context"].handler, ["max"], console=console)
+        switch_context_window.assert_awaited_with("max")
 
         # 2. /task handler (create/run are intercepted inline by the TUI app)
         with patch("ollama_agent.interfaces.dispatch.list_tasks") as mock_list_tasks:

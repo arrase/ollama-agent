@@ -31,7 +31,9 @@ from ..skills import SkillError, SkillsContext, create_skill, delete_skill, list
 from ..tasks.commands import TaskError, TasksContext, create_task, delete_task, list_tasks, run_task
 from .model_commands import (
     list_models,
+    set_context_window,
     set_model_param,
+    show_context_window,
     show_effort,
     show_model_params,
 )
@@ -163,6 +165,7 @@ def build_repl_handlers(
     get_runtime: Callable[[], Any],
     current_thread_id: Callable[[], str],
     switch_effort: Callable[[str], Awaitable[None]],
+    switch_context_window: Callable[[str], Awaitable[None]],
 ) -> dict[str, REPLCommand]:
     """Build the REPL command registry for unified slash commands.
 
@@ -203,6 +206,13 @@ def build_repl_handlers(
             return None
         target = args[1] if args[0] in ("set", "use", "switch") and len(args) > 1 else args[0]
         return switch_effort(target)
+
+    def handle_context(args: list[str]) -> object:
+        if not args:
+            show_context_window(console, get_runtime())
+            return None
+        target = args[1] if args[0] in ("set", "use", "switch") and len(args) > 1 else args[0]
+        return switch_context_window(target)
 
     def handle_params(args: list[str]) -> object:
         if not args or args[0] == "list":
@@ -351,6 +361,12 @@ def build_repl_handlers(
             "Model Management",
             _("Usage: /effort <level>"),
             handle_effort,
+        ),
+        "/context": REPLCommand(
+            _("Show or set context window size (num_ctx)"),
+            "Model Management",
+            _("Usage: /context [<size|max>]"),
+            handle_context,
         ),
         "/params": REPLCommand(
             _("Manage model sampling parameters"),

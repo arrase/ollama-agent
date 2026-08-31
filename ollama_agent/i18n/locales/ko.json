@@ -414,5 +414,15 @@
   "MCP Servers": "MCP 서버",
   "inherited": "상속됨",
   "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "서브커맨드에 대한 자세한 내용은 'ollama-agent agents <서브커맨드> -h'를 실행하세요.",
-  "Built-in skills cannot be deleted: {name}": "기본 제공 스킬은 삭제할 수 없습니다: {name}"
+  "Built-in skills cannot be deleted: {name}": "기본 제공 스킬은 삭제할 수 없습니다: {name}",
+  "Set context window size in tokens (num_ctx) or 'max'": "토큰 단위 컨텍스트 창 크기(num_ctx) 또는 'max' 설정",
+  "Context window set to {context_window}.": "컨텍스트 창이 {context_window}(으)로 설정되었습니다.",
+  "Show or set context window size (num_ctx)": "컨텍스트 창 크기(num_ctx) 표시 또는 설정",
+  "Set context window size (e.g. 8192, 16384, max)": "컨텍스트 창 크기 설정 (예: 8192, 16384, max)",
+  "Usage: /context [<size|max>]": "사용법: /context [<크기|max>]",
+  "Current context window: {ctx} (effective: {effective} tokens, model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "현재 컨텍스트 창: {ctx} (유효: {effective} 토큰, 모델: {model})\n사용법: /context <크기|max> (예: 8192, 16384, 32768, max)",
+  "Current context window: {ctx} (model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "현재 컨텍스트 창: {ctx} (모델: {model})\n사용법: /context <크기|max> (예: 8192, 16384, 32768, max)",
+  "Already using context window '{val}'.": "이미 컨텍스트 창 '{val}'을(를) 사용하고 있습니다.",
+  "Switched context window from {current} to {val}{eff_info}\nConversation preserved. Continue chatting.": "컨텍스트 창을 {current}에서 {val}{eff_info}(으)로 변경했습니다\n대화가 보존됩니다. 계속 채팅하세요.",
+  "Failed to switch context window to '{val}': {exc}": "컨텍스트 창을 '{val}'(으)로 변경하지 못했습니다: {exc}"
 }

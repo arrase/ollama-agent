@@ -414,5 +414,15 @@
   "MCP Servers": "MCP सर्वर",
   "inherited": "विरासत में मिला",
   "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "उप-कमांड पर अधिक विवरण देखने के लिए 'ollama-agent agents <subcommand> -h' चलाएँ।",
-  "Built-in skills cannot be deleted: {name}": "अंतर्निहित कौशल हटाए नहीं जा सकते: {name}"
+  "Built-in skills cannot be deleted: {name}": "अंतर्निहित कौशल हटाए नहीं जा सकते: {name}",
+  "Set context window size in tokens (num_ctx) or 'max'": "टोकन (num_ctx) या 'max' में संदर्भ विंडो का आकार सेट करें",
+  "Context window set to {context_window}.": "संदर्भ विंडो {context_window} पर सेट की गई।",
+  "Show or set context window size (num_ctx)": "संदर्भ विंडो का आकार (num_ctx) दिखाएं या सेट करें",
+  "Set context window size (e.g. 8192, 16384, max)": "संदर्भ विंडो का आकार सेट करें (उदा. 8192, 16384, max)",
+  "Usage: /context [<size|max>]": "उपयोग: /context [<आकार|max>]",
+  "Current context window: {ctx} (effective: {effective} tokens, model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "वर्तमान संदर्भ विंडो: {ctx} (प्रभावी: {effective} टोकन, मॉडल: {model})\nउपयोग: /context <आकार|max> (उदा. 8192, 16384, 32768, max)",
+  "Current context window: {ctx} (model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "वर्तमान संदर्भ विंडो: {ctx} (मॉडल: {model})\nउपयोग: /context <आकार|max> (उदा. 8192, 16384, 32768, max)",
+  "Already using context window '{val}'.": "पहले से ही संदर्भ विंडो '{val}' का उपयोग कर रहे हैं।",
+  "Switched context window from {current} to {val}{eff_info}\nConversation preserved. Continue chatting.": "संदर्भ विंडो को {current} से {val}{eff_info} में बदला गया\nबातचीत सुरक्षित है। चैट जारी रखें।",
+  "Failed to switch context window to '{val}': {exc}": "संदर्भ विंडो को '{val}' में बदलने में विफल: {exc}"
 }

@@ -414,5 +414,15 @@
   "MCP Servers": "Сервери MCP",
   "inherited": "успадковано",
   "Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand.": "Запустіть 'ollama-agent agents <subcommand> -h', щоб дізнатися більше про підкоманду.",
-  "Built-in skills cannot be deleted: {name}": "Вбудовані навички не можна видалити: {name}"
+  "Built-in skills cannot be deleted: {name}": "Вбудовані навички не можна видалити: {name}",
+  "Set context window size in tokens (num_ctx) or 'max'": "Задати розмір контекстного вікна в токенах (num_ctx) або 'max'",
+  "Context window set to {context_window}.": "Контекстне вікно встановлено: {context_window}.",
+  "Show or set context window size (num_ctx)": "Показати або задати розмір контекстного вікна (num_ctx)",
+  "Set context window size (e.g. 8192, 16384, max)": "Задати розмір контекстного вікна (наприклад 8192, 16384, max)",
+  "Usage: /context [<size|max>]": "Використання: /context [<розмір|max>]",
+  "Current context window: {ctx} (effective: {effective} tokens, model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "Поточне контекстне вікно: {ctx} (ефективно: {effective} токенів, модель: {model})\nВикористання: /context <розмір|max> (наприклад 8192, 16384, 32768, max)",
+  "Current context window: {ctx} (model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "Поточне контекстне вікно: {ctx} (модель: {model})\nВикористання: /context <розмір|max> (наприклад 8192, 16384, 32768, max)",
+  "Already using context window '{val}'.": "Контекстне вікно '{val}' уже використовується.",
+  "Switched context window from {current} to {val}{eff_info}\nConversation preserved. Continue chatting.": "Контекстне вікно змінено з {current} на {val}{eff_info}\nРозмову збережено. Продовжуйте спілкування.",
+  "Failed to switch context window to '{val}': {exc}": "Не вдалося змінити контекстне вікно на '{val}': {exc}"
 }

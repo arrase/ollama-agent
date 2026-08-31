@@ -52,6 +52,14 @@ def main() -> None:
         settings.model.name = args.model
     if args.effort:
         settings.model.reasoning_effort = args.effort
+    if args.num_ctx:
+        cleaned_cw = args.num_ctx.strip().lower()
+        if cleaned_cw == "max":
+            settings.model.context_window = "max"
+        elif cleaned_cw.isdigit():
+            settings.model.context_window = int(cleaned_cw)
+        else:
+            settings.model.context_window = args.num_ctx
     if args.builtin_tool_timeout is not None:
         settings.runtime.builtin_tool_timeout = args.builtin_tool_timeout
     if args.allow_traversal is not None:
