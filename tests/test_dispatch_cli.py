@@ -41,12 +41,20 @@ class TestDispatchAndCLI(unittest.TestCase):
 
     def test_argument_parser_flags(self) -> None:
         parser = create_argument_parser()
-        args = parser.parse_args(["-m", "llama3:8b", "-e", "high", "-y", "--prompt", "hello", "--rag", "docs_db"])
+        args = parser.parse_args(["-m", "llama3:8b", "-e", "high", "-c", "16384", "-y", "--prompt", "hello", "--rag", "docs_db"])
         self.assertEqual(args.model, "llama3:8b")
         self.assertEqual(args.effort, "high")
+        self.assertEqual(args.num_ctx, "16384")
         self.assertTrue(args.yolo)
         self.assertEqual(args.prompt, "hello")
         self.assertEqual(args.rag, "docs_db")
+
+    def test_argument_parser_num_ctx(self) -> None:
+        parser = create_argument_parser()
+        args1 = parser.parse_args(["--num-ctx", "32768"])
+        self.assertEqual(args1.num_ctx, "32768")
+        args2 = parser.parse_args(["-c", "max"])
+        self.assertEqual(args2.num_ctx, "max")
 
     def test_argument_parser_runtime_flags(self) -> None:
         parser = create_argument_parser()
@@ -124,6 +132,7 @@ class TestDispatchAndCLI(unittest.TestCase):
             get_runtime=lambda: MagicMock(),
             current_thread_id=lambda: "",
             switch_effort=dummy_async_str,
+            switch_context_window=dummy_async_str,
         )
 
         self.assertNotIn("/help", handlers)
@@ -134,6 +143,8 @@ class TestDispatchAndCLI(unittest.TestCase):
         self.assertNotIn("/compact", handlers)
         self.assertIn("/model", handlers)
         self.assertIn("/effort", handlers)
+        self.assertIn("/context", handlers)
+        self.assertNotIn("/ctx", handlers)
         self.assertIn("/yolo", handlers)
         self.assertIn("/session", handlers)
         self.assertIn("/task", handlers)
@@ -160,6 +171,7 @@ class TestDispatchAndCLI(unittest.TestCase):
             get_runtime=lambda: MagicMock(),
             current_thread_id=lambda: "",
             switch_effort=dummy_async,
+            switch_context_window=dummy_async,
         )
 
         # Inline-intercepted branches are gone from the registry handlers.

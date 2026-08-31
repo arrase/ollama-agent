@@ -429,6 +429,12 @@ class AgentRuntime:
         await self.reload()
         return _("Reasoning effort set to {validated}.", validated=validated)
 
+    async def set_context_window(self, context_window: int | str) -> str:
+        self.settings.model.context_window = context_window
+        await asyncio.to_thread(save_settings, self.settings)
+        await self.reload()
+        return _("Context window set to {context_window}.", context_window=context_window)
+
     async def aclose(self) -> None:
         await self._exit_stack.aclose()
 

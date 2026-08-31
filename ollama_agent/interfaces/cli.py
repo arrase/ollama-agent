@@ -35,6 +35,12 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         help=_("Set reasoning effort level (low, medium, high, xhigh, disabled, hide, enabled)"),
     )
     parser.add_argument(
+        "-c",
+        "--num-ctx",
+        type=str,
+        help=_("Set context window size in tokens (num_ctx) or 'max'"),
+    )
+    parser.add_argument(
         "-t",
         "--builtin-tool-timeout",
         type=int,

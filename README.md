@@ -161,6 +161,7 @@ The REPL provides built-in slash commands for managing models, sessions, tasks, 
 | :--- | :--- | :--- |
 | `/model` | `/model [list \| set <model>]` | List available Ollama models (with tool support indicators) or switch the active model for the current session. |
 | `/effort` | `/effort [<level>]` | Show current reasoning effort or switch the thinking/reasoning effort level (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`) for the active session. |
+| `/context` | `/context [<size\|max>]` | Show current context window or switch context window token size (`num_ctx`) or `'max'` for the active session. |
 | `/params` | `/params [list \| set <parameter> <value>]` | Inspect active sampling parameters and resolution sources, or dynamically update parameter values for the active session. |
 | `/session` | `/session [list \| search <query> \| resume <id> (alias: switch) \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume previous threads, export to Markdown, or delete history. |
 | `/compact` | `/compact` (alias: `/compress`) | Manually compact conversation history into a structured summary to reclaim context window tokens. |
@@ -304,6 +305,7 @@ flowchart LR
 | `--model` | `-m` | `str` | `settings.yaml` | Specify the Ollama model for this session (falls back to interactive selection if unconfigured or missing in Ollama). |
 | `--prompt` | `-p` | `str` | `None` | Run in non-interactive mode with the provided prompt. |
 | `--effort` | `-e` | `str` | `medium` | Set reasoning effort level (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
+| `--num-ctx` | `-c` | `int \| str` | `10000` | Set context window size in tokens (`num_ctx`) or `'max'`. |
 | `--builtin-tool-timeout` | `-t` | `int` | `30` | Timeout in seconds for tool executions (including shell commands). |
 | `--yolo` | `-y` | `flag` | `False` | Enable YOLO mode (bypasses all tool approval prompts). |
 | `--rag` | — | `str` | `None` | Preload a RAG database collection at startup. |
