@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import os
 import re
@@ -31,7 +32,6 @@ from .tui_components import (
     AgentResponse,
     PromptQueueWidget,
     ReplInput,
-    SystemMessage,
     SystemOutputWidget,
     ToolApprovalWidget,
     UserMessage,
@@ -376,6 +376,16 @@ class OllamaAgentApp(App):
     def on_mount(self) -> None:
         self.query_one(ReplInput).focus()
         self.update_mode_ui()
+        self.run_worker(self._warmup_agent(), group="warmup")
+
+    async def _warmup_agent(self) -> None:
+        try:
+            res = self.repl.runtime._ensure_graph()
+            if inspect.isawaitable(res):
+                await res
+            self.query_one(AgentHeader).update_header()
+        except Exception as exc:
+            logging.warning("Agent runtime warmup failed: %s", exc)
 
     def update_mode_ui(self) -> None:
         prompt_char = self.query_one("#prompt-char")
@@ -1025,12 +1035,11 @@ class OllamaREPL:
         await self.runtime.aclose()
 
     async def run(self) -> None:
-        rag_ctx = self._get_rag_ctx()
         if self._initial_rag_database:
+            rag_ctx = self._get_rag_ctx()
             load_rag_database(rag_ctx, self._initial_rag_database)
 
         set_tool_timeout(self.runtime.settings.runtime.builtin_tool_timeout)
-        await self.runtime.reload()
 
         app = OllamaAgentApp(self)
         try:

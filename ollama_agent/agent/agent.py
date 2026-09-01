@@ -130,9 +130,8 @@ class AgentRuntime:
 
     async def _build_graph(self) -> Any:
         ms = self.settings.model
-        await ensure_model_supports_tools(ms.name, ms.base_url)
 
-        model = await create_ollama_chat_model(
+        model_coro = create_ollama_chat_model(
             model=ms.name,
             base_url=ms.base_url,
             context_window=ms.context_window,
@@ -145,6 +144,29 @@ class AgentRuntime:
             repeat_penalty=ms.repeat_penalty,
             warn_callback=_log.warning,
         )
+        mcp_coro = load_main_mcp_tools()
+        subagents_coro = build_subagents(
+            self.settings.subagents,
+            model_settings=self.settings.model,
+        )
+        checkpointer_coro = (
+            asyncio.sleep(0, result=self._get_memory_checkpointer())
+            if self.stealth_mode
+            else self._sqlite_checkpointer()
+        )
+
+        model, mcp_tools, subagents, checkpointer = await asyncio.gather(
+            model_coro,
+            mcp_coro,
+            subagents_coro,
+            checkpointer_coro,
+        )
+        await ensure_model_supports_tools(
+            ms.name,
+            ms.base_url,
+            show_info=getattr(model, "show_info", None),
+        )
+
         self.effective_context_window = model.num_ctx
         self.effective_model_params = model.effective_params
 
@@ -206,15 +228,6 @@ class AgentRuntime:
             routes=routes,
         )
 
-        # MCP flat tools (for main agent, from mcp.json)
-        mcp_tools = await load_main_mcp_tools()
-
-        # Custom subagents (from settings.yaml)
-        subagents = await build_subagents(
-            self.settings.subagents,
-            model_settings=self.settings.model,
-        )
-
         def should_interrupt_tool(request: Any) -> bool:
             return not self.yolo_mode and request.tool_call["name"] not in self.auto_approved_tools
 
@@ -233,12 +246,6 @@ class AgentRuntime:
         self._model = model
         # Live deepagents engine used by manual compaction (see compaction.py).
         self._summarization_engine = summarization_tool_mw._summarization
-
-        checkpointer = (
-            self._get_memory_checkpointer()
-            if self.stealth_mode
-            else await self._sqlite_checkpointer()
-        )
 
         kwargs: dict[str, Any] = {
             "model": model,

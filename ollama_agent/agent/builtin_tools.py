@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from contextvars import ContextVar
-from typing import Any
 
 from langchain_core.tools import BaseTool, tool
 
