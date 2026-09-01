@@ -90,4 +90,4 @@ async def search_past_conversations(query: str, limit: int = 3) -> str:
     return format_past_conversations_context(results)
 
 
-BUILTIN_TOOLS: list[Any] = [search_past_conversations]
+BUILTIN_TOOLS: list[Any] = [search_past_conversations, rag_search]

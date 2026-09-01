@@ -130,6 +130,8 @@ class TestI18nTranslations(unittest.TestCase):
         self.assertEqual(_("Copy"), "Copiar")
         self.assertEqual(_("Paste"), "Pegar")
         self.assertEqual(_("Interrupt"), "Interrumpir")
+        self.assertEqual(_("Show or clear the prompt queue"), "Mostrar o limpiar la cola de prompts")
+        self.assertEqual(_("Approval cancelled."), "Aprobación cancelada.")
 
     def test_french_translation(self) -> None:
         set_locale("fr")
@@ -137,6 +139,8 @@ class TestI18nTranslations(unittest.TestCase):
         self.assertEqual(_("Exit the REPL"), "Quitter le REPL")
         self.assertEqual(_("Tool:"), "Outil :")
         self.assertEqual(_("Arguments:"), "Arguments :")
+        self.assertEqual(_("Show or clear the prompt queue"), "Afficher ou vider la file d'attente des invites")
+        self.assertEqual(_("Approval cancelled."), "Approbation annulée.")
 
     def test_german_translation(self) -> None:
         set_locale("de")
@@ -144,6 +148,8 @@ class TestI18nTranslations(unittest.TestCase):
         self.assertEqual(_("Exit the REPL"), "REPL beenden")
         self.assertEqual(_("Tool:"), "Werkzeug:")
         self.assertEqual(_("Arguments:"), "Argumente:")
+        self.assertEqual(_("Show or clear the prompt queue"), "Prompt-Warteschlange anzeigen oder leeren")
+        self.assertEqual(_("Approval cancelled."), "Genehmigung abgebrochen.")
 
     def test_italian_translation(self) -> None:
         set_locale("it")
@@ -230,6 +236,24 @@ class TestI18nTranslations(unittest.TestCase):
         self.assertEqual(
             _("Settings file must contain a YAML mapping: {path}", path="demo"),
             "सेटिंग्स फ़ाइल में YAML मैपिंग होनी चाहिए: demo",
+        )
+        set_locale("en")
+        self.assertEqual(
+            _("Prompt added to queue (position #{pos})", pos=1),
+            "Prompt added to queue (position #1)",
+        )
+        self.assertEqual(
+            _("Prompt queue cleared ({count} removed).", count=3),
+            "Prompt queue cleared (3 removed).",
+        )
+        set_locale("es")
+        self.assertEqual(
+            _("Prompt added to queue (position #{pos})", pos=1),
+            "Prompt añadido a la cola (posición #1)",
+        )
+        self.assertEqual(
+            _("Prompt queue cleared ({count} removed).", count=3),
+            "Cola de prompts limpiada (3 eliminados).",
         )
 
     def test_unknown_string_in_english_is_source_language(self) -> None:

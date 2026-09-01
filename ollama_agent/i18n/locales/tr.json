@@ -424,5 +424,16 @@
   "Current context window: {ctx} (model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "Geçerli bağlam penceresi: {ctx} (model: {model})\nKullanım: /context <boyut|max> (örn. 8192, 16384, 32768, max)",
   "Already using context window '{val}'.": "Zaten '{val}' bağlam penceresi kullanılıyor.",
   "Switched context window from {current} to {val}{eff_info}\nConversation preserved. Continue chatting.": "Bağlam penceresi {current} değerinden {val}{eff_info} değerine geçirildi\nSohbet korundu. Sohbete devam edin.",
-  "Failed to switch context window to '{val}': {exc}": "Bağlam penceresi '{val}' değerine geçirilemedi: {exc}"
+  "Failed to switch context window to '{val}': {exc}": "Bağlam penceresi '{val}' değerine geçirilemedi: {exc}",
+  "Show or clear the prompt queue": "İstem kuyruğunu göster veya temizle",
+  "Clear all queued prompts": "Kuyruktaki tüm istemleri temizle",
+  "Usage: /queue [clear]": "Kullanım: /queue [clear]",
+  "Prompt queue cleared.": "İstem kuyruğu temizlendi.",
+  "Prompt queue is empty.": "İstem kuyruğu boş.",
+  "Queued prompts ({count}):": "Kuyruktaki istemler ({count}):",
+  "Prompt queue cleared ({count} removed).": "İstem kuyruğu temizlendi ({count} kaldırıldı).",
+  "Unknown queue subcommand '{sub}'. Usage: /queue [clear]": "Bilinmeyen kuyruk alt komutu '{sub}'. Kullanım: /queue [clear]",
+  "{count} queued": "{count} kuyrukta",
+  "Prompt added to queue (position #{pos})": "İstem kuyruğa eklendi (konum #{pos})",
+  "Approval cancelled.": "Onay iptal edildi."
 }

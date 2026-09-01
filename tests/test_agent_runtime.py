@@ -310,7 +310,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             self.assertIn(rag_search, kwargs["tools"])
             self.assertEqual(kwargs["skills"], [("/system_skills/", "Built-in"), ("/skills/", "User")])
 
-        # When RAG is inactive
+        # When RAG is inactive, rag_search is still always present
         mock_mgr.current_database = None
         with patch("ollama_agent.agent.agent.ensure_model_supports_tools", AsyncMock()), \
              patch("ollama_agent.agent.agent.create_ollama_chat_model", AsyncMock(return_value=MagicMock())), \
@@ -320,7 +320,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
              patch.object(AgentRuntime, "_sqlite_checkpointer", AsyncMock(return_value=MagicMock())):
             await runtime._build_graph()
             kwargs = mock_cda.call_args.kwargs
-            self.assertNotIn(rag_search, kwargs["tools"])
+            self.assertIn(rag_search, kwargs["tools"])
 
         set_rag_manager(None)
         await runtime.aclose()
@@ -549,6 +549,21 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("writes", tables)
                 self.assertIn("checkpoints", tables)
             await runtime.aclose()
+
+    async def test_checkpointer_persists_across_reload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "history.db"
+            runtime = AgentRuntime(settings=Settings())
+            with patch("ollama_agent.agent.agent.HISTORY_DB_PATH", db_path), \
+                 patch.object(AgentRuntime, "_build_graph", AsyncMock(return_value=MagicMock())):
+                cp1 = await runtime._sqlite_checkpointer()
+                self.assertIsNotNone(cp1)
+                await runtime.reload()
+                cp2 = await runtime._sqlite_checkpointer()
+                self.assertIs(cp1, cp2)
+                self.assertIsNotNone(cp2.conn)
+            await runtime.aclose()
+            self.assertIsNone(runtime._checkpointer)
 
     async def test_agent_runtime_set_context_window(self) -> None:
         settings = Settings()

@@ -41,6 +41,7 @@ def _repl_handler_kwargs(**overrides: object) -> dict:
         "base_url": lambda: "http://localhost:11434",
         "switch_model": AsyncMock(),
         "handle_yolo": lambda _: None,
+        "handle_queue": lambda _: None,
         "get_runtime": lambda: MagicMock(),
         "current_thread_id": lambda: "",
         "switch_effort": AsyncMock(),

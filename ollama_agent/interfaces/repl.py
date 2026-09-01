@@ -4,7 +4,9 @@ import asyncio
 import logging
 import os
 import re
+from collections import deque
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -62,6 +64,13 @@ _AT_MENTION_RE = re.compile(
 )
 
 
+@dataclass(frozen=True)
+class QueuedItem:
+    """Item waiting in the prompt queue."""
+
+    text: str
+
+
 class MainScreen(Screen):
     """Default screen with a guard against Textual crashes when text selection
     ends over a widget detached mid-drag (``parent`` is ``None``)."""
@@ -93,6 +102,7 @@ def _get_root_commands() -> list[tuple[str, str]]:
         ("/rag", _("Manage RAG databases")),
         ("/mcp", _("Manage and check MCP servers")),
         ("/agents", _("Manage configured subagents")),
+        ("/queue", _("Show or clear the prompt queue")),
         ("/yolo", _("Toggle YOLO mode or set it explicitly (on/off)")),
         ("/new", _("Start a new chat session and clear the screen")),
         ("/clear", _("Start a new chat session and clear the screen (alias for /new)")),
@@ -151,11 +161,46 @@ def _get_subcommands() -> dict[str, list[tuple[str, str]]]:
         "/agents": [
             ("list", _("List configured subagents and their properties")),
         ],
+        "/queue": [
+            ("clear", _("Clear all queued prompts")),
+        ],
         "/yolo": [
             ("on", _("Enable YOLO mode (bypasses confirmations)")),
             ("off", _("Disable YOLO mode")),
         ],
     }
+
+
+def _is_immediate_command(val: str) -> bool:
+    if not val.startswith("/"):
+        return False
+    parts = val.split()
+    if not parts:
+        return False
+    cmd = parts[0].lower()
+    sub = parts[1].lower() if len(parts) > 1 else ""
+
+    if cmd in ("/exit", "/quit", "/queue", "/yolo"):
+        return True
+    if cmd == "/model" and (not sub or sub == "list"):
+        return True
+    if cmd in ("/effort", "/context") and not sub:
+        return True
+    if cmd == "/params" and (not sub or sub == "list"):
+        return True
+    if cmd == "/session" and (not sub or sub in ("list", "search", "export", "delete")):
+        return True
+    if cmd == "/task" and (not sub or sub in ("list", "delete")):
+        return True
+    if cmd == "/skill" and (not sub or sub in ("list", "show", "delete")):
+        return True
+    if cmd == "/rag" and (not sub or sub in ("status", "list", "create", "delete", "load", "unload")):
+        return True
+    if cmd == "/mcp" and (not sub or sub in ("list", "status")):
+        return True
+    if cmd == "/agents" and (not sub or sub == "list"):
+        return True
+    return False
 
 
 class _TUIStreamingRenderer(StreamingRenderer):
@@ -232,13 +277,25 @@ class OllamaAgentApp(App):
     ]
 
     def action_cancel_generation(self) -> None:
+        if self._prompt_queue:
+            self._prompt_queue.clear()
+            self._update_footer_queue_count()
+            scroll = self.query_one("#chat-scroll")
+            scroll.mount(SystemMessage(f"[bold #f87171]🛑 {_('Prompt queue cleared.')}[/bold #f87171]"))
+            self._deferred_scroll()
         if self._is_generating and self._current_worker is not None:
             self._current_worker.cancel()
+        elif self._is_approval_pending:
+            self._is_approval_pending = False
+            footer = self.query_one(AgentFooter)
+            footer.set_approval(False)
+            scroll = self.query_one("#chat-scroll")
+            scroll.mount(SystemMessage(f"[bold #f87171]🛑 {_('Approval cancelled.')}[/bold #f87171]"))
+            self._deferred_scroll()
 
     def action_cancel_or_quit(self) -> None:
-        if self._is_generating:
-            if self._current_worker is not None:
-                self._current_worker.cancel()
+        if self._is_generating or self._is_approval_pending or self._prompt_queue:
+            self.action_cancel_generation()
         else:
             self.exit()
 
@@ -277,7 +334,10 @@ class OllamaAgentApp(App):
     def __init__(self, repl: OllamaREPL) -> None:
         super().__init__()
         self.repl = repl
+        self.repl.app = self
         self._is_generating = False
+        self._is_approval_pending = False
+        self._prompt_queue: deque[QueuedItem] = deque()
         self._current_worker: Worker | None = None
 
     def compose(self) -> ComposeResult:
@@ -307,6 +367,10 @@ class OllamaAgentApp(App):
         header = self.query_one(AgentHeader)
         header.update_header()
 
+    def _update_footer_queue_count(self) -> None:
+        footer = self.query_one(AgentFooter)
+        footer.set_queued_count(len(self._prompt_queue))
+
     # ── Input events ──────────────────────────────────────────────────────
 
     def on_text_area_changed(self, event: TextArea.Changed) -> None:
@@ -316,13 +380,26 @@ class OllamaAgentApp(App):
     def on_repl_input_submitted(self, event: ReplInput.Submitted) -> None:
         if event.input.id != "repl-input":
             return
-        if self._is_generating:
-            return
         val = event.value.strip()
         if not val:
             return
         event.input.text = ""
         event.input.add_history_entry(val)
+
+        if _is_immediate_command(val):
+            worker = self.run_worker(self._run_slash_command(val))
+            if not self._is_generating:
+                self._current_worker = worker
+            return
+
+        if self._is_generating or self._is_approval_pending:
+            self._prompt_queue.append(QueuedItem(text=val))
+            pos = len(self._prompt_queue)
+            scroll = self.query_one("#chat-scroll")
+            scroll.mount(SystemMessage(f"[dim]⏳ {_('Prompt added to queue (position #{pos})', pos=pos)}[/dim]"))
+            self._deferred_scroll()
+            self._update_footer_queue_count()
+            return
 
         if val.startswith("/"):
             self._current_worker = self.run_worker(self._run_slash_command(val))
@@ -333,6 +410,21 @@ class OllamaAgentApp(App):
             scroll.mount(agent_msg)
             self._deferred_scroll()
             self._current_worker = self.run_worker(self._run_stream(val, scroll, agent_msg))
+
+    def _process_next_in_queue(self) -> None:
+        if not self._prompt_queue or self._is_generating or self._is_approval_pending:
+            return
+        item = self._prompt_queue.popleft()
+        self._update_footer_queue_count()
+        if item.text.startswith("/"):
+            self._current_worker = self.run_worker(self._run_slash_command(item.text))
+        else:
+            scroll = self.query_one("#chat-scroll")
+            scroll.mount(UserMessage(item.text))
+            agent_msg = AgentResponse()
+            scroll.mount(agent_msg)
+            self._deferred_scroll()
+            self._current_worker = self.run_worker(self._run_stream(item.text, scroll, agent_msg))
 
     # ── Autocomplete ──────────────────────────────────────────────────────
 
@@ -595,203 +687,207 @@ class OllamaAgentApp(App):
     # ── Slash command dispatch ────────────────────────────────────
 
     async def _run_slash_command(self, cmd_line: str) -> None:
-        parts = cmd_line.split()
-        cmd = parts[0].lower()
-        args = parts[1:]
-        scroll = self.query_one("#chat-scroll")
+        try:
+            parts = cmd_line.split()
+            cmd = parts[0].lower()
+            args = parts[1:]
+            scroll = self.query_one("#chat-scroll")
 
-        if cmd in ("/exit", "/quit"):
-            self.exit()
-            return
+            if cmd in ("/exit", "/quit"):
+                self.exit()
+                return
 
-        if cmd in ("/clear", "/new") or (cmd == "/session" and args and args[0] == "new"):
-            await self.repl._handle_new_session([])
-            await scroll.remove_children()
-            scroll.mount(SystemMessage(f"[bold #38bdf8]✓ {_('New session started: {session_id}', session_id=self.repl.runtime.thread_id[:8])}[/bold #38bdf8]"))
-            self.query_one(AgentHeader).update_header()
-            self._deferred_scroll()
-            return
+            if cmd in ("/clear", "/new") or (cmd == "/session" and args and args[0] == "new"):
+                await self.repl._handle_new_session([])
+                await scroll.remove_children()
+                scroll.mount(SystemMessage(f"[bold #38bdf8]✓ {_('New session started: {session_id}', session_id=self.repl.runtime.thread_id[:8])}[/bold #38bdf8]"))
+                self.query_one(AgentHeader).update_header()
+                self._deferred_scroll()
+                return
 
-        if cmd in ("/compact", "/compress"):
-            scroll.mount(SystemMessage(f"[dim]⚡ {_('Compacting conversation context...')}[/dim]"))
-            self._deferred_scroll()
+            if cmd in ("/compact", "/compress"):
+                scroll.mount(SystemMessage(f"[dim]⚡ {_('Compacting conversation context...')}[/dim]"))
+                self._deferred_scroll()
+                with self.repl.console.capture() as capture:
+                    res = await compact_session(self.repl.console, self.repl.runtime)
+                output = capture.get()
+                if output:
+                    scroll.mount(SystemMessage(Text.from_ansi(output)))
+                if res["success"]:
+                    self.query_one(AgentHeader).update_header()
+                self._deferred_scroll()
+                return
+
+            if cmd == "/session" and args and args[0] in ("resume", "switch"):
+                if len(args) < 2:
+                    scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Usage: /session resume <session_id>')}[/bold #f87171]"))
+                    self._deferred_scroll()
+                    return
+                try:
+                    resolved = resume_session(self.repl.console, args[1])
+                except HistoryError as exc:
+                    scroll.mount(SystemMessage(f"[red]{exc}[/red]"))
+                    self._deferred_scroll()
+                    return
+                if resolved:
+                    self.repl.runtime.thread_id = resolved
+                    await scroll.remove_children()
+                    messages = await self.repl.runtime.get_thread_messages(resolved)
+                    self.repl.runtime.last_context_tokens = (
+                        await self.repl.runtime.count_effective_tokens(resolved)
+                    )
+                    for msg in messages:
+                        role = getattr(msg, "type", "unknown")
+                        content = extract_text(getattr(msg, "content", ""))
+                        if not content:
+                            continue
+                        if role in ("human", "user"):
+                            scroll.mount(UserMessage(content))
+                        elif role in ("ai", "assistant"):
+                            scroll.mount(AgentResponse(initial_text=content))
+                    scroll.mount(SystemMessage(f"[bold #38bdf8]✓ {_('Resumed session: {session_id}', session_id=f'{resolved[:8]} ({resolved})')}[/bold #38bdf8]"))
+                    self.query_one(AgentHeader).update_header()
+                    self._deferred_scroll()
+                else:
+                    scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Session not found: {session_id}', session_id=args[1])}[/bold #f87171]"))
+                    self._deferred_scroll()
+                return
+
+            if cmd == "/session" and args and args[0] == "export":
+                try:
+                    out_file = await export_session(
+                        self.repl.console,
+                        self.repl.runtime,
+                        self.repl.runtime.thread_id,
+                        output_path=args[1] if len(args) > 1 else None,
+                    )
+                except HistoryError as exc:
+                    scroll.mount(SystemMessage(f"[red]{exc}[/red]"))
+                    self._deferred_scroll()
+                    return
+                if out_file:
+                    scroll.mount(SystemMessage(f"[bold #38bdf8]✓ {_('Session exported to: {path}', path=out_file)}[/bold #38bdf8]"))
+                else:
+                    scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Failed to export session.')}[/bold #f87171]"))
+                    self._deferred_scroll()
+                return
+
+            if cmd == "/task" and args and args[0] == "create":
+                sub_args = args[1:]
+                task_info = " ".join(sub_args)
+                if task_info:
+                    prompt_text = (
+                        f"[System Instruction: The user executed '/task create {task_info}'. "
+                        f"Use your 'task-creator' instructions to guide the user or draft the task, "
+                        f"generate a clear and self-contained YAML task file, and save it in /tasks/<task_id>.yaml.]"
+                    )
+                else:
+                    prompt_text = (
+                        "[System Instruction: The user executed '/task create'. "
+                        "Use your 'task-creator' instructions to ask what repeatable workflow or prompt "
+                        "they want to save as a task, and guide them through creating it in /tasks/<task_id>.yaml.]"
+                    )
+                scroll.mount(UserMessage(cmd_line))
+                agent_msg = AgentResponse()
+                scroll.mount(agent_msg)
+                self._deferred_scroll()
+                await self._run_stream(prompt_text, scroll, agent_msg)
+                return
+
+            if cmd == "/skill" and args and args[0] == "create":
+                sub_args = args[1:]
+                skill_info = " ".join(sub_args)
+                if skill_info:
+                    prompt_text = (
+                        f"[System Instruction: The user executed '/skill create {skill_info}'. "
+                        f"Use your 'skill-creator' instructions to guide the user, gather requirements, "
+                        f"evaluate whether helper scripts in scripts/ are needed, write the SKILL.md and any scripts "
+                        f"to /skills/<skill_id>/, and confirm when created.]"
+                    )
+                else:
+                    prompt_text = (
+                        "[System Instruction: The user executed '/skill create'. "
+                        "Use your 'skill-creator' instructions to ask what capability or workflow they want to teach "
+                        "the agent, evaluate whether helper scripts are needed, and guide them step-by-step through "
+                        "creating the skill in /skills/<skill_id>/.]"
+                    )
+                scroll.mount(UserMessage(cmd_line))
+                agent_msg = AgentResponse()
+                scroll.mount(agent_msg)
+                self._deferred_scroll()
+                await self._run_stream(prompt_text, scroll, agent_msg)
+                return
+
+            if cmd == "/task" and args and args[0] == "run":
+                sub_args = args[1:]
+                target_id = next((a for a in sub_args if not a.startswith("-")), "")
+                if not target_id:
+                    scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Usage: /task run <id> [-y]')}[/bold #f87171]"))
+                    self._deferred_scroll()
+                    return
+                try:
+                    tid, t = self.repl._task_ctx._find_or_exit(target_id)
+                except TaskError as exc:
+                    scroll.mount(SystemMessage(f"[red]{exc}[/red]"))
+                    self._deferred_scroll()
+                    return
+
+                scroll.mount(SystemMessage(Text.from_markup(
+                    f"[bold #38bdf8]▶ {_('Executing Task: {title} ({task_id})', title=t.title, task_id=tid)}[/bold #38bdf8]\n"
+                    f"  [dim]{_('Model:')}[/dim] {t.model} [dim]·[/dim] [dim]{_('Effort:')}[/dim] {t.reasoning_effort}"
+                )))
+                agent_msg = AgentResponse()
+                scroll.mount(agent_msg)
+                self._deferred_scroll()
+
+                settings = self.repl.runtime.settings
+                prev_model = settings.model.name
+                prev_effort = settings.model.reasoning_effort
+                prev_yolo = self.repl.runtime.yolo_mode
+                try:
+                    apply_task_settings(settings, t)
+                    if "-y" in sub_args or "--yolo" in sub_args:
+                        self.repl.runtime.yolo_mode = True
+                    await self.repl.runtime.reload()
+                    await self._run_stream(t.prompt, scroll, agent_msg)
+                finally:
+                    settings.model.name = prev_model
+                    settings.model.reasoning_effort = prev_effort
+                    self.repl.runtime.yolo_mode = prev_yolo
+                    await self.repl.runtime.reload()
+                    self.update_yolo_ui()
+                return
+
+            commands = self.repl._get_commands()
+            if cmd not in commands:
+                scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Unknown command: {cmd}', cmd=cmd)}[/bold #f87171]"))
+                self._deferred_scroll()
+                return
+
+            spec = commands[cmd]
+            scroll_w = scroll.size.width if scroll.size.width > 10 else self.size.width
+            self.repl.console.width = max(40, scroll_w - 6)
+            self.repl.console.height = 25
             with self.repl.console.capture() as capture:
-                res = await compact_session(self.repl.console, self.repl.runtime)
+                await safe_call(spec.handler, args, console=self.repl.console)
             output = capture.get()
             if output:
                 scroll.mount(SystemMessage(Text.from_ansi(output)))
-            if res["success"]:
-                self.query_one(AgentHeader).update_header()
-            self._deferred_scroll()
-            return
-
-        if cmd == "/session" and args and args[0] in ("resume", "switch"):
-            if len(args) < 2:
-                scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Usage: /session resume <session_id>')}[/bold #f87171]"))
                 self._deferred_scroll()
-                return
-            try:
-                resolved = resume_session(self.repl.console, args[1])
-            except HistoryError as exc:
-                scroll.mount(SystemMessage(f"[red]{exc}[/red]"))
-                self._deferred_scroll()
-                return
-            if resolved:
-                self.repl.runtime.thread_id = resolved
-                await scroll.remove_children()
-                messages = await self.repl.runtime.get_thread_messages(resolved)
-                self.repl.runtime.last_context_tokens = (
-                    await self.repl.runtime.count_effective_tokens(resolved)
-                )
-                for msg in messages:
-                    role = getattr(msg, "type", "unknown")
-                    content = extract_text(getattr(msg, "content", ""))
-                    if not content:
-                        continue
-                    if role in ("human", "user"):
-                        scroll.mount(UserMessage(content))
-                    elif role in ("ai", "assistant"):
-                        scroll.mount(AgentResponse(initial_text=content))
-                scroll.mount(SystemMessage(f"[bold #38bdf8]✓ {_('Resumed session: {session_id}', session_id=f'{resolved[:8]} ({resolved})')}[/bold #38bdf8]"))
-                self.query_one(AgentHeader).update_header()
-                self._deferred_scroll()
-            else:
-                scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Session not found: {session_id}', session_id=args[1])}[/bold #f87171]"))
-                self._deferred_scroll()
-            return
 
-        if cmd == "/session" and args and args[0] == "export":
-            try:
-                out_file = await export_session(
-                    self.repl.console,
-                    self.repl.runtime,
-                    self.repl.runtime.thread_id,
-                    output_path=args[1] if len(args) > 1 else None,
-                )
-            except HistoryError as exc:
-                scroll.mount(SystemMessage(f"[red]{exc}[/red]"))
-                self._deferred_scroll()
-                return
-            if out_file:
-                scroll.mount(SystemMessage(f"[bold #38bdf8]✓ {_('Session exported to: {path}', path=out_file)}[/bold #38bdf8]"))
-            else:
-                scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Failed to export session.')}[/bold #f87171]"))
-            self._deferred_scroll()
-            return
-
-        if cmd == "/task" and args and args[0] == "create":
-            sub_args = args[1:]
-            task_info = " ".join(sub_args)
-            if task_info:
-                prompt_text = (
-                    f"[System Instruction: The user executed '/task create {task_info}'. "
-                    f"Use your 'task-creator' instructions to guide the user or draft the task, "
-                    f"generate a clear and self-contained YAML task file, and save it in /tasks/<task_id>.yaml.]"
-                )
-            else:
-                prompt_text = (
-                    "[System Instruction: The user executed '/task create'. "
-                    "Use your 'task-creator' instructions to ask what repeatable workflow or prompt "
-                    "they want to save as a task, and guide them through creating it in /tasks/<task_id>.yaml.]"
-                )
-            scroll.mount(UserMessage(cmd_line))
-            agent_msg = AgentResponse()
-            scroll.mount(agent_msg)
-            self._deferred_scroll()
-            self._current_worker = self.run_worker(self._run_stream(prompt_text, scroll, agent_msg))
-            return
-
-        if cmd == "/skill" and args and args[0] == "create":
-            sub_args = args[1:]
-            skill_info = " ".join(sub_args)
-            if skill_info:
-                prompt_text = (
-                    f"[System Instruction: The user executed '/skill create {skill_info}'. "
-                    f"Use your 'skill-creator' instructions to guide the user, gather requirements, "
-                    f"evaluate whether helper scripts in scripts/ are needed, write the SKILL.md and any scripts "
-                    f"to /skills/<skill_id>/, and confirm when created.]"
-                )
-            else:
-                prompt_text = (
-                    "[System Instruction: The user executed '/skill create'. "
-                    "Use your 'skill-creator' instructions to ask what capability or workflow they want to teach "
-                    "the agent, evaluate whether helper scripts are needed, and guide them step-by-step through "
-                    "creating the skill in /skills/<skill_id>/.]"
-                )
-            scroll.mount(UserMessage(cmd_line))
-            agent_msg = AgentResponse()
-            scroll.mount(agent_msg)
-            self._deferred_scroll()
-            self._current_worker = self.run_worker(self._run_stream(prompt_text, scroll, agent_msg))
-            return
-
-        if cmd == "/task" and args and args[0] == "run":
-            sub_args = args[1:]
-            target_id = next((a for a in sub_args if not a.startswith("-")), "")
-            if not target_id:
-                scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Usage: /task run <id> [-y]')}[/bold #f87171]"))
-                self._deferred_scroll()
-                return
-            try:
-                tid, t = self.repl._task_ctx._find_or_exit(target_id)
-            except TaskError as exc:
-                scroll.mount(SystemMessage(f"[red]{exc}[/red]"))
-                self._deferred_scroll()
-                return
-
-            scroll.mount(SystemMessage(Text.from_markup(
-                f"[bold #38bdf8]▶ {_('Executing Task: {title} ({task_id})', title=t.title, task_id=tid)}[/bold #38bdf8]\n"
-                f"  [dim]{_('Model:')}[/dim] {t.model} [dim]·[/dim] [dim]{_('Effort:')}[/dim] {t.reasoning_effort}"
-            )))
-            agent_msg = AgentResponse()
-            scroll.mount(agent_msg)
-            self._deferred_scroll()
-
-            settings = self.repl.runtime.settings
-            prev_model = settings.model.name
-            prev_effort = settings.model.reasoning_effort
-            prev_yolo = self.repl.runtime.yolo_mode
-            try:
-                apply_task_settings(settings, t)
-                if "-y" in sub_args or "--yolo" in sub_args:
-                    self.repl.runtime.yolo_mode = True
-                await self.repl.runtime.reload()
-                await self._run_stream(t.prompt, scroll, agent_msg)
-            finally:
-                settings.model.name = prev_model
-                settings.model.reasoning_effort = prev_effort
-                self.repl.runtime.yolo_mode = prev_yolo
-                await self.repl.runtime.reload()
+            if cmd == "/yolo":
                 self.update_yolo_ui()
-            return
-
-        commands = self.repl._get_commands()
-        if cmd not in commands:
-            scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Unknown command: {cmd}', cmd=cmd)}[/bold #f87171]"))
-            self._deferred_scroll()
-            return
-
-        spec = commands[cmd]
-        scroll_w = scroll.size.width if scroll.size.width > 10 else self.size.width
-        self.repl.console.width = max(40, scroll_w - 6)
-        self.repl.console.height = 25
-        with self.repl.console.capture() as capture:
-            await safe_call(spec.handler, args, console=self.repl.console)
-        output = capture.get()
-        if output:
-            scroll.mount(SystemMessage(Text.from_ansi(output)))
-            self._deferred_scroll()
-
-        if cmd == "/yolo":
-            self.update_yolo_ui()
-        elif cmd == "/rag" and args and args[0] in ("load", "unload", "delete"):
-            await self.repl.runtime.reload()
-        elif cmd in ("/model", "/effort", "/context"):
-            self.query_one(AgentHeader).update_header()
+            elif cmd == "/queue":
+                self._update_footer_queue_count()
+            elif cmd in ("/model", "/effort", "/context"):
+                self.query_one(AgentHeader).update_header()
+        finally:
+            self._process_next_in_queue()
 
     # ── Streaming chat ────────────────────────────────────────────────────
 
     async def _handle_approval_decision(self, decisions: list[dict[str, Any]], scroll: Any, agent_msg: AgentResponse) -> None:
+        self._is_approval_pending = False
         command: Command[Any] = Command(resume={"decisions": decisions})
         await self._run_stream(command, scroll, agent_msg)
 
@@ -805,11 +901,16 @@ class OllamaAgentApp(App):
                 await stream_agent_events(self.repl.runtime, prompt, _TUIStreamingRenderer(self, scroll, agent_msg), auto_close=True)
             except asyncio.CancelledError:
                 scroll.mount(SystemMessage(f"[bold #f87171]🛑 {_('Execution interrupted by user.')}[/bold #f87171]"))
+                if self._prompt_queue:
+                    self._prompt_queue.clear()
+                    self._update_footer_queue_count()
+                    scroll.mount(SystemMessage(f"[bold #f87171]🛑 {_('Prompt queue cleared.')}[/bold #f87171]"))
                 self._deferred_scroll()
                 inp = self.query_one(ReplInput)
                 inp.disabled = False
                 inp.focus()
                 footer.set_approval(False)
+                self._is_approval_pending = False
                 raise
 
             # Check if the execution got interrupted
@@ -817,8 +918,9 @@ class OllamaAgentApp(App):
             state = await self.repl.runtime.graph.aget_state(config)
             if state.interrupts:
                 action_requests = extract_action_requests({"interrupts": state.interrupts})
+                self._is_approval_pending = True
                 inp = self.query_one(ReplInput)
-                inp.disabled = True
+                inp.disabled = False
                 footer.set_approval(True)
                 approval_widget = ToolApprovalWidget(
                     action_requests=action_requests,
@@ -835,6 +937,7 @@ class OllamaAgentApp(App):
         finally:
             self._is_generating = False
             footer.set_generating(False)
+            self._process_next_in_queue()
 
 
 
@@ -856,6 +959,7 @@ class OllamaREPL:
         self._initial_rag_database = rag_database
         self._rag_ctx: RAGContext | None = None
         self._commands: dict[str, REPLCommand] | None = None
+        self.app: OllamaAgentApp | None = None
 
     def _get_rag_ctx(self) -> RAGContext:
         if self._rag_ctx is None:
@@ -876,6 +980,7 @@ class OllamaREPL:
                 base_url=lambda: self.runtime.settings.model.base_url,
                 switch_model=self._switch_model,
                 handle_yolo=self._handle_yolo_cmd,
+                handle_queue=self._handle_queue_cmd,
                 get_runtime=lambda: self.runtime,
                 current_thread_id=lambda: self.runtime.thread_id,
                 switch_effort=self._switch_effort,
@@ -933,3 +1038,23 @@ class OllamaREPL:
         status = _("on") if self.runtime.yolo_mode else _("off")
         color = "red" if self.runtime.yolo_mode else "green"
         self.console.print(f"[bold {color}]{_('YOLO mode is now {status}', status=status)}[/bold {color}]")
+
+    def _handle_queue_cmd(self, args: list[str]) -> None:
+        queue = self.app._prompt_queue if self.app is not None else None
+        if not args or args[0] == "list":
+            if not queue:
+                self.console.print(f"[dim]{_('Prompt queue is empty.')}[/dim]")
+                return
+            self.console.print(f"[bold #38bdf8]{_('Queued prompts ({count}):', count=len(queue))}[/bold #38bdf8]")
+            for i, item in enumerate(queue, 1):
+                self.console.print(f"  [dim]#{i}[/dim] {item.text}")
+            return
+        if args[0] == "clear":
+            count = len(queue) if queue is not None else 0
+            if queue is not None:
+                queue.clear()
+            if self.app is not None:
+                self.app._update_footer_queue_count()
+            self.console.print(f"[bold #34d399]✓ {_('Prompt queue cleared ({count} removed).', count=count)}[/bold #34d399]")
+            return
+        self.console.print(f"[red]{_('Unknown queue subcommand \'{sub}\'. Usage: /queue [clear]', sub=args[0])}[/red]")

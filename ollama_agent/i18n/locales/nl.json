@@ -424,5 +424,16 @@
   "Current context window: {ctx} (model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "Huidig contextvenster: {ctx} (model: {model})\nGebruik: /context <grootte|max> (bijv. 8192, 16384, 32768, max)",
   "Already using context window '{val}'.": "Je gebruikt al contextvenster '{val}'.",
   "Switched context window from {current} to {val}{eff_info}\nConversation preserved. Continue chatting.": "Contextvenster gewijzigd van {current} naar {val}{eff_info}\nGesprek behouden. Ga door met chatten.",
-  "Failed to switch context window to '{val}': {exc}": "Wijzigen van contextvenster naar '{val}' mislukt: {exc}"
+  "Failed to switch context window to '{val}': {exc}": "Wijzigen van contextvenster naar '{val}' mislukt: {exc}",
+  "Show or clear the prompt queue": "Toon of wis de promptwachtrij",
+  "Clear all queued prompts": "Wis alle prompts in de wachtrij",
+  "Usage: /queue [clear]": "Gebruik: /queue [clear]",
+  "Prompt queue cleared.": "Promptwachtrij gewist.",
+  "Prompt queue is empty.": "Promptwachtrij is leeg.",
+  "Queued prompts ({count}):": "Prompts in wachtrij ({count}):",
+  "Prompt queue cleared ({count} removed).": "Promptwachtrij gewist ({count} verwijderd).",
+  "Unknown queue subcommand '{sub}'. Usage: /queue [clear]": "Onbekende wachtrij-subopdracht '{sub}'. Gebruik: /queue [clear]",
+  "{count} queued": "{count} in de wachtrij",
+  "Prompt added to queue (position #{pos})": "Prompt toegevoegd aan wachtrij (positie #{pos})",
+  "Approval cancelled.": "Goedkeuring geannuleerd."
 }

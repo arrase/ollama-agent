@@ -424,5 +424,16 @@
   "Current context window: {ctx} (model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "Текущее контекстное окно: {ctx} (модель: {model})\nИспользование: /context <размер|max> (напр. 8192, 16384, 32768, max)",
   "Already using context window '{val}'.": "Контекстное окно '{val}' уже используется.",
   "Switched context window from {current} to {val}{eff_info}\nConversation preserved. Continue chatting.": "Контекстное окно переключено с {current} на {val}{eff_info}\nБеседа сохранена. Продолжайте общение.",
-  "Failed to switch context window to '{val}': {exc}": "Не удалось переключить контекстное окно на '{val}': {exc}"
+  "Failed to switch context window to '{val}': {exc}": "Не удалось переключить контекстное окно на '{val}': {exc}",
+  "Show or clear the prompt queue": "Показать или очистить очередь промптов",
+  "Clear all queued prompts": "Очистить все промпты в очереди",
+  "Usage: /queue [clear]": "Использование: /queue [clear]",
+  "Prompt queue cleared.": "Очередь промптов очищена.",
+  "Prompt queue is empty.": "Очередь промптов пуста.",
+  "Queued prompts ({count}):": "Промпты в очереди ({count}):",
+  "Prompt queue cleared ({count} removed).": "Очередь промптов очищена (удалено {count}).",
+  "Unknown queue subcommand '{sub}'. Usage: /queue [clear]": "Неизвестная подкоманда очереди '{sub}'. Использование: /queue [clear]",
+  "{count} queued": "{count} в очереди",
+  "Prompt added to queue (position #{pos})": "Промпт добавлен в очередь (позиция #{pos})",
+  "Approval cancelled.": "Подтверждение отменено."
 }

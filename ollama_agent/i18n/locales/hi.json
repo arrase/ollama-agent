@@ -424,5 +424,16 @@
   "Current context window: {ctx} (model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "वर्तमान संदर्भ विंडो: {ctx} (मॉडल: {model})\nउपयोग: /context <आकार|max> (उदा. 8192, 16384, 32768, max)",
   "Already using context window '{val}'.": "पहले से ही संदर्भ विंडो '{val}' का उपयोग कर रहे हैं।",
   "Switched context window from {current} to {val}{eff_info}\nConversation preserved. Continue chatting.": "संदर्भ विंडो को {current} से {val}{eff_info} में बदला गया\nबातचीत सुरक्षित है। चैट जारी रखें।",
-  "Failed to switch context window to '{val}': {exc}": "संदर्भ विंडो को '{val}' में बदलने में विफल: {exc}"
+  "Failed to switch context window to '{val}': {exc}": "संदर्भ विंडो को '{val}' में बदलने में विफल: {exc}",
+  "Show or clear the prompt queue": "प्रॉम्प्ट कतार दिखाएं या साफ़ करें",
+  "Clear all queued prompts": "कतारबद्ध सभी प्रॉम्प्ट साफ़ करें",
+  "Usage: /queue [clear]": "उपयोग: /queue [clear]",
+  "Prompt queue cleared.": "प्रॉम्प्ट कतार साफ़ कर दी गई।",
+  "Prompt queue is empty.": "प्रॉम्प्ट कतार खाली है।",
+  "Queued prompts ({count}):": "कतारबद्ध प्रॉम्प्ट ({count}):",
+  "Prompt queue cleared ({count} removed).": "प्रॉम्प्ट कतार साफ़ कर दी गई ({count} हटाए गए)।",
+  "Unknown queue subcommand '{sub}'. Usage: /queue [clear]": "अज्ञात कतार उप-कमांड '{sub}'। उपयोग: /queue [clear]",
+  "{count} queued": "{count} कतारबद्ध",
+  "Prompt added to queue (position #{pos})": "प्रॉम्प्ट कतार में जोड़ा गया (स्थान #{pos})",
+  "Approval cancelled.": "अनुमोदन रद्द किया गया।"
 }

@@ -162,6 +162,7 @@ def build_repl_handlers(
     base_url: Callable[[], str],
     switch_model: Callable[[str], Awaitable[None]],
     handle_yolo: Callable[[list[str]], object],
+    handle_queue: Callable[[list[str]], object],
     get_runtime: Callable[[], Any],
     current_thread_id: Callable[[], str],
     switch_effort: Callable[[str], Awaitable[None]],
@@ -338,6 +339,12 @@ def build_repl_handlers(
         return None
 
     cmds: dict[str, REPLCommand] = {
+        "/queue": REPLCommand(
+            _("Show or clear the prompt queue"),
+            "General",
+            _("Usage: /queue [clear]"),
+            handle_queue,
+        ),
         "/yolo": REPLCommand(
             _("Toggle YOLO mode or set it explicitly (on/off)"),
             "General",

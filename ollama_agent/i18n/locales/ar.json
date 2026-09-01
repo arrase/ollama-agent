@@ -424,5 +424,16 @@
   "Current context window: {ctx} (model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "نافذة السياق الحالية: {ctx} (النموذج: {model})\nالاستخدام: /context <الحجم|max> (مثال: 8192, 16384, 32768, max)",
   "Already using context window '{val}'.": "تستخدم نافذة السياق '{val}' بالفعل.",
   "Switched context window from {current} to {val}{eff_info}\nConversation preserved. Continue chatting.": "تم تبديل نافذة السياق من {current} إلى {val}{eff_info}\nتم حفظ المحادثة. تابع الدردشة.",
-  "Failed to switch context window to '{val}': {exc}": "فشل تبديل نافذة السياق إلى '{val}': {exc}"
+  "Failed to switch context window to '{val}': {exc}": "فشل تبديل نافذة السياق إلى '{val}': {exc}",
+  "Show or clear the prompt queue": "عرض قائمة انتظار المطالبات أو مسحها",
+  "Clear all queued prompts": "مسح جميع المطالبات الموجودة في قائمة الانتظار",
+  "Usage: /queue [clear]": "الاستخدام: /queue [clear]",
+  "Prompt queue cleared.": "تم مسح قائمة انتظار المطالبات.",
+  "Prompt queue is empty.": "قائمة انتظار المطالبات فارغة.",
+  "Queued prompts ({count}):": "المطالبات في قائمة الانتظار ({count}):",
+  "Prompt queue cleared ({count} removed).": "تم مسح قائمة انتظار المطالبات (تمت إزالة {count}).",
+  "Unknown queue subcommand '{sub}'. Usage: /queue [clear]": "أمر فرعي غير معروف لقائمة الانتظار '{sub}'. الاستخدام: /queue [clear]",
+  "{count} queued": "{count} في قائمة الانتظار",
+  "Prompt added to queue (position #{pos})": "تمت إضافة المطالبة إلى قائمة الانتظار (الموضع #{pos})",
+  "Approval cancelled.": "تم إلغاء الموافقة."
 }

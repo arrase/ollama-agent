@@ -11,7 +11,13 @@ from textual.widgets import OptionList
 from rich.console import Console
 
 from ollama_agent.interfaces.dispatch import REPLCommand
-from ollama_agent.interfaces.repl import OllamaAgentApp, OllamaREPL, _TUIStreamingRenderer
+from ollama_agent.interfaces.repl import (
+    OllamaAgentApp,
+    OllamaREPL,
+    QueuedItem,
+    _TUIStreamingRenderer,
+    _is_immediate_command,
+)
 from ollama_agent.interfaces.tui_components import (
     AgentFooter,
     AgentHeader,
@@ -84,6 +90,20 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
         footer.set_approval(False)
         footer.set_generating(False)
         self.assertIn("interrupt", str(footer.render()))
+
+    def test_agent_footer_with_queue(self) -> None:
+        footer = AgentFooter()
+        footer.set_queued_count(3)
+        self.assertIn("3 queued", str(footer.render()))
+
+        footer.set_generating(True)
+        self.assertIn("3 queued", str(footer.render()))
+
+        footer.set_approval(True)
+        self.assertIn("3 queued", str(footer.render()))
+
+        footer.set_queued_count(0)
+        self.assertNotIn("queued", str(footer.render()))
 
     def test_user_message_compose(self) -> None:
         msg = UserMessage("How do I build a minimal CLI?")
@@ -464,6 +484,14 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             inp = app.query_one(ReplInput)
             self.assertEqual(inp.text, "/agents list ")
 
+            # 1d. Level 1: Subcommands for /queue
+            app.update_autocomplete("/queue ")
+            self.assertTrue(autolist.display)
+            self.assertEqual(autolist.option_count, 1)  # clear
+            app.accept_completion(0)
+            inp = app.query_one(ReplInput)
+            self.assertEqual(inp.text, "/queue clear ")
+
             app.update_autocomplete("/session sea")
             self.assertEqual(autolist.option_count, 1)
             app.accept_completion(0)
@@ -740,4 +768,209 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
         await repl.cleanup()
         rag_ctx_mock.rag_manager.unload.assert_called_once()
         runtime_mock.aclose.assert_awaited_once()
+
+    def test_queued_item_dataclass(self) -> None:
+        item = QueuedItem(text="Hello world")
+        self.assertEqual(item.text, "Hello world")
+
+    def test_is_immediate_command(self) -> None:
+        # Immediate / safe commands
+        self.assertTrue(_is_immediate_command("/exit"))
+        self.assertTrue(_is_immediate_command("/quit"))
+        self.assertTrue(_is_immediate_command("/queue"))
+        self.assertTrue(_is_immediate_command("/queue clear"))
+        self.assertTrue(_is_immediate_command("/yolo"))
+        self.assertTrue(_is_immediate_command("/yolo on"))
+        self.assertTrue(_is_immediate_command("/yolo off"))
+        self.assertTrue(_is_immediate_command("/model"))
+        self.assertTrue(_is_immediate_command("/model list"))
+        self.assertTrue(_is_immediate_command("/effort"))
+        self.assertTrue(_is_immediate_command("/context"))
+        self.assertTrue(_is_immediate_command("/params"))
+        self.assertTrue(_is_immediate_command("/params list"))
+        self.assertTrue(_is_immediate_command("/session"))
+        self.assertTrue(_is_immediate_command("/session list"))
+        self.assertTrue(_is_immediate_command("/session search test"))
+        self.assertTrue(_is_immediate_command("/session export"))
+        self.assertTrue(_is_immediate_command("/session delete id123"))
+        self.assertTrue(_is_immediate_command("/task"))
+        self.assertTrue(_is_immediate_command("/task list"))
+        self.assertTrue(_is_immediate_command("/task delete id123"))
+        self.assertTrue(_is_immediate_command("/skill"))
+        self.assertTrue(_is_immediate_command("/skill list"))
+        self.assertTrue(_is_immediate_command("/skill show id123"))
+        self.assertTrue(_is_immediate_command("/skill delete id123"))
+        self.assertTrue(_is_immediate_command("/rag"))
+        self.assertTrue(_is_immediate_command("/rag status"))
+        self.assertTrue(_is_immediate_command("/rag list"))
+        self.assertTrue(_is_immediate_command("/rag create test_db"))
+        self.assertTrue(_is_immediate_command("/rag delete test_db"))
+        self.assertTrue(_is_immediate_command("/rag load test_db"))
+        self.assertTrue(_is_immediate_command("/rag unload"))
+        self.assertTrue(_is_immediate_command("/mcp"))
+        self.assertTrue(_is_immediate_command("/mcp list"))
+        self.assertTrue(_is_immediate_command("/agents"))
+        self.assertTrue(_is_immediate_command("/agents list"))
+
+        # Stateful / Agent-running commands
+        self.assertFalse(_is_immediate_command("normal prompt"))
+        self.assertFalse(_is_immediate_command("/model set llama3:latest"))
+        self.assertFalse(_is_immediate_command("/model llama3:latest"))
+        self.assertFalse(_is_immediate_command("/effort high"))
+        self.assertFalse(_is_immediate_command("/effort set high"))
+        self.assertFalse(_is_immediate_command("/context 8192"))
+        self.assertFalse(_is_immediate_command("/context set 8192"))
+        self.assertFalse(_is_immediate_command("/params set temperature 0.7"))
+        self.assertFalse(_is_immediate_command("/session resume 12345"))
+        self.assertFalse(_is_immediate_command("/session switch 12345"))
+        self.assertFalse(_is_immediate_command("/session new"))
+        self.assertFalse(_is_immediate_command("/compact"))
+        self.assertFalse(_is_immediate_command("/compress"))
+        self.assertFalse(_is_immediate_command("/clear"))
+        self.assertFalse(_is_immediate_command("/new"))
+        self.assertFalse(_is_immediate_command("/task create my_task"))
+        self.assertFalse(_is_immediate_command("/task run my_task"))
+        self.assertFalse(_is_immediate_command("/skill create my_skill"))
+        self.assertFalse(_is_immediate_command("/rag add file.txt"))
+        self.assertFalse(_is_immediate_command("/mcp reload"))
+
+    async def test_repl_queue_handler(self) -> None:
+        runtime_mock = MagicMock()
+        repl = OllamaREPL(runtime=runtime_mock)
+        repl.console = Console(file=io.StringIO())
+
+        # Empty queue
+        repl._handle_queue_cmd([])
+        self.assertIn("Prompt queue is empty", repl.console.file.getvalue())
+
+        # Setup app with queue items
+        app = OllamaAgentApp(repl)
+        async with app.run_test():
+            app._prompt_queue.append(QueuedItem("Prompt 1"))
+            app._prompt_queue.append(QueuedItem("Prompt 2"))
+
+            repl.console = Console(file=io.StringIO())
+            repl._handle_queue_cmd(["list"])
+            out = repl.console.file.getvalue()
+            self.assertIn("Queued prompts (2)", out)
+            self.assertIn("Prompt 1", out)
+            self.assertIn("Prompt 2", out)
+
+            # Clear queue
+            repl.console = Console(file=io.StringIO())
+            repl._handle_queue_cmd(["clear"])
+            out = repl.console.file.getvalue()
+            self.assertIn("Prompt queue cleared (2 removed)", out)
+            self.assertEqual(len(app._prompt_queue), 0)
+
+            # Invalid subcommand
+            repl.console = Console(file=io.StringIO())
+            repl._handle_queue_cmd(["invalid_sub"])
+            self.assertIn("Unknown queue subcommand", repl.console.file.getvalue())
+
+    async def test_app_queue_and_fifo_processing(self) -> None:
+        runtime_mock = MagicMock()
+        runtime_mock.settings.model.name = "qwen2.5-coder:32b"
+        runtime_mock.settings.model.reasoning_effort = "high"
+        runtime_mock.yolo_mode = False
+        repl = OllamaREPL(runtime=runtime_mock)
+
+        app = OllamaAgentApp(repl)
+        async with app.run_test():
+            inp = app.query_one(ReplInput)
+
+            # 1. Enqueue while generating
+            app._is_generating = True
+            app.on_repl_input_submitted(ReplInput.Submitted(inp, "First queued prompt"))
+            app.on_repl_input_submitted(ReplInput.Submitted(inp, "Second queued prompt"))
+
+            self.assertEqual(len(app._prompt_queue), 2)
+            self.assertEqual(app._prompt_queue[0].text, "First queued prompt")
+            self.assertEqual(app._prompt_queue[1].text, "Second queued prompt")
+
+            # Check footer queued count
+            footer = app.query_one(AgentFooter)
+            self.assertEqual(footer._queued_count, 2)
+
+            # 2. Immediate command during generating does not enqueue
+            app.on_repl_input_submitted(ReplInput.Submitted(inp, "/yolo"))
+            self.assertEqual(len(app._prompt_queue), 2)
+
+            # 3. Process next in queue
+            app._is_generating = False
+            with patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream:
+                app._process_next_in_queue()
+                self.assertEqual(len(app._prompt_queue), 1)
+                self.assertEqual(footer._queued_count, 1)
+                mock_stream.assert_called_once()
+                self.assertEqual(mock_stream.call_args[0][0], "First queued prompt")
+
+            # 4. Cancellation clears the queue
+            app._prompt_queue.append(QueuedItem("Third prompt"))
+            self.assertEqual(len(app._prompt_queue), 2)
+            app.action_cancel_generation()
+            self.assertEqual(len(app._prompt_queue), 0)
+            self.assertEqual(footer._queued_count, 0)
+            chat_scroll = app.query_one("#chat-scroll")
+            sys_msgs = list(chat_scroll.query(SystemMessage))
+            self.assertTrue(any("Prompt queue cleared" in str(m.render()) for m in sys_msgs))
+
+    async def test_app_tool_approval_allows_queueing_and_resumes(self) -> None:
+        runtime_mock = MagicMock()
+        runtime_mock.settings.model.name = "qwen2.5-coder:32b"
+        runtime_mock.settings.model.reasoning_effort = "high"
+        runtime_mock.yolo_mode = False
+        repl = OllamaREPL(runtime=runtime_mock)
+
+        app = OllamaAgentApp(repl)
+        async with app.run_test():
+            inp = app.query_one(ReplInput)
+            footer = app.query_one(AgentFooter)
+
+            # Simulate approval pending
+            app._is_approval_pending = True
+            footer.set_approval(True)
+
+            # Verify input is NOT disabled
+            self.assertFalse(inp.disabled)
+
+            # Queue a prompt while approval is pending
+            app.on_repl_input_submitted(ReplInput.Submitted(inp, "Prompt during approval"))
+            self.assertEqual(len(app._prompt_queue), 1)
+            self.assertEqual(footer._queued_count, 1)
+
+            # Approval decision handled
+            agent_msg = AgentResponse()
+            scroll = app.query_one("#chat-scroll")
+            with patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream:
+                await app._handle_approval_decision([{"type": "approve"}], scroll, agent_msg)
+                self.assertFalse(app._is_approval_pending)
+                mock_stream.assert_awaited_once()
+
+    async def test_app_queue_slash_command_and_drain(self) -> None:
+        runtime_mock = MagicMock()
+        runtime_mock.settings.model.name = "qwen2.5-coder:32b"
+        runtime_mock.settings.model.reasoning_effort = "high"
+        runtime_mock.yolo_mode = False
+        repl = OllamaREPL(runtime=runtime_mock)
+
+        app = OllamaAgentApp(repl)
+        async with app.run_test():
+            inp = app.query_one(ReplInput)
+            footer = app.query_one(AgentFooter)
+
+            # Queue stateful slash command while generating
+            app._is_generating = True
+            app.on_repl_input_submitted(ReplInput.Submitted(inp, "/compact"))
+            self.assertEqual(len(app._prompt_queue), 1)
+            self.assertEqual(app._prompt_queue[0].text, "/compact")
+            self.assertEqual(footer._queued_count, 1)
+
+            # Drain queue
+            app._is_generating = False
+            with patch.object(app, "_run_slash_command", new_callable=AsyncMock) as mock_slash:
+                app._process_next_in_queue()
+                self.assertEqual(len(app._prompt_queue), 0)
+                self.assertEqual(footer._queued_count, 0)
+                mock_slash.assert_called_once_with("/compact")
 

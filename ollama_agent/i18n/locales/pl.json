@@ -424,5 +424,16 @@
   "Current context window: {ctx} (model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)": "Bieżące okno kontekstu: {ctx} (model: {model})\nUżycie: /context <rozmiar|max> (np. 8192, 16384, 32768, max)",
   "Already using context window '{val}'.": "Już używasz okna kontekstu '{val}'.",
   "Switched context window from {current} to {val}{eff_info}\nConversation preserved. Continue chatting.": "Zmieniono okno kontekstu z {current} na {val}{eff_info}\nRozmowa została zachowana. Kontynuuj czat.",
-  "Failed to switch context window to '{val}': {exc}": "Nie udało się zmienić okna kontekstu na '{val}': {exc}"
+  "Failed to switch context window to '{val}': {exc}": "Nie udało się zmienić okna kontekstu na '{val}': {exc}",
+  "Show or clear the prompt queue": "Pokaż lub wyczyść kolejkę promptów",
+  "Clear all queued prompts": "Wyczyść wszystkie prompty w kolejce",
+  "Usage: /queue [clear]": "Użycie: /queue [clear]",
+  "Prompt queue cleared.": "Kolejka promptów wyczyszczona.",
+  "Prompt queue is empty.": "Kolejka promptów jest pusta.",
+  "Queued prompts ({count}):": "Prompty w kolejce ({count}):",
+  "Prompt queue cleared ({count} removed).": "Kolejka promptów wyczyszczona (usunięto {count}).",
+  "Unknown queue subcommand '{sub}'. Usage: /queue [clear]": "Nieznane podpolecenie kolejki '{sub}'. Użycie: /queue [clear]",
+  "{count} queued": "{count} w kolejce",
+  "Prompt added to queue (position #{pos})": "Prompt dodany do kolejki (pozycja #{pos})",
+  "Approval cancelled.": "Zatwierdzenie anulowane."
 }
