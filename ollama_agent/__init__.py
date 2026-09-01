@@ -1,7 +1,7 @@
 """Ollama Agent package."""
 from __future__ import annotations
 
-__version__ = "0.9.6"
+__version__ = "0.9.7"
 
 from .core import (
     ALLOWED_REASONING_EFFORTS,
