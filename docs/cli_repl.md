@@ -56,6 +56,7 @@ ollama-agent --rag project-docs -p "How is authentication configured in this rep
 | `--lang`, `--language` | `-l` | `str` | `auto` | Set UI language code (`en`, `es`, `fr`, `de`, `it`, `pt`, `zh`, `ja`, `ko`, `ru`, `hi`, `ar`, `tr`, `pl`, `nl`, `uk`). |
 | `--builtin-tool-timeout` | `-t` | `int` | `30` | Timeout in seconds for tool executions (including shell commands). |
 | `--yolo` | `-y` | `flag` | `False` | Enable YOLO mode (bypasses all tool approval prompts). |
+| `--stealth` | `-s` | `flag` | `False` | Enable stealth mode (do not save conversation to SQLite history). |
 | `--rag` | — | `str` | `None` | Preload a RAG database collection at startup. |
 | `--allow-traversal` | — | `flag` | `False` | Allow filesystem traversal outside current working directory. |
 | `--no-allow-traversal` | — | `flag` | `True` | Sandbox filesystem operations to current working directory (default). |
@@ -150,7 +151,7 @@ ollama-agent mcp list
 The interactive REPL is powered by Textual and Rich, featuring rich Markdown rendering, live token gauges, modal forms, and multi-turn persistence.
 
 ```text
-● ollama-agent │ Model: gemma4:26b │ Context: 2.1k/10.0k (21%) │ Effort: medium │ YOLO: OFF
+● ollama-agent │ Model: gemma4:26b │ Context: 2.1k/10.0k (21%) │ Effort: medium │ YOLO: OFF │ STEALTH: OFF
 ```
 
 ### Slash Commands Reference
@@ -172,6 +173,7 @@ Slash commands provide full application control directly within the REPL:
 | `/mcp` | `/mcp [list \| reload]` | List configured MCP servers, check connection status, or reload MCP servers and rebuild tool graph mid-session. |
 | `/agents` | `/agents [list]` | List configured specialized subagents, inspecting their models, context windows, and dedicated MCP tool servers. |
 | `/yolo` | `/yolo [on \| off]` | Toggle YOLO mode or set it explicitly to bypass tool execution confirmation prompts. |
+| `/stealth` | `/stealth [on \| off]` | Toggle Stealth mode or set it explicitly to run in-memory without saving conversation to SQLite history. |
 | `/new` | `/new` (alias: `/clear`) | Start a clean session with fresh context and clear the screen (alias for `/session new`). |
 | `/clear` | `/clear` | Clear the screen and start a clean session (alias for `/new`). |
 | `/exit` | `/exit` (alias: `/quit`) | Exit the application cleanly. |
@@ -212,7 +214,7 @@ The REPL is designed with an asynchronous non-blocking event loop. The user inpu
 Slash commands that perform read-only queries or instant state toggles execute immediately in the chat viewport without waiting for the active stream to complete:
 
 * **Inspection & Queue Removal**: `/queue`, `/queue rm <position>`, `/model list`, `/effort`, `/context`, `/params list`, `/session list`, `/session search`, `/session export`, `/task list`, `/skill list`, `/skill show`, `/rag status`, `/rag list`, `/mcp list`, `/agents list`.
-* **Toggles & Exit**: `/yolo`, `/exit`, `/quit`.
+* **Toggles & Exit**: `/yolo`, `/stealth`, `/exit`, `/quit`.
 
 #### Enqueued Prompts & Stateful Commands
 Normal chat prompts and commands that mutate graph state (e.g., `/model set`, `/compact`, `/session resume`, `/session new`, `/task run`, `/skill create`) are placed in a FIFO queue:
@@ -234,7 +236,7 @@ Normal chat prompts and commands that mutate graph state (e.g., `/model set`, `/
 The dynamic header bar monitors token consumption and model parameters in real time:
 
 ```text
-● ollama-agent │ Model: gemma4:26b │ Context: 3.4k/10.0k (34%) │ Effort: medium │ RAG: my-docs │ YOLO: OFF
+● ollama-agent │ Model: gemma4:26b │ Context: 3.4k/10.0k (34%) │ Effort: medium │ RAG: my-docs │ YOLO: OFF │ STEALTH: OFF
 ```
 
 * **Metrics**: Displays consumed tokens vs. effective context window limit (`num_ctx`), formatted with `k` suffixes.
@@ -242,7 +244,7 @@ The dynamic header bar monitors token consumption and model parameters in real t
   - 🔵 **Cyan / Sky Blue (`#38bdf8`)**: Healthy context utilization (`≤ 75%`).
   - 🟡 **Yellow / Amber (`#fbbf24`)**: Elevated context warning (`76% – 90%`).
   - 🔴 **Red (`#f87171`)**: Critical limit proximity (`> 90%`).
-* **Dynamic Indicators**: Displays active RAG database in purple (`#a78bfa`) when loaded, reasoning effort level, and highlighted YOLO status badge.
+* **Dynamic Indicators**: Displays active RAG database in purple (`#a78bfa`) when loaded, reasoning effort level, highlighted YOLO status badge, and Stealth status badge.
 
 ---
 
@@ -299,7 +301,7 @@ Common programming decorators (e.g. `@staticmethod`, `@property`, `@decorator`) 
 
 ---
 
-### Human-in-the-Loop (HITL) & YOLO Mode
+### Human-in-the-Loop (HITL), YOLO & Stealth Modes
 
 To ensure safety when interacting with your local system, Ollama Agent enforces a Human-in-the-Loop confirmation policy before executing potentially sensitive operations (such as running shell commands via `execute` or modifying files via `write_file` and `edit_file`).
 
@@ -329,8 +331,19 @@ When you want autonomous execution without confirmation pauses:
 
 When YOLO mode is active:
 1. Tool approval prompts are bypassed automatically.
-2. The header displays `YOLO: ON` with a highlighted badge.
-3. The prompt chevron (`❯ `) and input box border change color to **red** for clear visual status.
+2. The header displays `YOLO: ON` with a highlighted badge (`#f87171`).
+3. The prompt chevron (`❯ `) and input box border change color to **red** (`#f87171`) for clear visual status.
+
+#### Stealth Mode
+When you want private execution without persisting conversation turns or checkpoints to SQLite (`~/.ollama-agent/history.db`):
+* **CLI Flag**: Start the agent with `-s` or `--stealth` (e.g. `ollama-agent -s`).
+* **REPL Slash Command**: Toggle dynamically with `/stealth` or set explicitly via `/stealth on` and `/stealth off`.
+
+When Stealth mode is active:
+1. Checkpoints are kept in-memory (`MemorySaver`) for multi-turn execution during the session, but no history is written to SQLite.
+2. The header displays `STEALTH: ON` with a purple highlight badge (`#c084fc`).
+3. The prompt chevron (`❯ `) and focused input border turn **purple** (`#c084fc`).
+4. **Dual Mode (YOLO + Stealth)**: When both YOLO and Stealth modes are active simultaneously, both header badges light up (`[YOLO: ON] │ [STEALTH: ON]`), and the prompt chevron and focused input border turn **fuchsia / magenta** (`#e879f9`).
 
 ---
 
