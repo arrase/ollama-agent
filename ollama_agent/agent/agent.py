@@ -46,7 +46,7 @@ from ..settings import (
     load_rag_policy,
     save_settings,
 )
-from ..streaming.parsers import ThinkTagParser, streaming_reasoning, streaming_text
+from ..streaming.parsers import ThinkTagParser
 from .builtin_tools import (
     BUILTIN_TOOLS,
     get_tool_timeout,
@@ -443,15 +443,3 @@ class AgentRuntime:
         self._checkpointer = None
 
 
-# ---------------------------------------------------------------------------
-# Pure helpers (no state)
-# ---------------------------------------------------------------------------
-
-
-def _process_message_chunk(
-    chunk: Any,
-    hide_reasoning: bool = False,
-) -> dict[str, Any] | None:
-    """Process 'messages' chunk to extract reasoning or text deltas."""
-    events = ThinkTagParser().process_chunk(chunk, hide_reasoning=hide_reasoning)
-    return events[0] if events else None

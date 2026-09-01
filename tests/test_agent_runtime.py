@@ -15,13 +15,14 @@ from langgraph.types import Command
 
 from rich.console import Console
 
-from ollama_agent.agent.agent import AgentRuntime, _process_message_chunk
+from ollama_agent.agent.agent import AgentRuntime
 from ollama_agent.agent.builtin_tools import rag_search, set_rag_manager
 from ollama_agent.agent.middleware import _stream_tool_events
 from ollama_agent.agent.subagents import build_subagents, list_subagents
 from test_compaction import make_summarization_engine
 from ollama_agent.core.prompt_processor import PromptProcessingError
 from ollama_agent.settings.config import ModelSettings, Settings, SubAgentMCPServer, SubAgentSettings
+from ollama_agent.streaming.parsers import ThinkTagParser
 
 
 class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
@@ -34,25 +35,29 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         set_rag_manager(None)
 
     def test_process_message_chunk_text(self) -> None:
+        parser = ThinkTagParser()
         chunk = MagicMock(type="ai", content="Hello world", additional_kwargs={})
-        res = _process_message_chunk(chunk)
-        self.assertEqual(res, {"type": "text_delta", "content": "Hello world"})
+        events = parser.process_chunk(chunk)
+        self.assertEqual(events, [{"type": "text_delta", "content": "Hello world"}])
 
     def test_process_message_chunk_reasoning(self) -> None:
+        parser = ThinkTagParser()
         chunk = MagicMock(type="ai", content="", additional_kwargs={"reasoning_content": "thinking..."})
-        res = _process_message_chunk(chunk)
-        self.assertEqual(res, {"type": "reasoning_delta", "content": "thinking..."})
+        events = parser.process_chunk(chunk)
+        self.assertEqual(events, [{"type": "reasoning_delta", "content": "thinking..."}])
 
         # When reasoning is hidden
-        self.assertIsNone(_process_message_chunk(chunk, hide_reasoning=True))
+        parser2 = ThinkTagParser()
+        self.assertEqual(parser2.process_chunk(chunk, hide_reasoning=True), [])
 
     def test_process_message_chunk_tool_chunk_ignored(self) -> None:
+        parser = ThinkTagParser()
         chunk = MagicMock(type="tool", content="output", additional_kwargs={})
-        self.assertIsNone(_process_message_chunk(chunk))
+        self.assertEqual(parser.process_chunk(chunk), [])
 
         # Real ToolMessageChunk
         real_tool_chunk = ToolMessageChunk(content="output", tool_call_id="call-1")
-        self.assertIsNone(_process_message_chunk(real_tool_chunk))
+        self.assertEqual(parser.process_chunk(real_tool_chunk), [])
 
     async def test_stream_tool_events_emits_events_and_result(self) -> None:
         mock_runtime = MagicMock()
