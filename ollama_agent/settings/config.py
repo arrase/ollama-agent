@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from dataclasses import asdict, dataclass, field, fields
 from importlib import resources
 from pathlib import Path
@@ -142,6 +143,14 @@ class Settings:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> Self:
+        if not isinstance(raw, dict):
+            raise ValueError(
+                _("Expected mapping for Settings, got {type_name}", type_name=type(raw).__name__)
+            )
+        valid = {f.name for f in fields(cls)}
+        unknown = set(raw) - valid
+        if unknown:
+            raise ValueError(_("Unknown setting keys: {keys}", keys=sorted(unknown)))
         settings = cls(
             model=_dataclass_from_dict(ModelSettings, raw.get("model")),
             runtime=_dataclass_from_dict(RuntimeSettings, raw.get("runtime")),
@@ -179,9 +188,13 @@ class Settings:
 # ---------------------------------------------------------------------------
 
 
-def _dataclass_from_dict(cls: type[Any], raw: dict[str, Any] | None) -> Any:
+def _dataclass_from_dict(cls: type[Any], raw: Any) -> Any:
     if raw is None:
         return cls()
+    if not isinstance(raw, dict):
+        raise ValueError(
+            _("Expected mapping for '{name}', got {type_name}", name=cls.__name__, type_name=type(raw).__name__)
+        )
     valid = {f.name for f in fields(cls)}
     unknown = set(raw) - valid
     if unknown:
@@ -190,16 +203,29 @@ def _dataclass_from_dict(cls: type[Any], raw: dict[str, Any] | None) -> Any:
 
 
 def _subagents_from_list(
-    raw: list[dict[str, Any]] | None,
+    raw: Any,
 ) -> list[SubAgentSettings]:
     """Parse subagent list from YAML, handling nested mcp_servers."""
-    if not raw:
+    if raw is None:
         return []
+    if not isinstance(raw, list):
+        raise ValueError(
+            _("Expected list for subagents, got {type_name}", type_name=type(raw).__name__)
+        )
     subagents: list[SubAgentSettings] = []
     for item in raw:
+        if not isinstance(item, dict):
+            raise ValueError(
+                _("Expected mapping for subagent, got {type_name}", type_name=type(item).__name__)
+            )
+        mcp_servers_raw = item.get("mcp_servers")
+        if mcp_servers_raw is not None and not isinstance(mcp_servers_raw, list):
+            raise ValueError(
+                _("Expected list for mcp_servers, got {type_name}", type_name=type(mcp_servers_raw).__name__)
+            )
         mcp_servers = [
             _dataclass_from_dict(SubAgentMCPServer, m)
-            for m in (item.get("mcp_servers") or [])
+            for m in (mcp_servers_raw or [])
         ]
         data = {k: v for k, v in item.items() if k != "mcp_servers"}
         data["mcp_servers"] = mcp_servers
@@ -219,7 +245,9 @@ def load_settings(settings_path: Path = SETTINGS_PATH) -> Settings:
         save_settings(settings, settings_path)
         return settings
 
-    raw = yaml.safe_load(settings_path.read_text(encoding="utf-8")) or {}
+    raw = yaml.safe_load(settings_path.read_text(encoding="utf-8"))
+    if raw is None:
+        raw = {}
     if not isinstance(raw, dict):
         raise ValueError(
             _("Settings file must contain a YAML mapping: {path}", path=settings_path)
@@ -229,10 +257,21 @@ def load_settings(settings_path: Path = SETTINGS_PATH) -> Settings:
 
 def save_settings(settings: Settings, settings_path: Path = SETTINGS_PATH) -> None:
     """Save settings to YAML file atomically."""
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    parent = settings_path.parent
+    parent.mkdir(parents=True, exist_ok=True)
     text = yaml.safe_dump(settings.to_dict(), sort_keys=False, allow_unicode=True)
-    tmp_path = settings_path.with_suffix(".tmp")
-    tmp_path.write_text(text, encoding="utf-8")
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=parent,
+        prefix=f".{settings_path.stem}_",
+        suffix=".tmp",
+        delete=False,
+    ) as tf:
+        tmp_path = Path(tf.name)
+        tf.write(text)
+        tf.flush()
+        os.fsync(tf.fileno())
     os.replace(tmp_path, settings_path)
 
 
@@ -339,7 +378,6 @@ def reset_config(
     messages: list[str] = []
 
     if option in ("all", "config-file"):
-        settings_path.unlink(missing_ok=True)
         save_settings(Settings(), settings_path)
         messages.append(_("Reset: Restored default configuration at {path}", path=settings_path))
 

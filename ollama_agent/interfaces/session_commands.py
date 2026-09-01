@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import uuid
 from pathlib import Path
@@ -14,6 +15,7 @@ from rich.table import Table
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 from ..agent.episodic_memory import (
+    HistoryError,
     connect_history,
     format_iso_timestamp,
     search_past_conversations_in_db,
@@ -29,8 +31,14 @@ _serializer = JsonPlusSerializer()
 
 
 def is_current(thread_id: str, current_thread_id: str) -> bool:
-    """Return whether *thread_id* is the current session (exact match or prefix match)."""
-    return thread_id == current_thread_id or bool(current_thread_id and thread_id.startswith(current_thread_id))
+    """Return whether *thread_id* is the current session (exact match or bidirectional prefix match)."""
+    if not thread_id or not current_thread_id:
+        return False
+    return (
+        thread_id == current_thread_id
+        or thread_id.startswith(current_thread_id)
+        or current_thread_id.startswith(thread_id)
+    )
 
 
 def new_session(console: Console) -> str:
@@ -49,29 +57,32 @@ def get_available_sessions(db_path: Path = HISTORY_DB_PATH) -> list[dict[str, An
     if not db_path.exists():
         return []
 
-    with connect_history(db_path) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT thread_id, type, checkpoint FROM checkpoints ORDER BY rowid ASC"
-        )
-        timestamps: dict[str, str] = {}
-        for tid, typ, chk in cursor.fetchall():
-            c = _serializer.loads_typed((typ, chk))
-            if isinstance(c, dict) and "ts" in c:
-                timestamps[tid] = str(c["ts"])
+    try:
+        with connect_history(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT thread_id, type, checkpoint FROM checkpoints ORDER BY rowid ASC"
+            )
+            timestamps: dict[str, str] = {}
+            for tid, typ, chk in cursor.fetchall():
+                c = _serializer.loads_typed((typ, chk))
+                if isinstance(c, dict) and "ts" in c:
+                    timestamps[tid] = str(c["ts"])
 
-        cursor.execute(
-            "SELECT thread_id, COUNT(*) as steps FROM checkpoints GROUP BY thread_id ORDER BY MAX(rowid) DESC"
-        )
-        rows = cursor.fetchall()
-        return [
-            {
-                "thread_id": row[0],
-                "steps": row[1],
-                "timestamp": format_iso_timestamp(timestamps.get(row[0], "")),
-            }
-            for row in rows
-        ]
+            cursor.execute(
+                "SELECT thread_id, COUNT(*) as steps FROM checkpoints GROUP BY thread_id ORDER BY MAX(rowid) DESC"
+            )
+            rows = cursor.fetchall()
+            return [
+                {
+                    "thread_id": row[0],
+                    "steps": row[1],
+                    "timestamp": format_iso_timestamp(timestamps.get(row[0], "")),
+                }
+                for row in rows
+            ]
+    except (sqlite3.Error, OSError, HistoryError):
+        return []
 
 
 def list_sessions(
@@ -165,11 +176,14 @@ def delete_session(
         return False
 
     try:
-        with sqlite3.connect(str(db_path)) as conn:
+        conn = sqlite3.connect(str(db_path))
+        try:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM checkpoints WHERE thread_id = ?", (resolved,))
             cursor.execute("DELETE FROM writes WHERE thread_id = ?", (resolved,))
             conn.commit()
+        finally:
+            conn.close()
         deleted_msg = _("Deleted session: {resolved}", resolved=resolved)
         console.print(f"[green]✓ {deleted_msg}[/green]")
         return True
@@ -223,18 +237,31 @@ async def export_session(
         elif role in ("ai", "assistant"):
             lines.append(f"## 🤖 {asst_label}")
             lines.append("")
-            lines.append(content)
-            lines.append("")
+            if content:
+                lines.append(content)
+                lines.append("")
+            tool_calls = getattr(msg, "tool_calls", None)
+            if tool_calls and isinstance(tool_calls, list):
+                for tc in tool_calls:
+                    tc_name = tc.get("name", "tool") if isinstance(tc, dict) else getattr(tc, "name", "tool")
+                    tc_args = tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {})
+                    tool_call_hdr = _("Tool: {name}", name=tc_name)
+                    lines.append(f"### ⚙ {tool_call_hdr}")
+                    lines.append("```json")
+                    lines.append(json.dumps(tc_args, indent=2, ensure_ascii=False) if isinstance(tc_args, dict) else str(tc_args))
+                    lines.append("```")
+                    lines.append("")
         elif role in ("tool",):
             name = getattr(msg, "name", "tool")
             tool_hdr = _("Tool: {name}", name=name)
             lines.append(f"### ⚙ {tool_hdr}")
             lines.append("```")
-            lines.append(content[:1000])
+            lines.append(content)
             lines.append("```")
             lines.append("")
 
     target_file = Path(output_path).expanduser().resolve() if output_path else Path.cwd() / f"session_{resolved[:8]}.md"
+    target_file.parent.mkdir(parents=True, exist_ok=True)
     try:
         target_file.write_text("\n".join(lines), encoding="utf-8")
         exported_msg = _("Session exported to: {target_file}", target_file=target_file)

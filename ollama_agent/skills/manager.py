@@ -10,7 +10,7 @@ from typing import Any
 
 import yaml  # type: ignore[import-untyped]
 
-from ..core import BaseFileStoreManager, validate_identifier
+from ..core import BaseFileStoreManager, require_text, validate_identifier
 from ..i18n import _
 from ..settings.paths import BUILTIN_SKILLS_DIR, SKILLS_DIR
 
@@ -29,28 +29,45 @@ class SkillInfo:
     content: str
 
 
+def _find_skill_file(skill_dir: Path) -> Path | None:
+    """Find SKILL.md (case-insensitive) inside skill_dir."""
+    if not skill_dir.is_dir():
+        return None
+    if (skill_dir / "SKILL.md").is_file():
+        return skill_dir / "SKILL.md"
+    if (skill_dir / "skill.md").is_file():
+        return skill_dir / "skill.md"
+    for item in skill_dir.iterdir():
+        if item.is_file() and item.name.lower() == "skill.md":
+            return item
+    return None
+
+
 def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     """Split a SKILL.md into YAML frontmatter dict and body markdown."""
-    if not text.startswith("---"):
+    stripped = text.lstrip()
+    if not stripped.startswith("---"):
         return {}, text
-    match = _FRONTMATTER_CLOSE.search(text, 3)
+    first_line_end = stripped.find("\n")
+    if first_line_end == -1 or stripped[:first_line_end].strip() != "---":
+        return {}, text
+    match = _FRONTMATTER_CLOSE.search(stripped, first_line_end + 1)
     if match is None:
         raise ValueError(_("Unclosed YAML frontmatter"))
+    yaml_str = stripped[first_line_end + 1 : match.start()]
     try:
-        meta = yaml.safe_load(text[3 : match.start()])
+        meta = yaml.safe_load(yaml_str) or {}
     except yaml.YAMLError as exc:
         raise ValueError(_("Invalid YAML frontmatter: {exc}", exc=exc)) from exc
     if not isinstance(meta, dict):
         raise ValueError(_("YAML frontmatter must be a mapping"))
-    return meta, text[match.end() :].lstrip("\n")
+    return meta, stripped[match.end() :].lstrip("\n")
 
 
 def _read_skill(skill_dir: Path) -> SkillInfo:
     """Read and parse the SKILL.md inside *skill_dir*."""
-    skill_file = skill_dir / "SKILL.md"
-    if not skill_file.is_file():
-        skill_file = skill_dir / "skill.md"
-    if not skill_file.is_file():
+    skill_file = _find_skill_file(skill_dir)
+    if skill_file is None:
         raise ValueError(_("Missing SKILL.md: {path}", path=skill_dir))
     if skill_file.stat().st_size > _MAX_SKILL_SIZE:
         raise ValueError(_("SKILL.md exceeds 10 MB: {path}", path=skill_file))
@@ -88,11 +105,11 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
         skills: dict[str, SkillInfo] = {}
         if self.builtin_dir is not None and self.builtin_dir.is_dir():
             for d in self.builtin_dir.iterdir():
-                if d.is_dir() and d.name.startswith(prefix) and (d / "SKILL.md").exists():
+                if d.is_dir() and d.name.startswith(prefix) and _find_skill_file(d) is not None:
                     skills[d.name] = _read_skill(d)
         if self.base_dir.is_dir():
             for d in self.base_dir.iterdir():
-                if d.is_dir() and d.name.startswith(prefix) and (d / "SKILL.md").exists():
+                if d.is_dir() and d.name.startswith(prefix) and _find_skill_file(d) is not None:
                     skills[d.name] = _read_skill(d)
         return skills
 
@@ -130,18 +147,22 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
     ) -> str:
         """Create a skill directory with a SKILL.md and return the skill ID."""
         skill_id = self.validate_skill_id(skill_id)
+        clean_name = require_text(name, _("Name"), ValueError)
+        clean_desc = require_text(description, _("Description"), ValueError)
+        clean_inst = require_text(instructions, _("Instructions"), ValueError)
+
         skill_dir = self._path(skill_id)
         if skill_dir.exists() and not overwrite:
             raise FileExistsError(_("Skill already exists: {skill_id}", skill_id=skill_id))
         skill_dir.mkdir(parents=True, exist_ok=True)
 
         frontmatter = yaml.safe_dump(
-            {"name": name, "description": description},
+            {"name": clean_name, "description": clean_desc},
             allow_unicode=True,
             default_flow_style=False,
         ).strip()
 
-        content = f"---\n{frontmatter}\n---\n\n# {name}\n\n{instructions}\n"
+        content = f"---\n{frontmatter}\n---\n\n# {clean_name}\n\n{clean_inst}\n"
         (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
         return skill_id
 

@@ -104,13 +104,18 @@ async def _read_main_config() -> dict[str, dict[str, Any]]:
     Returns the ``mcpServers`` mapping (empty when the file does not exist).
     Raises MCPConfigError when the file exists but is unreadable or invalid.
     """
-    if not MCP_PATH.exists():
-        return {}
-
     try:
         raw_json = await asyncio.to_thread(MCP_PATH.read_text, encoding="utf-8")
+    except FileNotFoundError:
+        return {}
+    except OSError as exc:
+        raise MCPConfigError(
+            _("Failed to load MCP config {config_path}: {exc}", config_path=MCP_PATH, exc=exc)
+        ) from exc
+
+    try:
         data = json.loads(raw_json)
-    except (json.JSONDecodeError, OSError) as exc:
+    except json.JSONDecodeError as exc:
         raise MCPConfigError(
             _("Failed to load MCP config {config_path}: {exc}", config_path=MCP_PATH, exc=exc)
         ) from exc
@@ -163,8 +168,21 @@ async def load_main_mcp_tools() -> list[Any]:
             )
         connections[name] = _build_mcp_connection(name, cfg)
 
-    results = await asyncio.gather(*[_connect_and_load(name, conn) for name, conn in connections.items()])
-    return [tool for chunk in results for tool in chunk]
+    if not connections:
+        return []
+
+    tasks: list[asyncio.Task[list[Any]]] = []
+    try:
+        async with asyncio.TaskGroup() as tg:
+            for name, conn in connections.items():
+                tasks.append(tg.create_task(_connect_and_load(name, conn)))
+    except ExceptionGroup as eg:
+        for exc in eg.exceptions:
+            if isinstance(exc, MCPConfigError):
+                raise exc from eg
+        raise
+
+    return [tool for t in tasks for tool in t.result()]
 
 
 async def load_subagent_mcp_tools(
@@ -175,11 +193,35 @@ async def load_subagent_mcp_tools(
 
     Raises MCPConfigError when any server entry is malformed or fails to connect.
     """
-    connections = {
-        srv.name: _build_mcp_connection(srv.name, {"command": srv.command, "args": srv.args, "env": srv.env})
-        for srv in mcp_servers
-    }
-    results = await asyncio.gather(*[_connect_and_load(name, conn) for name, conn in connections.items()])
-    tools = [tool for chunk in results for tool in chunk]
+    if not mcp_servers:
+        return []
+
+    seen_names: set[str] = set()
+    connections: dict[str, dict[str, Any]] = {}
+    for srv in mcp_servers:
+        name = srv.name.strip() if srv.name else ""
+        if not name:
+            raise MCPConfigError(
+                f"Subagent '{subagent_name}': MCP server name cannot be empty"
+            )
+        if name in seen_names:
+            raise MCPConfigError(
+                f"Subagent '{subagent_name}': duplicate MCP server name '{name}'"
+            )
+        seen_names.add(name)
+        connections[name] = _build_mcp_connection(name, {"command": srv.command, "args": srv.args, "env": srv.env})
+
+    tasks: list[asyncio.Task[list[Any]]] = []
+    try:
+        async with asyncio.TaskGroup() as tg:
+            for name, conn in connections.items():
+                tasks.append(tg.create_task(_connect_and_load(name, conn)))
+    except ExceptionGroup as eg:
+        for exc in eg.exceptions:
+            if isinstance(exc, MCPConfigError):
+                raise exc from eg
+        raise
+
+    tools = [tool for t in tasks for tool in t.result()]
     _log.info("Subagent '%s': loaded %d MCP tools", subagent_name, len(tools))
     return tools

@@ -448,5 +448,19 @@
   "Usage: /context [set <size>]": "사용법: /context [set <크기>]",
   "System Output": "시스템 출력",
   "esc to dismiss": "esc 키로 닫기",
-  "Context Compacted": "컨텍스트 압축됨"
+  "Context Compacted": "컨텍스트 압축됨",
+  "Database name cannot be empty.": "데이터베이스 이름은 비워 둘 수 없습니다.",
+  "Limit must be greater than 0": "제한은 0보다 커야 합니다",
+  "Failed to query vector database: {e}": "벡터 데이터베이스를 쿼리하지 못했습니다: {e}",
+  "Failed to get collection info: {e}": "컬렉션 정보를 가져오지 못했습니다: {e}",
+  "Failed to create database '{name}': {e}": "데이터베이스 '{name}' 생성에 실패했습니다: {e}",
+  "Failed to load database '{name}': {e}": "데이터베이스 '{name}' 로드에 실패했습니다: {e}",
+  "Failed to upsert points into vector database: {e}": "벡터 데이터베이스에 포인트를 삽입/업데이트하지 못했습니다: {e}",
+  "Expected mapping for Settings, got {type_name}": "Settings에 매핑이 필요하지만 {type_name}을(를) 받았습니다",
+  "Expected mapping for '{name}', got {type_name}": "'{name}'에 매핑이 필요하지만 {type_name}을(를) 받았습니다",
+  "Expected list for subagents, got {type_name}": "subagents에 목록이 필요하지만 {type_name}을(를) 받았습니다",
+  "Expected mapping for subagent, got {type_name}": "subagent에 매핑이 필요하지만 {type_name}을(를) 받았습니다",
+  "Expected list for mcp_servers, got {type_name}": "mcp_servers에 목록이 필요하지만 {type_name}을(를) 받았습니다",
+  "Expected mapping for Task, got {type_name}": "Task에 매핑이 필요하지만 {type_name}을(를) 받았습니다",
+  "Path traversal detected: {item_id}": "경로 탐색이 감지되었습니다: {item_id}"
 }

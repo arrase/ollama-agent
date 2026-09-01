@@ -7,19 +7,19 @@ from datetime import datetime
 from pathlib import Path
 
 #: Virtual skill mount points exposed by the CompositeBackend.
-SKILL_ROOTS: list[str | tuple[str, str]] = [("/system_skills/", "Built-in"), ("/skills/", "User")]
+SKILL_ROOTS: tuple[tuple[str, str], ...] = (("/system_skills/", "Built-in"), ("/skills/", "User"))
 
 
 def environment_block(*, include_cwd: bool) -> str:
     """Build the '# ENVIRONMENT' section appended to system prompts."""
+    now_str = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
     lines = [
         "# ENVIRONMENT",
-        f"Operating System: {platform.system()} ({platform.release()})",
+        f"Operating System: {platform.system()} ({platform.release()}, {platform.machine()})",
+        f"Current Date & Time: {now_str}",
     ]
     if include_cwd:
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
         cwd = Path.cwd().resolve()
-        lines.append(f"Current Date & Time: {now_str}")
         lines.append(
             f'Working Directory: {cwd} (directory where shell commands start in; this is what execute(command="pwd") reports)'
         )

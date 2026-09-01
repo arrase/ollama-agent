@@ -23,8 +23,14 @@ class TestCommonUtilities(unittest.TestCase):
         payload = [{"text": "part 1"}, {"content": "part 2"}]
         self.assertEqual(extract_text(payload), "part 1 part 2")
 
+    def test_extract_text_from_tuple_of_strings(self) -> None:
+        self.assertEqual(extract_text(("hello", "world")), "hello world")
+
+    def test_extract_text_none_returns_empty(self) -> None:
+        self.assertEqual(extract_text(None), "")
+
     def test_extract_text_unknown_types_raise_type_error(self) -> None:
-        for unknown in (123, None, 4.5, ("a", "b")):
+        for unknown in (123, 4.5, object()):
             with self.subTest(value=unknown):
                 with self.assertRaises(TypeError):
                     extract_text(unknown)
@@ -49,7 +55,9 @@ class TestCommonUtilities(unittest.TestCase):
             "nul",
             "aux",
             "prn",
+            "com0",
             "com1",
+            "lpt0",
             "lpt9",
         ]
         for invalid_name in invalid_cases:

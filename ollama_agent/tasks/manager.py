@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -33,7 +34,11 @@ class Task:
         self.reasoning_effort = validate_reasoning_effort(self.reasoning_effort)
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> Task:
+    def from_dict(cls, d: Any) -> Task:
+        if not isinstance(d, dict):
+            raise ValueError(
+                _("Expected mapping for Task, got {type_name}", type_name=type(d).__name__)
+            )
         return cls(
             title=d["title"],
             prompt=d["prompt"],
@@ -62,29 +67,35 @@ class TaskManager(BaseFileStoreManager[Task]):
         if path.exists() and not overwrite:
             raise FileExistsError(_("Task already exists: {task_id}", task_id=task_id))
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = path.with_suffix(".tmp")
-        tmp_path.write_text(
-            yaml.safe_dump(asdict(task), allow_unicode=True), encoding="utf-8"
-        )
+        text = yaml.safe_dump(asdict(task), allow_unicode=True)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.stem}_",
+            suffix=".tmp",
+            delete=False,
+        ) as tf:
+            tmp_path = Path(tf.name)
+            tf.write(text)
+            tf.flush()
+            os.fsync(tf.fileno())
         os.replace(tmp_path, path)
         return task_id
 
     def find_matches(self, prefix: str) -> list[tuple[str, Task]]:
         """Return all tasks whose id starts with prefix."""
         prefix = self.validate_task_id(prefix)
-        try:
-            return [(prefix, self.get(prefix))]
-        except FileNotFoundError:
-            pass
-        return [
+        matches = [
             (p.stem, self.get(p.stem))
             for p in self.base_dir.glob(f"{prefix}*.yaml")
         ]
+        return sorted(matches, key=lambda x: x[0])
 
     def get(self, item_id: str) -> Task:
         """Retrieve a task by ID. Raise FileNotFoundError if missing."""
         path = self._path(self.validate_task_id(item_id))
-        if not path.exists():
+        if not path.is_file():
             raise FileNotFoundError(str(path))
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
         return Task.from_dict(raw)

@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
-
-from rich import box
-from rich.console import Console
-from rich.table import Table
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Literal
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from rich import box
+from rich.console import Console
+from rich.markup import escape
+from rich.table import Table
 
 from ..i18n import _
 from ..settings import MCP_PATH, Settings
@@ -27,8 +27,8 @@ class MCPServerStatus:
     name: str
     transport: str
     target: str
-    status: str  # "active" | "failed"
-    tools: list[str]
+    status: Literal["active", "failed"]
+    tools: list[str] = field(default_factory=list)
     error: str = ""
 
 
@@ -51,9 +51,10 @@ async def check_mcp_server(
         target = str(conn["url"])
 
     try:
-        async with MultiServerMCPClient({name: conn}) as client:  # type: ignore[dict-item,arg-type]
-            tools = await asyncio.wait_for(client.get_tools(), timeout=timeout)
-    except asyncio.TimeoutError:
+        async with asyncio.timeout(timeout):
+            async with MultiServerMCPClient({name: conn}) as client:  # type: ignore[dict-item,arg-type]
+                tools = await client.get_tools()
+    except (TimeoutError, asyncio.TimeoutError):
         return MCPServerStatus(
             name=name,
             transport=transport,
@@ -80,11 +81,7 @@ async def list_mcp_servers(
     settings: Settings | None = None,
 ) -> None:
     """List all configured MCP servers and display their connection status."""
-    try:
-        servers_cfg = await _read_main_config()
-    except MCPConfigError as exc:
-        console.print(f"[red]{exc}[/red]")
-        return
+    servers_cfg = await _read_main_config()
 
     subagent_servers: dict[str, dict[str, Any]] = {}
     if settings:
@@ -126,21 +123,22 @@ async def list_mcp_servers(
         if st.status == "active":
             status_text = "[bold green]● Active[/bold green]"
             if st.tools:
+                escaped_tools = [escape(t) for t in st.tools]
                 tools_str = (
                     f"[green]{len(st.tools)} {_('tools')}:[/green] "
-                    f"[dim]{', '.join(st.tools)}[/dim]"
+                    f"[dim]{', '.join(escaped_tools)}[/dim]"
                 )
             else:
                 tools_str = f"[green]{_('0 tools available')}[/green]"
         else:
             status_text = "[bold red]● Failed[/bold red]"
-            tools_str = f"[red]{st.error}[/red]"
+            tools_str = f"[red]{escape(st.error)}[/red]"
 
         table.add_row(
             status_text,
-            st.name,
-            st.transport,
-            st.target,
+            escape(st.name),
+            escape(st.transport),
+            escape(st.target),
             tools_str,
         )
 
@@ -154,4 +152,3 @@ async def reload_mcp_servers(
     """Reload MCP servers and rebuild the agent graph."""
     await runtime.reload()
     await list_mcp_servers(console, settings=runtime.settings)
-

@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import sqlite3
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -24,14 +24,13 @@ class HistoryError(RuntimeError):
 
 @contextlib.contextmanager
 def connect_history(db_path: Path):
-    """Open the history database as a context manager that closes on exit."""
+    """Open the history database as a read-only context manager that closes on exit."""
     try:
-        conn = sqlite3.connect(str(db_path))
+        conn = sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True)
     except sqlite3.Error as e:
         raise HistoryError(_("Failed to open history database {db_path}: {e}", db_path=db_path, e=e)) from e
     try:
-        with conn:
-            yield conn
+        yield conn
     finally:
         conn.close()
 
@@ -40,12 +39,14 @@ def format_iso_timestamp(ts: str) -> str:
     """Format ISO timestamp into a human-readable UTC string (YYYY-MM-DD HH:MM UTC)."""
     if not ts:
         return _("unknown")
-    return datetime.fromisoformat(ts).strftime("%Y-%m-%d %H:%M UTC")
+    dt = datetime.fromisoformat(ts)
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc)
+    return dt.strftime("%Y-%m-%d %H:%M UTC")
 
 
-def load_past_user_prompts(db_path: Path | None = None) -> list[str]:
+def load_past_user_prompts(db_path: Path = HISTORY_DB_PATH) -> list[str]:
     """Load past user prompt strings from the SQLite history database in chronological order."""
-    db_path = db_path if db_path is not None else HISTORY_DB_PATH
     if not db_path.exists():
         return []
 
@@ -73,14 +74,13 @@ def load_past_user_prompts(db_path: Path | None = None) -> list[str]:
 
 
 def load_past_conversations(
-    db_path: Path | None = None,
+    db_path: Path = HISTORY_DB_PATH,
     exclude_thread_id: str = "",
 ) -> dict[str, dict[str, Any]]:
     """Load conversation messages and timestamps grouped by thread_id from SQLite history.
 
     Threads matching ``exclude_thread_id`` (e.g. active conversation) are skipped.
     """
-    db_path = db_path if db_path is not None else HISTORY_DB_PATH
     if not db_path.exists():
         return {}
 
@@ -128,7 +128,7 @@ def load_past_conversations(
 
 def search_past_conversations_in_db(
     query: str,
-    db_path: Path | None = None,
+    db_path: Path = HISTORY_DB_PATH,
     exclude_thread_id: str = "",
     limit: int = 3,
 ) -> list[dict[str, Any]]:
@@ -179,6 +179,18 @@ def search_past_conversations_in_db(
                         snippets_full = True
 
         if match_count > 0:
+            if not snippets:
+                for msg in msgs:
+                    role = getattr(msg, "type", "unknown")
+                    if role in ("human", "ai", "user", "assistant"):
+                        text = extract_text(getattr(msg, "content", "")).strip()
+                        if text:
+                            truncated = text if len(text) <= 300 else f"{text[:297]}..."
+                            role_label = _("User") if role in ("human", "user") else _("Assistant")
+                            snippets.append(f"[{role_label}]: {truncated}")
+                            if len(snippets) >= 2:
+                                break
+
             scored_results.append({
                 "thread_id": tid,
                 "score": match_count,
@@ -208,7 +220,8 @@ def format_past_conversations_context(results: list[dict[str, Any]]) -> str:
             f"### {_('Session')} #{idx} ({short_id}){header_date} - [{_('Total messages:')} {item['total_messages']}]"
         )
         for snippet in item["snippets"]:
-            lines.append(f"  {snippet}")
+            indented = "\n  ".join(snippet.splitlines())
+            lines.append(f"  {indented}")
         lines.append("")
 
     return "\n".join(lines).strip()

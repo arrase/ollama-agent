@@ -17,25 +17,35 @@ class StreamingRenderer(ABC):
 
     def on_event(self, event: dict[str, Any]) -> None:
         """Dispatch event to type-specific handler (on_<type>)."""
-        etype = event.get("type")
-        if not etype or etype == "event":
+        etype = event["type"]
+        if etype == "event":
             _log.debug("Skipping event with unroutable type: %s", etype)
             return
         handler = getattr(self, f"on_{etype}", None)
-        if not callable(handler):
+        if not callable(handler) or handler == self.on_event:
             _log.debug("Unhandled event type skipped: %s", etype)
             return
         handler(event)
 
+    def on_text_delta(self, event: dict[str, Any]) -> None:
+        """Handle a text delta event."""
+
+    def on_reasoning_delta(self, event: dict[str, Any]) -> None:
+        """Handle a reasoning delta event."""
+
+    def on_tool_call(self, event: dict[str, Any]) -> None:
+        """Handle a tool call event."""
+
+    def on_tool_output(self, event: dict[str, Any]) -> None:
+        """Handle a tool output event."""
+
     @abstractmethod
     def on_error(self, event: dict[str, Any]) -> None:
         """Handle an error event."""
-        ...
 
     @abstractmethod
     def on_warning(self, event: dict[str, Any]) -> None:
         """Handle a warning event."""
-        ...
 
     async def handle_interrupt(
         self, event: dict[str, Any], runtime: AgentRuntime

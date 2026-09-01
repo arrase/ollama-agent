@@ -260,6 +260,19 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(MCPConfigError, "MISSING_VAR_XYZ"):
                 await load_subagent_mcp_tools("coder", servers)
 
+    async def test_load_subagent_mcp_tools_empty_name_raises(self) -> None:
+        servers = [SubAgentMCPServer(name="  ", command="git-mcp")]
+        with self.assertRaisesRegex(MCPConfigError, "cannot be empty"):
+            await load_subagent_mcp_tools("coder", servers)
+
+    async def test_load_subagent_mcp_tools_duplicate_name_raises(self) -> None:
+        servers = [
+            SubAgentMCPServer(name="git", command="git-mcp"),
+            SubAgentMCPServer(name="git", command="git-mcp-2"),
+        ]
+        with self.assertRaisesRegex(MCPConfigError, "duplicate MCP server name 'git'"):
+            await load_subagent_mcp_tools("coder", servers)
+
     async def test_check_mcp_server_active(self) -> None:
         cfg = {"type": "http", "url": "https://mcp.example.com"}
         mock_tool = MagicMock()
@@ -315,9 +328,8 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
 
         try:
             with patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path):
-                await list_mcp_servers(console)
-                out = console.export_text()
-                self.assertIn("Failed to load MCP config", out)
+                with self.assertRaises(MCPConfigError):
+                    await list_mcp_servers(console)
         finally:
             tmp_path.unlink(missing_ok=True)
 

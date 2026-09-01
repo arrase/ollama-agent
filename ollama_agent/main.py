@@ -33,15 +33,19 @@ def main() -> None:
     if args.command and args.prompt:
         parser.error(_("--prompt cannot be used together with a subcommand."))
 
+    # Apply language overrides first (before config-reset so messages use chosen locale)
+    if args.language:
+        set_locale(args.language)
+
     if args.config_reset:
+        console = Console()
         for msg in reset_config(args.config_reset):
-            print(msg)
+            console.print(msg)
         return
 
     settings = load_settings()
     settings.setup_environment()
 
-    # Apply language overrides
     if args.language:
         settings.runtime.language = args.language
     if settings.runtime.language:
@@ -68,28 +72,28 @@ def main() -> None:
     set_tool_timeout(settings.runtime.builtin_tool_timeout)
 
     try:
-        if not args.command:
-            ensure_model_configured(settings)
+        if args.command:
+            handle_cli_commands(args, settings)
+            return
 
-        if args.command or args.prompt:
+        ensure_model_configured(settings)
+
+        if args.prompt:
             handle_cli_commands(args, settings)
             return
 
         runtime = AgentRuntime(settings=settings, yolo_mode=args.yolo)
-
         repl = OllamaREPL(
             runtime=runtime,
             rag_database=args.rag,
         )
-        try:
-            asyncio.run(repl.run())
-        except KeyboardInterrupt:
-            raise SystemExit(130)
+        asyncio.run(repl.run())
+    except KeyboardInterrupt:
+        raise SystemExit(130)
     except (ModelCapabilityError, ModelContextWindowError) as exc:
         console = Console()
         console.print(f"[red]{_('Error: {exc}', exc=exc)}[/red]")
         raise SystemExit(1)
-
 
 
 if __name__ == "__main__":

@@ -350,10 +350,10 @@ The `--effort` flag (and `model.reasoning_effort` in `settings.yaml`) controls m
 
 | Model Family | `--effort` Value | Ollama API Parameter | Behavior |
 | :--- | :--- | :--- | :--- |
-| **Qwen3.8 Series** | `xhigh` | `"xhigh"` | Default level. Thorough reasoning for complex analysis. |
+| **Qwen3.8 Series** | `xhigh` / `high` | `"high"` | Thorough reasoning for complex analysis (translated to Ollama API `"high"`). |
 | **Qwen3.8 Series** | `medium` | `"medium"` | Balanced reasoning optimizing accuracy and speed. |
 | **Qwen3.8 Series** | `low` | `"low"` | Efficient reasoning optimizing for speed and cost. |
-| **Qwen3.8 Series** | `enabled` | `"xhigh"` | Enables reasoning with Qwen3.8 default `xhigh` level. |
+| **Qwen3.8 Series** | `enabled` | `"high"` | Enables reasoning with Qwen3.8 default `"high"` level. |
 | **Qwen3.8 Series** | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
 | **Qwen3.8 Series** | `disabled` | `false` | Disables reasoning trace generation at the model level. |
 | **GPT-OSS** | `low` / `medium` / `high` / `xhigh` | `"low"` / `"medium"` / `"high"` / `"xhigh"` | Sets thinking trace depth. GPT-OSS accepts string effort levels. |

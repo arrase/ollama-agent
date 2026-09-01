@@ -402,10 +402,10 @@ The `--effort` flag, `/effort` slash command, and `model.reasoning_effort` in `s
 
 | Model Family | `--effort` Value | Ollama API Parameter | Behavior |
 | :--- | :--- | :--- | :--- |
-| **Qwen3.8 Series** | `xhigh` | `"xhigh"` | Default level. Thorough reasoning for complex analysis. |
+| **Qwen3.8 Series** | `xhigh` / `high` | `"high"` | Thorough reasoning for complex analysis (translated to Ollama API `"high"`). |
 | **Qwen3.8 Series** | `medium` | `"medium"` | Balanced reasoning optimizing accuracy and speed. |
 | **Qwen3.8 Series** | `low` | `"low"` | Efficient reasoning optimizing for speed and cost. |
-| **Qwen3.8 Series** | `enabled` | `"xhigh"` | Enables reasoning with Qwen3.8 default `xhigh` level. |
+| **Qwen3.8 Series** | `enabled` | `"high"` | Enables reasoning with Qwen3.8 default `"high"` level. |
 | **Qwen3.8 Series** | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
 | **Qwen3.8 Series** | `disabled` | `false` | Disables reasoning trace generation at the model level. |
 | **GPT-OSS** | `low` / `medium` / `high` / `xhigh` | `"low"` / `"medium"` / `"high"` / `"xhigh"` | Sets thinking trace depth. GPT-OSS accepts string effort levels. |
@@ -810,13 +810,7 @@ flowchart TD
 
 1. **User Settings (`settings.yaml`)**: If explicitly specified in configuration, the user's value takes precedence.
 2. **Modelfile / Model Metadata**: If omitted in configuration, the agent inspects the model's metadata (`PARAMETER <name> <value>`) for model-specific recommendations.
-3. **Ollama Engine Defaults**: If not specified in the Modelfile, official Ollama engine defaults are applied:
-   - `temperature`: `0.8`
-   - `top_p`: `0.9`
-   - `top_k`: `40`
-   - `min_p`: `0.0`
-   - `presence_penalty`: `0.0`
-   - `repeat_penalty`: `1.1`
+3. **Ollama Engine Defaults**: If not specified in `settings.yaml` or the Modelfile, parameters are not artificially overridden, allowing Ollama's native model engine defaults to apply directly.
 
 > [!TIP]
 > You can inspect active parameters at any time using `/params` (or `/params list`), and dynamically override parameters for the active session (saving to `settings.yaml`) using `/params set <parameter> <value>` (e.g. `/params set temperature 0.7`).

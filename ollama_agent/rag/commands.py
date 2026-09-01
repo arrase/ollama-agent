@@ -29,9 +29,14 @@ class RAGContext:
     def _find_or_exit(self, name: str) -> str:
         """Find a database by name/prefix or raise RAGError."""
         target = name.strip()
+        if not target:
+            raise RAGDatabaseNotFoundError(_("Database name cannot be empty."))
         names = [d["name"] for d in self.rag_manager.list_databases()]
         if target in names:
             return target
+        exact_ci = [c for c in names if c.lower() == target.lower()]
+        if len(exact_ci) == 1:
+            return exact_ci[0]
         matches = [c for c in names if c.startswith(target)]
         if not matches:
             matches = [c for c in names if c.lower().startswith(target.lower())]
@@ -111,9 +116,16 @@ async def add_rag_file(ctx: RAGContext, file_path: str) -> None:
 async def add_rag_directory(ctx: RAGContext, dir_path: str) -> None:
     """Add all files from a directory to the current RAG database."""
     result = await ctx.rag_manager.add_directory(dir_path)
-    ctx.console.print(
-        f"[green]✓ {_('Added {added} files (skipped: {skipped}, failed: {failed})', added=result['added'], skipped=result['skipped'], failed=result['failed'])}[/green]"
-    )
+    added = result["added"]
+    skipped = result["skipped"]
+    failed = result["failed"]
+    msg = _("Added {added} files (skipped: {skipped}, failed: {failed})", added=added, skipped=skipped, failed=failed)
+    if failed > 0 and added == 0:
+        ctx.console.print(f"[red]✕ {msg}[/red]")
+    elif failed > 0:
+        ctx.console.print(f"[yellow]⚠ {msg}[/yellow]")
+    else:
+        ctx.console.print(f"[green]✓ {msg}[/green]")
 
 
 def show_rag_status(ctx: RAGContext) -> None:

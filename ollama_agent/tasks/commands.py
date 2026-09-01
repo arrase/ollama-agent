@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from ..agent import AgentRuntime
@@ -38,6 +39,7 @@ class TasksContext:
 
     console: Console = field(default_factory=Console)
     task_manager: TaskManager = field(default_factory=TaskManager)
+    settings: Settings | None = None
 
     def _find_or_exit(self, task_id: str) -> tuple[str, Task]:
         try:
@@ -75,16 +77,16 @@ def list_tasks(ctx: TasksContext) -> None:
     ]:
         table.add_column(col, style=style)
     for tid, t in tasks:
-        table.add_row(tid, t.title, t.model, t.reasoning_effort)
+        table.add_row(escape(tid), escape(t.title), escape(t.model), escape(t.reasoning_effort))
     ctx.console.print(table)
 
 
 async def run_task(ctx: TasksContext, task_id: str, *, yolo: bool = False) -> None:
     tid, t = ctx._find_or_exit(task_id)
     ctx.console.print(
-        _("Executing: {title} ({tid})\nPrompt: {prompt}\nModel: {model} | Effort: {effort}", title=t.title, tid=tid, prompt=t.prompt, model=t.model, effort=t.reasoning_effort)
+        _("Executing: {title} ({tid})\nPrompt: {prompt}\nModel: {model} | Effort: {effort}", title=escape(t.title), tid=escape(tid), prompt=escape(t.prompt), model=escape(t.model), effort=escape(t.reasoning_effort))
     )
-    settings = load_settings()
+    settings = ctx.settings if ctx.settings is not None else load_settings()
     apply_task_settings(settings, t)
     runtime = AgentRuntime(settings=settings, yolo_mode=yolo)
     async with runtime:
@@ -96,7 +98,7 @@ async def run_task(ctx: TasksContext, task_id: str, *, yolo: bool = False) -> No
 def delete_task(ctx: TasksContext, task_id: str) -> None:
     tid, t = ctx._find_or_exit(task_id)
     ctx.task_manager.delete(tid)
-    ctx.console.print(f"[green]✓ {_('Task deleted: {title} ({tid})', title=t.title, tid=tid)}[/green]")
+    ctx.console.print(f"[green]✓ {_('Task deleted: {title} ({tid})', title=escape(t.title), tid=escape(tid))}[/green]")
 
 
 def create_task(
@@ -123,5 +125,5 @@ def create_task(
     except ValueError as e:
         raise ValidationError(str(e)) from e
     ctx.console.print(
-        f"[green]✓ {_('Task created: {title} ({task_id})', title=task.title, task_id=saved_id)}[/green]"
+        f"[green]✓ {_('Task created: {title} ({task_id})', title=escape(task.title), task_id=escape(saved_id))}[/green]"
     )

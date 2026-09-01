@@ -448,5 +448,19 @@
   "Usage: /context [set <size>]": "Verwendung: /context [set <Größe>]",
   "System Output": "Systemausgabe",
   "esc to dismiss": "Esc zum Schließen",
-  "Context Compacted": "Kontext komprimiert"
+  "Context Compacted": "Kontext komprimiert",
+  "Database name cannot be empty.": "Der Datenbankname darf nicht leer sein.",
+  "Limit must be greater than 0": "Das Limit muss größer als 0 sein",
+  "Failed to query vector database: {e}": "Fehler beim Abfragen der Vektordatenbank: {e}",
+  "Failed to get collection info: {e}": "Fehler beim Abrufen der Sammlungsinfo: {e}",
+  "Failed to create database '{name}': {e}": "Fehler beim Erstellen der Datenbank '{name}': {e}",
+  "Failed to load database '{name}': {e}": "Fehler beim Laden der Datenbank '{name}': {e}",
+  "Failed to upsert points into vector database: {e}": "Fehler beim Einfügen/Aktualisieren von Punkten in der Vektordatenbank: {e}",
+  "Expected mapping for Settings, got {type_name}": "Mapping für Settings erwartet, {type_name} erhalten",
+  "Expected mapping for '{name}', got {type_name}": "Mapping für '{name}' erwartet, {type_name} erhalten",
+  "Expected list for subagents, got {type_name}": "Liste für subagents erwartet, {type_name} erhalten",
+  "Expected mapping for subagent, got {type_name}": "Mapping für subagent erwartet, {type_name} erhalten",
+  "Expected list for mcp_servers, got {type_name}": "Liste für mcp_servers erwartet, {type_name} erhalten",
+  "Expected mapping for Task, got {type_name}": "Mapping für Task erwartet, {type_name} erhalten",
+  "Path traversal detected: {item_id}": "Pfadüberschreitung erkannt: {item_id}"
 }

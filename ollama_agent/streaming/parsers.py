@@ -46,3 +46,106 @@ def streaming_reasoning(content: Any, additional_kwargs: dict[str, Any] | None =
         for entry in (block.get("summary") or ())
         if isinstance(entry, dict) and entry.get("type") == "summary_text" and "text" in entry
     )
+
+
+class ThinkTagParser:
+    """Stateful parser for tracking <think> and </think> boundaries across streaming chunks."""
+
+    def __init__(self) -> None:
+        self.in_think: bool = False
+        self._buffer: str = ""
+
+    def feed(self, text: str) -> list[tuple[str, str]]:
+        """Feed text into parser and return list of (kind, delta) tuples.
+
+        kind is either 'text' or 'reasoning'.
+        """
+        combined = self._buffer + text
+        self._buffer = ""
+        deltas: list[tuple[str, str]] = []
+        accumulated: list[str] = []
+        i = 0
+        n = len(combined)
+
+        while i < n:
+            if not self.in_think:
+                if combined.startswith("<think>", i):
+                    if accumulated:
+                        deltas.append(("text", "".join(accumulated)))
+                        accumulated = []
+                    self.in_think = True
+                    i += len("<think>")
+                    continue
+
+                rem = combined[i:]
+                if "<think>".startswith(rem):
+                    self._buffer = rem
+                    break
+
+                accumulated.append(combined[i])
+                i += 1
+            else:
+                if combined.startswith("</think>", i):
+                    if accumulated:
+                        deltas.append(("reasoning", "".join(accumulated)))
+                        accumulated = []
+                    self.in_think = False
+                    i += len("</think>")
+                    continue
+
+                rem = combined[i:]
+                if "</think>".startswith(rem):
+                    self._buffer = rem
+                    break
+
+                accumulated.append(combined[i])
+                i += 1
+
+        if accumulated:
+            kind = "reasoning" if self.in_think else "text"
+            deltas.append((kind, "".join(accumulated)))
+
+        return deltas
+
+    def flush(self, hide_reasoning: bool = False) -> list[dict[str, Any]]:
+        """Flush any pending buffer as a final delta."""
+        if not self._buffer:
+            return []
+        buf = self._buffer
+        self._buffer = ""
+        if self.in_think:
+            if hide_reasoning:
+                return []
+            return [{"type": "reasoning_delta", "content": buf}]
+        return [{"type": "text_delta", "content": buf}]
+
+    def process_chunk(
+        self,
+        chunk: Any,
+        hide_reasoning: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Process a chunk and return reasoning or text delta events."""
+        if getattr(chunk, "type", "") in ("tool", "ToolMessageChunk"):
+            return []
+
+        content = getattr(chunk, "content", None)
+        additional_kwargs = getattr(chunk, "additional_kwargs", None)
+
+        reasoning = streaming_reasoning(content, additional_kwargs)
+        if reasoning:
+            if hide_reasoning:
+                return []
+            return [{"type": "reasoning_delta", "content": reasoning}]
+
+        text = streaming_text(content)
+        if not text:
+            return []
+
+        events: list[dict[str, Any]] = []
+        for kind, delta in self.feed(text):
+            if kind == "reasoning":
+                if not hide_reasoning:
+                    events.append({"type": "reasoning_delta", "content": delta})
+            else:
+                events.append({"type": "text_delta", "content": delta})
+        return events

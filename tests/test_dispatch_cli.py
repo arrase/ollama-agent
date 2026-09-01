@@ -201,13 +201,14 @@ class TestDispatchAndCLI(unittest.TestCase):
 
     def test_main_config_reset(self) -> None:
         # Patch set_locale so the system language does not leak into other tests.
+        mock_console = MagicMock()
         with patch("sys.argv", ["ollama-agent", "--config-reset", "config-file"]), \
              patch("ollama_agent.main.set_locale", return_value="en"), \
              patch("ollama_agent.main.reset_config", return_value=["Reset successful"]) as mock_reset, \
-             patch("builtins.print") as mock_print:
+             patch("ollama_agent.main.Console", return_value=mock_console):
             main()
             mock_reset.assert_called_once_with("config-file")
-            mock_print.assert_called_once_with("Reset successful")
+            mock_console.print.assert_called_once_with("Reset successful")
 
     def test_main_cli_commands_handled(self) -> None:
         with patch("sys.argv", ["ollama-agent", "task", "list"]), \
@@ -286,9 +287,14 @@ class TestDispatchAndCLI(unittest.TestCase):
     def test_cli_session_export(self) -> None:
         parser = create_argument_parser()
         args = parser.parse_args(["session", "export", "sess-123", "-o", "export.md"])
-        args._runtime = AsyncMock()
 
-        with patch("ollama_agent.interfaces.dispatch.export_session", AsyncMock()) as mock_export:
+        with patch("ollama_agent.interfaces.dispatch.AgentRuntime") as mock_runtime_cls, \
+             patch("ollama_agent.interfaces.dispatch.export_session", AsyncMock()) as mock_export:
+            mock_runtime = MagicMock()
+            mock_runtime.__aenter__ = AsyncMock(return_value=mock_runtime)
+            mock_runtime.__aexit__ = AsyncMock(return_value=None)
+            mock_runtime_cls.return_value = mock_runtime
+
             handlers = _build_cli_handlers(args)
             asyncio.run(handlers[("session", "export")]())
             mock_export.assert_called_once()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 import mimetypes
 import os
 import re
@@ -13,9 +14,19 @@ from urllib.request import url2pathname
 
 from ..i18n import _
 
+_log = logging.getLogger(__name__)
+
 
 class PromptProcessingError(Exception):
     """Exception raised when prompt processing fails, e.g., referenced file not found."""
+
+
+class ContextLimitExceededError(PromptProcessingError):
+    """Raised when the total number of files or total context size limit is exceeded."""
+
+
+class FileTooLargeError(PromptProcessingError):
+    """Raised when a single referenced file exceeds the maximum allowed file size."""
 
 
 _MIME_EXTENSIONS: dict[str, str] = {
@@ -94,12 +105,16 @@ def classify_multimodal_file(file_path: Path) -> str | None:
 
 def is_binary_file(file_path: Path) -> bool:
     """Check if a file is binary by searching for null bytes in the first block."""
-    with file_path.open("rb") as f:
-        chunk = f.read(1024)
-        return b"\x00" in chunk
+    try:
+        with file_path.open("rb") as f:
+            chunk = f.read(1024)
+            return b"\x00" in chunk
+    except OSError as exc:
+        _log.warning("Could not read file %s to check for binary content: %s", file_path, exc)
+        return False
 
 
-def _check_file_size(file_path: Path, max_file_size: int) -> None:
+def _check_file_size(file_path: Path, max_file_size: int) -> int:
     """Verify that file exists and its size does not exceed max_file_size."""
     try:
         file_size = file_path.stat().st_size
@@ -107,9 +122,10 @@ def _check_file_size(file_path: Path, max_file_size: int) -> None:
         raise PromptProcessingError(_("Failed to read file {file_path}: {e}", file_path=file_path, e=e)) from e
 
     if file_size > max_file_size:
-        raise PromptProcessingError(
+        raise FileTooLargeError(
             _("File too large: {file_path} ({file_size} bytes, limit is {max_file_size} bytes)", file_path=file_path, file_size=file_size, max_file_size=max_file_size)
         )
+    return file_size
 
 
 def read_file_content(file_path: Path, max_file_size: int = 1024 * 1024) -> str:
@@ -123,8 +139,7 @@ def read_file_content(file_path: Path, max_file_size: int = 1024 * 1024) -> str:
         raise PromptProcessingError(_("Cannot read binary file as text: {file_path}", file_path=file_path))
 
     try:
-        with file_path.open("r", encoding="utf-8", errors="replace") as f:
-            return f.read()
+        return file_path.read_text(encoding="utf-8", errors="replace")
     except OSError as e:
         raise PromptProcessingError(_("Failed to read file {file_path}: {e}", file_path=file_path, e=e)) from e
 
@@ -134,8 +149,7 @@ def read_binary_file_b64(file_path: Path, max_file_size: int = 1024 * 1024) -> s
     _check_file_size(file_path, max_file_size)
 
     try:
-        with file_path.open("rb") as f:
-            return base64.b64encode(f.read()).decode("utf-8")
+        return base64.b64encode(file_path.read_bytes()).decode("utf-8")
     except OSError as e:
         raise PromptProcessingError(_("Failed to read file {file_path}: {e}", file_path=file_path, e=e)) from e
 
@@ -145,16 +159,20 @@ def resolve_context_files(
     max_file_size: int = 1024 * 1024,
     max_files: int = 100,
     max_total_size: int = 10 * 1024 * 1024,
+    *,
+    initial_count: int = 0,
+    initial_size: int = 0,
 ) -> ResolvedContext:
     """Resolve a target file or directory into context data."""
     text_contents: dict[Path, str] = {}
     binary_attachments: list[dict[str, Any]] = []
     classifications: dict[Path, str] = {}
     warnings: list[str] = []
-    total_size = 0
+    total_size = initial_size
+    file_count = initial_count
 
     def add_file(file_path: Path) -> None:
-        nonlocal total_size
+        nonlocal total_size, file_count
 
         try:
             size = file_path.stat().st_size
@@ -168,13 +186,13 @@ def resolve_context_files(
         elif is_binary_file(file_path):
             raise PromptProcessingError(_("Cannot read binary file as text: {file_path}", file_path=file_path))
 
-        if len(text_contents) + len(binary_attachments) >= max_files:
-            raise PromptProcessingError(
+        if file_count >= max_files:
+            raise ContextLimitExceededError(
                 _("Mentions limit exceeded: max {max_files} files.", max_files=max_files)
             )
 
         if total_size + size > max_total_size:
-            raise PromptProcessingError(
+            raise ContextLimitExceededError(
                 _("Total context size limit of {max_total_size} bytes exceeded.", max_total_size=max_total_size)
             )
 
@@ -187,6 +205,7 @@ def resolve_context_files(
             })
         else:
             text_contents[file_path] = read_file_content(file_path, max_file_size)
+        file_count += 1
         total_size += size
 
     if target_path.is_file():
@@ -202,10 +221,11 @@ def resolve_context_files(
         for file_name in files:
             try:
                 add_file(Path(root) / file_name)
+            except ContextLimitExceededError as exc:
+                warnings.append(str(exc))
+                return ResolvedContext(text_contents, binary_attachments, classifications, list(dict.fromkeys(warnings)))
             except PromptProcessingError as exc:
                 warnings.append(str(exc))
-                if "limit" in str(exc).lower() or "exceeded" in str(exc).lower():
-                    return ResolvedContext(text_contents, binary_attachments, classifications, list(dict.fromkeys(warnings)))
 
     return ResolvedContext(text_contents, binary_attachments, classifications, list(dict.fromkeys(warnings)))
 
@@ -236,6 +256,8 @@ def process_prompt_mentions(
     all_binary_attachments: list[dict[str, Any]] = []
     all_classifications: dict[Path, str] = {}
     all_warnings: list[str] = []
+    cumulative_files = 0
+    cumulative_size = 0
 
     # Map of match range or original mention text -> replacement placeholder
     replacements: list[tuple[int, int, str]] = []
@@ -258,9 +280,9 @@ def process_prompt_mentions(
         if not is_quoted:
             while path_str and path_str[-1] in ".,?:;!":
                 if (
-                    path_str.endswith("..")
-                    or path_str == "."
-                    or re.match(r"^[a-zA-Z]:$", path_str)
+                    path_str in (".", "..")
+                    or path_str.endswith(("/..", "\\..", "/.", "\\."))
+                    or bool(re.match(r"^[a-zA-Z]:$", path_str))
                 ):
                     break
                 path_str = path_str[:-1]
@@ -284,20 +306,27 @@ def process_prompt_mentions(
                     max_file_size=max_file_size,
                     max_files=max_files,
                     max_total_size=max_total_size,
+                    initial_count=cumulative_files,
+                    initial_size=cumulative_size,
                 )
                 all_context_contents.update(context.text_contents)
                 all_binary_attachments.extend(context.attachments)
                 all_classifications.update(context.classifications)
                 all_warnings.extend(context.warnings)
+                cumulative_files = len(all_context_contents) + len(all_binary_attachments)
+                cumulative_size = sum(p.stat().st_size for p in all_context_contents) + sum(
+                    p.stat().st_size for p in all_classifications if p in resolved_paths and p.is_file()
+                )
 
             attachment_type = all_classifications.get(candidate_path)
             if candidate_path.is_file() and attachment_type is not None:
                 replacements.append((start, end, f"[{attachment_type}: {path_str}]"))
         else:
             has_separator = "/" in path_str or "\\" in path_str
-            has_extension = re.search(r"\.[a-zA-Z0-9]{1,5}$", path_str) is not None
+            has_relative_prefix = path_str.startswith(("./", "../", ".\\", "..\\"))
+            is_intended_file = is_quoted or has_separator or has_relative_prefix
 
-            if has_separator or has_extension or is_quoted:
+            if is_intended_file:
                 raise PromptProcessingError(
                     _("File or directory not found: '{path_str}'", path_str=path_str)
                 )
