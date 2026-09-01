@@ -41,13 +41,17 @@ AgentHeader {
 }
 
 #autocomplete-list:focus > .option-list--option-highlighted {
-    background: #21262d;
-    color: #38bdf8;
+    background: #264f78;
+    color: #e6edf3;
 }
 
 #autocomplete-list > .option-list--option-highlighted {
-    background: #21262d;
-    color: #38bdf8;
+    background: #264f78;
+    color: #e6edf3;
+}
+
+#autocomplete-list > .option-list--option-hover {
+    background: rgba(56, 189, 248, 0.12);
 }
 
 /* ── Prompt Queue Widget ────────────────────────────────────────────────── */
