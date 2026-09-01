@@ -246,6 +246,22 @@ class TestI18nTranslations(unittest.TestCase):
             _("Prompt queue cleared ({count} removed).", count=3),
             "Prompt queue cleared (3 removed).",
         )
+        self.assertEqual(
+            _("Removed #{pos} from prompt queue: {text}", pos=2, text="foo"),
+            "Removed #2 from prompt queue: foo",
+        )
+        self.assertEqual(
+            _("Invalid queue position '{pos}'. Usage: /queue rm <position>", pos="xyz"),
+            "Invalid queue position 'xyz'. Usage: /queue rm <position>",
+        )
+        self.assertEqual(
+            _("Queue position {pos} out of range (queue has {count} items).", pos=5, count=2),
+            "Queue position 5 out of range (queue has 2 items).",
+        )
+        self.assertEqual(
+            _("Queued ({count})", count=4),
+            "Queued (4)",
+        )
         set_locale("es")
         self.assertEqual(
             _("Prompt added to queue (position #{pos})", pos=1),
@@ -254,6 +270,22 @@ class TestI18nTranslations(unittest.TestCase):
         self.assertEqual(
             _("Prompt queue cleared ({count} removed).", count=3),
             "Cola de prompts limpiada (3 eliminados).",
+        )
+        self.assertEqual(
+            _("Removed #{pos} from prompt queue: {text}", pos=2, text="foo"),
+            "Eliminado #2 de la cola de prompts: foo",
+        )
+        self.assertEqual(
+            _("Invalid queue position '{pos}'. Usage: /queue rm <position>", pos="xyz"),
+            "Posición de cola no válida 'xyz'. Uso: /queue rm <posición>",
+        )
+        self.assertEqual(
+            _("Queue position {pos} out of range (queue has {count} items).", pos=5, count=2),
+            "Posición de cola 5 fuera de rango (la cola tiene 2 elementos).",
+        )
+        self.assertEqual(
+            _("Queued ({count})", count=4),
+            "En cola (4)",
         )
 
     def test_unknown_string_in_english_is_source_language(self) -> None:

@@ -20,6 +20,7 @@ from ollama_agent.interfaces.tui_components import (
     AgentFooter,
     AgentHeader,
     AgentResponse,
+    PromptQueueWidget,
     ReplInput,
     SystemMessage,
     UserMessage,
@@ -58,6 +59,51 @@ class TestQueuedItem(unittest.TestCase):
         self.assertEqual(item.text, "Explain quicksort in Python")
 
 
+class TestPromptQueueWidget(unittest.TestCase):
+    """Unit tests for PromptQueueWidget rendering and update behaviors."""
+
+    def test_can_focus_is_false(self) -> None:
+        widget = PromptQueueWidget()
+        self.assertFalse(widget.can_focus)
+
+    def test_update_queue_empty_hides_widget(self) -> None:
+        widget = PromptQueueWidget()
+        widget.update_queue([])
+        self.assertFalse(widget.display)
+
+    def test_update_queue_renders_items(self) -> None:
+        widget = PromptQueueWidget()
+        items = [QueuedItem("Prompt alpha"), QueuedItem("Prompt beta")]
+        widget.update_queue(items)
+        self.assertTrue(widget.display)
+        rendered = str(widget.render())
+        self.assertIn("Queued (2)", rendered)
+        self.assertIn("esc to clear", rendered)
+        self.assertIn("#1 Prompt alpha", rendered)
+        self.assertIn("#2 Prompt beta", rendered)
+
+    def test_update_queue_truncates_long_items_and_escapes(self) -> None:
+        widget = PromptQueueWidget()
+        long_prompt = "A" * 70
+        widget.update_queue([QueuedItem(long_prompt)])
+        self.assertTrue(widget.display)
+        rendered = str(widget.render())
+        self.assertIn("...", rendered)
+
+    def test_update_queue_more_than_three_items(self) -> None:
+        widget = PromptQueueWidget()
+        items = [QueuedItem(f"Item {i}") for i in range(1, 6)]
+        widget.update_queue(items)
+        self.assertTrue(widget.display)
+        rendered = str(widget.render())
+        self.assertIn("Queued (5)", rendered)
+        self.assertIn("#1 Item 1", rendered)
+        self.assertIn("#2 Item 2", rendered)
+        self.assertIn("#3 Item 3", rendered)
+        self.assertNotIn("#4 Item 4", rendered)
+        self.assertIn("+2 more", rendered)
+
+
 class TestIsImmediateCommand(unittest.TestCase):
     """Unit tests for immediate vs stateful/queued slash command classification."""
 
@@ -68,6 +114,9 @@ class TestIsImmediateCommand(unittest.TestCase):
             "/queue",
             "/queue list",
             "/queue clear",
+            "/queue rm 1",
+            "/queue remove 2",
+            "/queue delete 3",
             "/yolo",
             "/yolo on",
             "/yolo off",
@@ -250,7 +299,7 @@ class TestImmediateCommandExecution(unittest.IsolatedAsyncioTestCase):
             app._is_generating = True
             app._prompt_queue.append(QueuedItem("Queued prompt 1"))
             app._prompt_queue.append(QueuedItem("Queued prompt 2"))
-            app._update_footer_queue_count()
+            app._update_queue_ui()
 
             self.assertEqual(footer._queued_count, 2)
 
@@ -315,7 +364,7 @@ class TestQueueDrainingBehavior(unittest.IsolatedAsyncioTestCase):
             chat_scroll = app.query_one("#chat-scroll")
 
             app._prompt_queue.append(QueuedItem("Drainable prompt"))
-            app._update_footer_queue_count()
+            app._update_queue_ui()
             self.assertEqual(footer._queued_count, 1)
 
             with patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream:
@@ -340,7 +389,7 @@ class TestQueueDrainingBehavior(unittest.IsolatedAsyncioTestCase):
             footer = app.query_one(AgentFooter)
 
             app._prompt_queue.append(QueuedItem("/compact"))
-            app._update_footer_queue_count()
+            app._update_queue_ui()
             self.assertEqual(footer._queued_count, 1)
 
             with patch.object(app, "_run_slash_command", new_callable=AsyncMock) as mock_slash:
@@ -357,7 +406,7 @@ class TestQueueDrainingBehavior(unittest.IsolatedAsyncioTestCase):
             app._prompt_queue.append(QueuedItem("Prompt 1"))
             app._prompt_queue.append(QueuedItem("/compact"))
             app._prompt_queue.append(QueuedItem("Prompt 2"))
-            app._update_footer_queue_count()
+            app._update_queue_ui()
 
             streamed_prompts: list[str] = []
 
@@ -389,7 +438,7 @@ class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
 
             app._prompt_queue.append(QueuedItem("Queued prompt 1"))
             app._prompt_queue.append(QueuedItem("Queued prompt 2"))
-            app._update_footer_queue_count()
+            app._update_queue_ui()
 
             self.assertEqual(footer._queued_count, 2)
 
@@ -475,7 +524,7 @@ class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
             inp = app.query_one(ReplInput)
 
             app._prompt_queue.append(QueuedItem("Stale queued prompt"))
-            app._update_footer_queue_count()
+            app._update_queue_ui()
 
             agent_msg = AgentResponse()
 
@@ -552,7 +601,7 @@ class TestToolApprovalModalAndQueue(unittest.IsolatedAsyncioTestCase):
 
             app._is_approval_pending = True
             app._prompt_queue.append(QueuedItem("Subsequent queued prompt"))
-            app._update_footer_queue_count()
+            app._update_queue_ui()
 
             processed_calls: list[object] = []
 
@@ -601,7 +650,7 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
             app._prompt_queue.append(QueuedItem("Item 1"))
             app._prompt_queue.append(QueuedItem("Item 2"))
             app._prompt_queue.append(QueuedItem("Item 3"))
-            app._update_footer_queue_count()
+            app._update_queue_ui()
 
             repl.console = Console(file=io.StringIO())
             repl._handle_queue_cmd(["clear"])
@@ -611,6 +660,122 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(app._prompt_queue), 0)
             footer = app.query_one(AgentFooter)
             self.assertEqual(footer._queued_count, 0)
+
+    async def test_queue_rm_success(self) -> None:
+        repl, _ = _create_mock_repl()
+        app = OllamaAgentApp(repl)
+        async with app.run_test():
+            app._prompt_queue.append(QueuedItem("Item 1"))
+            app._prompt_queue.append(QueuedItem("Item 2"))
+            app._prompt_queue.append(QueuedItem("Item 3"))
+            app._update_queue_ui()
+
+            repl.console = Console(file=io.StringIO())
+            repl._handle_queue_cmd(["rm", "2"])
+            output = repl.console.file.getvalue()
+
+            self.assertIn("Removed #2 from prompt queue: Item 2", output)
+            self.assertEqual(len(app._prompt_queue), 2)
+            self.assertEqual(app._prompt_queue[0].text, "Item 1")
+            self.assertEqual(app._prompt_queue[1].text, "Item 3")
+            footer = app.query_one(AgentFooter)
+            self.assertEqual(footer._queued_count, 2)
+
+    async def test_queue_rm_with_hash_prefix(self) -> None:
+        repl, _ = _create_mock_repl()
+        app = OllamaAgentApp(repl)
+        async with app.run_test():
+            app._prompt_queue.append(QueuedItem("Item 1"))
+            app._prompt_queue.append(QueuedItem("Item 2"))
+            app._update_queue_ui()
+
+            repl.console = Console(file=io.StringIO())
+            repl._handle_queue_cmd(["rm", "#1"])
+            output = repl.console.file.getvalue()
+
+            self.assertIn("Removed #1 from prompt queue: Item 1", output)
+            self.assertEqual(len(app._prompt_queue), 1)
+            self.assertEqual(app._prompt_queue[0].text, "Item 2")
+
+    async def test_queue_rm_aliases_remove_and_delete(self) -> None:
+        repl, _ = _create_mock_repl()
+        app = OllamaAgentApp(repl)
+        async with app.run_test():
+            app._prompt_queue.append(QueuedItem("Alpha"))
+            app._prompt_queue.append(QueuedItem("Beta"))
+            app._update_queue_ui()
+
+            repl.console = Console(file=io.StringIO())
+            repl._handle_queue_cmd(["remove", "1"])
+            self.assertIn("Removed #1 from prompt queue: Alpha", repl.console.file.getvalue())
+
+            repl.console = Console(file=io.StringIO())
+            repl._handle_queue_cmd(["delete", "1"])
+            self.assertIn("Removed #1 from prompt queue: Beta", repl.console.file.getvalue())
+            self.assertEqual(len(app._prompt_queue), 0)
+
+    def test_queue_rm_missing_position(self) -> None:
+        repl, _ = _create_mock_repl()
+        repl._handle_queue_cmd(["rm"])
+        output = repl.console.file.getvalue()
+        self.assertIn("Usage: /queue rm <position>", output)
+
+    def test_queue_rm_when_empty(self) -> None:
+        repl, _ = _create_mock_repl()
+        repl._handle_queue_cmd(["rm", "1"])
+        output = repl.console.file.getvalue()
+        self.assertIn("Prompt queue is empty.", output)
+
+    async def test_queue_rm_invalid_position_non_digit(self) -> None:
+        repl, _ = _create_mock_repl()
+        app = OllamaAgentApp(repl)
+        async with app.run_test():
+            app._prompt_queue.append(QueuedItem("Item 1"))
+            repl.console = Console(file=io.StringIO())
+            repl._handle_queue_cmd(["rm", "abc"])
+            output = repl.console.file.getvalue()
+            self.assertIn("Invalid queue position 'abc'. Usage: /queue rm <position>", output)
+
+    async def test_queue_rm_out_of_range(self) -> None:
+        repl, _ = _create_mock_repl()
+        app = OllamaAgentApp(repl)
+        async with app.run_test():
+            app._prompt_queue.append(QueuedItem("Item 1"))
+            app._prompt_queue.append(QueuedItem("Item 2"))
+            app._update_queue_ui()
+
+            repl.console = Console(file=io.StringIO())
+            repl._handle_queue_cmd(["rm", "0"])
+            self.assertIn("Queue position 0 out of range (queue has 2 items).", repl.console.file.getvalue())
+
+            repl.console = Console(file=io.StringIO())
+            repl._handle_queue_cmd(["rm", "5"])
+            self.assertIn("Queue position 5 out of range (queue has 2 items).", repl.console.file.getvalue())
+
+    async def test_queue_rm_autocomplete(self) -> None:
+        repl, _ = _create_mock_repl()
+        app = OllamaAgentApp(repl)
+        async with app.run_test():
+            app._prompt_queue.append(QueuedItem("First queued prompt"))
+            app._prompt_queue.append(QueuedItem("Second queued prompt"))
+
+            # Level 2 completions for /queue rm
+            comps = app._slash_completions("/queue rm ")
+            self.assertEqual(len(comps), 2)
+            self.assertEqual(comps[0][0], "/queue rm 1")
+            self.assertEqual(comps[1][0], "/queue rm 2")
+            self.assertIn("#1", comps[0][1].plain)
+            self.assertIn("First queued prompt", comps[0][1].plain)
+
+            # Filtered completion
+            comps_filtered = app._slash_completions("/queue remove 2")
+            self.assertEqual(len(comps_filtered), 1)
+            self.assertEqual(comps_filtered[0][0], "/queue remove 2")
+
+            # Hash-prefixed filter
+            comps_hash = app._slash_completions("/queue delete #1")
+            self.assertEqual(len(comps_hash), 1)
+            self.assertEqual(comps_hash[0][0], "/queue delete 1")
 
     def test_queue_invalid_subcommand(self) -> None:
         repl, _ = _create_mock_repl()
@@ -641,7 +806,7 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
 
             app._prompt_queue.append(QueuedItem("/session new"))
             app._prompt_queue.append(QueuedItem("First message in fresh session"))
-            app._update_footer_queue_count()
+            app._update_queue_ui()
 
             streamed: list[str] = []
 
@@ -672,7 +837,7 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
 
             app._prompt_queue.append(QueuedItem("/session resume sess_target_123"))
             app._prompt_queue.append(QueuedItem("Followup question"))
-            app._update_footer_queue_count()
+            app._update_queue_ui()
 
             streamed: list[str] = []
 

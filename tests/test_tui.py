@@ -487,7 +487,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             # 1d. Level 1: Subcommands for /queue
             app.update_autocomplete("/queue ")
             self.assertTrue(autolist.display)
-            self.assertEqual(autolist.option_count, 1)  # clear
+            self.assertEqual(autolist.option_count, 4)  # clear, rm, remove, delete
             app.accept_completion(0)
             inp = app.query_one(ReplInput)
             self.assertEqual(inp.text, "/queue clear ")

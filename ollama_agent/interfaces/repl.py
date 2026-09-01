@@ -12,6 +12,7 @@ from typing import Any
 
 import ollama
 from rich.console import Console
+from rich.markup import escape
 from rich.text import Text
 
 from textual import events
@@ -28,6 +29,7 @@ from .tui_components import (
     AgentFooter,
     AgentHeader,
     AgentResponse,
+    PromptQueueWidget,
     ReplInput,
     SystemMessage,
     ToolApprovalWidget,
@@ -163,6 +165,9 @@ def _get_subcommands() -> dict[str, list[tuple[str, str]]]:
         ],
         "/queue": [
             ("clear", _("Clear all queued prompts")),
+            ("rm", _("Remove a prompt from the queue")),
+            ("remove", _("Remove a prompt from the queue")),
+            ("delete", _("Remove a prompt from the queue")),
         ],
         "/yolo": [
             ("on", _("Enable YOLO mode (bypasses confirmations)")),
@@ -279,7 +284,7 @@ class OllamaAgentApp(App):
     def action_cancel_generation(self) -> None:
         if self._prompt_queue:
             self._prompt_queue.clear()
-            self._update_footer_queue_count()
+            self._update_queue_ui()
             scroll = self.query_one("#chat-scroll")
             scroll.mount(SystemMessage(f"[bold #f87171]🛑 {_('Prompt queue cleared.')}[/bold #f87171]"))
             self._deferred_scroll()
@@ -344,6 +349,7 @@ class OllamaAgentApp(App):
         yield AgentHeader(self.repl)
         yield ScrollableContainer(id="chat-scroll")
         yield OptionList(id="autocomplete-list")
+        yield PromptQueueWidget(id="prompt-queue")
         with Container(id="input-container"):
             with Horizontal(id="input-bar"):
                 yield Static("❯ ", id="prompt-char")
@@ -367,9 +373,10 @@ class OllamaAgentApp(App):
         header = self.query_one(AgentHeader)
         header.update_header()
 
-    def _update_footer_queue_count(self) -> None:
+    def _update_queue_ui(self) -> None:
         footer = self.query_one(AgentFooter)
         footer.set_queued_count(len(self._prompt_queue))
+        self.query_one(PromptQueueWidget).update_queue(self._prompt_queue)
 
     # ── Input events ──────────────────────────────────────────────────────
 
@@ -398,7 +405,7 @@ class OllamaAgentApp(App):
             scroll = self.query_one("#chat-scroll")
             scroll.mount(SystemMessage(f"[dim]⏳ {_('Prompt added to queue (position #{pos})', pos=pos)}[/dim]"))
             self._deferred_scroll()
-            self._update_footer_queue_count()
+            self._update_queue_ui()
             return
 
         if val.startswith("/"):
@@ -415,7 +422,7 @@ class OllamaAgentApp(App):
         if not self._prompt_queue or self._is_generating or self._is_approval_pending:
             return
         item = self._prompt_queue.popleft()
-        self._update_footer_queue_count()
+        self._update_queue_ui()
         if item.text.startswith("/"):
             self._current_worker = self.run_worker(self._run_slash_command(item.text))
         else:
@@ -547,6 +554,22 @@ class OllamaAgentApp(App):
                     for d in dbs
                     if d["name"].startswith(arg_token)
                 ]
+
+            if root_cmd == "/queue" and sub_cmd in ("rm", "remove", "delete"):
+                clean_arg = arg_token.lstrip("#")
+                items = []
+                for idx, item in enumerate(self._prompt_queue, 1):
+                    if clean_arg and not str(idx).startswith(clean_arg):
+                        continue
+                    text = item.text.replace("\n", " ")
+                    preview = escape(text[:57] + "..." if len(text) > 60 else text)
+                    items.append(
+                        (
+                            f"{root_cmd} {sub_cmd} {idx}",
+                            Text.from_markup(f"[bold #e6edf3]#{idx}[/bold #e6edf3] [dim #8b949e]{preview}[/dim #8b949e]"),
+                        )
+                    )
+                return items
 
         return []
 
@@ -878,7 +901,7 @@ class OllamaAgentApp(App):
             if cmd == "/yolo":
                 self.update_yolo_ui()
             elif cmd == "/queue":
-                self._update_footer_queue_count()
+                self._update_queue_ui()
             elif cmd in ("/model", "/effort", "/context"):
                 self.query_one(AgentHeader).update_header()
         finally:
@@ -903,7 +926,7 @@ class OllamaAgentApp(App):
                 scroll.mount(SystemMessage(f"[bold #f87171]🛑 {_('Execution interrupted by user.')}[/bold #f87171]"))
                 if self._prompt_queue:
                     self._prompt_queue.clear()
-                    self._update_footer_queue_count()
+                    self._update_queue_ui()
                     scroll.mount(SystemMessage(f"[bold #f87171]🛑 {_('Prompt queue cleared.')}[/bold #f87171]"))
                 self._deferred_scroll()
                 inp = self.query_one(ReplInput)
@@ -1054,7 +1077,33 @@ class OllamaREPL:
             if queue is not None:
                 queue.clear()
             if self.app is not None:
-                self.app._update_footer_queue_count()
+                self.app._update_queue_ui()
             self.console.print(f"[bold #34d399]✓ {_('Prompt queue cleared ({count} removed).', count=count)}[/bold #34d399]")
             return
-        self.console.print(f"[red]{_('Unknown queue subcommand \'{sub}\'. Usage: /queue [clear]', sub=args[0])}[/red]")
+        if args[0] in ("rm", "remove", "delete"):
+            if len(args) < 2:
+                self.console.print(f"[red]{_('Usage: /queue rm <position>')}[/red]")
+                return
+            if not queue:
+                self.console.print(f"[dim]{_('Prompt queue is empty.')}[/dim]")
+                return
+            raw_pos = args[1].lstrip("#")
+            if not raw_pos.isdigit():
+                msg = _("Invalid queue position '{pos}'. Usage: /queue rm <position>", pos=raw_pos)
+                self.console.print(f"[red]{msg}[/red]")
+                return
+            pos = int(raw_pos)
+            if pos < 1 or pos > len(queue):
+                self.console.print(f"[red]{_('Queue position {pos} out of range (queue has {count} items).', pos=pos, count=len(queue))}[/red]")
+                return
+            item = queue[pos - 1]
+            del queue[pos - 1]
+            if self.app is not None:
+                self.app._update_queue_ui()
+            truncated_text = item.text.replace("\n", " ")
+            if len(truncated_text) > 60:
+                truncated_text = truncated_text[:57] + "..."
+            self.console.print(f"[bold #34d399]✓ {_('Removed #{pos} from prompt queue: {text}', pos=pos, text=truncated_text)}[/bold #34d399]")
+            return
+        err_msg = _("Unknown queue subcommand '{sub}'. Usage: /queue [clear | rm <position>]", sub=args[0])
+        self.console.print(f"[red]{err_msg}[/red]")

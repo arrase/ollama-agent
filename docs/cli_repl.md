@@ -163,7 +163,7 @@ Slash commands provide full application control directly within the REPL:
 | `/effort` | `/effort [<level>]` | Show current reasoning effort or change thinking/reasoning effort mid-session (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
 | `/context` | `/context [<size\|max>]` | Show current context window or switch context window token size (`num_ctx`) or `'max'` for the active session. |
 | `/params` | `/params [list \| set <parameter> <value>]` | Inspect active sampling parameters and resolution sources, or dynamically update parameter values for the active session. |
-| `/queue` | `/queue [list \| clear]` | Inspect pending messages in the prompt queue or clear all queued prompts. |
+| `/queue` | `/queue [list \| clear \| rm <position>]` | Inspect pending prompts in the queue, remove an item by index (`/queue rm <id>`, aliases: `remove`, `delete`), or clear all queued prompts. |
 | `/session` | `/session [list \| search <query> \| resume <id> (alias: switch) \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume threads, export to Markdown, or delete history. |
 | `/compact` | `/compact` (alias: `/compress`) | Manually compact conversation history into a structured summary to reclaim context window tokens. |
 | `/task` | `/task [list \| create [<id>] \| run <id> [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` launches an interactive conversational creation flow with the agent. |
@@ -188,9 +188,10 @@ The prompt input box (`ReplInput`) provides intuitive editing, history navigatio
 * **Command History**: Pressing `↑` anywhere on row 0 recalls prior user prompts; pressing `↓` on the last line at the end of the text navigates forward. Slash commands (`/cmd`) are filtered out from stored history.
 * **Tab Autocompletion (`Tab`)**: Activates 3-level autocompletion:
   1. *Level 0*: Root slash commands (`/mo` -> `/model`, `/co` -> `/compact`, `/qu` -> `/queue`).
-  2. *Level 1*: Subcommands (`/task ` -> `list`, `create`, `run`, `delete`, `/queue ` -> `clear`).
+  2. *Level 1*: Subcommands (`/task ` -> `list`, `create`, `run`, `delete`, `/queue ` -> `clear`, `rm`, `remove`, `delete`).
   3. *Level 2*: Dynamic entities:
      - `/model set ` -> Dynamic list of available Ollama models + disk size.
+     - `/queue rm `, `/queue remove `, `/queue delete ` -> Dynamic list of active queued prompt IDs (`#1`, `#2`, ...) + preview text.
      - `/task run `, `/task delete ` -> Dynamic list of saved task IDs + titles.
      - `/skill show `, `/skill delete ` -> Dynamic list of discovered skill IDs + names.
      - `/session resume `, `/session switch `, `/session delete ` -> Dynamic list of session IDs + step counts.
@@ -210,17 +211,19 @@ The REPL is designed with an asynchronous non-blocking event loop. The user inpu
 #### Immediate (Non-Blocking) Commands
 Slash commands that perform read-only queries or instant state toggles execute immediately in the chat viewport without waiting for the active stream to complete:
 
-* **Inspection**: `/queue`, `/model list`, `/effort`, `/context`, `/params list`, `/session list`, `/session search`, `/session export`, `/task list`, `/skill list`, `/skill show`, `/rag status`, `/rag list`, `/mcp list`, `/agents list`.
+* **Inspection & Queue Removal**: `/queue`, `/queue rm <position>`, `/model list`, `/effort`, `/context`, `/params list`, `/session list`, `/session search`, `/session export`, `/task list`, `/skill list`, `/skill show`, `/rag status`, `/rag list`, `/mcp list`, `/agents list`.
 * **Toggles & Exit**: `/yolo`, `/exit`, `/quit`.
 
 #### Enqueued Prompts & Stateful Commands
 Normal chat prompts and commands that mutate graph state (e.g., `/model set`, `/compact`, `/session resume`, `/session new`, `/task run`, `/skill create`) are placed in a FIFO queue:
 
 * **Queue Feedback**: Submitting an item while busy renders a subtle notification (`⏳ Prompt added to queue (position #N)`) and updates the footer counter (`⏳ N queued`).
+* **Persistent TUI Queue Panel**: A dedicated `PromptQueueWidget` card renders above the input container whenever items are queued, showing prompt previews and position numbers in real time.
 * **FIFO Draining**: As soon as the active stream or tool execution completes, the next queued item is automatically dispatched.
 * **Unblocked Tool Approvals**: The prompt input box is not locked while a `ToolApprovalWidget` modal is displayed, allowing you to queue follow-up prompts while reviewing pending tool actions.
 * **Managing the Queue**:
   * Run `/queue` to inspect all pending prompts and their indices.
+  * Run `/queue rm <position>` (aliases: `remove`, `delete`) to remove a single prompt by its 1-based index (e.g. `/queue rm 2` or `/queue rm #2`).
   * Run `/queue clear` to purge all queued items.
   * Press `Esc` or `Ctrl+C` to cancel current generation and purge the queue simultaneously.
 

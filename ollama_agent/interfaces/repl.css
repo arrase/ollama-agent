@@ -50,6 +50,18 @@ AgentHeader {
     color: #38bdf8;
 }
 
+/* ── Prompt Queue Widget ────────────────────────────────────────────────── */
+PromptQueueWidget, #prompt-queue {
+    display: none;
+    height: auto;
+    max-height: 5;
+    background: #161b22;
+    border: round #30363d;
+    margin: 0 2 1 2;
+    padding: 0 1;
+    color: #e6edf3;
+}
+
 /* ── Input Container & ReplInput ───────────────────────────────────────── */
 #input-container {
     height: auto;

@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Sequence
+from itertools import islice
 from typing import TYPE_CHECKING, Any
 
 from rich.markup import escape
@@ -17,7 +19,7 @@ from ..agent.episodic_memory import HistoryError, load_past_user_prompts
 from ..i18n import _
 
 if TYPE_CHECKING:
-    from .repl import OllamaREPL, OllamaAgentApp
+    from .repl import OllamaREPL, OllamaAgentApp, QueuedItem
 
 _log = logging.getLogger(__name__)
 
@@ -133,6 +135,36 @@ class AgentFooter(Static):
                 f"[dim]/[/dim] [bold #8b949e]{_('commands')}[/bold #8b949e]"
                 f"{queue_info}"
             )
+
+
+# ─── Prompt Queue Widget ─────────────────────────────────────────────────────
+
+class PromptQueueWidget(Static):
+    """Widget displaying currently queued prompts and commands."""
+
+    can_focus = False
+
+    def update_queue(self, queue: Sequence[QueuedItem]) -> None:
+        if not queue:
+            self.display = False
+            return
+
+        self.display = True
+        count = len(queue)
+        header = f"[bold #38bdf8]⏳ {_('Queued ({count})', count=count)}[/bold #38bdf8] [dim]• esc {_('to clear')}[/dim]"
+        lines = [header]
+
+        for i, item in enumerate(islice(queue, 3), 1):
+            text = item.text.replace("\n", " ")
+            if len(text) > 60:
+                text = text[:57] + "..."
+            lines.append(f"  [dim]#{i}[/dim] {escape(text)}")
+
+        if count > 3:
+            remaining = count - 3
+            lines.append(f"  [dim]... +{remaining} {_('more')}[/dim]")
+
+        self.update("\n".join(lines))
 
 
 # ─── Custom Input ─────────────────────────────────────────────────────────────

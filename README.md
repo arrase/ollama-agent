@@ -164,7 +164,7 @@ The REPL provides built-in slash commands for managing models, sessions, tasks, 
 | `/effort` | `/effort [<level>]` | Show current reasoning effort or switch the thinking/reasoning effort level (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`) for the active session. |
 | `/context` | `/context [<size\|max>]` | Show current context window or switch context window token size (`num_ctx`) or `'max'` for the active session. |
 | `/params` | `/params [list \| set <parameter> <value>]` | Inspect active sampling parameters and resolution sources, or dynamically update parameter values for the active session. |
-| `/queue` | `/queue [list \| clear]` | Inspect pending messages in the prompt queue or clear all queued prompts. |
+| `/queue` | `/queue [list \| clear \| rm <position>]` | Inspect pending prompts in the queue, remove a specific item by index (`/queue rm 2`, aliases: `remove`, `delete`), or clear all queued prompts. |
 | `/session` | `/session [list \| search <query> \| resume <id> (alias: switch) \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume previous threads, export to Markdown, or delete history. |
 | `/compact` | `/compact` (alias: `/compress`) | Manually compact conversation history into a structured summary to reclaim context window tokens. |
 | `/task` | `/task [list \| create [<id>] \| run <id> [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` initiates an interactive conversational creation flow with the agent. |
@@ -204,11 +204,13 @@ In Ollama Agent, the user input is **never locked**. You can freely type and sub
   - Mode toggles: `/yolo` (toggle or on/off).
   - Lifecycle: `/exit`, `/quit`.
 - **Enqueued Prompts & Stateful Commands**: Normal conversation prompts and state-mutating commands (e.g. `/model set`, `/compact`, `/session resume`, `/session new`, `/clear`, `/task run`, `/skill create`) are placed in a FIFO queue. A system message (`⏳ Prompt added to queue (position #N)`) notifies you of your queue position, and the bottom status bar displays a live indicator (`⏳ N queued`).
+- **Persistent TUI Queue Panel**: When prompts are in the queue, a dedicated `PromptQueueWidget` card automatically appears above the input container, displaying the active item count, prompt previews, and position numbers in real time. It automatically collapses when the queue is drained.
 - **Unblocked Tool Approvals**: The prompt input box remains active while a tool confirmation modal (`ToolApprovalWidget`) is shown, allowing you to queue follow-up prompts while reviewing pending tool actions.
 - **Queue Management (`/queue`)**:
   - `/queue`: Lists all currently queued prompts with their position numbers.
+  - `/queue rm <position>` (aliases: `/queue remove <position>`, `/queue delete <position>`): Removes a specific prompt from the queue by its 1-based index (e.g. `/queue rm 2` or `/queue rm #2`). Includes full Level 2 autocompletion with prompt text previews.
   - `/queue clear`: Clears all pending prompts from the queue.
-- **Cancellation**: Pressing `Esc` or `Ctrl+C` purges the prompt queue, cancels active generation or pending tool approvals, and resets the queue badge.
+- **Cancellation**: Pressing `Esc` or `Ctrl+C` purges the prompt queue, cancels active generation or pending tool approvals, and resets the queue badge and preview widget.
 
 ---
 

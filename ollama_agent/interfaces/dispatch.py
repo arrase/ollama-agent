@@ -342,7 +342,7 @@ def build_repl_handlers(
         "/queue": REPLCommand(
             _("Show or clear the prompt queue"),
             "General",
-            _("Usage: /queue [clear]"),
+            _("Usage: /queue [clear | rm <position>]"),
             handle_queue,
         ),
         "/yolo": REPLCommand(
