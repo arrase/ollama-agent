@@ -29,6 +29,11 @@
     <p>Full-featured Textual TUI with live Markdown rendering, multiline editing (<code>\ + Enter</code>), 3-level tab autocompletion, and live session status.</p>
   </div>
   <div class="feature-card">
+    <i class="fa-solid fa-list-ol feature-icon"></i>
+    <h3>Non-Blocking Prompt Queue</h3>
+    <p>Submit prompts and immediate slash commands concurrently while generating responses, featuring FIFO auto-draining and <code>/queue</code> management.</p>
+  </div>
+  <div class="feature-card">
     <i class="fa-solid fa-bolt feature-icon"></i>
     <h3>Non-Interactive CLI</h3>
     <p>Execute single prompts directly from your shell (<code>-p</code>) for automation, scripting, CI pipelines, and rapid queries.</p>

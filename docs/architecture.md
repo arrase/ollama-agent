@@ -178,6 +178,11 @@ flowchart TD
 - **Token Consumption Tracking**: Inspects `response_metadata` for `prompt_eval_count` and `eval_count` to maintain accurate `last_context_tokens` metrics for the live gauge.
 - **Text & Reasoning Parsers**: `streaming_text()` extracts text content across all response payload formats; `streaming_reasoning()` extracts thinking traces from `additional_kwargs['reasoning_content']`.
 - **Interrupt Handling**: When `state.interrupts` is encountered during streaming, `StreamingInterruptHandler` parses the action requests using `extract_action_requests()` (`ollama_agent/streaming/interrupts.py`) and invokes the renderer's `handle_interrupt()` callback.
+- **Prompt Queue & Concurrent Command Dispatch**:
+  - `_prompt_queue: deque[QueuedItem]` holds pending turns when generation or tool approval is active.
+  - `_is_immediate_command()` fast-path dispatches read-only slash commands (`/queue`, `/yolo`, `/model list`, `/effort`, `/context`, `/params list`, `/session list/search/export`, `/task list`, `/skill list`, `/rag status`, `/mcp list`, `/agents list`) directly to the console/chat without blocking or interrupting active streams.
+  - Stateful commands and user prompts are enqueued FIFO and automatically drained by `_process_next_in_queue()` inside `finally` blocks of stream workers.
+  - Unblocked tool approval keeps `ReplInput` enabled (`_is_approval_pending = True`), allowing users to submit follow-up prompts while reviewing sensitive tool actions.
 
 ---
 
