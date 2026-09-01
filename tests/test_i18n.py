@@ -1,5 +1,6 @@
 """Tests for internationalization (i18n) system."""
 
+import ast
 import json
 import os
 import re
@@ -130,6 +131,8 @@ class TestI18nTranslations(unittest.TestCase):
         self.assertEqual(_("Copy"), "Copiar")
         self.assertEqual(_("Paste"), "Pegar")
         self.assertEqual(_("Interrupt"), "Interrumpir")
+        self.assertEqual(_("Show or clear the prompt queue"), "Mostrar o limpiar la cola de prompts")
+        self.assertEqual(_("Approval cancelled."), "Aprobación cancelada.")
 
     def test_french_translation(self) -> None:
         set_locale("fr")
@@ -137,6 +140,8 @@ class TestI18nTranslations(unittest.TestCase):
         self.assertEqual(_("Exit the REPL"), "Quitter le REPL")
         self.assertEqual(_("Tool:"), "Outil :")
         self.assertEqual(_("Arguments:"), "Arguments :")
+        self.assertEqual(_("Show or clear the prompt queue"), "Afficher ou vider la file d'attente des invites")
+        self.assertEqual(_("Approval cancelled."), "Approbation annulée.")
 
     def test_german_translation(self) -> None:
         set_locale("de")
@@ -144,6 +149,8 @@ class TestI18nTranslations(unittest.TestCase):
         self.assertEqual(_("Exit the REPL"), "REPL beenden")
         self.assertEqual(_("Tool:"), "Werkzeug:")
         self.assertEqual(_("Arguments:"), "Argumente:")
+        self.assertEqual(_("Show or clear the prompt queue"), "Prompt-Warteschlange anzeigen oder leeren")
+        self.assertEqual(_("Approval cancelled."), "Genehmigung abgebrochen.")
 
     def test_italian_translation(self) -> None:
         set_locale("it")
@@ -231,6 +238,56 @@ class TestI18nTranslations(unittest.TestCase):
             _("Settings file must contain a YAML mapping: {path}", path="demo"),
             "सेटिंग्स फ़ाइल में YAML मैपिंग होनी चाहिए: demo",
         )
+        set_locale("en")
+        self.assertEqual(
+            _("Prompt added to queue (position #{pos})", pos=1),
+            "Prompt added to queue (position #1)",
+        )
+        self.assertEqual(
+            _("Prompt queue cleared ({count} removed).", count=3),
+            "Prompt queue cleared (3 removed).",
+        )
+        self.assertEqual(
+            _("Removed #{pos} from prompt queue: {text}", pos=2, text="foo"),
+            "Removed #2 from prompt queue: foo",
+        )
+        self.assertEqual(
+            _("Invalid queue position '{pos}'. Usage: /queue rm <position>", pos="xyz"),
+            "Invalid queue position 'xyz'. Usage: /queue rm <position>",
+        )
+        self.assertEqual(
+            _("Queue position {pos} out of range (queue has {count} items).", pos=5, count=2),
+            "Queue position 5 out of range (queue has 2 items).",
+        )
+        self.assertEqual(
+            _("Queued ({count})", count=4),
+            "Queued (4)",
+        )
+        set_locale("es")
+        self.assertEqual(
+            _("Prompt added to queue (position #{pos})", pos=1),
+            "Prompt añadido a la cola (posición #1)",
+        )
+        self.assertEqual(
+            _("Prompt queue cleared ({count} removed).", count=3),
+            "Cola de prompts limpiada (3 eliminados).",
+        )
+        self.assertEqual(
+            _("Removed #{pos} from prompt queue: {text}", pos=2, text="foo"),
+            "Eliminado #2 de la cola de prompts: foo",
+        )
+        self.assertEqual(
+            _("Invalid queue position '{pos}'. Usage: /queue rm <position>", pos="xyz"),
+            "Posición de cola no válida 'xyz'. Uso: /queue rm <posición>",
+        )
+        self.assertEqual(
+            _("Queue position {pos} out of range (queue has {count} items).", pos=5, count=2),
+            "Posición de cola 5 fuera de rango (la cola tiene 2 elementos).",
+        )
+        self.assertEqual(
+            _("Queued ({count})", count=4),
+            "En cola (4)",
+        )
 
     def test_unknown_string_in_english_is_source_language(self) -> None:
         set_locale("en")
@@ -289,6 +346,28 @@ class TestCatalogCompleteness(unittest.TestCase):
                     loc_placeholders,
                     f"Placeholder mismatch in {loc}.json for key '{key}': {key_placeholders} vs {loc_placeholders}",
                 )
+
+    def test_all_codebase_strings_present_in_catalogs(self) -> None:
+        pkg_dir = Path(__file__).parent.parent / "ollama_agent"
+        locales_dir = pkg_dir / "i18n" / "locales"
+
+        extracted_strings: set[str] = set()
+        for py_file in pkg_dir.rglob("*.py"):
+            with open(py_file, "r", encoding="utf-8") as f:
+                tree = ast.parse(f.read(), filename=str(py_file))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call):
+                    func = node.func
+                    if (isinstance(func, ast.Name) and func.id == "_") or (isinstance(func, ast.Attribute) and func.attr == "_"):
+                        if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                            extracted_strings.add(node.args[0].value)
+
+        for loc in [l for l in SUPPORTED_LOCALES if l != "en"]:
+            loc_file = locales_dir / f"{loc}.json"
+            with open(loc_file, "r", encoding="utf-8") as f:
+                catalog = json.load(f)
+            missing = [s for s in extracted_strings if s not in catalog]
+            self.assertEqual(missing, [], f"{loc}.json is missing translation for in-code strings: {missing}")
 
 
 class TestCLIAndSettingsI18n(unittest.TestCase):

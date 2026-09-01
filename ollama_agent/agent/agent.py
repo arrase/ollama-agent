@@ -50,8 +50,6 @@ from ..streaming.parsers import streaming_reasoning, streaming_text
 from .builtin_tools import (
     BUILTIN_TOOLS,
     get_tool_timeout,
-    is_rag_active,
-    rag_search,
     set_active_thread_id,
 )
 from .compaction import (
@@ -78,13 +76,12 @@ def _prepare_instructions(settings: Settings) -> str:
     ensure_prompt_files()
     base_instructions = load_instructions()
     fs_policy = load_fs_policy_traversal() if settings.runtime.allow_traversal else load_fs_policy_sandboxed()
-    instructions = base_instructions.replace("{FILESYSTEM_POLICY}", fs_policy)
-
-    if is_rag_active():
-        instructions = instructions.replace("{RAG_POLICY}", load_rag_policy())
-    else:
-        instructions = instructions.replace("{RAG_POLICY}", "")
-
+    rag_policy = load_rag_policy()
+    instructions = (
+        base_instructions
+        .replace("{FILESYSTEM_POLICY}", fs_policy)
+        .replace("{RAG_POLICY}", rag_policy)
+    )
     os_info = environment_block(include_cwd=True)
     ensure_memory_file(MEMORY_PATH)
     return instructions + os_info
@@ -106,6 +103,10 @@ class AgentRuntime:
     _model: Any = field(default=None, init=False, repr=False)
     _summarization_engine: SummarizationMiddleware | None = field(default=None, init=False, repr=False)
     _instructions: str = field(default="", init=False)
+    _checkpointer: Any = field(default=None, init=False, repr=False)
+    _checkpointer_stack: contextlib.AsyncExitStack = field(
+        default_factory=contextlib.AsyncExitStack, init=False, repr=False
+    )
     _exit_stack: contextlib.AsyncExitStack = field(
         default_factory=contextlib.AsyncExitStack, init=False, repr=False
     )
@@ -223,8 +224,6 @@ class AgentRuntime:
         }
 
         tools: list[Any] = [*BUILTIN_TOOLS, *mcp_tools]
-        if is_rag_active():
-            tools.append(rag_search)
 
         summarization_tool_mw = create_summarization_tool_middleware(model, backend)
         self._backend = backend
@@ -253,10 +252,11 @@ class AgentRuntime:
         return create_deep_agent(**kwargs)
 
     async def _sqlite_checkpointer(self) -> Any:
-        saver = AsyncSqliteSaver.from_conn_string(str(HISTORY_DB_PATH))
-        checkpointer = await self._exit_stack.enter_async_context(saver)
-        await checkpointer.setup()
-        return checkpointer
+        if self._checkpointer is None:
+            saver = AsyncSqliteSaver.from_conn_string(str(HISTORY_DB_PATH))
+            self._checkpointer = await self._checkpointer_stack.enter_async_context(saver)
+            await self._checkpointer.setup()
+        return self._checkpointer
 
     async def _ensure_graph(self, thread_id: str = "") -> tuple[Any, str, dict[str, Any]]:
         """Resolve the thread, lazily build the graph, and return (graph, thread, config)."""
@@ -437,6 +437,8 @@ class AgentRuntime:
 
     async def aclose(self) -> None:
         await self._exit_stack.aclose()
+        await self._checkpointer_stack.aclose()
+        self._checkpointer = None
 
 
 # ---------------------------------------------------------------------------

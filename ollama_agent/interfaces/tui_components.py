@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Sequence
+from itertools import islice
 from typing import TYPE_CHECKING, Any
 
 from rich.markup import escape
@@ -17,7 +19,7 @@ from ..agent.episodic_memory import HistoryError, load_past_user_prompts
 from ..i18n import _
 
 if TYPE_CHECKING:
-    from .repl import OllamaREPL, OllamaAgentApp
+    from .repl import OllamaREPL, OllamaAgentApp, QueuedItem
 
 _log = logging.getLogger(__name__)
 
@@ -84,6 +86,7 @@ class AgentFooter(Static):
         super().__init__(**kwargs)
         self._is_generating = False
         self._is_approval = False
+        self._queued_count = 0
 
     def on_mount(self) -> None:
         self.update_footer()
@@ -96,7 +99,16 @@ class AgentFooter(Static):
         self._is_approval = is_approval
         self.update_footer()
 
+    def set_queued_count(self, count: int) -> None:
+        self._queued_count = count
+        self.update_footer()
+
     def update_footer(self) -> None:
+        queue_info = (
+            f"  [dim]│[/dim]  [bold #38bdf8]⏳ {_('{count} queued', count=self._queued_count)}[/bold #38bdf8]"
+            if self._queued_count > 0
+            else ""
+        )
         if self._is_approval:
             self.update(
                 f"[bold #fbbf24]⚠ {_('Approval required:')}[/bold #fbbf24]   "
@@ -105,11 +117,13 @@ class AgentFooter(Static):
                 f"[dim]a[/dim] [bold #8b949e]{_('allow session')}[/bold #8b949e]   "
                 f"[dim]esc[/dim] [bold #8b949e]{_('cancel')}[/bold #8b949e]   "
                 f"[dim]←→[/dim] [bold #8b949e]{_('select')}[/bold #8b949e]"
+                f"{queue_info}"
             )
         elif self._is_generating:
             self.update(
                 f"[bold #38bdf8]⟡ {_('Generating response...')}[/bold #38bdf8]   "
                 f"[dim]{_('press esc or ^C to interrupt')}[/dim]"
+                f"{queue_info}"
             )
         else:
             self.update(
@@ -119,7 +133,38 @@ class AgentFooter(Static):
                 f"[dim]↑↓[/dim] [bold #8b949e]{_('history')}[/bold #8b949e]   "
                 f"[dim]esc[/dim] [bold #8b949e]{_('interrupt')}[/bold #8b949e]   "
                 f"[dim]/[/dim] [bold #8b949e]{_('commands')}[/bold #8b949e]"
+                f"{queue_info}"
             )
+
+
+# ─── Prompt Queue Widget ─────────────────────────────────────────────────────
+
+class PromptQueueWidget(Static):
+    """Widget displaying currently queued prompts and commands."""
+
+    can_focus = False
+
+    def update_queue(self, queue: Sequence[QueuedItem]) -> None:
+        if not queue:
+            self.display = False
+            return
+
+        self.display = True
+        count = len(queue)
+        header = f"[bold #38bdf8]⏳ {_('Queued ({count})', count=count)}[/bold #38bdf8]"
+        lines = [header]
+
+        for i, item in enumerate(islice(queue, 3), 1):
+            text = item.text.replace("\n", " ")
+            if len(text) > 60:
+                text = text[:57] + "..."
+            lines.append(f"  [dim]#{i}[/dim] {escape(text)}")
+
+        if count > 3:
+            remaining = count - 3
+            lines.append(f"  [dim]... +{remaining} {_('more')}[/dim]")
+
+        self.update("\n".join(lines))
 
 
 # ─── Custom Input ─────────────────────────────────────────────────────────────
@@ -489,7 +534,12 @@ class ToolApprovalWidget(Container):
             yield Button(_("Cancel (c)"), id="cancel-btn", classes="approval-btn")
 
     def on_mount(self) -> None:
-        self.query_one("#approve-btn", Button).focus()
+        buttons = self.query("#approve-btn")
+        if buttons:
+            buttons.first().focus()
+        else:
+            self.call_after_refresh(lambda: self.query_one("#approve-btn", Button).focus())
+
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         event.stop()
@@ -578,6 +628,7 @@ class ToolApprovalWidget(Container):
 
         footer = self.app_ref.query_one(AgentFooter)
         footer.set_approval(False)
+        self.app_ref._is_approval_pending = False
 
         self.app_ref._current_worker = self.app_ref.run_worker(
             self.app_ref._handle_approval_decision(decisions, self.scroll, self.agent_msg)

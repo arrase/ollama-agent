@@ -19,6 +19,7 @@
 - [Interactive REPL Interface](#interactive-repl-interface)
   - [Multiline Input & Navigation](#multiline-input--navigation)
   - [Slash Commands](#slash-commands)
+  - [Prompt Queue & Non-Blocking Execution](#prompt-queue--non-blocking-execution)
   - [Live Context Usage & Token Gauge](#live-context-usage--token-gauge)
   - [Human-in-the-Loop (HITL) & YOLO Mode](#human-in-the-loop-hitl--yolo-mode)
   - [File & Directory Context (`@-mentions`)](#file--directory-context--mentions)
@@ -163,6 +164,7 @@ The REPL provides built-in slash commands for managing models, sessions, tasks, 
 | `/effort` | `/effort [<level>]` | Show current reasoning effort or switch the thinking/reasoning effort level (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`) for the active session. |
 | `/context` | `/context [<size\|max>]` | Show current context window or switch context window token size (`num_ctx`) or `'max'` for the active session. |
 | `/params` | `/params [list \| set <parameter> <value>]` | Inspect active sampling parameters and resolution sources, or dynamically update parameter values for the active session. |
+| `/queue` | `/queue [list \| clear \| rm <position>]` | Inspect pending prompts in the queue, remove a specific item by index (`/queue rm 2`, aliases: `remove`, `delete`), or clear all queued prompts. |
 | `/session` | `/session [list \| search <query> \| resume <id> (alias: switch) \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume previous threads, export to Markdown, or delete history. |
 | `/compact` | `/compact` (alias: `/compress`) | Manually compact conversation history into a structured summary to reclaim context window tokens. |
 | `/task` | `/task [list \| create [<id>] \| run <id> [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` initiates an interactive conversational creation flow with the agent. |
@@ -177,6 +179,38 @@ The REPL provides built-in slash commands for managing models, sessions, tasks, 
 
 > [!WARNING]
 > Not all models support all reasoning effort levels (or reasoning traces at all). Support for reasoning effort levels depends on the model provider and architecture. It is the user's responsibility to know and verify which levels are supported by the model being used. See [Thinking / Reasoning Effort Mapping](#thinking--reasoning-effort-mapping) for details.
+
+---
+
+### Prompt Queue & Non-Blocking Execution
+
+In Ollama Agent, the user input is **never locked**. You can freely type and submit messages or slash commands at any time—even while the model is actively streaming an inference response or waiting for human tool approval.
+
+```text
+╭── Prompt Queue Flow ────────────────────────────────────────────────────────╮
+│ User inputs message while agent is busy (generating or waiting for approval)│
+│                                                                             │
+│  ├─ Immediate / Read-Only Slash Commands (/queue, /yolo, /model list, etc.) │
+│  │  └─► Executed INSTANTLY without interrupting the active stream           │
+│  │                                                                          │
+│  └─ Stateful Slash Commands & Normal Prompts                                │
+│     └─► Enqueued in FIFO Queue (⏳ Prompt added to queue (position #N))      │
+│         └─► Automatically processed in sequence when current turn finishes  │
+╰─────────────────────────────────────────────────────────────────────────────╯
+```
+
+- **Immediate / Non-Blocking Commands**: Commands that do not modify active stream graph state execute immediately in the chat scroll without pausing or queuing:
+  - Inspection & List commands: `/queue`, `/model list`, `/effort`, `/context`, `/params list`, `/session list`, `/session search`, `/session export`, `/task list`, `/skill list`, `/skill show`, `/rag status`, `/rag list`, `/mcp list`, `/agents list`.
+  - Mode toggles: `/yolo` (toggle or on/off).
+  - Lifecycle: `/exit`, `/quit`.
+- **Enqueued Prompts & Stateful Commands**: Normal conversation prompts and state-mutating commands (e.g. `/model set`, `/compact`, `/session resume`, `/session new`, `/clear`, `/task run`, `/skill create`) are placed in a FIFO queue. A system message (`⏳ Prompt added to queue (position #N)`) notifies you of your queue position, and the bottom status bar displays a live indicator (`⏳ N queued`).
+- **Persistent TUI Queue Panel**: When prompts are in the queue, a dedicated `PromptQueueWidget` card automatically appears above the input container, displaying the active item count, prompt previews, and position numbers in real time. It automatically collapses when the queue is drained.
+- **Unblocked Tool Approvals**: The prompt input box remains active while a tool confirmation modal (`ToolApprovalWidget`) is shown, allowing you to queue follow-up prompts while reviewing pending tool actions.
+- **Queue Management (`/queue`)**:
+  - `/queue`: Lists all currently queued prompts with their position numbers.
+  - `/queue rm <position>` (aliases: `/queue remove <position>`, `/queue delete <position>`): Removes a specific prompt from the queue without interrupting the active stream (e.g. `/queue rm 2` or `/queue rm #2`). Includes full Level 2 autocompletion with prompt text previews.
+  - `/queue clear`: Clears all pending prompts from the queue while letting active stream generation continue uninterrupted.
+- **Cancellation**: Pressing `Esc` or `Ctrl+C` cancels active generation or pending tool approvals and purges the prompt queue.
 
 ---
 

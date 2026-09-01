@@ -129,6 +129,7 @@ class TestDispatchAndCLI(unittest.TestCase):
             base_url=lambda: "http://localhost:11434",
             switch_model=dummy_async_str,
             handle_yolo=lambda _: None,
+            handle_queue=lambda _: None,
             get_runtime=lambda: MagicMock(),
             current_thread_id=lambda: "",
             switch_effort=dummy_async_str,
@@ -145,6 +146,7 @@ class TestDispatchAndCLI(unittest.TestCase):
         self.assertIn("/effort", handlers)
         self.assertIn("/context", handlers)
         self.assertNotIn("/ctx", handlers)
+        self.assertIn("/queue", handlers)
         self.assertIn("/yolo", handlers)
         self.assertIn("/session", handlers)
         self.assertIn("/task", handlers)
@@ -168,6 +170,7 @@ class TestDispatchAndCLI(unittest.TestCase):
             base_url=lambda: "http://localhost:11434",
             switch_model=dummy_async,
             handle_yolo=lambda _: None,
+            handle_queue=lambda _: None,
             get_runtime=lambda: MagicMock(),
             current_thread_id=lambda: "",
             switch_effort=dummy_async,
