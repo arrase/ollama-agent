@@ -23,6 +23,7 @@ from ollama_agent.interfaces.tui_components import (
     PromptQueueWidget,
     ReplInput,
     SystemMessage,
+    SystemOutputWidget,
     UserMessage,
 )
 
@@ -210,11 +211,14 @@ class TestPromptQueueFIFO(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(footer._queued_count, 3)
             self.assertIn("3 queued", str(footer.render()))
 
-            sys_msgs = list(chat_scroll.query(SystemMessage))
-            msg_texts = [str(m.render()) for m in sys_msgs]
-            self.assertTrue(any("position #1" in t for t in msg_texts))
-            self.assertTrue(any("position #2" in t for t in msg_texts))
-            self.assertTrue(any("position #3" in t for t in msg_texts))
+            self.assertEqual(len(list(chat_scroll.query(SystemMessage))), 0)
+            queue_widget = app.query_one(PromptQueueWidget)
+            self.assertTrue(queue_widget.display)
+            self.assertIn("Prompt 1", str(queue_widget.render()))
+            self.assertIn("Prompt 2", str(queue_widget.render()))
+            self.assertIn("Prompt 3", str(queue_widget.render()))
+            sys_out = app.query_one(SystemOutputWidget)
+            self.assertFalse(sys_out.display)
 
     async def test_fifo_queuing_stateful_slash_commands(self) -> None:
         repl, _ = _create_mock_repl()
@@ -451,9 +455,10 @@ class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(footer._queued_count, 0)
             self.assertNotIn("queued", str(footer.render()))
 
-            sys_msgs = list(chat_scroll.query(SystemMessage))
-            msg_texts = [str(m.render()) for m in sys_msgs]
-            self.assertTrue(any("Prompt queue cleared" in t for t in msg_texts))
+            self.assertEqual(len(list(chat_scroll.query(SystemMessage))), 0)
+            sys_out = app.query_one(SystemOutputWidget)
+            self.assertTrue(sys_out.display)
+            self.assertIn("Prompt queue cleared", str(sys_out.render()))
 
     async def test_cancel_generation_cancels_worker_and_approval(self) -> None:
         repl, _ = _create_mock_repl()
@@ -479,9 +484,10 @@ class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(app._is_approval_pending)
             self.assertNotIn("Approval required", str(footer.render()))
 
-            sys_msgs = list(chat_scroll.query(SystemMessage))
-            msg_texts = [str(m.render()) for m in sys_msgs]
-            self.assertTrue(any("Approval cancelled" in t for t in msg_texts))
+            self.assertEqual(len(list(chat_scroll.query(SystemMessage))), 0)
+            sys_out = app.query_one(SystemOutputWidget)
+            self.assertTrue(sys_out.display)
+            self.assertIn("Approval cancelled", str(sys_out.render()))
 
     async def test_action_cancel_or_quit_branches(self) -> None:
         repl, _ = _create_mock_repl()
@@ -540,10 +546,10 @@ class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(inp.disabled)
             self.assertFalse(app._is_approval_pending)
 
-            sys_msgs = list(chat_scroll.query(SystemMessage))
-            msg_texts = [str(m.render()) for m in sys_msgs]
-            self.assertTrue(any("Execution interrupted by user" in t for t in msg_texts))
-            self.assertTrue(any("Prompt queue cleared" in t for t in msg_texts))
+            self.assertEqual(len(list(chat_scroll.query(SystemMessage))), 0)
+            sys_out = app.query_one(SystemOutputWidget)
+            self.assertTrue(sys_out.display)
+            self.assertIn("Execution interrupted by user", str(sys_out.render()))
 
     async def test_queue_clear_and_rm_do_not_interrupt_active_generation(self) -> None:
         repl, _ = _create_mock_repl()
@@ -911,10 +917,7 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
                 app._process_next_in_queue()
                 await pilot.pause()
 
-                sys_msgs = list(chat_scroll.query(SystemMessage))
-                msg_texts = [str(m.render()) for m in sys_msgs]
-                self.assertTrue(any("Session not found" in t for t in msg_texts))
-
+                self.assertEqual(len(list(chat_scroll.query(SystemMessage))), 0)
                 self.assertEqual(len(app._prompt_queue), 0)
                 self.assertEqual(streamed, ["Subsequent message"])
 

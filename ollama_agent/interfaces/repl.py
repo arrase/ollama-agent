@@ -32,6 +32,7 @@ from .tui_components import (
     PromptQueueWidget,
     ReplInput,
     SystemMessage,
+    SystemOutputWidget,
     ToolApprovalWidget,
     UserMessage,
 )
@@ -282,21 +283,22 @@ class OllamaAgentApp(App):
     ]
 
     def action_cancel_generation(self) -> None:
+        sys_out = self.query_one(SystemOutputWidget)
+        if sys_out.display:
+            self.clear_system_output()
+            return
+
         if self._prompt_queue:
             self._prompt_queue.clear()
             self._update_queue_ui()
-            scroll = self.query_one("#chat-scroll")
-            scroll.mount(SystemMessage(f"[bold #f87171]🛑 {_('Prompt queue cleared.')}[/bold #f87171]"))
-            self._deferred_scroll()
+            self.show_system_notice(f"[bold #f87171]🛑 {_('Prompt queue cleared.')}[/bold #f87171]")
         if self._is_generating and self._current_worker is not None:
             self._current_worker.cancel()
         elif self._is_approval_pending:
             self._is_approval_pending = False
             footer = self.query_one(AgentFooter)
             footer.set_approval(False)
-            scroll = self.query_one("#chat-scroll")
-            scroll.mount(SystemMessage(f"[bold #f87171]🛑 {_('Approval cancelled.')}[/bold #f87171]"))
-            self._deferred_scroll()
+            self.show_system_notice(f"[bold #f87171]🛑 {_('Approval cancelled.')}[/bold #f87171]")
 
     def action_cancel_or_quit(self) -> None:
         if self._is_generating or self._is_approval_pending or self._prompt_queue:
@@ -350,11 +352,21 @@ class OllamaAgentApp(App):
         yield ScrollableContainer(id="chat-scroll")
         yield OptionList(id="autocomplete-list")
         yield PromptQueueWidget(id="prompt-queue")
+        yield SystemOutputWidget(id="system-output")
         with Container(id="input-container"):
             with Horizontal(id="input-bar"):
                 yield Static("❯ ", id="prompt-char")
                 yield ReplInput(id="repl-input")
         yield AgentFooter()
+
+    def show_system_output(self, content: str | Text, title: str | None = None) -> None:
+        self.query_one(SystemOutputWidget).show_output(content, title=title)
+
+    def show_system_notice(self, notice: str | Text) -> None:
+        self.query_one(SystemOutputWidget).show_notice(notice)
+
+    def clear_system_output(self) -> None:
+        self.query_one(SystemOutputWidget).clear_output()
 
     def on_mount(self) -> None:
         self.query_one(ReplInput).focus()
@@ -390,6 +402,7 @@ class OllamaAgentApp(App):
         val = event.value.strip()
         if not val:
             return
+        self.clear_system_output()
         event.input.text = ""
         event.input.add_history_entry(val)
 
@@ -401,10 +414,6 @@ class OllamaAgentApp(App):
 
         if self._is_generating or self._is_approval_pending:
             self._prompt_queue.append(QueuedItem(text=val))
-            pos = len(self._prompt_queue)
-            scroll = self.query_one("#chat-scroll")
-            scroll.mount(SystemMessage(f"[dim]⏳ {_('Prompt added to queue (position #{pos})', pos=pos)}[/dim]"))
-            self._deferred_scroll()
             self._update_queue_ui()
             return
 
@@ -723,34 +732,29 @@ class OllamaAgentApp(App):
             if cmd in ("/clear", "/new") or (cmd == "/session" and args and args[0] == "new"):
                 await self.repl._handle_new_session([])
                 await scroll.remove_children()
-                scroll.mount(SystemMessage(f"[bold #38bdf8]✓ {_('New session started: {session_id}', session_id=self.repl.runtime.thread_id[:8])}[/bold #38bdf8]"))
+                self.show_system_notice(f"[bold #38bdf8]✓ {_('New session started: {session_id}', session_id=self.repl.runtime.thread_id[:8])}[/bold #38bdf8]")
                 self.query_one(AgentHeader).update_header()
-                self._deferred_scroll()
                 return
 
             if cmd in ("/compact", "/compress"):
-                scroll.mount(SystemMessage(f"[dim]⚡ {_('Compacting conversation context...')}[/dim]"))
-                self._deferred_scroll()
+                self.show_system_notice(f"[dim]⚡ {_('Compacting conversation context...')}[/dim]")
                 with self.repl.console.capture() as capture:
                     res = await compact_session(self.repl.console, self.repl.runtime)
                 output = capture.get()
                 if output:
-                    scroll.mount(SystemMessage(Text.from_ansi(output)))
+                    self.show_system_output(Text.from_ansi(output), title=_("Context Compacted"))
                 if res["success"]:
                     self.query_one(AgentHeader).update_header()
-                self._deferred_scroll()
                 return
 
             if cmd == "/session" and args and args[0] in ("resume", "switch"):
                 if len(args) < 2:
-                    scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Usage: /session resume <session_id>')}[/bold #f87171]"))
-                    self._deferred_scroll()
+                    self.show_system_notice(f"[bold #f87171]✕ {_('Usage: /session resume <session_id>')}[/bold #f87171]")
                     return
                 try:
                     resolved = resume_session(self.repl.console, args[1])
                 except HistoryError as exc:
-                    scroll.mount(SystemMessage(f"[red]{exc}[/red]"))
-                    self._deferred_scroll()
+                    self.show_system_notice(f"[red]{exc}[/red]")
                     return
                 if resolved:
                     self.repl.runtime.thread_id = resolved
@@ -768,12 +772,11 @@ class OllamaAgentApp(App):
                             scroll.mount(UserMessage(content))
                         elif role in ("ai", "assistant"):
                             scroll.mount(AgentResponse(initial_text=content))
-                    scroll.mount(SystemMessage(f"[bold #38bdf8]✓ {_('Resumed session: {session_id}', session_id=f'{resolved[:8]} ({resolved})')}[/bold #38bdf8]"))
+                    self.show_system_notice(f"[bold #38bdf8]✓ {_('Resumed session: {session_id}', session_id=f'{resolved[:8]} ({resolved})')}[/bold #38bdf8]")
                     self.query_one(AgentHeader).update_header()
                     self._deferred_scroll()
                 else:
-                    scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Session not found: {session_id}', session_id=args[1])}[/bold #f87171]"))
-                    self._deferred_scroll()
+                    self.show_system_notice(f"[bold #f87171]✕ {_('Session not found: {session_id}', session_id=args[1])}[/bold #f87171]")
                 return
 
             if cmd == "/session" and args and args[0] == "export":
@@ -785,14 +788,12 @@ class OllamaAgentApp(App):
                         output_path=args[1] if len(args) > 1 else None,
                     )
                 except HistoryError as exc:
-                    scroll.mount(SystemMessage(f"[red]{exc}[/red]"))
-                    self._deferred_scroll()
+                    self.show_system_notice(f"[red]{exc}[/red]")
                     return
                 if out_file:
-                    scroll.mount(SystemMessage(f"[bold #38bdf8]✓ {_('Session exported to: {path}', path=out_file)}[/bold #38bdf8]"))
+                    self.show_system_notice(f"[bold #38bdf8]✓ {_('Session exported to: {path}', path=out_file)}[/bold #38bdf8]")
                 else:
-                    scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Failed to export session.')}[/bold #f87171]"))
-                    self._deferred_scroll()
+                    self.show_system_notice(f"[bold #f87171]✕ {_('Failed to export session.')}[/bold #f87171]")
                 return
 
             if cmd == "/task" and args and args[0] == "create":
@@ -845,20 +846,15 @@ class OllamaAgentApp(App):
                 sub_args = args[1:]
                 target_id = next((a for a in sub_args if not a.startswith("-")), "")
                 if not target_id:
-                    scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Usage: /task run <id> [-y]')}[/bold #f87171]"))
-                    self._deferred_scroll()
+                    self.show_system_notice(f"[bold #f87171]✕ {_('Usage: /task run <id> [-y]')}[/bold #f87171]")
                     return
                 try:
                     tid, t = self.repl._task_ctx._find_or_exit(target_id)
                 except TaskError as exc:
-                    scroll.mount(SystemMessage(f"[red]{exc}[/red]"))
-                    self._deferred_scroll()
+                    self.show_system_notice(f"[red]{exc}[/red]")
                     return
 
-                scroll.mount(SystemMessage(Text.from_markup(
-                    f"[bold #38bdf8]▶ {_('Executing Task: {title} ({task_id})', title=t.title, task_id=tid)}[/bold #38bdf8]\n"
-                    f"  [dim]{_('Model:')}[/dim] {t.model} [dim]·[/dim] [dim]{_('Effort:')}[/dim] {t.reasoning_effort}"
-                )))
+                scroll.mount(UserMessage(cmd_line))
                 agent_msg = AgentResponse()
                 scroll.mount(agent_msg)
                 self._deferred_scroll()
@@ -883,8 +879,7 @@ class OllamaAgentApp(App):
 
             commands = self.repl._get_commands()
             if cmd not in commands:
-                scroll.mount(SystemMessage(f"[bold #f87171]✕ {_('Unknown command: {cmd}', cmd=cmd)}[/bold #f87171]"))
-                self._deferred_scroll()
+                self.show_system_notice(f"[bold #f87171]✕ {_('Unknown command: {cmd}', cmd=cmd)}[/bold #f87171]")
                 return
 
             spec = commands[cmd]
@@ -895,8 +890,7 @@ class OllamaAgentApp(App):
                 await safe_call(spec.handler, args, console=self.repl.console)
             output = capture.get()
             if output:
-                scroll.mount(SystemMessage(Text.from_ansi(output)))
-                self._deferred_scroll()
+                self.show_system_output(Text.from_ansi(output), title=cmd_line)
 
             if cmd == "/yolo":
                 self.update_yolo_ui()
@@ -923,12 +917,10 @@ class OllamaAgentApp(App):
             try:
                 await stream_agent_events(self.repl.runtime, prompt, _TUIStreamingRenderer(self, scroll, agent_msg), auto_close=True)
             except asyncio.CancelledError:
-                scroll.mount(SystemMessage(f"[bold #f87171]🛑 {_('Execution interrupted by user.')}[/bold #f87171]"))
+                self.show_system_notice(f"[bold #f87171]🛑 {_('Execution interrupted by user.')}[/bold #f87171]")
                 if self._prompt_queue:
                     self._prompt_queue.clear()
                     self._update_queue_ui()
-                    scroll.mount(SystemMessage(f"[bold #f87171]🛑 {_('Prompt queue cleared.')}[/bold #f87171]"))
-                self._deferred_scroll()
                 inp = self.query_one(ReplInput)
                 inp.disabled = False
                 inp.focus()

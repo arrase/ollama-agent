@@ -445,5 +445,8 @@
   "more": "更多",
   "tokens": "Token",
   "Usage: /effort [set <level>]": "用法：/effort [set <级别>]",
-  "Usage: /context [set <size>]": "用法：/context [set <大小>]"
+  "Usage: /context [set <size>]": "用法：/context [set <大小>]",
+  "System Output": "系统输出",
+  "esc to dismiss": "按 esc 关闭",
+  "Context Compacted": "上下文已压缩"
 }

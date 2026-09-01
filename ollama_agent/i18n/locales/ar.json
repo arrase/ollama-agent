@@ -445,5 +445,8 @@
   "more": "المزيد",
   "tokens": "رموز",
   "Usage: /effort [set <level>]": "الاستخدام: /effort [set <المستوى>]",
-  "Usage: /context [set <size>]": "الاستخدام: /context [set <الحجم>]"
+  "Usage: /context [set <size>]": "الاستخدام: /context [set <الحجم>]",
+  "System Output": "مخرجات النظام",
+  "esc to dismiss": "esc للإغلاق",
+  "Context Compacted": "تم ضغط السياق"
 }

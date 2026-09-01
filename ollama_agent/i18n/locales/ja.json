@@ -445,5 +445,8 @@
   "more": "件",
   "tokens": "トークン",
   "Usage: /effort [set <level>]": "使用法: /effort [set <レベル>]",
-  "Usage: /context [set <size>]": "使用法: /context [set <サイズ>]"
+  "Usage: /context [set <size>]": "使用法: /context [set <サイズ>]",
+  "System Output": "システム出力",
+  "esc to dismiss": "escで閉じる",
+  "Context Compacted": "コンテキスト圧縮完了"
 }

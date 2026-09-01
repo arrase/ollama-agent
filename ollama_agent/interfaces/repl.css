@@ -62,6 +62,23 @@ PromptQueueWidget, #prompt-queue {
     color: #e6edf3;
 }
 
+/* ── System Output Widget ────────────────────────────────────────────────── */
+SystemOutputWidget, #system-output {
+    display: none;
+    height: auto;
+    max-height: 12;
+    background: #161b22;
+    border: round #30363d;
+    margin: 0 2 1 2;
+    padding: 0 1;
+    color: #e6edf3;
+    overflow-y: auto;
+    scrollbar-size: 1 1;
+    scrollbar-color: #30363d;
+    scrollbar-color-active: #38bdf8;
+    scrollbar-color-hover: #58a6ff;
+}
+
 /* ── Input Container & ReplInput ───────────────────────────────────────── */
 #input-container {
     height: auto;

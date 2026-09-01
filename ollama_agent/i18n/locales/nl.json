@@ -445,5 +445,8 @@
   "more": "meer",
   "tokens": "tokens",
   "Usage: /effort [set <level>]": "Gebruik: /effort [set <niveau>]",
-  "Usage: /context [set <size>]": "Gebruik: /context [set <grootte>]"
+  "Usage: /context [set <size>]": "Gebruik: /context [set <grootte>]",
+  "System Output": "Systeemuitvoer",
+  "esc to dismiss": "esc om te sluiten",
+  "Context Compacted": "Context gecomprimeerd"
 }
