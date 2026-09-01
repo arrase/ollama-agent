@@ -13,6 +13,8 @@ from ollama_agent.settings.config import (
     Settings,
     SubAgentMCPServer,
     SubAgentSettings,
+    _dataclass_from_dict,
+    _subagents_from_list,
     ensure_memory_file,
     ensure_prompt_files,
     find_agents_file,
@@ -290,6 +292,31 @@ class TestConfigManagement(unittest.TestCase):
         self.assertTrue(trav_path.exists())
         self.assertTrue(sand_path.exists())
         self.assertTrue(rag_path.exists())
+
+    def test_settings_from_dict_rejects_unknown_root_keys(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            Settings.from_dict({"modeel": {"name": "llama3"}})
+        self.assertIn("modeel", str(ctx.exception))
+
+    def test_dataclass_from_dict_rejects_non_dict(self) -> None:
+        with self.assertRaises(ValueError):
+            _dataclass_from_dict(ModelSettings, "not-a-dict")
+        with self.assertRaises(ValueError):
+            _dataclass_from_dict(ModelSettings, 123)
+
+    def test_subagents_from_list_validation(self) -> None:
+        with self.assertRaises(ValueError):
+            _subagents_from_list("not-a-list")
+        with self.assertRaises(ValueError):
+            _subagents_from_list(["not-a-dict"])
+        with self.assertRaises(ValueError):
+            _subagents_from_list([{"name": "coder", "mcp_servers": "invalid"}])
+
+    def test_load_settings_falsy_scalar_yaml_raises_value_error(self) -> None:
+        for val in ["false\n", "0\n", "[]\n"]:
+            self.settings_file.write_text(val, encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_settings(self.settings_file)
 
 
 if __name__ == "__main__":

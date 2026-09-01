@@ -42,7 +42,7 @@ def _parse_modelfile_param(text: str | None, param_name: str) -> str | None:
         return None
     pattern = rf"^\s*(?:PARAMETER\s+)?{re.escape(param_name)}\s+([^\s\n]+)"
     match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
-    return match.group(1) if match else None
+    return match.group(1).strip("\"'") if match else None
 
 
 def _parse_num_ctx(text: str | None) -> int | None:
@@ -59,9 +59,14 @@ def _model_context_length(model_info: dict[str, Any]) -> int | None:
     return max(values, default=None)
 
 
-async def get_model_capabilities(model: str, base_url: str) -> set[str]:
+async def get_model_capabilities(
+    model: str,
+    base_url: str,
+    *,
+    show_info: Any | None = None,
+) -> set[str]:
     """Extract capabilities for a model."""
-    response = await _show_model(model, base_url)
+    response = show_info if show_info is not None else await _show_model(model, base_url)
     caps = getattr(response, "capabilities", None)
     if isinstance(caps, dict):
         caps = caps.get("capabilities", [])
@@ -72,20 +77,35 @@ async def get_model_capabilities(model: str, base_url: str) -> set[str]:
     )
 
 
-async def model_supports_tools(model: str, base_url: str) -> bool:
+async def model_supports_tools(
+    model: str,
+    base_url: str,
+    *,
+    show_info: Any | None = None,
+) -> bool:
     """Check if a model supports tool calls."""
-    return "tools" in await get_model_capabilities(model, base_url)
+    return "tools" in await get_model_capabilities(model, base_url, show_info=show_info)
 
 
-async def ensure_model_supports_tools(model: str, base_url: str) -> None:
+async def ensure_model_supports_tools(
+    model: str,
+    base_url: str,
+    *,
+    show_info: Any | None = None,
+) -> None:
     """Raise ModelCapabilityError if the model doesn't support tools."""
-    if not await model_supports_tools(model, base_url):
+    if not await model_supports_tools(model, base_url, show_info=show_info):
         raise ModelCapabilityError(_("Model '{model}' does not support tools.", model=model))
 
 
-async def model_supports_thinking(model: str, base_url: str) -> bool:
+async def model_supports_thinking(
+    model: str,
+    base_url: str,
+    *,
+    show_info: Any | None = None,
+) -> bool:
     """Detection of Ollama thinking support for a model."""
-    return "thinking" in await get_model_capabilities(model, base_url)
+    return "thinking" in await get_model_capabilities(model, base_url, show_info=show_info)
 
 
 def _get_model_info(response: Any) -> dict[str, Any]:
@@ -94,13 +114,15 @@ def _get_model_info(response: Any) -> dict[str, Any]:
         info = getattr(response, attr, None)
         if isinstance(info, dict):
             return info
-    raise ModelCapabilityError(_("Model metadata has no 'model_info' or 'modelinfo' dict attribute."))
+    return {}
 
 
 async def resolve_context_window(
     model: str,
     context_window: int | str | None,
     base_url: str,
+    *,
+    show_info: Any | None = None,
 ) -> int:
     """Resolve the effective context window for a model."""
     if isinstance(context_window, str):
@@ -119,7 +141,7 @@ async def resolve_context_window(
             raise ModelContextWindowError(_("context_window must be greater than zero."))
         return context_window
 
-    response = await _show_model(model, base_url)
+    response = show_info if show_info is not None else await _show_model(model, base_url)
 
     model_info = _get_model_info(response)
     if resolved := _model_context_length(model_info):
@@ -139,6 +161,8 @@ async def resolve_ollama_reasoning(
     effort: ReasoningEffortValue,
     base_url: str,
     warn_callback: Callable[[str], None],
+    *,
+    show_info: Any | None = None,
 ) -> bool | str | None:
     """Translate reasoning_effort to Ollama's native reasoning setting."""
     lower_name = model.lower()
@@ -147,8 +171,8 @@ async def resolve_ollama_reasoning(
             return False
         if effort == "hide":
             return True
-        if effort == "enabled":
-            return "xhigh"
+        if effort in ("xhigh", "high", "enabled"):
+            return "high"
         return effort
 
     if "gpt-oss" in lower_name:
@@ -156,29 +180,23 @@ async def resolve_ollama_reasoning(
             warn_callback(
                 _("Model '{model}' is a thinking-only model. reasoning_effort='disabled' is not supported; thinking will remain enabled.", model=model)
             )
-            return None
-        if effort == "hide":
-            return None
-        if effort == "enabled":
-            return DEFAULT_REASONING_EFFORT
+            return True
+        if effort in ("hide", "enabled"):
+            return True
+        if effort == "xhigh":
+            return "high"
         return effort
 
-    if not await model_supports_thinking(model, base_url):
+    if not await model_supports_thinking(model, base_url, show_info=show_info):
         return None
 
+    if effort == "disabled":
+        return False
     if effort in ("hide", "enabled"):
         return True
-    return effort != "disabled"
-
-
-OLLAMA_PARAM_DEFAULTS: dict[str, Any] = {
-    "temperature": 0.8,
-    "top_p": 0.9,
-    "top_k": 40,
-    "min_p": 0.0,
-    "presence_penalty": 0.0,
-    "repeat_penalty": 1.1,
-}
+    if effort == "xhigh":
+        return "high"
+    return effort
 
 
 async def resolve_model_parameters(
@@ -192,8 +210,9 @@ async def resolve_model_parameters(
     presence_penalty: float | None = None,
     repeat_penalty: float | None = None,
     warn_callback: Callable[[str], None],
+    show_info: Any | None = None,
 ) -> dict[str, tuple[Any, str]]:
-    """Resolve model sampling parameters with precedence: User > Modelfile > Ollama Default."""
+    """Resolve model sampling parameters with precedence: User > Modelfile."""
     user_inputs: dict[str, Any] = {
         "temperature": temperature,
         "top_p": top_p,
@@ -203,7 +222,7 @@ async def resolve_model_parameters(
         "repeat_penalty": repeat_penalty,
     }
 
-    response = await _show_model(model, base_url)
+    response = show_info if show_info is not None else await _show_model(model, base_url)
     meta_sources = [
         getattr(response, "parameters", None),
         getattr(response, "modelfile", None),
@@ -233,8 +252,6 @@ async def resolve_model_parameters(
 
         if found_val is not None:
             resolved[param] = (found_val, "modelfile")
-        else:
-            resolved[param] = (OLLAMA_PARAM_DEFAULTS[param], "default")
 
     return resolved
 
@@ -253,7 +270,7 @@ class OllamaChatModel(ChatOllama):
         **kwargs: Any,
     ) -> dict[str, Any]:
         params = super()._chat_params(messages, stop=stop, **kwargs)
-        options = params["options"]
+        options = params.setdefault("options", {})
         if self.min_p is not None:
             options["min_p"] = self.min_p
         if self.presence_penalty is not None:
@@ -277,10 +294,13 @@ async def create_ollama_chat_model(
 ) -> OllamaChatModel:
     """Create a native ChatOllama model with resolved runtime settings."""
     host = base_url.rstrip("/")
+    show_info = await _show_model(model, host)
     reasoning = await resolve_ollama_reasoning(
-        model, reasoning_effort, host, warn_callback
+        model, reasoning_effort, host, warn_callback, show_info=show_info
     )
-    num_ctx = await resolve_context_window(model, context_window, host)
+    num_ctx = await resolve_context_window(
+        model, context_window, host, show_info=show_info
+    )
     resolved_params = await resolve_model_parameters(
         model,
         host,
@@ -291,21 +311,18 @@ async def create_ollama_chat_model(
         presence_penalty=presence_penalty,
         repeat_penalty=repeat_penalty,
         warn_callback=warn_callback,
+        show_info=show_info,
     )
 
     kwargs: dict[str, Any] = {
         "base_url": host,
         "model": model,
         "num_ctx": num_ctx,
-        "temperature": resolved_params["temperature"][0],
-        "top_p": resolved_params["top_p"][0],
-        "top_k": resolved_params["top_k"][0],
-        "min_p": resolved_params["min_p"][0],
-        "presence_penalty": resolved_params["presence_penalty"][0],
-        "repeat_penalty": resolved_params["repeat_penalty"][0],
         "profile": {"max_input_tokens": num_ctx},
         "effective_params": resolved_params,
     }
+    for param, (val, _source) in resolved_params.items():
+        kwargs[param] = val
     if reasoning is not None:
         kwargs["reasoning"] = reasoning
     return OllamaChatModel(**kwargs)
@@ -313,8 +330,9 @@ async def create_ollama_chat_model(
 
 def validate_reasoning_effort(effort: str) -> ReasoningEffortValue:
     """Validate and normalize reasoning effort value."""
-    if effort in ALLOWED_REASONING_EFFORTS:
-        return cast(ReasoningEffortValue, effort)
+    normalized = effort.strip().lower()
+    if normalized in ALLOWED_REASONING_EFFORTS:
+        return cast(ReasoningEffortValue, normalized)
     raise ValueError(
         _("Invalid reasoning effort '{effort}'. Allowed values are: {allowed}", effort=effort, allowed=sorted(ALLOWED_REASONING_EFFORTS))
     )

@@ -93,12 +93,14 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         )
 
     def on_error(self, event: dict[str, Any]) -> None:
+        self._end_reasoning()
         self._toggle_live(False)
         self.console.print(
             f"  [red]❌ {_('Error:')} {event['content']}[/red]"
         )
 
     def on_warning(self, event: dict[str, Any]) -> None:
+        self._end_reasoning()
         self._toggle_live(False)
         self.console.print(
             f"  [yellow]⚠ {_('Warning:')} {event['content']}[/yellow]"
@@ -155,5 +157,6 @@ class ConsoleStreamingRenderer(StreamingRenderer):
             return None
 
     def close(self) -> None:
+        self._end_reasoning()
         self._toggle_live(False)
         self.console.print()

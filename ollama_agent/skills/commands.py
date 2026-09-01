@@ -37,11 +37,15 @@ class SkillsContext:
     console: Console = field(default_factory=Console)
     skill_manager: SkillManager = field(default_factory=SkillManager)
 
-    def _find_or_exit(self, skill_id: str) -> tuple[str, SkillInfo]:
+    def _resolve_skill(self, skill_id: str) -> tuple[str, SkillInfo]:
         try:
             matches = self.skill_manager.find_matches(skill_id)
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
+        except (FileNotFoundError, OSError) as exc:
+            raise SkillNotFoundError(
+                _("{label} not found: {prefix}", label=_("Skill"), prefix=skill_id)
+            ) from exc
         return resolve_unique_match(
             matches,
             skill_id,
@@ -69,7 +73,7 @@ def list_skills(ctx: SkillsContext) -> None:
 
 def show_skill(ctx: SkillsContext, skill_id: str) -> None:
     """Display the full contents of a skill's SKILL.md."""
-    sid, info = ctx._find_or_exit(skill_id)
+    sid, info = ctx._resolve_skill(skill_id)
     ctx.console.print(
         Panel(Markdown(info.content), title=_("Skill: {sid}", sid=sid), border_style="cyan")
     )
@@ -107,9 +111,11 @@ def create_skill(
 
 def delete_skill(ctx: SkillsContext, skill_id: str) -> None:
     """Delete an existing skill."""
-    sid, info = ctx._find_or_exit(skill_id)
+    sid, info = ctx._resolve_skill(skill_id)
     try:
         ctx.skill_manager.delete(sid)
+    except (FileNotFoundError, OSError) as exc:
+        raise SkillNotFoundError(str(exc)) from exc
     except ValueError as exc:
         raise SkillError(str(exc)) from exc
     ctx.console.print(f"[green]✓ {_('Skill deleted: {name} ({sid})', name=info.name, sid=sid)}[/green]")

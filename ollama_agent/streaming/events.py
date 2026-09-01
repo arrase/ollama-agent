@@ -19,12 +19,12 @@ if TYPE_CHECKING:
     from ..agent import AgentRuntime
     from .base import StreamingRenderer
 
-logger = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 async def stream_agent_events(
     runtime: AgentRuntime,
-    prompt: str | Command,
+    prompt: str | Command[Any],
     renderer: StreamingRenderer,
     *,
     thread_id: str = "",
@@ -37,17 +37,20 @@ async def stream_agent_events(
     completed = True
     try:
         while True:
-            interrupted = False
             interrupt_event: dict[str, Any] | None = None
             async for event in runtime.run_streamed(current_prompt, thread_id=thread_id):
-                etype = event.get("type")
-                if etype == "interrupt":
-                    interrupted = True
+                etype = event["type"]
+                if etype in ignored:
+                    continue
+                if etype == "error":
+                    completed = False
+                    renderer.on_event(event)
+                elif etype == "interrupt":
                     interrupt_event = event
-                elif etype and etype not in ignored:
+                else:
                     renderer.on_event(event)
 
-            if interrupted and interrupt_event is not None:
+            if interrupt_event is not None:
                 decisions = await renderer.handle_interrupt(interrupt_event, runtime)
                 if decisions is not None:
                     current_prompt = Command(resume={"decisions": decisions})
@@ -57,7 +60,7 @@ async def stream_agent_events(
             break
     except KeyboardInterrupt:
         completed = False
-        logger.info("Agent run interrupted by user")
+        _log.info("Agent run interrupted by user")
         renderer.on_warning({"type": "warning", "content": _("Execution interrupted by user.")})
     finally:
         if auto_close:
@@ -66,7 +69,7 @@ async def stream_agent_events(
 
 
 async def run_non_interactive(
-    runtime: AgentRuntime, prompt: str | Command, *, thread_id: str = ""
+    runtime: AgentRuntime, prompt: str | Command[Any], *, thread_id: str = ""
 ) -> bool:
     """Stream agent output to the console (non-interactive mode).
 
@@ -78,4 +81,3 @@ async def run_non_interactive(
         ConsoleStreamingRenderer(Console()),
         thread_id=thread_id,
     )
-

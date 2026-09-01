@@ -348,13 +348,11 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         await set_model_param(console, "temperature", "not_a_number", runtime=runtime)
         self.assertIn("Invalid value", console.export_text())
 
-    def test_params_dispatch(self) -> None:
+    async def test_model_dispatch(self) -> None:
         console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
         runtime.settings.model.name = "llama3.2:3b"
-        runtime.effective_model_params = {
-            "temperature": (0.8, "default"),
-        }
+        runtime.settings.model.parameters = {"temperature": 0.8}
         switch_mock = AsyncMock()
 
         handlers = build_repl_handlers(
@@ -381,10 +379,10 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Usage: /params set", console.export_text())
 
         # /model <name> routes to switch_model (single arg is treated as a model name)
-        handlers["/model"].handler(["some-model"])
+        await safe_call(handlers["/model"].handler, ["some-model"], console=console)
         switch_mock.assert_called_once_with("some-model")
 
-    def test_effort_dispatch(self) -> None:
+    async def test_effort_dispatch(self) -> None:
         console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
         runtime.settings.model.reasoning_effort = "medium"
@@ -406,7 +404,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         self.assertIn("medium", out)
 
         # /effort <level>
-        handlers["/effort"].handler(["high"])
+        await safe_call(handlers["/effort"].handler, ["high"], console=console)
         switch_effort.assert_called_once_with("high")
 
     async def test_unified_repl_handlers(self) -> None:

@@ -7,14 +7,43 @@ import os
 import shutil
 import subprocess
 import sys
+from typing import Any
 
 
 class ClipboardError(Exception):
     """Raised when a system clipboard operation fails."""
 
 
+def _configure_win32_clipboard(u32: Any, k32: Any) -> None:
+    u32.OpenClipboard.argtypes = [ctypes.c_void_p]
+    u32.OpenClipboard.restype = ctypes.c_int
+    u32.CloseClipboard.argtypes = []
+    u32.CloseClipboard.restype = ctypes.c_int
+    u32.EmptyClipboard.argtypes = []
+    u32.EmptyClipboard.restype = ctypes.c_int
+    u32.GetClipboardData.argtypes = [ctypes.c_uint]
+    u32.GetClipboardData.restype = ctypes.c_void_p
+    u32.SetClipboardData.argtypes = [ctypes.c_uint, ctypes.c_void_p]
+    u32.SetClipboardData.restype = ctypes.c_void_p
+
+    k32.GlobalAlloc.argtypes = [ctypes.c_uint, ctypes.c_size_t]
+    k32.GlobalAlloc.restype = ctypes.c_void_p
+    k32.GlobalLock.argtypes = [ctypes.c_void_p]
+    k32.GlobalLock.restype = ctypes.c_void_p
+    k32.GlobalUnlock.argtypes = [ctypes.c_void_p]
+    k32.GlobalUnlock.restype = ctypes.c_int
+    k32.GlobalFree.argtypes = [ctypes.c_void_p]
+    k32.GlobalFree.restype = ctypes.c_void_p
+
+
 def _copy_via_command(cmd: list[str], text: str) -> None:
-    proc = subprocess.run(cmd, input=text.encode("utf-8"), check=False)
+    proc = subprocess.run(
+        cmd,
+        input=text.encode("utf-8"),
+        capture_output=True,
+        timeout=3.0,
+        check=False,
+    )
     if proc.returncode != 0:
         raise ClipboardError(f"'{cmd[0]}' exited with code {proc.returncode}")
 
@@ -53,6 +82,7 @@ def copy_to_system_clipboard(text: str) -> None:
     elif sys.platform == "win32":
         u32 = ctypes.windll.user32
         k32 = ctypes.windll.kernel32
+        _configure_win32_clipboard(u32, k32)
         if not u32.OpenClipboard(None):
             raise ClipboardError("Could not open the Windows clipboard")
         try:
@@ -96,6 +126,7 @@ def get_system_clipboard() -> str:
     elif sys.platform == "win32":
         u32 = ctypes.windll.user32
         k32 = ctypes.windll.kernel32
+        _configure_win32_clipboard(u32, k32)
         if not u32.OpenClipboard(None):
             raise ClipboardError("Could not open the Windows clipboard")
         try:

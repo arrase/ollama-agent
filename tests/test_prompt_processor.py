@@ -145,13 +145,13 @@ class TestPromptProcessor(unittest.TestCase):
         self.assertEqual(attachments, [])
 
     def test_process_prompt_mentions_ignores_decorators_as_literal_text(self) -> None:
-        prompt = "def func():\n    @staticmethod\n    @classmethod\n    @property\n    def helper(): pass"
+        prompt = "def func():\n    @staticmethod\n    @classmethod\n    @property\n    @app.route('/api')\n    @pytest.mark.asyncio\n    def helper(): pass"
         processed, attachments, warnings = process_prompt_mentions(prompt)
         self.assertEqual(processed, prompt)
         self.assertEqual(attachments, [])
 
-    def test_process_prompt_mentions_with_unquoted_missing_file_with_extension_raises(self) -> None:
-        prompt = "Please look at @nonexistent_file.py"
+    def test_process_prompt_mentions_with_unquoted_missing_relative_file_raises(self) -> None:
+        prompt = "Please look at @./nonexistent_file.py"
         with self.assertRaises(PromptProcessingError):
             process_prompt_mentions(prompt)
 
@@ -159,6 +159,13 @@ class TestPromptProcessor(unittest.TestCase):
         prompt = "Please look at @src/missing"
         with self.assertRaises(PromptProcessingError):
             process_prompt_mentions(prompt)
+
+    def test_process_prompt_mentions_trailing_ellipsis_stripped(self) -> None:
+        file = self.base_path / "hello.py"
+        file.write_text("print('world')", encoding="utf-8")
+        prompt = f"Please look at @{file}..."
+        processed, _, _ = process_prompt_mentions(prompt)
+        self.assertIn("print('world')", processed)
 
     def test_get_file_type_typescript_classified_as_text(self) -> None:
         self.assertEqual(classify_multimodal_file(Path("index.ts")), None)

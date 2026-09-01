@@ -448,5 +448,19 @@
   "Usage: /context [set <size>]": "Використання: /context [set <розмір>]",
   "System Output": "Вивід системи",
   "esc to dismiss": "esc для закриття",
-  "Context Compacted": "Контекст стиснуто"
+  "Context Compacted": "Контекст стиснуто",
+  "Database name cannot be empty.": "Назва бази даних не може бути порожньою.",
+  "Limit must be greater than 0": "Ліміт має бути більше 0",
+  "Failed to query vector database: {e}": "Не вдалося виконати запит до векторної бази даних: {e}",
+  "Failed to get collection info: {e}": "Не вдалося отримати інформацію про колекцію: {e}",
+  "Failed to create database '{name}': {e}": "Не вдалося створити базу даних '{name}': {e}",
+  "Failed to load database '{name}': {e}": "Не вдалося завантажити базу даних '{name}': {e}",
+  "Failed to upsert points into vector database: {e}": "Не вдалося вставити/оновити точки у векторній базі даних: {e}",
+  "Expected mapping for Settings, got {type_name}": "Очікувалося зіставлення для Settings, отримано {type_name}",
+  "Expected mapping for '{name}', got {type_name}": "Очікувалося зіставлення для '{name}', отримано {type_name}",
+  "Expected list for subagents, got {type_name}": "Очікувався список для subagents, отримано {type_name}",
+  "Expected mapping for subagent, got {type_name}": "Очікувалося зіставлення для subagent, отримано {type_name}",
+  "Expected list for mcp_servers, got {type_name}": "Очікувався список для mcp_servers, отримано {type_name}",
+  "Expected mapping for Task, got {type_name}": "Очікувалося зіставлення для Task, отримано {type_name}",
+  "Path traversal detected: {item_id}": "Виявлено обхід шляху: {item_id}"
 }

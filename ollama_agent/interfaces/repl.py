@@ -896,7 +896,7 @@ class OllamaAgentApp(App):
                 self.update_yolo_ui()
             elif cmd == "/queue":
                 self._update_queue_ui()
-            elif cmd in ("/model", "/effort", "/context"):
+            elif cmd in ("/model", "/effort", "/context", "/rag"):
                 self.query_one(AgentHeader).update_header()
         finally:
             self._process_next_in_queue()
@@ -969,7 +969,7 @@ class OllamaREPL:
     ):
         self.runtime = runtime
         self.console = Console(force_terminal=True, color_system="truecolor")
-        self._task_ctx = TasksContext(console=self.console)
+        self._task_ctx = TasksContext(console=self.console, settings=self.runtime.settings)
         self._skills_ctx = SkillsContext(console=self.console)
         self._initial_rag_database = rag_database
         self._rag_ctx: RAGContext | None = None

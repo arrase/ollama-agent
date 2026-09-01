@@ -9,7 +9,7 @@ from typing import Awaitable, Callable, Any
 
 from rich.console import Console
 
-from ..agent import list_subagents
+from ..agent import AgentRuntime, list_subagents
 from ..agent.episodic_memory import HistoryError
 from ..i18n import _
 from ..mcp import list_mcp_servers, reload_mcp_servers
@@ -79,11 +79,11 @@ async def safe_call(
 
 async def _cli_export_session(
     console: Console,
-    runtime: Any,
+    settings: Settings,
     session_id: str,
     output_path: str | None = None,
 ) -> None:
-    async with runtime:
+    async with AgentRuntime(settings=settings) as runtime:
         await export_session(console, runtime, session_id, output_path=output_path)
 
 
@@ -96,6 +96,7 @@ def build_cli_handlers(
     settings: Settings,
 ) -> dict[tuple[str, str], CLIHandler]:
     """Map parsed CLI subcommands to their synchronous or async handler functions."""
+    console = Console()
 
     async def rag_add() -> None:
         load_rag_database(rag_ctx, args.database)
@@ -132,21 +133,21 @@ def build_cli_handlers(
             instructions=args.instructions,
             force=args.force,
         ),
-        ("session", "list"): lambda: list_sessions(Console()),
-        ("session", "search"): lambda: search_sessions(Console(), args.query),
-        ("session", "delete"): lambda: delete_session(Console(), args.session_id),
+        ("session", "list"): lambda: list_sessions(console),
+        ("session", "search"): lambda: search_sessions(console, args.query),
+        ("session", "delete"): lambda: delete_session(console, args.session_id),
         ("session", "export"): lambda: _cli_export_session(
-            Console(),
-            args._runtime,
+            console,
+            settings,
             args.session_id,
             output_path=args.output,
         ),
         ("mcp", "list"): lambda: list_mcp_servers(
-            Console(),
+            console,
             settings=settings,
         ),
         ("agents", "list"): lambda: list_subagents(
-            Console(),
+            console,
             settings=settings,
         ),
     }
@@ -209,22 +210,28 @@ def build_repl_handlers(
             show_effort(console, get_runtime())
             return None
         if args[0] in ("set", "use", "switch"):
-            if len(args) > 1:
+            if len(args) == 2:
                 return switch_effort(args[1])
             console.print(f"[red]{_('Usage: /effort [set <level>]')}[/red]")
             return None
-        return switch_effort(args[0])
+        if len(args) == 1:
+            return switch_effort(args[0])
+        console.print(f"[red]{_('Usage: /effort [set <level>]')}[/red]")
+        return None
 
     def handle_context(args: list[str]) -> object:
         if not args:
             show_context_window(console, get_runtime())
             return None
         if args[0] in ("set", "use", "switch"):
-            if len(args) > 1:
+            if len(args) == 2:
                 return switch_context_window(args[1])
             console.print(f"[red]{_('Usage: /context [set <size>]')}[/red]")
             return None
-        return switch_context_window(args[0])
+        if len(args) == 1:
+            return switch_context_window(args[0])
+        console.print(f"[red]{_('Usage: /context [set <size>]')}[/red]")
+        return None
 
     def handle_params(args: list[str]) -> object:
         if not args or args[0] == "list":
@@ -315,10 +322,11 @@ def build_repl_handlers(
             if not paths:
                 console.print(f"[red]{_('Usage: /rag add <path> [--dir]')}[/red]")
                 return None
+            target_path = " ".join(paths).strip("\"'")
             return (
-                add_rag_directory(get_rag_ctx(), paths[0])
+                add_rag_directory(get_rag_ctx(), target_path)
                 if is_dir
-                else add_rag_file(get_rag_ctx(), paths[0])
+                else add_rag_file(get_rag_ctx(), target_path)
             )
         err_msg = _("Unknown rag subcommand '{sub}'. Usage: /rag [status | list | create | delete | load | unload | add]", sub=sub)
         console.print(f"[red]{err_msg}[/red]")
@@ -377,13 +385,13 @@ def build_repl_handlers(
         "/effort": REPLCommand(
             _("Show or set reasoning/thinking effort"),
             "Model Management",
-            _("Usage: /effort <level>"),
+            _("Usage: /effort [set <level>]"),
             handle_effort,
         ),
         "/context": REPLCommand(
             _("Show or set context window size (num_ctx)"),
             "Model Management",
-            _("Usage: /context [<size|max>]"),
+            _("Usage: /context [set <size>]"),
             handle_context,
         ),
         "/params": REPLCommand(

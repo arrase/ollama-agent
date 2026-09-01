@@ -16,6 +16,7 @@ from ollama_agent.interfaces.session_commands import (
     delete_session,
     export_session,
     get_available_sessions,
+    is_current,
     list_sessions,
     new_session,
     resolve_session_id,
@@ -251,6 +252,39 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         out = console_search.export_text()
         self.assertIn("session-", out)
         self.assertIn("async", out.lower())
+
+    def test_is_current_bidirectional_and_empty(self) -> None:
+        self.assertTrue(is_current("12345678", "12345678"))
+        self.assertTrue(is_current("12345678", "1234"))
+        self.assertTrue(is_current("1234", "12345678"))
+        self.assertFalse(is_current("", "1234"))
+        self.assertFalse(is_current("1234", ""))
+        self.assertFalse(is_current("abcd", "1234"))
+
+    async def test_export_session_with_tool_calls_and_nested_dir(self) -> None:
+        self._init_sample_db()
+        console = Console(file=io.StringIO(), record=True)
+        runtime_mock = MagicMock()
+
+        ai_msg = MagicMock(
+            type="ai",
+            content="I am calling a tool.",
+            tool_calls=[{"name": "test_tool", "args": {"arg1": "val1"}}],
+        )
+        tool_msg = MagicMock(type="tool", name="test_tool", content="tool output result")
+        runtime_mock.get_thread_messages = AsyncMock(return_value=[ai_msg, tool_msg])
+
+        out_file = Path(self.tmpdir.name) / "nested" / "dir" / "export_test.md"
+        exported_path = await export_session(
+            console, runtime_mock, "session-1234", output_path=str(out_file), db_path=self.db_path
+        )
+
+        self.assertIsNotNone(exported_path)
+        self.assertTrue(out_file.exists())
+        content = out_file.read_text(encoding="utf-8")
+        self.assertIn("Tool: test_tool", content)
+        self.assertIn("val1", content)
+        self.assertIn("tool output result", content)
 
 
 if __name__ == "__main__":

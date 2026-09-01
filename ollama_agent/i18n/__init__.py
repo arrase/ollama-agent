@@ -63,8 +63,8 @@ def _load_translations(lang: str) -> dict[str, str]:
     if lang == DEFAULT_LOCALE:
         return {}
     data = (
-        resources.files(__package__)
-        .joinpath(f"locales/{lang}.json")
+        resources.files(__name__)
+        .joinpath("locales", f"{lang}.json")
         .read_text(encoding="utf-8")
     )
     return json.loads(data)
@@ -98,3 +98,12 @@ def get_text(message: str, **kwargs: Any) -> str:
 
 
 _ = get_text
+
+__all__ = [
+    "DEFAULT_LOCALE",
+    "SUPPORTED_LOCALES",
+    "_",
+    "detect_system_language",
+    "get_text",
+    "set_locale",
+]

@@ -12,6 +12,7 @@ from ollama_agent.rag.commands import (
     AmbiguousRAGDatabaseError,
     RAGContext,
     RAGDatabaseNotFoundError,
+    add_rag_directory,
     create_rag_database,
     delete_rag_database,
     list_rag_databases,
@@ -153,9 +154,13 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(hits[0]["filename"], "doc.txt")
                 self.assertEqual(hits[0]["score"], 0.92)
 
-                # top_k=0 is respected instead of silently becoming the default
-                await self.manager.search("LangGraph", top_k=0)
-                self.assertEqual(mock_client.query_points.call_args.kwargs["limit"], 0)
+                # empty query returns [] immediately
+                empty_hits = await self.manager.search("   ")
+                self.assertEqual(empty_hits, [])
+
+                # top_k <= 0 raises RAGError
+                with self.assertRaises(RAGError):
+                    await self.manager.search("LangGraph", top_k=0)
 
     async def test_add_file_rejects_unsupported_extension(self) -> None:
         doc = self.rag_dir / "data.xyz"
@@ -266,4 +271,116 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
 
             delete_rag_database(ctx, "manual_db")
             self.assertFalse((self.rag_dir / "manual_db").exists())
+
+    def test_read_file_custom_allowed_extensions(self) -> None:
+        f_custom = self.rag_dir / "test.custom"
+        f_custom.write_text("custom content", encoding="utf-8")
+        # Fails with default extensions
+        with self.assertRaises(RAGError):
+            self.manager._read_file(f_custom)
+        # Succeeds when allowed_extensions includes .custom
+        content = self.manager._read_file(f_custom, allowed_extensions=frozenset({".custom"}))
+        self.assertEqual(content, "custom content")
+
+    def test_delete_sources_points_empty_set_noop(self) -> None:
+        mock_client = MagicMock()
+        # Should early return and not call client.delete
+        self.manager._delete_sources_points(mock_client, set())
+        mock_client.delete.assert_not_called()
+
+    def test_create_database_failure_cleanup(self) -> None:
+        with patch("ollama_agent.rag.manager.QdrantClient") as mock_qdrant_cls:
+            mock_client = MagicMock()
+            mock_client.create_collection.side_effect = RuntimeError("Disk full")
+            mock_qdrant_cls.return_value = mock_client
+
+            with self.assertRaises(RAGError):
+                self.manager.create_database("failing_db")
+
+            self.assertFalse((self.rag_dir / "failing_db").exists())
+            mock_client.close.assert_called()
+
+    async def test_get_embeddings_batching(self) -> None:
+        texts = [f"Text chunk {i}" for i in range(250)]
+        mock_response = MagicMock(embeddings=[[0.1, 0.2, 0.3, 0.4]] * 100)
+        mock_response_rem = MagicMock(embeddings=[[0.1, 0.2, 0.3, 0.4]] * 50)
+        self.manager._ollama_client = AsyncMock()
+        self.manager._ollama_client.embed.side_effect = [
+            mock_response,
+            mock_response,
+            mock_response_rem,
+        ]
+
+        embeddings = await self.manager._get_embeddings(texts, batch_size=100)
+        self.assertEqual(len(embeddings), 250)
+        self.assertEqual(self.manager._ollama_client.embed.call_count, 3)
+
+    async def test_add_directory_partial_failure(self) -> None:
+        sub_dir = self.rag_dir / "partial_dir"
+        sub_dir.mkdir()
+        f1 = sub_dir / "file1.md"
+        f1.write_text("# Doc 1", encoding="utf-8")
+        f2 = sub_dir / "file2.md"
+        f2.write_text("# Doc 2", encoding="utf-8")
+
+        mock_client = MagicMock()
+        self.manager._client = mock_client
+        self.manager._current_db = "partial_db"
+
+        # file1 fails embedding, file2 succeeds
+        async def mock_embed(texts: list[str], batch_size: int = 100) -> list[list[float]]:
+            if "Doc 1" in texts[0]:
+                raise RAGError("Embed failed for doc 1")
+            return [[0.1, 0.2, 0.3, 0.4]] * len(texts)
+
+        with patch.object(RAGManager, "_get_embeddings", side_effect=mock_embed):
+            res = await self.manager.add_directory(str(sub_dir))
+            self.assertEqual(res["added"], 1)
+            self.assertEqual(res["failed"], 1)
+            mock_client.upsert.assert_called_once()
+
+    def test_database_resolution_case_insensitive_exact_priority(self) -> None:
+        mock_mgr = MagicMock()
+        mock_mgr.list_databases.return_value = [
+            {"name": "Alpha", "active": False, "chunks": 5},
+            {"name": "alphabet", "active": False, "chunks": 10},
+        ]
+        ctx = RAGContext(rag_manager=mock_mgr, console=Console(file=io.StringIO(), record=True))
+        # "alpha" matches "Alpha" exactly (case-insensitive) instead of matching "alphabet" as prefix
+        self.assertEqual(ctx._find_or_exit("alpha"), "Alpha")
+
+    def test_database_resolution_empty_name_raises(self) -> None:
+        mock_mgr = MagicMock()
+        mock_mgr.list_databases.return_value = [{"name": "docs", "active": False, "chunks": 5}]
+        ctx = RAGContext(rag_manager=mock_mgr, console=Console(file=io.StringIO(), record=True))
+        with self.assertRaises(RAGDatabaseNotFoundError) as exc:
+            ctx._find_or_exit("")
+        self.assertIn("cannot be empty", str(exc.exception))
+        with self.assertRaises(RAGDatabaseNotFoundError) as exc:
+            ctx._find_or_exit("   ")
+        self.assertIn("cannot be empty", str(exc.exception))
+
+    async def test_add_rag_directory_styling(self) -> None:
+        mock_mgr = MagicMock()
+        console = Console(file=io.StringIO(), record=True)
+        ctx = RAGContext(rag_manager=mock_mgr, console=console)
+
+        # 1. All succeeded -> green checkmark
+        mock_mgr.add_directory = AsyncMock(return_value={"added": 3, "skipped": 0, "failed": 0})
+        await add_rag_directory(ctx, "dir")
+        self.assertIn("✓", console.export_text())
+
+        # 2. Partial failures -> yellow warning
+        console = Console(file=io.StringIO(), record=True)
+        ctx = RAGContext(rag_manager=mock_mgr, console=console)
+        mock_mgr.add_directory = AsyncMock(return_value={"added": 2, "skipped": 0, "failed": 1})
+        await add_rag_directory(ctx, "dir")
+        self.assertIn("⚠", console.export_text())
+
+        # 3. Total failure -> red cross
+        console = Console(file=io.StringIO(), record=True)
+        ctx = RAGContext(rag_manager=mock_mgr, console=console)
+        mock_mgr.add_directory = AsyncMock(return_value={"added": 0, "skipped": 0, "failed": 2})
+        await add_rag_directory(ctx, "dir")
+        self.assertIn("✕", console.export_text())
 

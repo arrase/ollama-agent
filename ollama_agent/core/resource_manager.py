@@ -44,8 +44,8 @@ class BaseFileStoreManager(ABC, Generic[T]):
     def _path(self, item_id: str) -> Path:
         """Return the filesystem path for *item_id*."""
         resolved = (self.base_dir / f"{item_id}{self._ext}").resolve()
-        if not resolved.is_relative_to(self.base_dir):
-            raise ValueError(f"Path traversal detected: {item_id}")
+        if not resolved.is_relative_to(self.base_dir) or resolved == self.base_dir:
+            raise ValueError(_("Path traversal detected: {item_id}", item_id=item_id))
         return resolved
 
     # ------------------------------------------------------------------
@@ -92,3 +92,10 @@ def resolve_unique_match(
     raise ambiguous_error(
         _("Ambiguous prefix: {name} -> {matches}", name=prefix, matches=", ".join(m[0] for m in matches))
     )
+
+
+__all__ = [
+    "BaseFileStoreManager",
+    "require_text",
+    "resolve_unique_match",
+]

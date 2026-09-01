@@ -46,7 +46,7 @@ from ..settings import (
     load_rag_policy,
     save_settings,
 )
-from ..streaming.parsers import streaming_reasoning, streaming_text
+from ..streaming.parsers import ThinkTagParser, streaming_reasoning, streaming_text
 from .builtin_tools import (
     BUILTIN_TOOLS,
     get_tool_timeout,
@@ -315,6 +315,7 @@ class AgentRuntime:
 
             inputs = {"messages": [user_msg]}
 
+        parser = ThinkTagParser()
         async for mode, event in graph.astream(
             inputs,
             config,
@@ -331,11 +332,13 @@ class AgentRuntime:
                 # host does not report it, last_context_tokens stays 0 (= unknown).
                 if isinstance(meta, dict) and "prompt_eval_count" in meta:
                     self.last_context_tokens = int(meta.get("eval_count", 0)) + int(meta["prompt_eval_count"])
-                result = _process_message_chunk(
+                for result in parser.process_chunk(
                     chunk, hide_reasoning=hide_reasoning
-                )
-                if result:
+                ):
                     yield result
+
+        for result in parser.flush(hide_reasoning=hide_reasoning):
+            yield result
 
         # Surface pending interrupts (e.g. awaiting tool approval) after the stream ends.
         state = await graph.aget_state(config)
@@ -375,6 +378,7 @@ class AgentRuntime:
             "summary_message": build_summary_message(self._summarization_engine, summary, file_path),
             "file_path": file_path,
         }
+
         await graph.aupdate_state(
             config,
             {
@@ -449,20 +453,5 @@ def _process_message_chunk(
     hide_reasoning: bool = False,
 ) -> dict[str, Any] | None:
     """Process 'messages' chunk to extract reasoning or text deltas."""
-    if getattr(chunk, "type", "") in ("tool", "ToolMessageChunk"):
-        return None
-
-    content = getattr(chunk, "content", None)
-    additional_kwargs = getattr(chunk, "additional_kwargs", None)
-
-    reasoning = streaming_reasoning(content, additional_kwargs)
-    if reasoning:
-        if hide_reasoning:
-            return None
-        return {"type": "reasoning_delta", "content": reasoning}
-
-    text = streaming_text(content)
-    if text:
-        return {"type": "text_delta", "content": text}
-    return None
-
+    events = ThinkTagParser().process_chunk(chunk, hide_reasoning=hide_reasoning)
+    return events[0] if events else None

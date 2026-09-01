@@ -448,5 +448,19 @@
   "Usage: /context [set <size>]": "उपयोग: /context [set <size>]",
   "System Output": "सिस्टम आउटपुट",
   "esc to dismiss": "खारिज करने के लिए esc",
-  "Context Compacted": "संदर्भ संक्षिप्त किया गया"
+  "Context Compacted": "संदर्भ संक्षिप्त किया गया",
+  "Database name cannot be empty.": "डेटाबेस का नाम खाली नहीं हो सकता।",
+  "Limit must be greater than 0": "सीमा 0 से अधिक होनी चाहिए",
+  "Failed to query vector database: {e}": "वेक्टर डेटाबेस से क्वेरी करने में विफल: {e}",
+  "Failed to get collection info: {e}": "कलेक्शन की जानकारी प्राप्त करने में विफल: {e}",
+  "Failed to create database '{name}': {e}": "डेटाबेस '{name}' बनाने में विफल: {e}",
+  "Failed to load database '{name}': {e}": "डेटाबेस '{name}' लोड करने में विफल: {e}",
+  "Failed to upsert points into vector database: {e}": "वेक्टर डेटाबेस में पॉइंट डालने/अपडेट करने में विफल: {e}",
+  "Expected mapping for Settings, got {type_name}": "Settings के लिए मैपिंग अपेक्षित थी, {type_name} मिला",
+  "Expected mapping for '{name}', got {type_name}": "'{name}' के लिए मैपिंग अपेक्षित थी, {type_name} मिला",
+  "Expected list for subagents, got {type_name}": "subagents के लिए सूची अपेक्षित थी, {type_name} मिला",
+  "Expected mapping for subagent, got {type_name}": "subagent के लिए मैपिंग अपेक्षित थी, {type_name} मिला",
+  "Expected list for mcp_servers, got {type_name}": "mcp_servers के लिए सूची अपेक्षित थी, {type_name} मिला",
+  "Expected mapping for Task, got {type_name}": "Task के लिए मैपिंग अपेक्षित थी, {type_name} मिला",
+  "Path traversal detected: {item_id}": "पथ पारगमन का पता चला: {item_id}"
 }

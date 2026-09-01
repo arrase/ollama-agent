@@ -448,5 +448,19 @@
   "Usage: /context [set <size>]": "Użycie: /context [set <rozmiar>]",
   "System Output": "Wyjście systemowe",
   "esc to dismiss": "esc, aby zamknąć",
-  "Context Compacted": "Kontekst skompresowany"
+  "Context Compacted": "Kontekst skompresowany",
+  "Database name cannot be empty.": "Nazwa bazy danych nie może być pusta.",
+  "Limit must be greater than 0": "Limit musi być większy niż 0",
+  "Failed to query vector database: {e}": "Nie udało się wykonać zapytania do bazy wektorowej: {e}",
+  "Failed to get collection info: {e}": "Nie udało się pobrać informacji o kolekcji: {e}",
+  "Failed to create database '{name}': {e}": "Nie udało się utworzyć bazy danych '{name}': {e}",
+  "Failed to load database '{name}': {e}": "Nie udało się załadować bazy danych '{name}': {e}",
+  "Failed to upsert points into vector database: {e}": "Nie udało się wstawić/zaktualizować punktów w bazie wektorowej: {e}",
+  "Expected mapping for Settings, got {type_name}": "Oczekiwano mapowania dla Settings, otrzymano {type_name}",
+  "Expected mapping for '{name}', got {type_name}": "Oczekiwano mapowania dla '{name}', otrzymano {type_name}",
+  "Expected list for subagents, got {type_name}": "Oczekiwano listy dla subagents, otrzymano {type_name}",
+  "Expected mapping for subagent, got {type_name}": "Oczekiwano mapowania dla subagent, otrzymano {type_name}",
+  "Expected list for mcp_servers, got {type_name}": "Oczekiwano listy dla mcp_servers, otrzymano {type_name}",
+  "Expected mapping for Task, got {type_name}": "Oczekiwano mapowania dla Task, otrzymano {type_name}",
+  "Path traversal detected: {item_id}": "Wykryto przejście po ścieżce: {item_id}"
 }

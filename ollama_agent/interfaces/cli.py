@@ -11,12 +11,12 @@ from ..agent.builtin_tools import set_rag_manager
 from ..agent.episodic_memory import HistoryError
 from ..core import ALLOWED_REASONING_EFFORTS
 from ..i18n import SUPPORTED_LOCALES, _
-from ..rag import RAGContext, RAGManager, RAGError, load_rag_database
+from ..mcp.loader import MCPConfigError
+from ..rag import RAGContext, RAGError, RAGManager, load_rag_database
 from ..settings import Settings
-from ..skills import SkillManager, SkillsContext, SkillError
+from ..skills import SkillError, SkillManager, SkillsContext
 from ..streaming import run_non_interactive
 from ..tasks.commands import TaskError, TasksContext
-from ..mcp.loader import MCPConfigError
 from .dispatch import build_cli_handlers
 
 
@@ -266,15 +266,13 @@ def handle_cli_commands(
     args: argparse.Namespace, settings: Settings
 ) -> bool:
     """Handle CLI commands and return True if a command was handled."""
-    ctx = TasksContext()
+    ctx = TasksContext(settings=settings)
     rag_ctx = RAGContext(rag_manager=RAGManager(settings.rag))
     skills_ctx = SkillsContext(skill_manager=SkillManager())
 
     cmd = args.command
     subcmd = getattr(args, "subcommand", None)
     if cmd and subcmd:
-        if cmd == "session" and subcmd == "export":
-            args._runtime = AgentRuntime(settings=settings)
         handlers = build_cli_handlers(
             args,
             task_ctx=ctx,
@@ -297,7 +295,7 @@ def handle_cli_commands(
         runtime = AgentRuntime(settings=settings, yolo_mode=args.yolo)
         completed = True
 
-        async def _run():
+        async def _run() -> None:
             nonlocal completed
             async with runtime:
                 if args.rag:
@@ -310,7 +308,11 @@ def handle_cli_commands(
                 await runtime.reload()
                 completed = await run_non_interactive(runtime, args.prompt)
 
-        asyncio.run(_run())
+        try:
+            asyncio.run(_run())
+        except KeyboardInterrupt:
+            raise SystemExit(130)
+
         if not completed:
             raise SystemExit(1)
         return True

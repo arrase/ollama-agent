@@ -41,13 +41,10 @@ class AgentHeader(Static):
     def update_header(self) -> None:
         ms = self.repl.runtime.settings.model
         tokens = self.repl.runtime.last_context_tokens
-        num_ctx = (
-            self.repl.runtime.effective_context_window
-            if isinstance(self.repl.runtime.effective_context_window, int) and self.repl.runtime.effective_context_window > 0
-            else (ms.context_window if isinstance(ms.context_window, int) else 0)
-        )
+        eff_ctx = getattr(self.repl.runtime, "effective_context_window", None)
+        num_ctx = eff_ctx if isinstance(eff_ctx, int) and eff_ctx > 0 else (ms.context_window if isinstance(ms.context_window, int) else 0)
 
-        if isinstance(num_ctx, int) and num_ctx > 0 and isinstance(tokens, (int, float)):
+        if num_ctx > 0 and isinstance(tokens, (int, float)):
             tokens_val = tokens
             pct = int((tokens_val / num_ctx) * 100)
             if pct > 90:
@@ -64,7 +61,7 @@ class AgentHeader(Static):
 
         rag_ctx = self.repl._rag_ctx
         rag_db = rag_ctx.rag_manager.current_database if rag_ctx else None
-        rag_info = f"  [dim]│[/dim]  [bold #8b949e]{_('RAG:')}[/bold #8b949e] [bold #a78bfa]{rag_db}[/bold #a78bfa]" if rag_db else ""
+        rag_info = f"  [dim]│[/dim]  [bold #8b949e]{_('RAG:')}[/bold #8b949e] [bold #a78bfa]{escape(str(rag_db))}[/bold #a78bfa]" if rag_db else ""
         yolo_status = (
             f"[bold #f87171 on #3b181e] {_('YOLO: ON')} [/bold #f87171 on #3b181e]"
             if self.repl.runtime.yolo_mode
@@ -72,8 +69,8 @@ class AgentHeader(Static):
         )
         self.update(
             f"[bold #38bdf8]● ollama-agent[/bold #38bdf8]  [dim]│[/dim]  "
-            f"[bold #8b949e]{_('Model:')}[/bold #8b949e] [bold #e6edf3]{ms.name}[/bold #e6edf3]{ctx_info}  [dim]│[/dim]  "
-            f"[bold #8b949e]{_('Effort:')}[/bold #8b949e] [#e6edf3]{ms.reasoning_effort}[/#e6edf3]{rag_info}  [dim]│[/dim]  "
+            f"[bold #8b949e]{_('Model:')}[/bold #8b949e] [bold #e6edf3]{escape(str(ms.name))}[/bold #e6edf3]{ctx_info}  [dim]│[/dim]  "
+            f"[bold #8b949e]{_('Effort:')}[/bold #8b949e] [#e6edf3]{escape(str(ms.reasoning_effort))}[/#e6edf3]{rag_info}  [dim]│[/dim]  "
             f"{yolo_status}"
         )
 
@@ -208,6 +205,11 @@ class ReplInput(TextArea):
         ("super+v", "paste", _("Paste")),
         ("shift+insert", "paste", _("Paste")),
     ]
+
+    def action_paste(self) -> None:
+        """Paste text from clipboard."""
+        if self.app.clipboard:
+            self.insert(self.app.clipboard)
 
     def __init__(self, **kwargs: Any) -> None:
         kwargs.setdefault("highlight_cursor_line", False)
@@ -453,7 +455,7 @@ class AgentResponse(Container):
         if self.current_thinking_text is not None:
             self._thinking_chunks.append(delta)
             self.current_thinking_text.update(
-                f"[dim italic #8b949e]{''.join(self._thinking_chunks)}[/dim italic #8b949e]"
+                Text("".join(self._thinking_chunks), style="dim italic #8b949e")
             )
 
     def append_text(self, delta: str) -> None:
@@ -501,11 +503,11 @@ class AgentResponse(Container):
 
     def add_error(self, content: str) -> None:
         self._reset_active_stream()
-        self.mount(SystemMessage(f"[bold #f87171]✕ {_('Error:')}[/bold #f87171] [red]{content}[/red]"))
+        self.mount(SystemMessage(f"[bold #f87171]✕ {_('Error:')}[/bold #f87171] [red]{escape(content)}[/red]"))
 
     def add_warning(self, content: str) -> None:
         self._reset_active_stream()
-        self.mount(SystemMessage(f"[bold #fbbf24]⚠ {_('Warning:')}[/bold #fbbf24] [yellow]{content}[/yellow]"))
+        self.mount(SystemMessage(f"[bold #fbbf24]⚠ {_('Warning:')}[/bold #fbbf24] [yellow]{escape(content)}[/yellow]"))
 
 
 class ToolCallMessage(Static):
@@ -552,8 +554,8 @@ class ToolApprovalWidget(Container):
     def compose(self) -> ComposeResult:
         yield Static(f"[bold #fbbf24]⚠ {_('Action Approval Required')}[/bold #fbbf24]", classes="approval-title")
         for req in self.action_requests:
-            name = req["name"]
-            args = req["args"]
+            name = escape(str(req["name"]))
+            args = escape(str(req["args"]))
             yield Static(f"{_('Tool:')} [bold #38bdf8]{name}[/bold #38bdf8]\n{_('Arguments:')} [dim]{args}[/dim]", classes="approval-details")
 
         with Horizontal(classes="approval-buttons") as buttons:
@@ -586,7 +588,7 @@ class ToolApprovalWidget(Container):
         elif key == "a":
             event.stop()
             self._handle_decision("allow-btn")
-        elif key == "c":
+        elif key in ("c", "escape"):
             event.stop()
             self._handle_decision("cancel-btn")
         elif key in ("left", "up", "shift+tab"):

@@ -448,5 +448,19 @@
   "Usage: /context [set <size>]": "Kullanım: /context [set <boyut>]",
   "System Output": "Sistem Çıktısı",
   "esc to dismiss": "kapatmak için esc",
-  "Context Compacted": "Bağlam Sıkıştırıldı"
+  "Context Compacted": "Bağlam Sıkıştırıldı",
+  "Database name cannot be empty.": "Veritabanı adı boş olamaz.",
+  "Limit must be greater than 0": "Limit 0'dan büyük olmalıdır",
+  "Failed to query vector database: {e}": "Vektör veritabanı sorgulanamadı: {e}",
+  "Failed to get collection info: {e}": "Koleksiyon bilgisi alınamadı: {e}",
+  "Failed to create database '{name}': {e}": "'{name}' veritabanı oluşturulamadı: {e}",
+  "Failed to load database '{name}': {e}": "'{name}' veritabanı yüklenemedi: {e}",
+  "Failed to upsert points into vector database: {e}": "Vektör veritabanına noktalar eklenemedi/güncellenemedi: {e}",
+  "Expected mapping for Settings, got {type_name}": "Settings için eşleme bekleniyordu, {type_name} alındı",
+  "Expected mapping for '{name}', got {type_name}": "'{name}' için eşleme bekleniyordu, {type_name} alındı",
+  "Expected list for subagents, got {type_name}": "subagents için liste bekleniyordu, {type_name} alındı",
+  "Expected mapping for subagent, got {type_name}": "subagent için eşleme bekleniyordu, {type_name} alındı",
+  "Expected list for mcp_servers, got {type_name}": "mcp_servers için liste bekleniyordu, {type_name} alındı",
+  "Expected mapping for Task, got {type_name}": "Task için eşleme bekleniyordu, {type_name} alındı",
+  "Path traversal detected: {item_id}": "Yol geçişi algılandı: {item_id}"
 }

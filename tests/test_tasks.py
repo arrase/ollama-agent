@@ -92,6 +92,27 @@ class TestTaskManager(unittest.TestCase):
         self.assertEqual(all_tasks[0][1].title, "Alpha Task")
         self.assertEqual(all_tasks[1][1].title, "Beta Task")
 
+    def test_task_from_dict_non_dict_raises_value_error(self) -> None:
+        with self.assertRaises(ValueError):
+            Task.from_dict("not-a-dict")
+        with self.assertRaises(ValueError):
+            Task.from_dict([1, 2, 3])
+
+    def test_find_matches_no_shadowing_and_sorted_deterministically(self) -> None:
+        self.mgr.save("build-docs", Task(title="Docs", prompt="p", model="m"))
+        self.mgr.save("build", Task(title="Build Base", prompt="p", model="m"))
+        self.mgr.save("build-docker", Task(title="Docker", prompt="p", model="m"))
+
+        matches = self.mgr.find_matches("build")
+        self.assertEqual(len(matches), 3)
+        self.assertEqual([m[0] for m in matches], ["build", "build-docker", "build-docs"])
+
+    def test_get_directory_raises_file_not_found(self) -> None:
+        dir_as_task = self.tasks_dir / "folder.yaml"
+        dir_as_task.mkdir()
+        with self.assertRaises(FileNotFoundError):
+            self.mgr.get("folder")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -448,5 +448,19 @@
   "Usage: /context [set <size>]": "الاستخدام: /context [set <الحجم>]",
   "System Output": "مخرجات النظام",
   "esc to dismiss": "esc للإغلاق",
-  "Context Compacted": "تم ضغط السياق"
+  "Context Compacted": "تم ضغط السياق",
+  "Database name cannot be empty.": "لا يمكن أن يكون اسم قاعدة البيانات فارغًا.",
+  "Limit must be greater than 0": "يجب أن يكون الحد أكبر من 0",
+  "Failed to query vector database: {e}": "فشل الاستعلام عن قاعدة بيانات المتجهات: {e}",
+  "Failed to get collection info: {e}": "فشل الحصول على معلومات المجموعة: {e}",
+  "Failed to create database '{name}': {e}": "فشل إنشاء قاعدة البيانات '{name}': {e}",
+  "Failed to load database '{name}': {e}": "فشل تحميل قاعدة البيانات '{name}': {e}",
+  "Failed to upsert points into vector database: {e}": "فشل إدراج/تحديث النقاط في قاعدة بيانات المتجهات: {e}",
+  "Expected mapping for Settings, got {type_name}": "تم توقع تخطيط (mapping) لـ Settings، تم الحصول على {type_name}",
+  "Expected mapping for '{name}', got {type_name}": "تم توقع تخطيط (mapping) لـ '{name}'، تم الحصول على {type_name}",
+  "Expected list for subagents, got {type_name}": "تم توقع قائمة لـ subagents، تم الحصول على {type_name}",
+  "Expected mapping for subagent, got {type_name}": "تم توقع تخطيط (mapping) لـ subagent، تم الحصول على {type_name}",
+  "Expected list for mcp_servers, got {type_name}": "تم توقع قائمة لـ mcp_servers، تم الحصول على {type_name}",
+  "Expected mapping for Task, got {type_name}": "تم توقع تخطيط (mapping) لـ Task، تم الحصول على {type_name}",
+  "Path traversal detected: {item_id}": "تم اكتشاف اجتياز المسار: {item_id}"
 }

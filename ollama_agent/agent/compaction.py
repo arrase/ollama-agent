@@ -20,14 +20,17 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from deepagents.backends.protocol import FILE_NOT_FOUND
+from deepagents.backends.protocol import FILE_NOT_FOUND, BackendProtocol
 from deepagents.middleware.summarization import (
     DEEPAGENTS_DEFAULT_SUMMARY_PROMPT,
+    SummarizationEvent,
     SummarizationMiddleware,
 )
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.messages.utils import get_buffer_string
 
+from ..core import extract_text
 from ..i18n import _
 
 #: Path prefix used by deepagents to store conversation history files.
@@ -47,16 +50,16 @@ class HistoryOffloadError(RuntimeError):
     """Raised when conversation history cannot be persisted to the backend."""
 
 
-def is_summary_message(msg: Any) -> bool:
+def is_summary_message(msg: BaseMessage) -> bool:
     """Check whether *msg* is a summary HumanMessage produced by compaction."""
     return isinstance(msg, HumanMessage) and msg.additional_kwargs.get("lc_source") == _SUMMARY_SOURCE
 
 
 def apply_summarization_event(
     engine: SummarizationMiddleware,
-    messages: list[Any],
-    event: dict[str, Any] | None,
-) -> list[Any]:
+    messages: list[BaseMessage],
+    event: SummarizationEvent | dict[str, Any] | None,
+) -> list[BaseMessage]:
     """Reconstruct the effective message list from raw state and a prior event.
 
     The effective conversation is ``[summary_message] + messages[cutoff:]``.
@@ -67,15 +70,19 @@ def apply_summarization_event(
     if event is None:
         return list(messages)
     try:
+        cutoff = event["cutoff_index"]
         event["summary_message"]
-        event["cutoff_index"]
+        if not isinstance(cutoff, int):
+            raise TypeError(f"invalid cutoff_index {cutoff!r}")
     except (KeyError, TypeError) as exc:
         raise ValueError(_("Malformed summarization event: {detail}", detail=str(exc))) from exc
     return engine._apply_event_to_messages(messages, event)
 
 
 def compute_state_cutoff(
-    engine: SummarizationMiddleware, prior_event: dict[str, Any] | None, effective_cutoff: int
+    engine: SummarizationMiddleware,
+    prior_event: SummarizationEvent | dict[str, Any] | None,
+    effective_cutoff: int,
 ) -> int:
     """Translate an effective-list cutoff into an absolute state index.
 
@@ -93,7 +100,7 @@ def compute_state_cutoff(
     return engine._compute_state_cutoff(prior_event, effective_cutoff)
 
 
-def find_safe_cutoff(messages: list[Any], keep: int) -> int:
+def find_safe_cutoff(messages: list[BaseMessage], keep: int) -> int:
     """Return the index where messages can be cut keeping the last *keep*.
 
     Never splits an AI/tool-call request from its tool outputs: if the cut
@@ -101,7 +108,7 @@ def find_safe_cutoff(messages: list[Any], keep: int) -> int:
     AIMessage (or forward past the orphaned tool outputs). Returns 0 when
     there are not enough messages to compact.
     """
-    if len(messages) <= keep:
+    if keep <= 0 or len(messages) <= keep:
         return 0
     target = len(messages) - keep
     if not isinstance(messages[target], ToolMessage):
@@ -133,15 +140,15 @@ def build_summary_message(engine: SummarizationMiddleware, summary: str, file_pa
     return engine._build_new_messages_with_path(summary, file_path)[0]
 
 
-async def generate_summary(model: Any, messages: list[Any]) -> str:
+async def generate_summary(model: BaseChatModel, messages: list[BaseMessage]) -> str:
     """Generate a structured summary of *messages* using *model*."""
     formatted = get_buffer_string(messages, format="xml")
     prompt = DEEPAGENTS_DEFAULT_SUMMARY_PROMPT.format(messages=formatted).rstrip()
     response = await model.ainvoke(prompt)
-    return response.content.strip()
+    return extract_text(response.content).strip()
 
 
-async def offload_history(backend: Any, messages: list[Any], path: str) -> str:
+async def offload_history(backend: BackendProtocol, messages: list[BaseMessage], path: str) -> str:
     """Append *messages* to the session history markdown file on *backend*.
 
     Returns the file path on success. Raises ``HistoryOffloadError`` when the

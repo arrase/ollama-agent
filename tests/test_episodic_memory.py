@@ -10,8 +10,10 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 from ollama_agent.agent.builtin_tools import (
+    get_tool_timeout,
     search_past_conversations,
     set_active_thread_id,
+    set_tool_timeout,
 )
 from ollama_agent.agent.episodic_memory import (
     format_past_conversations_context,
@@ -219,6 +221,19 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
             output_active = await search_past_conversations.ainvoke({"query": "FastAPI"})
             self.assertIn("No relevant past conversations found", output_active)
 
+            # Limit sanitization
+            output_limit = await search_past_conversations.ainvoke({"query": "React Vite", "limit": -5})
+            self.assertIn("react", output_limit.lower())
+
+    def test_tool_timeout_setter_getter(self) -> None:
+        set_tool_timeout(45)
+        self.assertEqual(get_tool_timeout(), 45)
+
+        with self.assertRaises(ValueError):
+            set_tool_timeout(0)
+
+        with self.assertRaises(ValueError):
+            set_tool_timeout(-10)
 
 
 if __name__ == "__main__":

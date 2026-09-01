@@ -11,7 +11,6 @@ from .common import (
 from .models import (
     ModelCapabilityError,
     ModelContextWindowError,
-    OLLAMA_PARAM_DEFAULTS,
     OllamaChatModel,
     create_ollama_chat_model,
     ensure_model_supports_tools,
@@ -24,10 +23,16 @@ from .models import (
     validate_reasoning_effort,
 )
 from .prompt_processor import (
+    ContextLimitExceededError,
+    FileTooLargeError,
     PromptProcessingError,
     process_prompt_mentions,
 )
-from .resource_manager import BaseFileStoreManager
+from .resource_manager import (
+    BaseFileStoreManager,
+    require_text,
+    resolve_unique_match,
+)
 
 __all__ = [
     # Types
@@ -39,7 +44,6 @@ __all__ = [
     # Models
     "ModelCapabilityError",
     "ModelContextWindowError",
-    "OLLAMA_PARAM_DEFAULTS",
     "OllamaChatModel",
     "create_ollama_chat_model",
     "ensure_model_supports_tools",
@@ -52,8 +56,12 @@ __all__ = [
     "validate_reasoning_effort",
     # Utils
     "extract_text",
+    "require_text",
+    "resolve_unique_match",
     "validate_identifier",
     # Prompt Processor
+    "ContextLimitExceededError",
+    "FileTooLargeError",
     "PromptProcessingError",
     "process_prompt_mentions",
 ]

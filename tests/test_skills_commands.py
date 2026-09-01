@@ -72,18 +72,18 @@ class TestSkillsCommands(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             self.mgr.get("skill-a")
 
-    def test_find_or_exit_errors(self) -> None:
+    def test_resolve_skill_errors(self) -> None:
         with self.assertRaises(SkillNotFoundError):
-            self.ctx._find_or_exit("nonexistent")
+            self.ctx._resolve_skill("nonexistent")
 
         with self.assertRaises(ValidationError):
-            self.ctx._find_or_exit("invalid/name")
+            self.ctx._resolve_skill("invalid/name")
 
         create_skill(self.ctx, "test-1", name="T1", description="D1", instructions="I1")
         create_skill(self.ctx, "test-2", name="T2", description="D2", instructions="I2")
 
         with self.assertRaises(AmbiguousSkillError):
-            self.ctx._find_or_exit("test")
+            self.ctx._resolve_skill("test")
 
     def test_delete_builtin_skill_fails(self) -> None:
         mgr = SkillManager(skills_dir=Path(self.temp_dir.name))

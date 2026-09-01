@@ -32,15 +32,18 @@ class RAGToolResult(TypedDict, total=False):
 
 def extract_text(content: Any, *, sep: str = " ") -> str:
     """Convert agent payload content into plain text."""
+    if content is None:
+        return ""
     if isinstance(content, str):
         return content
-    if isinstance(content, list):
+    if isinstance(content, (list, tuple)):
         return sep.join(filter(None, (extract_text(c, sep=sep) for c in content))).strip()
     if isinstance(content, dict):
-        text_val = content.get("text") or content.get("content")
-        if text_val is None:
-            return ""
-        return extract_text(text_val, sep=sep)
+        if "text" in content:
+            return extract_text(content["text"], sep=sep)
+        if "content" in content:
+            return extract_text(content["content"], sep=sep)
+        return ""
     raise TypeError(f"Unsupported content shape for extract_text: {type(content).__name__}")
 
 
@@ -49,12 +52,12 @@ _WINDOWS_RESERVED_NAMES: frozenset[str] = frozenset({
     "PRN",
     "AUX",
     "NUL",
-    *(f"COM{i}" for i in range(1, 10)),
-    *(f"LPT{i}" for i in range(1, 10)),
+    *(f"COM{i}" for i in range(10)),
+    *(f"LPT{i}" for i in range(10)),
 })
 
 
-def validate_identifier(name: str, label: str | None = None) -> str:
+def validate_identifier(name: str, label: str = "identifier") -> str:
     """Validate that *name* contains only [A-Za-z0-9_-] and is not a reserved system name."""
     name = name.strip()
     if (
@@ -62,8 +65,7 @@ def validate_identifier(name: str, label: str | None = None) -> str:
         or not re.fullmatch(r"[A-Za-z0-9_-]+", name)
         or name.upper() in _WINDOWS_RESERVED_NAMES
     ):
-        resolved_label = label or _("identifier")
         raise ValueError(
-            _("Invalid {label}. Use only letters, numbers, '_' and '-' (reserved device names not allowed).", label=resolved_label)
+            _("Invalid {label}. Use only letters, numbers, '_' and '-' (reserved device names not allowed).", label=label)
         )
     return name
