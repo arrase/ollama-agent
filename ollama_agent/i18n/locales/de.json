@@ -462,5 +462,15 @@
   "Expected mapping for subagent, got {type_name}": "Mapping für subagent erwartet, {type_name} erhalten",
   "Expected list for mcp_servers, got {type_name}": "Liste für mcp_servers erwartet, {type_name} erhalten",
   "Expected mapping for Task, got {type_name}": "Mapping für Task erwartet, {type_name} erhalten",
-  "Path traversal detected: {item_id}": "Pfadüberschreitung erkannt: {item_id}"
+  "Path traversal detected: {item_id}": "Pfadüberschreitung erkannt: {item_id}",
+  "Enable stealth mode (do not save conversation to SQLite history)": "Stealth-Modus aktivieren (Chat-Verlauf nicht in SQLite speichern)",
+  "Toggle stealth mode or set it explicitly (on/off)": "Stealth-Modus umschalten oder explizit festlegen (on/off)",
+  "Enable stealth mode (no SQLite history)": "Stealth-Modus aktivieren (kein SQLite-Verlauf)",
+  "Disable stealth mode": "Stealth-Modus deaktivieren",
+  "Usage: /stealth [on|off]": "Verwendung: /stealth [on|off]",
+  "STEALTH: ON": "STEALTH: EIN",
+  "STEALTH: OFF": "STEALTH: AUS",
+  "chat history will not be saved to SQLite": "Chat-Verlauf wird nicht in SQLite gespeichert",
+  "chat history will be saved to SQLite": "Chat-Verlauf wird in SQLite gespeichert",
+  "Stealth mode is now {status} ({desc})": "Stealth-Modus ist jetzt {status} ({desc})"
 }

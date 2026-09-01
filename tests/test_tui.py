@@ -41,6 +41,7 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
         self.repl_mock.runtime.settings.model.reasoning_effort = "high"
         self.repl_mock.runtime.settings.runtime.collapse_thinking = True
         self.repl_mock.runtime.yolo_mode = False
+        self.repl_mock.runtime.stealth_mode = False
         self.repl_mock._rag_ctx = None
 
     def test_agent_header_format_default(self) -> None:
@@ -391,6 +392,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
         repl_mock._rag_ctx = None
         repl_mock.runtime.yolo_mode = False
+        repl_mock.runtime.stealth_mode = False
         repl_mock._get_commands.return_value = {}
 
         app = OllamaAgentApp(repl_mock)
@@ -420,6 +422,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
         repl_mock._rag_ctx = None
         repl_mock.runtime.yolo_mode = False
+        repl_mock.runtime.stealth_mode = False
 
         cmd_spec = MagicMock()
         cmd_spec.summary = "Switch model"
@@ -451,6 +454,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
         repl_mock._rag_ctx = None
         repl_mock.runtime.yolo_mode = False
+        repl_mock.runtime.stealth_mode = False
 
         cmd_spec = MagicMock()
         cmd_spec.summary = "Switch model"
@@ -470,6 +474,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
         repl_mock._rag_ctx = None
         repl_mock.runtime.yolo_mode = False
+        repl_mock.runtime.stealth_mode = False
 
         # Mock tasks and skills
         mock_task = MagicMock(title="My Test Task")

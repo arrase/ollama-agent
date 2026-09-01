@@ -462,5 +462,15 @@
   "Expected mapping for subagent, got {type_name}": "subagent 预期为映射，得到 {type_name}",
   "Expected list for mcp_servers, got {type_name}": "mcp_servers 预期为列表，得到 {type_name}",
   "Expected mapping for Task, got {type_name}": "Task 预期为映射，得到 {type_name}",
-  "Path traversal detected: {item_id}": "检测到路径遍历: {item_id}"
+  "Path traversal detected: {item_id}": "检测到路径遍历: {item_id}",
+  "Enable stealth mode (do not save conversation to SQLite history)": "启用隐身模式（不将对话保存到 SQLite 历史记录）",
+  "Toggle stealth mode or set it explicitly (on/off)": "切换隐身模式或显式设置 (on/off)",
+  "Enable stealth mode (no SQLite history)": "启用隐身模式（无 SQLite 历史记录）",
+  "Disable stealth mode": "禁用隐身模式",
+  "Usage: /stealth [on|off]": "用法：/stealth [on|off]",
+  "STEALTH: ON": "隐身: 开启",
+  "STEALTH: OFF": "隐身: 关闭",
+  "chat history will not be saved to SQLite": "聊天记录将不会保存到 SQLite",
+  "chat history will be saved to SQLite": "聊天记录将保存到 SQLite",
+  "Stealth mode is now {status} ({desc})": "隐身模式现在为 {status} ({desc})"
 }

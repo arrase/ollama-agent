@@ -163,6 +163,7 @@ def build_repl_handlers(
     base_url: Callable[[], str],
     switch_model: Callable[[str], Awaitable[None]],
     handle_yolo: Callable[[list[str]], object],
+    handle_stealth: Callable[[list[str]], object],
     handle_queue: Callable[[list[str]], object],
     get_runtime: Callable[[], Any],
     current_thread_id: Callable[[], str],
@@ -369,6 +370,12 @@ def build_repl_handlers(
             "General",
             _("Usage: /yolo [on|off]"),
             handle_yolo,
+        ),
+        "/stealth": REPLCommand(
+            _("Toggle stealth mode or set it explicitly (on/off)"),
+            "General",
+            _("Usage: /stealth [on|off]"),
+            handle_stealth,
         ),
         "/session": REPLCommand(
             _("Manage chat sessions"),

@@ -462,5 +462,15 @@
   "Expected mapping for subagent, got {type_name}": "تم توقع تخطيط (mapping) لـ subagent، تم الحصول على {type_name}",
   "Expected list for mcp_servers, got {type_name}": "تم توقع قائمة لـ mcp_servers، تم الحصول على {type_name}",
   "Expected mapping for Task, got {type_name}": "تم توقع تخطيط (mapping) لـ Task، تم الحصول على {type_name}",
-  "Path traversal detected: {item_id}": "تم اكتشاف اجتياز المسار: {item_id}"
+  "Path traversal detected: {item_id}": "تم اكتشاف اجتياز المسار: {item_id}",
+  "Enable stealth mode (do not save conversation to SQLite history)": "تمكين وضع التخفي (عدم حفظ المحادثة في سجل SQLite)",
+  "Toggle stealth mode or set it explicitly (on/off)": "تبديل وضع التخفي أو تعيينه صراحةً (on/off)",
+  "Enable stealth mode (no SQLite history)": "تمكين وضع التخفي (بدون سجل SQLite)",
+  "Disable stealth mode": "تعطيل وضع التخفي",
+  "Usage: /stealth [on|off]": "الاستخدام: /stealth [on|off]",
+  "STEALTH: ON": "التخفي: مفعل",
+  "STEALTH: OFF": "التخفي: معطل",
+  "chat history will not be saved to SQLite": "لن يتم حفظ سجل المحادثة في SQLite",
+  "chat history will be saved to SQLite": "سيتم حفظ سجل المحادثة في SQLite",
+  "Stealth mode is now {status} ({desc})": "وضع التخفي الآن {status} ({desc})"
 }

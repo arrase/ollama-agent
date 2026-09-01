@@ -122,13 +122,18 @@ flowchart LR
 
 ### 3. State Persistence & Episodic Memory
 
-Session persistence is handled by `AsyncSqliteSaver` from `langgraph-checkpoint-sqlite` storing state in `~/.ollama-agent/history.db`.
+Session persistence is handled dynamically by `AgentRuntime`:
+- **Default Mode (`stealth_mode = False`)**: Uses `AsyncSqliteSaver` from `langgraph-checkpoint-sqlite` storing state in `~/.ollama-agent/history.db`.
+- **Stealth Mode (`stealth_mode = True`)**: Uses `MemorySaver` from `langgraph.checkpoint.memory` keeping conversation checkpoints strictly in-memory during the active session without persisting to SQLite.
 
 ```mermaid
 flowchart LR
-    subgraph Storage ["SQLite Storage (~/.ollama-agent/history.db)"]
-        Checkpoints[("checkpoints table")]
-        Writes[("writes table (channel='messages')")]
+    subgraph Storage ["Storage Resolution"]
+        CheckpointerDecision{"stealth_mode?"}
+        SqliteDB[("SQLite Storage (~/.ollama-agent/history.db)")]
+        MemStore[("In-Memory Store (MemorySaver)")]
+        CheckpointerDecision -- False --> SqliteDB
+        CheckpointerDecision -- True --> MemStore
     end
 
     subgraph Runtime ["Agent Graph Execution"]
@@ -136,14 +141,14 @@ flowchart LR
         EpisodicSearch["search_past_conversations Tool"]
     end
 
-    Checkpoints <--> GraphState
-    Writes <--> GraphState
-    Writes --> EpisodicSearch
+    SqliteDB <--> GraphState
+    MemStore <--> GraphState
+    SqliteDB --> EpisodicSearch
 ```
 
-- **Thread Tracking**: Each chat session is assigned a unique `thread_id`. State snapshots are written to SQLite after every node execution step in the graph.
+- **Thread Tracking**: Each chat session is assigned a unique `thread_id`. State snapshots are recorded after every node execution step in the graph.
 - **Mid-Session Model Switching**: Changing models mid-conversation (`/model set <model>`) preserves conversation state by passing the active `thread_id` to the newly instantiated model.
-- **Session Resumption & Export**: Past sessions can be inspected, resumed with full UI message restoration (`/session resume <id>` or `/session switch <id>`), exported to Markdown (`/session export`), or deleted (`/session delete <id>`).
+- **Session Resumption & Export**: Past sessions stored in SQLite can be inspected, resumed with full UI message restoration (`/session resume <id>` or `/session switch <id>`), exported to Markdown (`/session export`), or deleted (`/session delete <id>`).
 - **Episodic Memory Subsystem**:
   - Implemented in `ollama_agent/agent/episodic_memory.py`.
   - Queries SQLite checkpoints and `writes` records where `channel = 'messages'`, deserialized with `JsonPlusSerializer`.
@@ -183,7 +188,7 @@ flowchart TD
 - **Interrupt Handling**: When `state.interrupts` is encountered during streaming, `StreamingInterruptHandler` parses the action requests using `extract_action_requests()` (`ollama_agent/streaming/interrupts.py`) and invokes the renderer's `handle_interrupt()` callback.
 - **Prompt Queue & Concurrent Command Dispatch**:
   - `_prompt_queue: deque[QueuedItem]` holds pending turns when generation or tool approval is active.
-  - `_is_immediate_command()` fast-path dispatches read-only slash commands (`/queue`, `/yolo`, `/model list`, `/effort`, `/context`, `/params list`, `/session list/search/export`, `/task list`, `/skill list`, `/rag status`, `/mcp list`, `/agents list`) directly to the console/chat without blocking or interrupting active streams.
+  - `_is_immediate_command()` fast-path dispatches read-only slash commands (`/queue`, `/yolo`, `/stealth`, `/model list`, `/effort`, `/context`, `/params list`, `/session list/search/export`, `/task list`, `/skill list`, `/rag status`, `/mcp list`, `/agents list`) directly to the console/chat without blocking or interrupting active streams.
   - `SystemOutputWidget`: Dedicated TUI widget card that cleanly renders command tables, notices, and system responses separately from conversation message bubbles.
   - Stateful commands and user prompts are enqueued FIFO and automatically drained by `_process_next_in_queue()` inside `finally` blocks of stream workers.
   - Unblocked tool approval keeps `ReplInput` enabled (`_is_approval_pending = True`), allowing users to submit follow-up prompts while reviewing sensitive tool actions.

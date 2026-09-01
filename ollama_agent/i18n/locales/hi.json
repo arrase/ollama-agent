@@ -462,5 +462,15 @@
   "Expected mapping for subagent, got {type_name}": "subagent के लिए मैपिंग अपेक्षित थी, {type_name} मिला",
   "Expected list for mcp_servers, got {type_name}": "mcp_servers के लिए सूची अपेक्षित थी, {type_name} मिला",
   "Expected mapping for Task, got {type_name}": "Task के लिए मैपिंग अपेक्षित थी, {type_name} मिला",
-  "Path traversal detected: {item_id}": "पथ पारगमन का पता चला: {item_id}"
+  "Path traversal detected: {item_id}": "पथ पारगमन का पता चला: {item_id}",
+  "Enable stealth mode (do not save conversation to SQLite history)": "स्टेल्थ मोड सक्षम करें (बातचीत को SQLite इतिहास में न सहेजें)",
+  "Toggle stealth mode or set it explicitly (on/off)": "स्टेल्थ मोड टॉगल करें या स्पष्ट रूप से सेट करें (on/off)",
+  "Enable stealth mode (no SQLite history)": "स्टेल्थ मोड सक्षम करें (कोई SQLite इतिहास नहीं)",
+  "Disable stealth mode": "स्टेल्थ मोड अक्षम करें",
+  "Usage: /stealth [on|off]": "उपयोग: /stealth [on|off]",
+  "STEALTH: ON": "स्टेल्थ: चालू",
+  "STEALTH: OFF": "स्टेल्थ: बंद",
+  "chat history will not be saved to SQLite": "चैट इतिहास SQLite में सहेजा नहीं जाएगा",
+  "chat history will be saved to SQLite": "चैट इतिहास SQLite में सहेजा जाएगा",
+  "Stealth mode is now {status} ({desc})": "स्टेल्थ मोड अब {status} है ({desc})"
 }

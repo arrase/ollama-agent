@@ -17,6 +17,7 @@ from deepagents.middleware.summarization import (
     create_summarization_tool_middleware,
 )
 from langchain_core.messages.utils import count_tokens_approximately
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
 
@@ -94,6 +95,7 @@ class AgentRuntime:
     settings: Settings = field(default_factory=Settings)
     thread_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     yolo_mode: bool = field(default=False)
+    stealth_mode: bool = field(default=False)
     auto_approved_tools: set[str] = field(default_factory=set)
     last_context_tokens: int = field(default=0, init=False)
     effective_context_window: int = field(default=0, init=False)
@@ -104,6 +106,7 @@ class AgentRuntime:
     _summarization_engine: SummarizationMiddleware | None = field(default=None, init=False, repr=False)
     _instructions: str = field(default="", init=False)
     _checkpointer: Any = field(default=None, init=False, repr=False)
+    _memory_checkpointer: Any = field(default=None, init=False, repr=False)
     _checkpointer_stack: contextlib.AsyncExitStack = field(
         default_factory=contextlib.AsyncExitStack, init=False, repr=False
     )
@@ -231,6 +234,12 @@ class AgentRuntime:
         # Live deepagents engine used by manual compaction (see compaction.py).
         self._summarization_engine = summarization_tool_mw._summarization
 
+        checkpointer = (
+            self._get_memory_checkpointer()
+            if self.stealth_mode
+            else await self._sqlite_checkpointer()
+        )
+
         kwargs: dict[str, Any] = {
             "model": model,
             "tools": tools,
@@ -238,7 +247,7 @@ class AgentRuntime:
             "backend": backend,
             "memory": memory_sources,
             "skills": SKILL_ROOTS,
-            "checkpointer": await self._sqlite_checkpointer(),
+            "checkpointer": checkpointer,
             "middleware": [
                 summarization_tool_mw,
                 stream_tool_events_mw,
@@ -250,6 +259,11 @@ class AgentRuntime:
             kwargs["subagents"] = subagents
 
         return create_deep_agent(**kwargs)
+
+    def _get_memory_checkpointer(self) -> Any:
+        if self._memory_checkpointer is None:
+            self._memory_checkpointer = MemorySaver()
+        return self._memory_checkpointer
 
     async def _sqlite_checkpointer(self) -> Any:
         if self._checkpointer is None:
@@ -441,5 +455,6 @@ class AgentRuntime:
         await self._exit_stack.aclose()
         await self._checkpointer_stack.aclose()
         self._checkpointer = None
+        self._memory_checkpointer = None
 
 

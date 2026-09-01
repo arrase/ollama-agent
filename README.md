@@ -43,10 +43,9 @@
   - [MCP Servers & Scopes](#mcp-servers--scopes)
   - [Main Agent MCP Configuration](#main-agent-mcp-configuration-ollama-agentmcpjson)
   - [Custom Subagents](#custom-subagents)
-- [Configuration & Customization](#configuration--customization)
+- [Configuration & Settings](#configuration--settings)
   - [Configuration File (`settings.yaml`)](#configuration-file-settingsyaml)
-  - [Settings Reference](#settings-reference)
-  - [Context Window Resolution](#context-window-resolution)
+  - [Environment Variables](#environment-variables)
   - [Agent System Prompts](#agent-system-prompts)
   - [Configuration Reset (`--config-reset`)](#configuration-reset---config-reset)
   - [LangSmith Tracing](#langsmith-tracing)
@@ -67,6 +66,7 @@
 - 🗜️ **Context Compression & Compaction**: Automatic background summarization and history offloading at 85% context capacity, plus on-demand context compaction anytime via `/compact` or `/compress`.
 - 🔄 **Per-Session Model Switching**: Change models mid-conversation (`/model set <name>`) while preserving the conversation context for the active session.
 - 🛡️ **Human-in-the-Loop (HITL) & YOLO Mode**: Interactive terminal approval widget before executing shell commands or editing files, with full bypass available via YOLO mode (`-y` or `/yolo`).
+- 🕶️ **Stealth Mode (In-Memory Privacy)**: Run conversations without persisting chat history to SQLite (`-s` or `/stealth`), keeping all state in-memory during the session.
 - 📁 **Interactive `@-mentions`**: Reference local files or entire directory trees directly in prompts (e.g. `@src/main.py`, `@"data folder"`, `@.`) with path autocompletion, multimodal encoding, and binary safety.
 - 💾 **SQLite-Backed Sessions**: Durable conversation checkpoints in `~/.ollama-agent/history.db` with instant resumption (`/session resume <id>`), markdown export (`/session export`), and history management.
 - 📋 **Saved Tasks**: Save reusable prompts as YAML templates and execute them on demand via CLI (`task run`) or interactive REPL commands (`/task run`).
@@ -137,7 +137,7 @@ ollama-agent -m "gemma4:26b" -e "high" -y -p "Refactor src/utils.py to follow PE
 The interactive REPL is a full-featured terminal UI built on Textual and Rich, providing a persistent chat session with markdown rendering, status gauges, and interactive workflows.
 
 ```text
-● ollama-agent │ Model: gemma4:26b │ Context: 2.1k/10.0k (21%) │ Effort: medium │ YOLO: OFF
+● ollama-agent │ Model: gemma4:26b │ Context: 2.1k/10.0k (21%) │ Effort: medium │ YOLO: OFF │ STEALTH: OFF
 ```
 
 ---
@@ -173,6 +173,7 @@ The REPL provides built-in slash commands for managing models, sessions, tasks, 
 | `/mcp` | `/mcp [list \| reload]` | List configured MCP servers, check connection status, or reload MCP servers and rebuild tool graph mid-session. |
 | `/agents` | `/agents [list]` | List configured specialized subagents, inspecting their models, context windows, and dedicated MCP tool servers. |
 | `/yolo` | `/yolo [on \| off]` | Toggle YOLO mode or explicitly enable/disable it to bypass tool confirmations. |
+| `/stealth` | `/stealth [on \| off]` | Toggle Stealth mode or set it explicitly to run in-memory without saving conversation to SQLite history. |
 | `/new` | `/new` (alias: `/clear`) | Start a clean new session with fresh context and clear the screen (alias for `/session new`). |
 | `/clear` | `/clear` | Clear the screen and start a clean new session (alias for `/new`). |
 | `/exit` | `/exit` (alias: `/quit`) | Exit the application cleanly. |
@@ -190,7 +191,7 @@ In Ollama Agent, the user input is **never locked**. You can freely type and sub
 ╭── Prompt Queue Flow ────────────────────────────────────────────────────────╮
 │ User inputs message while agent is busy (generating or waiting for approval)│
 │                                                                             │
-│  ├─ Immediate / Read-Only Slash Commands (/queue, /yolo, /model list, etc.) │
+│  ├─ Immediate / Read-Only Slash Commands (/queue, /yolo, /stealth, etc.)    │
 │  │  └─► Executed INSTANTLY without interrupting the active stream           │
 │  │                                                                          │
 │  └─ Stateful Slash Commands & Normal Prompts                                │
@@ -201,7 +202,7 @@ In Ollama Agent, the user input is **never locked**. You can freely type and sub
 
 - **Immediate / Non-Blocking Commands**: Commands that do not modify active stream graph state execute immediately in the chat scroll without pausing or queuing:
   - Inspection & List commands: `/queue`, `/model list`, `/effort`, `/context`, `/params list`, `/session list`, `/session search`, `/session export`, `/task list`, `/skill list`, `/skill show`, `/rag status`, `/rag list`, `/mcp list`, `/agents list`.
-  - Mode toggles: `/yolo` (toggle or on/off).
+  - Mode toggles: `/yolo`, `/stealth` (toggle or on/off).
   - Lifecycle: `/exit`, `/quit`.
 - **Enqueued Prompts & Stateful Commands**: Normal conversation prompts and state-mutating commands (e.g. `/model set`, `/compact`, `/session resume`, `/session new`, `/clear`, `/task run`, `/skill create`) are placed in a FIFO queue. A system message (`⏳ Prompt added to queue (position #N)`) notifies you of your queue position, and the bottom status bar displays a live indicator (`⏳ N queued`).
 - **Persistent TUI Queue Panel**: When prompts are in the queue, a dedicated `PromptQueueWidget` card automatically appears above the input container, displaying the active item count, prompt previews, and position numbers in real time. It automatically collapses when the queue is drained.
@@ -219,7 +220,7 @@ In Ollama Agent, the user input is **never locked**. You can freely type and sub
 The dynamic header bar monitors token consumption and model parameters in real-time:
 
 ```text
-● ollama-agent │ Model: gemma4:26b │ Context: 3.4k/10.0k (34%) │ Effort: medium │ RAG: my-docs │ YOLO: OFF
+● ollama-agent │ Model: gemma4:26b │ Context: 3.4k/10.0k (34%) │ Effort: medium │ RAG: my-docs │ YOLO: OFF │ STEALTH: OFF
 ```
 
 - **Metrics**: Displays consumed tokens vs. effective context window limit (`num_ctx`), formatted with `k` suffixes.
@@ -227,11 +228,11 @@ The dynamic header bar monitors token consumption and model parameters in real-t
   - 🔵 **Cyan / Sky Blue (`#38bdf8`)**: Healthy context utilization (`≤ 75%`).
   - 🟡 **Yellow / Amber (`#fbbf24`)**: Elevated context warning (`76% – 90%`).
   - 🔴 **Red (`#f87171`)**: Critical limit proximity (`> 90%`).
-- **Dynamic Indicators**: Displays active RAG database in purple (`#a78bfa`) when loaded, reasoning effort level, and highlighted YOLO status.
+- **Dynamic Indicators**: Displays active RAG database in purple (`#a78bfa`) when loaded, reasoning effort level, highlighted YOLO status, and Stealth status.
 
 ---
 
-### Human-in-the-Loop (HITL) & YOLO Mode
+### Human-in-the-Loop (HITL), YOLO & Stealth Modes
 
 To ensure safety when interacting with your local system, Ollama Agent enforces a Human-in-the-Loop confirmation policy before executing potentially sensitive operations (such as running shell commands via `execute` or modifying files via `write_file` and `edit_file`).
 
@@ -262,8 +263,20 @@ When you want autonomous execution without confirmation pauses:
 
 When YOLO mode is active:
 1. Tool approval prompts are bypassed automatically.
-2. The header displays `YOLO: ON` with a red highlight badge.
-3. The prompt chevron (`❯ `) and input box border change color to **red** for clear visual status.
+2. The header displays `YOLO: ON` with a red highlight badge (`#f87171`).
+3. The prompt chevron (`❯ `) and input box border change color to **red** (`#f87171`) for clear visual status.
+
+#### Stealth Mode
+
+When you want private execution without saving conversation turns or checkpoints to SQLite (`~/.ollama-agent/history.db`):
+- **CLI Flag**: Start the agent with `-s` or `--stealth` (e.g. `ollama-agent -s`).
+- **REPL Slash Command**: Toggle dynamically with `/stealth` or set explicitly via `/stealth on` and `/stealth off`.
+
+When Stealth mode is active:
+1. Checkpoints are kept in-memory (`MemorySaver`) for multi-turn execution during the session, but no history is written to SQLite.
+2. The header displays `STEALTH: ON` with a purple highlight badge (`#c084fc`).
+3. The prompt chevron (`❯ `) and focused input border turn **purple** (`#c084fc`).
+4. **Dual Mode (YOLO + Stealth)**: When both YOLO and Stealth modes are active simultaneously, both header badges light up (`[YOLO: ON] │ [STEALTH: ON]`), and the prompt chevron and focused input border turn **fuchsia / magenta** (`#e879f9`).
 
 ---
 
@@ -342,6 +355,7 @@ flowchart LR
 | `--num-ctx` | `-c` | `int \| str` | `10000` | Set context window size in tokens (`num_ctx`) or `'max'`. |
 | `--builtin-tool-timeout` | `-t` | `int` | `30` | Timeout in seconds for tool executions (including shell commands). |
 | `--yolo` | `-y` | `flag` | `False` | Enable YOLO mode (bypasses all tool approval prompts). |
+| `--stealth` | `-s` | `flag` | `False` | Enable stealth mode (do not save conversation to SQLite history). |
 | `--rag` | — | `str` | `None` | Preload a RAG database collection at startup. |
 | `--allow-traversal` | — | `flag` | `False` | Allow filesystem traversal outside current working directory. |
 | `--no-allow-traversal` | — | `flag` | `True` | Sandbox filesystem operations to current working directory (default). |

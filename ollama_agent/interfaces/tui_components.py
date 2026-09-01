@@ -62,16 +62,24 @@ class AgentHeader(Static):
         rag_ctx = self.repl._rag_ctx
         rag_db = rag_ctx.rag_manager.current_database if rag_ctx else None
         rag_info = f"  [dim]│[/dim]  [bold #8b949e]{_('RAG:')}[/bold #8b949e] [bold #a78bfa]{escape(str(rag_db))}[/bold #a78bfa]" if rag_db else ""
+        yolo = self.repl.runtime.yolo_mode
+        stealth = self.repl.runtime.stealth_mode
+
         yolo_status = (
             f"[bold #f87171 on #3b181e] {_('YOLO: ON')} [/bold #f87171 on #3b181e]"
-            if self.repl.runtime.yolo_mode
+            if yolo
             else f"[dim #8b949e]{_('YOLO: OFF')}[/dim #8b949e]"
+        )
+        stealth_status = (
+            f"[bold #c084fc on #2e1065] {_('STEALTH: ON')} [/bold #c084fc on #2e1065]"
+            if stealth
+            else f"[dim #8b949e]{_('STEALTH: OFF')}[/dim #8b949e]"
         )
         self.update(
             f"[bold #38bdf8]● ollama-agent[/bold #38bdf8]  [dim]│[/dim]  "
             f"[bold #8b949e]{_('Model:')}[/bold #8b949e] [bold #e6edf3]{escape(str(ms.name))}[/bold #e6edf3]{ctx_info}  [dim]│[/dim]  "
             f"[bold #8b949e]{_('Effort:')}[/bold #8b949e] [#e6edf3]{escape(str(ms.reasoning_effort))}[/#e6edf3]{rag_info}  [dim]│[/dim]  "
-            f"{yolo_status}"
+            f"{yolo_status}  [dim]│[/dim]  {stealth_status}"
         )
 
 

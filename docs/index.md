@@ -110,8 +110,8 @@
   </div>
   <div class="feature-card">
     <i class="fa-solid fa-shield-halved feature-icon"></i>
-    <h3>HITL & YOLO Mode</h3>
-    <p>Human-in-the-Loop approval workflow for destructive shell & file operations with optional zero-friction YOLO mode toggle.</p>
+    <h3>HITL, YOLO & Stealth</h3>
+    <p>Human-in-the-Loop tool approvals, zero-friction autonomous YOLO mode, and in-memory Stealth mode without SQLite persistence.</p>
   </div>
   <div class="feature-card">
     <i class="fa-solid fa-clipboard feature-icon"></i>
@@ -148,9 +148,9 @@ ollama-agent
 ollama-agent -p "Summarize the git commits made in the last 7 days."
 ```
 
-### 3. Run with Specific Model, Effort, and YOLO Mode
+### 3. Run with Specific Model, Effort, YOLO, or Stealth Mode
 ```bash
-ollama-agent -m "gemma4:26b" -e "high" -y -p "Refactor src/utils.py to follow PEP 8."
+ollama-agent -m "gemma4:26b" -e "high" -y -s -p "Refactor src/utils.py to follow PEP 8."
 ```
 
 ---

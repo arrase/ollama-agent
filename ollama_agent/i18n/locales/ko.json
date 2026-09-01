@@ -462,5 +462,15 @@
   "Expected mapping for subagent, got {type_name}": "subagent에 매핑이 필요하지만 {type_name}을(를) 받았습니다",
   "Expected list for mcp_servers, got {type_name}": "mcp_servers에 목록이 필요하지만 {type_name}을(를) 받았습니다",
   "Expected mapping for Task, got {type_name}": "Task에 매핑이 필요하지만 {type_name}을(를) 받았습니다",
-  "Path traversal detected: {item_id}": "경로 탐색이 감지되었습니다: {item_id}"
+  "Path traversal detected: {item_id}": "경로 탐색이 감지되었습니다: {item_id}",
+  "Enable stealth mode (do not save conversation to SQLite history)": "스텔스 모드 활성화 (SQLite 기록에 대화를 저장하지 않음)",
+  "Toggle stealth mode or set it explicitly (on/off)": "스텔스 모드 전환 또는 명시적 설정 (on/off)",
+  "Enable stealth mode (no SQLite history)": "스텔스 모드 활성화 (SQLite 기록 없음)",
+  "Disable stealth mode": "스텔스 모드 비활성화",
+  "Usage: /stealth [on|off]": "사용법: /stealth [on|off]",
+  "STEALTH: ON": "스텔스: 켜짐",
+  "STEALTH: OFF": "스텔스: 꺼짐",
+  "chat history will not be saved to SQLite": "대화 기록이 SQLite에 저장되지 않습니다",
+  "chat history will be saved to SQLite": "대화 기록이 SQLite에 저장됩니다",
+  "Stealth mode is now {status} ({desc})": "스텔스 모드가 현재 {status} 상태입니다 ({desc})"
 }

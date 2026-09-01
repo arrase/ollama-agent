@@ -462,5 +462,15 @@
   "Expected mapping for subagent, got {type_name}": "Mapping verwacht voor subagent, {type_name} gekregen",
   "Expected list for mcp_servers, got {type_name}": "Lijst verwacht voor mcp_servers, {type_name} gekregen",
   "Expected mapping for Task, got {type_name}": "Mapping verwacht voor Task, {type_name} gekregen",
-  "Path traversal detected: {item_id}": "Padtraversal gedetecteerd: {item_id}"
+  "Path traversal detected: {item_id}": "Padtraversal gedetecteerd: {item_id}",
+  "Enable stealth mode (do not save conversation to SQLite history)": "Stealth-modus inschakelen (gesprek niet opslaan in SQLite-geschiedenis)",
+  "Toggle stealth mode or set it explicitly (on/off)": "Stealth-modus schakelen of expliciet instellen (on/off)",
+  "Enable stealth mode (no SQLite history)": "Stealth-modus inschakelen (geen SQLite-geschiedenis)",
+  "Disable stealth mode": "Stealth-modus uitschakelen",
+  "Usage: /stealth [on|off]": "Gebruik: /stealth [on|off]",
+  "STEALTH: ON": "STEALTH: AAN",
+  "STEALTH: OFF": "STEALTH: UIT",
+  "chat history will not be saved to SQLite": "chatgeschiedenis wordt niet opgeslagen in SQLite",
+  "chat history will be saved to SQLite": "chatgeschiedenis wordt opgeslagen in SQLite",
+  "Stealth mode is now {status} ({desc})": "Stealth-modus is nu {status} ({desc})"
 }

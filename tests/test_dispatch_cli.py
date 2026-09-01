@@ -41,11 +41,12 @@ class TestDispatchAndCLI(unittest.TestCase):
 
     def test_argument_parser_flags(self) -> None:
         parser = create_argument_parser()
-        args = parser.parse_args(["-m", "llama3:8b", "-e", "high", "-c", "16384", "-y", "--prompt", "hello", "--rag", "docs_db"])
+        args = parser.parse_args(["-m", "llama3:8b", "-e", "high", "-c", "16384", "-y", "-s", "--prompt", "hello", "--rag", "docs_db"])
         self.assertEqual(args.model, "llama3:8b")
         self.assertEqual(args.effort, "high")
         self.assertEqual(args.num_ctx, "16384")
         self.assertTrue(args.yolo)
+        self.assertTrue(args.stealth)
         self.assertEqual(args.prompt, "hello")
         self.assertEqual(args.rag, "docs_db")
 
@@ -129,6 +130,7 @@ class TestDispatchAndCLI(unittest.TestCase):
             base_url=lambda: "http://localhost:11434",
             switch_model=dummy_async_str,
             handle_yolo=lambda _: None,
+            handle_stealth=lambda _: None,
             handle_queue=lambda _: None,
             get_runtime=lambda: MagicMock(),
             current_thread_id=lambda: "",
@@ -148,6 +150,7 @@ class TestDispatchAndCLI(unittest.TestCase):
         self.assertNotIn("/ctx", handlers)
         self.assertIn("/queue", handlers)
         self.assertIn("/yolo", handlers)
+        self.assertIn("/stealth", handlers)
         self.assertIn("/session", handlers)
         self.assertIn("/task", handlers)
         self.assertIn("/skill", handlers)
@@ -170,6 +173,7 @@ class TestDispatchAndCLI(unittest.TestCase):
             base_url=lambda: "http://localhost:11434",
             switch_model=dummy_async,
             handle_yolo=lambda _: None,
+            handle_stealth=lambda _: None,
             handle_queue=lambda _: None,
             get_runtime=lambda: MagicMock(),
             current_thread_id=lambda: "",
