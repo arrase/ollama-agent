@@ -443,5 +443,7 @@
   "Queue position {pos} out of range (queue has {count} items).": "Kuyruk konumu {pos} aralık dışında (kuyrukta {count} öğe var).",
   "Queued ({count})": "Kuyrukta ({count})",
   "more": "daha fazla",
-  "tokens": "belirteç"
+  "tokens": "belirteç",
+  "Usage: /effort [set <level>]": "Kullanım: /effort [set <seviye>]",
+  "Usage: /context [set <size>]": "Kullanım: /context [set <boyut>]"
 }

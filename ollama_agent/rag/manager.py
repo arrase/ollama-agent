@@ -263,13 +263,12 @@ class RAGManager:
             for i, chunk in enumerate(chunks):
                 flat_chunks_data.append((source, fname, chunk, i, total_chunks))
 
-        # Delete old points for all sources up-front, before batch processing.
         all_sources = {str(fpath) for fpath, _ in all_file_chunks}
-        self._delete_sources_points(client, all_sources)
 
-        # Process in batches.
+        # Process in batches — collect points before committing.
         BATCH_SIZE = 100
         failed_sources: set[str] = set()
+        all_points: list[PointStruct] = []
         for i in range(0, len(flat_chunks_data), BATCH_SIZE):
             batch = flat_chunks_data[i : i + BATCH_SIZE]
             batch_texts = [b[2] for b in batch]
@@ -285,13 +284,12 @@ class RAGManager:
                 failed_sources.update(batch_sources)
                 continue
 
-            points = []
             for (
                 (source, fname, chunk, chunk_idx, total_chunks),
                 embedding,
             ) in zip(batch, embeddings, strict=True):
                 point_id = self._generate_point_id(source, chunk_idx)
-                points.append(
+                all_points.append(
                     PointStruct(
                         id=point_id,
                         vector=embedding,
@@ -304,7 +302,14 @@ class RAGManager:
                         },
                     )
                 )
-            client.upsert(collection_name=self.COLLECTION_NAME, points=points)
+
+        # Only delete and re-insert sources that had ALL batches succeed.
+        successful_sources = all_sources - failed_sources
+        if successful_sources:
+            self._delete_sources_points(client, successful_sources)
+            successful_points = [p for p in all_points if p.payload["source"] in successful_sources]
+            if successful_points:
+                client.upsert(collection_name=self.COLLECTION_NAME, points=successful_points)
 
         # Populate results for successful files
         for fpath, chunks in all_file_chunks:

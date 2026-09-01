@@ -443,5 +443,7 @@
   "Queue position {pos} out of range (queue has {count} items).": "队列位置 {pos} 超出范围（队列有 {count} 项）。",
   "Queued ({count})": "已排队 ({count})",
   "more": "更多",
-  "tokens": "Token"
+  "tokens": "Token",
+  "Usage: /effort [set <level>]": "用法：/effort [set <级别>]",
+  "Usage: /context [set <size>]": "用法：/context [set <大小>]"
 }

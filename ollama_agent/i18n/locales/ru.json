@@ -443,5 +443,7 @@
   "Queue position {pos} out of range (queue has {count} items).": "Позиция в очереди {pos} вне диапазона (в очереди {count} элементов).",
   "Queued ({count})": "В очереди ({count})",
   "more": "еще",
-  "tokens": "токенов"
+  "tokens": "токенов",
+  "Usage: /effort [set <level>]": "Использование: /effort [set <уровень>]",
+  "Usage: /context [set <size>]": "Использование: /context [set <размер>]"
 }

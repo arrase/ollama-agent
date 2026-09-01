@@ -204,6 +204,8 @@ def resolve_context_files(
                 add_file(Path(root) / file_name)
             except PromptProcessingError as exc:
                 warnings.append(str(exc))
+                if "limit" in str(exc).lower() or "exceeded" in str(exc).lower():
+                    return ResolvedContext(text_contents, binary_attachments, classifications, list(dict.fromkeys(warnings)))
 
     return ResolvedContext(text_contents, binary_attachments, classifications, list(dict.fromkeys(warnings)))
 
@@ -262,6 +264,7 @@ def process_prompt_mentions(
                 ):
                     break
                 path_str = path_str[:-1]
+                end -= 1
 
         if not path_str:
             continue

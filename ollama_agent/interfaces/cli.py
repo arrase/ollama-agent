@@ -16,6 +16,7 @@ from ..settings import Settings
 from ..skills import SkillManager, SkillsContext, SkillError
 from ..streaming import run_non_interactive
 from ..tasks.commands import TaskError, TasksContext
+from ..mcp.loader import MCPConfigError
 from .dispatch import build_cli_handlers
 
 
@@ -287,7 +288,7 @@ def handle_cli_commands(
                 result = handlers[handler_key]()
                 if inspect.isawaitable(result):
                     asyncio.run(result)  # type: ignore[arg-type]
-            except (SkillError, TaskError, RAGError, HistoryError) as exc:
+            except (SkillError, TaskError, RAGError, HistoryError, MCPConfigError) as exc:
                 ctx.console.print(f"[red]{exc}[/red]")
                 raise SystemExit(1) from exc
             return True

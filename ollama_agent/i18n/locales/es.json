@@ -443,5 +443,7 @@
   "Queue position {pos} out of range (queue has {count} items).": "Posición de cola {pos} fuera de rango (la cola tiene {count} elementos).",
   "Queued ({count})": "En cola ({count})",
   "more": "más",
-  "tokens": "tokens"
+  "tokens": "tokens",
+  "Usage: /effort [set <level>]": "Uso: /effort [set <nivel>]",
+  "Usage: /context [set <size>]": "Uso: /context [set <tamaño>]"
 }

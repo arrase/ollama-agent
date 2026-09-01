@@ -443,5 +443,7 @@
   "Queue position {pos} out of range (queue has {count} items).": "موضع قائمة الانتظار {pos} خارج النطاق (تحتوي قائمة الانتظار على {count} من العناصر).",
   "Queued ({count})": "في قائمة الانتظار ({count})",
   "more": "المزيد",
-  "tokens": "رموز"
+  "tokens": "رموز",
+  "Usage: /effort [set <level>]": "الاستخدام: /effort [set <المستوى>]",
+  "Usage: /context [set <size>]": "الاستخدام: /context [set <الحجم>]"
 }

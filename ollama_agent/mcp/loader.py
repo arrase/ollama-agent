@@ -42,7 +42,7 @@ def _resolve_env(env: dict[str, str], server_name: str) -> dict[str, str]:
             )
         return os.environ[var]
 
-    return {key: _ENV_RE.sub(_replace, value) for key, value in env.items()}
+    return {key: _ENV_RE.sub(_replace, str(value)) for key, value in env.items()}
 
 
 def _build_mcp_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, Any]:

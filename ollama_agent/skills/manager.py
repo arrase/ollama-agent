@@ -88,11 +88,12 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
         skills: dict[str, SkillInfo] = {}
         if self.builtin_dir is not None and self.builtin_dir.is_dir():
             for d in self.builtin_dir.iterdir():
-                if d.is_dir() and d.name.startswith(prefix):
+                if d.is_dir() and d.name.startswith(prefix) and (d / "SKILL.md").exists():
                     skills[d.name] = _read_skill(d)
-        for d in self.base_dir.iterdir():
-            if d.is_dir() and d.name.startswith(prefix):
-                skills[d.name] = _read_skill(d)
+        if self.base_dir.is_dir():
+            for d in self.base_dir.iterdir():
+                if d.is_dir() and d.name.startswith(prefix) and (d / "SKILL.md").exists():
+                    skills[d.name] = _read_skill(d)
         return skills
 
     def get(self, item_id: str) -> SkillInfo:

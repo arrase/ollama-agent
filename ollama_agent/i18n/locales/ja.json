@@ -443,5 +443,7 @@
   "Queue position {pos} out of range (queue has {count} items).": "キュー位置 {pos} は範囲外です (キューには {count} 個の項目があります)。",
   "Queued ({count})": "キュー中 ({count})",
   "more": "件",
-  "tokens": "トークン"
+  "tokens": "トークン",
+  "Usage: /effort [set <level>]": "使用法: /effort [set <レベル>]",
+  "Usage: /context [set <size>]": "使用法: /context [set <サイズ>]"
 }

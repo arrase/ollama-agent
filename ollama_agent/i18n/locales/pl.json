@@ -443,5 +443,7 @@
   "Queue position {pos} out of range (queue has {count} items).": "Pozycja w kolejce {pos} poza zakresem (kolejka zawiera {count} elementów).",
   "Queued ({count})": "W kolejce ({count})",
   "more": "więcej",
-  "tokens": "tokenów"
+  "tokens": "tokenów",
+  "Usage: /effort [set <level>]": "Użycie: /effort [set <poziom>]",
+  "Usage: /context [set <size>]": "Użycie: /context [set <rozmiar>]"
 }
