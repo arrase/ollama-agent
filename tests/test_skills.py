@@ -87,11 +87,14 @@ class TestSkillsManager(unittest.TestCase):
             _read_skill(skill_dir)
 
     def test_find_matches_prefix(self) -> None:
+        self.mgr.create("py", name="Python Base", description="Base tool", instructions="Run py")
         self.mgr.create("py-lint", name="Python Linter", description="Lints code", instructions="Run ruff")
         self.mgr.create("py-test", name="Python Tester", description="Runs tests", instructions="Run pytest")
 
-        matches = self.mgr.find_matches("py-")
-        self.assertEqual(len(matches), 2)
+        matches = self.mgr.find_matches("py")
+        self.assertEqual(len(matches), 3)
+        match_ids = [m[0] for m in matches]
+        self.assertEqual(sorted(match_ids), ["py", "py-lint", "py-test"])
 
     def test_delete_skill(self) -> None:
         self.mgr.create("temp-skill", name="T", description="D", instructions="I")

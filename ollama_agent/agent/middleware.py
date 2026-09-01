@@ -44,7 +44,8 @@ async def _stream_tool_events(request: Any, handler: Any) -> Any:
             _("Tool '{tool_name}' timed out after {timeout_s}s", tool_name=tool_name, timeout_s=timeout_s)
         ) from exc
 
-    content_str = str(getattr(result, "content", result)) if result is not None else ""
+    content = result.content if hasattr(result, "content") else result
+    content_str = str(content)
     out_event: dict[str, Any] = {"type": "tool_output", "output_len": len(content_str)}
     if agent_name:
         out_event["agent_name"] = agent_name

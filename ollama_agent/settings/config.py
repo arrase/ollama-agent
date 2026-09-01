@@ -188,7 +188,7 @@ class Settings:
 # ---------------------------------------------------------------------------
 
 
-def _dataclass_from_dict(cls: type[Any], raw: Any) -> Any:
+def _dataclass_from_dict[T](cls: type[T], raw: Any) -> T:
     if raw is None:
         return cls()
     if not isinstance(raw, dict):
@@ -218,17 +218,17 @@ def _subagents_from_list(
             raise ValueError(
                 _("Expected mapping for subagent, got {type_name}", type_name=type(item).__name__)
             )
-        mcp_servers_raw = item.get("mcp_servers")
-        if mcp_servers_raw is not None and not isinstance(mcp_servers_raw, list):
-            raise ValueError(
-                _("Expected list for mcp_servers, got {type_name}", type_name=type(mcp_servers_raw).__name__)
-            )
-        mcp_servers = [
-            _dataclass_from_dict(SubAgentMCPServer, m)
-            for m in (mcp_servers_raw or [])
-        ]
-        data = {k: v for k, v in item.items() if k != "mcp_servers"}
-        data["mcp_servers"] = mcp_servers
+        data = dict(item)
+        if "mcp_servers" in item:
+            mcp_servers_raw = item["mcp_servers"]
+            if not isinstance(mcp_servers_raw, list):
+                raise ValueError(
+                    _("Expected list for mcp_servers, got {type_name}", type_name=type(mcp_servers_raw).__name__)
+                )
+            data["mcp_servers"] = [
+                _dataclass_from_dict(SubAgentMCPServer, m)
+                for m in mcp_servers_raw
+            ]
         subagents.append(_dataclass_from_dict(SubAgentSettings, data))
     return subagents
 
@@ -340,9 +340,9 @@ def ensure_memory_file(memory_path: Path = MEMORY_PATH) -> Path:
     return memory_path
 
 
-def find_agents_file(start_dir: Path | None = None) -> Path | None:
+def find_agents_file(start_dir: Path = Path(".")) -> Path | None:
     """Find AGENTS.md in the given directory or its parent hierarchy up to git root."""
-    current = (start_dir or Path.cwd()).resolve()
+    current = start_dir.resolve()
     for parent in [current, *current.parents]:
         for candidate in ("AGENTS.md", "agents.md", ".agents.md"):
             target = parent / candidate

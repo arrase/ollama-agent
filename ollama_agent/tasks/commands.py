@@ -39,9 +39,9 @@ class TasksContext:
 
     console: Console = field(default_factory=Console)
     task_manager: TaskManager = field(default_factory=TaskManager)
-    settings: Settings | None = None
+    settings: Settings = field(default_factory=load_settings)
 
-    def _find_or_exit(self, task_id: str) -> tuple[str, Task]:
+    def _resolve_task(self, task_id: str) -> tuple[str, Task]:
         try:
             matches = self.task_manager.find_matches(task_id)
         except ValueError as exc:
@@ -82,13 +82,12 @@ def list_tasks(ctx: TasksContext) -> None:
 
 
 async def run_task(ctx: TasksContext, task_id: str, *, yolo: bool = False) -> None:
-    tid, t = ctx._find_or_exit(task_id)
+    tid, t = ctx._resolve_task(task_id)
     ctx.console.print(
         _("Executing: {title} ({tid})\nPrompt: {prompt}\nModel: {model} | Effort: {effort}", title=escape(t.title), tid=escape(tid), prompt=escape(t.prompt), model=escape(t.model), effort=escape(t.reasoning_effort))
     )
-    settings = ctx.settings if ctx.settings is not None else load_settings()
-    apply_task_settings(settings, t)
-    runtime = AgentRuntime(settings=settings, yolo_mode=yolo)
+    apply_task_settings(ctx.settings, t)
+    runtime = AgentRuntime(settings=ctx.settings, yolo_mode=yolo)
     async with runtime:
         await runtime.reload()
         if not await run_non_interactive(runtime, t.prompt):
@@ -96,7 +95,7 @@ async def run_task(ctx: TasksContext, task_id: str, *, yolo: bool = False) -> No
 
 
 def delete_task(ctx: TasksContext, task_id: str) -> None:
-    tid, t = ctx._find_or_exit(task_id)
+    tid, t = ctx._resolve_task(task_id)
     ctx.task_manager.delete(tid)
     ctx.console.print(f"[green]✓ {_('Task deleted: {title} ({tid})', title=escape(t.title), tid=escape(tid))}[/green]")
 
@@ -108,15 +107,14 @@ def create_task(
     title: str,
     prompt: str,
     model: str,
-    reasoning_effort: str | None = None,
+    reasoning_effort: str = DEFAULT_REASONING_EFFORT,
     force: bool = False,
 ) -> None:
     title = ctx._require(title, _("Title"))
     prompt_text = ctx._require(prompt, _("Prompt"))
     model_name = ctx._require(model, _("Model"))
-    effort = DEFAULT_REASONING_EFFORT if reasoning_effort is None else reasoning_effort
     try:
-        task = Task(title, prompt_text, model_name, reasoning_effort=effort)
+        task = Task(title, prompt_text, model_name, reasoning_effort=reasoning_effort)
         saved_id = ctx.task_manager.save(task_id, task, overwrite=force)
     except FileExistsError as exc:
         raise TaskError(

@@ -57,17 +57,17 @@ class TestRAGComponents(unittest.TestCase):
         with self.assertRaises(RAGError):
             self.mgr._read_file(file)
 
-    def test_rag_context_find_or_exit_not_found(self) -> None:
+    def test_rag_context_resolve_database_not_found(self) -> None:
         ctx = RAGContext(rag_manager=self.mgr)
         with self.assertRaises(RAGDatabaseNotFoundError):
-            ctx._find_or_exit("nonexistent_db")
+            ctx.resolve_database("nonexistent_db")
 
-    def test_rag_context_find_or_exit_case_insensitive(self) -> None:
+    def test_rag_context_resolve_database_case_insensitive(self) -> None:
         ctx = RAGContext(rag_manager=self.mgr)
         # Create a database
         self.mgr.create_database("MyDatabase")
         # Find it using lowercase
-        found = ctx._find_or_exit("mydatabase")
+        found = ctx.resolve_database("mydatabase")
         self.assertEqual(found, "MyDatabase")
 
 

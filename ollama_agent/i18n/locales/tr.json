@@ -367,8 +367,6 @@
   "Failed to offload conversation history to {path}: {error}": "Konuşma geçmişi {path} üzerine kaydedilemedi: {error}",
   "Malformed summarization event: {detail}": "Bozuk özetleme olayı: {detail}",
   "Tool timeout must be greater than 0, got {timeout_s}": "Araç zaman aşımı 0'dan büyük olmalı, alınan {timeout_s}",
-  "Agent graph is not initialized": "Ajan grafiği başlatılmadı",
-  "Agent model is not initialized": "Ajan modeli başlatılmadı",
   "Subagent '{name}' configuration error: system_prompt cannot be empty": "Alt ajan '{name}' yapılandırma hatası: system_prompt boş olamaz",
   "unknown": "bilinmiyor",
   "{label} not found: {prefix}": "{label} bulunamadı: {prefix}",

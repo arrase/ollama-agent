@@ -367,8 +367,6 @@
   "Failed to offload conversation history to {path}: {error}": "فشل نقل سجل المحادثة إلى {path}: {error}",
   "Malformed summarization event: {detail}": "حدث تلخيص تالف: {detail}",
   "Tool timeout must be greater than 0, got {timeout_s}": "مهلة الأدوات يجب أن تكون أكبر من 0، القيمة المستلمة {timeout_s}",
-  "Agent graph is not initialized": "رسم الوكيل غير مهيأ",
-  "Agent model is not initialized": "نموذج الوكيل غير مهيأ",
   "Subagent '{name}' configuration error: system_prompt cannot be empty": "خطأ في إعداد الوكيل الفرعي '{name}': لا يمكن أن يكون system_prompt فارغًا",
   "unknown": "غير معروف",
   "{label} not found: {prefix}": "{label} غير موجود: {prefix}",

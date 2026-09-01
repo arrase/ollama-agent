@@ -41,7 +41,7 @@ class AgentHeader(Static):
     def update_header(self) -> None:
         ms = self.repl.runtime.settings.model
         tokens = self.repl.runtime.last_context_tokens
-        eff_ctx = getattr(self.repl.runtime, "effective_context_window", None)
+        eff_ctx = self.repl.runtime.effective_context_window
         num_ctx = eff_ctx if isinstance(eff_ctx, int) and eff_ctx > 0 else (ms.context_window if isinstance(ms.context_window, int) else 0)
 
         if num_ctx > 0 and isinstance(tokens, (int, float)):
@@ -186,8 +186,8 @@ class SystemOutputWidget(Static):
 
     def show_output(self, content: str | Text, title: str | None = None) -> None:
         self.display = True
-        display_title = title if title is not None else _("System Output")
-        header = f"[bold #38bdf8]⚙ {escape(display_title) if isinstance(display_title, str) else display_title}[/bold #38bdf8]  [dim]({_('esc to dismiss')})[/dim]"
+        display_title = title or _("System Output")
+        header = f"[bold #38bdf8]⚙ {escape(display_title)}[/bold #38bdf8]  [dim]({_('esc to dismiss')})[/dim]"
         if isinstance(content, Text):
             header_text = Text.from_markup(header + "\n")
             self.update(Text.assemble(header_text, content))
@@ -651,16 +651,13 @@ class ToolApprovalWidget(Container):
         self.buttons_container.remove()
         self.buttons_container = None
 
-        status_text = ""
-        if decision_type == "approve-btn":
-            status_text = f"[bold #34d399]✓ {_('Approved')}[/bold #34d399]"
-        elif decision_type == "reject-btn":
-            status_text = f"[bold #f87171]✗ {_('Rejected')}[/bold #f87171]"
-        elif decision_type == "allow-btn":
-            status_text = f"[bold #38bdf8]✓ {_('Allowed for session & approved')}[/bold #38bdf8]"
-        elif decision_type == "cancel-btn":
-            status_text = f"[bold #f87171]✗ {_('Cancelled')}[/bold #f87171]"
-
+        status_map = {
+            "approve-btn": f"[bold #34d399]✓ {_('Approved')}[/bold #34d399]",
+            "reject-btn": f"[bold #f87171]✗ {_('Rejected')}[/bold #f87171]",
+            "allow-btn": f"[bold #38bdf8]✓ {_('Allowed for session & approved')}[/bold #38bdf8]",
+            "cancel-btn": f"[bold #f87171]✗ {_('Cancelled')}[/bold #f87171]",
+        }
+        status_text = status_map.get(decision_type or "", "")
         self.mount(Static(f"  {status_text}", classes="approval-status"))
 
         inp = self.app_ref.query_one(ReplInput)

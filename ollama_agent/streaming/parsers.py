@@ -16,12 +16,12 @@ def streaming_text(content: Any) -> str:
     if isinstance(content, str):
         return content
     if isinstance(content, dict):
-        return content["text"] if content.get("type") == "text" and "text" in content else ""
+        return content["text"] if content.get("type") == "text" else ""
     if isinstance(content, list):
         return "".join(
             b["text"]
             for b in content
-            if isinstance(b, dict) and b.get("type") == "text" and "text" in b
+            if isinstance(b, dict) and b.get("type") == "text"
         )
     return ""
 
@@ -32,7 +32,7 @@ def streaming_reasoning(content: Any, additional_kwargs: dict[str, Any] | None =
     Supports both OpenAI-style reasoning blocks and ChatOllama's
     ``additional_kwargs['reasoning_content']``.
     """
-    if isinstance(additional_kwargs, dict):
+    if additional_kwargs:
         reasoning_content = additional_kwargs.get("reasoning_content")
         if isinstance(reasoning_content, str):
             return reasoning_content
@@ -43,8 +43,8 @@ def streaming_reasoning(content: Any, additional_kwargs: dict[str, Any] | None =
         entry["text"]
         for block in content
         if isinstance(block, dict) and block.get("type") == "reasoning"
-        for entry in (block.get("summary") or ())
-        if isinstance(entry, dict) and entry.get("type") == "summary_text" and "text" in entry
+        for entry in block.get("summary", ())
+        if isinstance(entry, dict) and entry.get("type") == "summary_text"
     )
 
 
@@ -129,23 +129,16 @@ class ThinkTagParser:
             return []
 
         content = getattr(chunk, "content", None)
-        additional_kwargs = getattr(chunk, "additional_kwargs", None)
-
-        reasoning = streaming_reasoning(content, additional_kwargs)
+        reasoning = streaming_reasoning(content, getattr(chunk, "additional_kwargs", None))
         if reasoning:
-            if hide_reasoning:
-                return []
-            return [{"type": "reasoning_delta", "content": reasoning}]
+            return [] if hide_reasoning else [{"type": "reasoning_delta", "content": reasoning}]
 
         text = streaming_text(content)
         if not text:
             return []
 
-        events: list[dict[str, Any]] = []
-        for kind, delta in self.feed(text):
-            if kind == "reasoning":
-                if not hide_reasoning:
-                    events.append({"type": "reasoning_delta", "content": delta})
-            else:
-                events.append({"type": "text_delta", "content": delta})
-        return events
+        return [
+            {"type": f"{kind}_delta", "content": delta}
+            for kind, delta in self.feed(text)
+            if not (kind == "reasoning" and hide_reasoning)
+        ]

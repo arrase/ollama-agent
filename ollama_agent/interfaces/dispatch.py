@@ -11,6 +11,7 @@ from rich.console import Console
 
 from ..agent import AgentRuntime, list_subagents
 from ..agent.episodic_memory import HistoryError
+from ..core import DEFAULT_REASONING_EFFORT
 from ..i18n import _
 from ..mcp import list_mcp_servers, reload_mcp_servers
 from ..mcp.loader import MCPConfigError
@@ -114,7 +115,7 @@ def build_cli_handlers(
             title=args.title,
             prompt=args.task_prompt,
             model=(args.task_model or args.model or ""),
-            reasoning_effort=(args.task_effort or args.effort),
+            reasoning_effort=(args.task_effort or args.effort or DEFAULT_REASONING_EFFORT),
             force=args.force,
         ),
         ("rag", "list"): lambda: list_rag_databases(rag_ctx),

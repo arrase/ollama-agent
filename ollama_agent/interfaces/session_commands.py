@@ -32,7 +32,7 @@ _serializer = JsonPlusSerializer()
 
 def is_current(thread_id: str, current_thread_id: str) -> bool:
     """Return whether *thread_id* is the current session (exact match or bidirectional prefix match)."""
-    if not thread_id or not current_thread_id:
+    if not thread_id.strip() or not current_thread_id.strip():
         return False
     return (
         thread_id == current_thread_id
@@ -176,18 +176,15 @@ def delete_session(
         return False
 
     try:
-        conn = sqlite3.connect(str(db_path))
-        try:
+        with connect_history(db_path, read_only=False) as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM checkpoints WHERE thread_id = ?", (resolved,))
             cursor.execute("DELETE FROM writes WHERE thread_id = ?", (resolved,))
             conn.commit()
-        finally:
-            conn.close()
         deleted_msg = _("Deleted session: {resolved}", resolved=resolved)
         console.print(f"[green]✓ {deleted_msg}[/green]")
         return True
-    except (sqlite3.Error, OSError) as exc:
+    except (sqlite3.Error, OSError, HistoryError) as exc:
         failed_msg = _("Failed to delete session '{resolved}': {exc}", resolved=resolved, exc=exc)
         console.print(f"[red]{failed_msg}[/red]")
         return False
@@ -226,39 +223,24 @@ async def export_session(
 
     for msg in messages:
         role = getattr(msg, "type", "unknown")
-        raw_content = getattr(msg, "content", "")
-        content = extract_text(raw_content)
+        content = extract_text(getattr(msg, "content", ""))
 
         if role in ("human", "user"):
-            lines.append(f"## 👤 {user_label}")
-            lines.append("")
-            lines.append(content)
-            lines.append("")
+            lines.extend([f"## 👤 {user_label}", "", content, ""])
         elif role in ("ai", "assistant"):
-            lines.append(f"## 🤖 {asst_label}")
-            lines.append("")
+            lines.extend([f"## 🤖 {asst_label}", ""])
             if content:
-                lines.append(content)
-                lines.append("")
-            tool_calls = getattr(msg, "tool_calls", None)
-            if tool_calls and isinstance(tool_calls, list):
-                for tc in tool_calls:
-                    tc_name = tc.get("name", "tool") if isinstance(tc, dict) else getattr(tc, "name", "tool")
-                    tc_args = tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {})
-                    tool_call_hdr = _("Tool: {name}", name=tc_name)
-                    lines.append(f"### ⚙ {tool_call_hdr}")
-                    lines.append("```json")
-                    lines.append(json.dumps(tc_args, indent=2, ensure_ascii=False) if isinstance(tc_args, dict) else str(tc_args))
-                    lines.append("```")
-                    lines.append("")
-        elif role in ("tool",):
+                lines.extend([content, ""])
+            for tc in getattr(msg, "tool_calls", None) or []:
+                tc_name = tc.get("name", "tool") if isinstance(tc, dict) else getattr(tc, "name", "tool")
+                tc_args = tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {})
+                tool_call_hdr = _("Tool: {name}", name=tc_name)
+                args_str = json.dumps(tc_args, indent=2, ensure_ascii=False) if isinstance(tc_args, dict) else str(tc_args)
+                lines.extend([f"### ⚙ {tool_call_hdr}", "```json", args_str, "```", ""])
+        elif role == "tool":
             name = getattr(msg, "name", "tool")
             tool_hdr = _("Tool: {name}", name=name)
-            lines.append(f"### ⚙ {tool_hdr}")
-            lines.append("```")
-            lines.append(content)
-            lines.append("```")
-            lines.append("")
+            lines.extend([f"### ⚙ {tool_hdr}", "```", content, "```", ""])
 
     target_file = Path(output_path).expanduser().resolve() if output_path else Path.cwd() / f"session_{resolved[:8]}.md"
     target_file.parent.mkdir(parents=True, exist_ok=True)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import sqlite3
 from collections import defaultdict
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -23,10 +24,10 @@ class HistoryError(RuntimeError):
 
 
 @contextlib.contextmanager
-def connect_history(db_path: Path):
-    """Open the history database as a read-only context manager that closes on exit."""
+def connect_history(db_path: Path, read_only: bool = True) -> Iterator[sqlite3.Connection]:
+    """Open the history database as a context manager that closes on exit."""
     try:
-        conn = sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True)
+        conn = sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True) if read_only else sqlite3.connect(str(db_path))
     except sqlite3.Error as e:
         raise HistoryError(_("Failed to open history database {db_path}: {e}", db_path=db_path, e=e)) from e
     try:
@@ -63,8 +64,8 @@ def load_past_user_prompts(db_path: Path = HISTORY_DB_PATH) -> list[str]:
                 if not isinstance(msgs, list):
                     msgs = [msgs]
                 for msg in msgs:
-                    if getattr(msg, "type", "") in ("human", "user"):
-                        text = extract_text(getattr(msg, "content", "")).strip()
+                    if getattr(msg, "type", None) in ("human", "user"):
+                        text = extract_text(msg.content).strip()
                         if text and text not in seen:
                             seen.add(text)
                             prompts.append(text)
@@ -126,6 +127,12 @@ def load_past_conversations(
     return conversations
 
 
+def _format_snippet(role: str, text: str) -> str:
+    truncated = text if len(text) <= 300 else f"{text[:297]}..."
+    role_label = _("User") if role in ("human", "user") else _("Assistant")
+    return f"[{role_label}]: {truncated}"
+
+
 def search_past_conversations_in_db(
     query: str,
     db_path: Path = HISTORY_DB_PATH,
@@ -159,11 +166,11 @@ def search_past_conversations_in_db(
         match_count += sum(formatted_date.lower().count(t) for t in terms)
 
         for msg in msgs:
-            role = getattr(msg, "type", "unknown")
+            role = getattr(msg, "type", None)
             if role not in ("human", "ai", "user", "assistant"):
                 continue
 
-            text = extract_text(getattr(msg, "content", "")).strip()
+            text = extract_text(msg.content).strip()
             if not text:
                 continue
 
@@ -171,23 +178,20 @@ def search_past_conversations_in_db(
             if term_hits > 0:
                 match_count += term_hits
                 if not snippets_full:
-                    truncated = text if len(text) <= 300 else f"{text[:297]}..."
-                    role_label = _("User") if role in ("human", "user") else _("Assistant")
-                    snippets.append(f"[{role_label}]: {truncated}")
-                    total_chars += len(truncated)
+                    snippet = _format_snippet(role, text)
+                    snippets.append(snippet)
+                    total_chars += len(snippet)
                     if total_chars > 1200:
                         snippets_full = True
 
         if match_count > 0:
             if not snippets:
                 for msg in msgs:
-                    role = getattr(msg, "type", "unknown")
+                    role = getattr(msg, "type", None)
                     if role in ("human", "ai", "user", "assistant"):
-                        text = extract_text(getattr(msg, "content", "")).strip()
+                        text = extract_text(msg.content).strip()
                         if text:
-                            truncated = text if len(text) <= 300 else f"{text[:297]}..."
-                            role_label = _("User") if role in ("human", "user") else _("Assistant")
-                            snippets.append(f"[{role_label}]: {truncated}")
+                            snippets.append(_format_snippet(role, text))
                             if len(snippets) >= 2:
                                 break
 

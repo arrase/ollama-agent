@@ -25,17 +25,16 @@ warnings.filterwarnings(
 
 def main() -> None:
     """Main entry point."""
-    set_locale()
-
     parser = create_argument_parser()
     args = parser.parse_args()
 
-    if args.command and args.prompt:
-        parser.error(_("--prompt cannot be used together with a subcommand."))
-
-    # Apply language overrides first (before config-reset so messages use chosen locale)
     if args.language:
         set_locale(args.language)
+    else:
+        set_locale()
+
+    if args.command and args.prompt:
+        parser.error(_("--prompt cannot be used together with a subcommand."))
 
     if args.config_reset:
         console = Console()
@@ -48,7 +47,7 @@ def main() -> None:
 
     if args.language:
         settings.runtime.language = args.language
-    if settings.runtime.language:
+    elif settings.runtime.language:
         set_locale(settings.runtime.language)
 
     # Apply CLI overrides

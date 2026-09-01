@@ -44,17 +44,17 @@ async def check_mcp_server(
     except MCPConfigError as exc:
         return MCPServerStatus(name=name, transport="", target="", status="failed", tools=[], error=str(exc))
 
-    transport = str(conn["transport"])
+    transport = conn["transport"]
     if "command" in conn:
         target = f"{conn['command']} {' '.join(conn['args'])}".strip()
     else:
-        target = str(conn["url"])
+        target = conn["url"]
 
     try:
         async with asyncio.timeout(timeout):
             async with MultiServerMCPClient({name: conn}) as client:  # type: ignore[dict-item,arg-type]
                 tools = await client.get_tools()
-    except (TimeoutError, asyncio.TimeoutError):
+    except TimeoutError:
         return MCPServerStatus(
             name=name,
             transport=transport,

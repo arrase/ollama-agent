@@ -21,10 +21,10 @@ _log = logging.getLogger(__name__)
 
 def list_subagents(
     console: Console,
-    settings: Settings | None = None,
+    settings: Settings,
 ) -> None:
     """List all configured subagents and their properties in a table."""
-    if not settings or not settings.subagents:
+    if not settings.subagents:
         console.print(
             f"[yellow]{_('No subagents configured.')}[/yellow]\n"
             f"[dim]{_('Configure subagents in {path}', path=SETTINGS_PATH)}[/dim]"
@@ -44,24 +44,9 @@ def list_subagents(
     table.add_column(_("MCP Servers"), style="blue")
 
     for sa in settings.subagents:
-        if sa.model:
-            model_str = sa.model
-        elif settings.model.name:
-            model_str = f"[dim]{settings.model.name} ({_('inherited')})[/dim]"
-        else:
-            model_str = f"[dim]{_('inherited')}[/dim]"
-
-        if sa.context_window:
-            ctx_str = str(sa.context_window)
-        elif settings.model.context_window:
-            ctx_str = f"[dim]{settings.model.context_window} ({_('inherited')})[/dim]"
-        else:
-            ctx_str = f"[dim]{_('inherited')}[/dim]"
-
-        if sa.mcp_servers:
-            mcp_str = ", ".join(srv.name for srv in sa.mcp_servers if srv.name)
-        else:
-            mcp_str = "[dim]-[/dim]"
+        model_str = sa.model or f"[dim]{settings.model.name} ({_('inherited')})[/dim]"
+        ctx_str = str(sa.context_window) if sa.context_window else f"[dim]{settings.model.context_window} ({_('inherited')})[/dim]"
+        mcp_str = ", ".join(srv.name for srv in sa.mcp_servers if srv.name) if sa.mcp_servers else "[dim]-[/dim]"
 
         table.add_row(
             sa.name,

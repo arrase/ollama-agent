@@ -367,8 +367,6 @@
   "Failed to offload conversation history to {path}: {error}": "Не удалось выгрузить историю беседы в {path}: {error}",
   "Malformed summarization event: {detail}": "Некорректное событие сумаризации: {detail}",
   "Tool timeout must be greater than 0, got {timeout_s}": "Тайм-аут инструментов должен быть больше 0, получено {timeout_s}",
-  "Agent graph is not initialized": "Граф агента не инициализирован",
-  "Agent model is not initialized": "Модель агента не инициализирована",
   "Subagent '{name}' configuration error: system_prompt cannot be empty": "Ошибка конфигурации субагента '{name}': system_prompt не может быть пустым",
   "unknown": "неизвестно",
   "{label} not found: {prefix}": "Не найдено: {label}: {prefix}",

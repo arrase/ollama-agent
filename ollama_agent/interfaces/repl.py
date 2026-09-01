@@ -874,7 +874,7 @@ class OllamaAgentApp(App):
                     self.show_system_notice(f"[bold #f87171]✕ {_('Usage: /task run <id> [-y]')}[/bold #f87171]")
                     return
                 try:
-                    tid, t = self.repl._task_ctx._find_or_exit(target_id)
+                    tid, t = self.repl._task_ctx._resolve_task(target_id)
                 except TaskError as exc:
                     self.show_system_notice(f"[red]{exc}[/red]")
                     return
@@ -946,12 +946,9 @@ class OllamaAgentApp(App):
                 if self._prompt_queue:
                     self._prompt_queue.clear()
                     self._update_queue_ui()
-                inp = self.query_one(ReplInput)
-                inp.disabled = False
-                inp.focus()
-                footer.set_approval(False)
-                self._is_approval_pending = False
                 raise
+            inp = self.query_one(ReplInput)
+            inp.disabled = False
 
             # Check if the execution got interrupted
             config = {"configurable": {"thread_id": self.repl.runtime.thread_id}}
@@ -959,8 +956,6 @@ class OllamaAgentApp(App):
             if state.interrupts:
                 action_requests = extract_action_requests({"interrupts": state.interrupts})
                 self._is_approval_pending = True
-                inp = self.query_one(ReplInput)
-                inp.disabled = False
                 footer.set_approval(True)
                 approval_widget = ToolApprovalWidget(
                     action_requests=action_requests,
@@ -971,8 +966,6 @@ class OllamaAgentApp(App):
                 agent_msg.mount(approval_widget)
                 self._deferred_scroll()
             else:
-                inp = self.query_one(ReplInput)
-                inp.disabled = False
                 inp.focus()
         finally:
             self._is_generating = False

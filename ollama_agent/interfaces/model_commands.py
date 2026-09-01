@@ -340,7 +340,7 @@ def ensure_model_configured(
             save_settings(settings)
             return settings.model.name
 
-    out = console if console is not None else Console()
+    out = console or Console()
     if configured:
         not_avail_msg = _("Configured model '{configured}' is not available in Ollama.", configured=configured)
         out.print(f"[yellow]{not_avail_msg}[/yellow]")

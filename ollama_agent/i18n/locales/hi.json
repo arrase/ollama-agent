@@ -367,8 +367,6 @@
   "Failed to offload conversation history to {path}: {error}": "बातचीत का इतिहास {path} में सहेजने में विफल: {error}",
   "Malformed summarization event: {detail}": "विकृत सारांश घटना: {detail}",
   "Tool timeout must be greater than 0, got {timeout_s}": "टूल टाइमआउट 0 से अधिक होना चाहिए, प्राप्त {timeout_s}",
-  "Agent graph is not initialized": "एजेंट ग्राफ़ आरंभ नहीं हुआ",
-  "Agent model is not initialized": "एजेंट मॉडल आरंभ नहीं हुआ",
   "Subagent '{name}' configuration error: system_prompt cannot be empty": "सब-एजेंट '{name}' कॉन्फ़िगरेशन त्रुटि: system_prompt खाली नहीं हो सकता",
   "unknown": "अज्ञात",
   "{label} not found: {prefix}": "{label} नहीं मिला: {prefix}",

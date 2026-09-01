@@ -159,16 +159,11 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
 
     def test_list_subagents_empty(self) -> None:
         console = Console(file=io.StringIO(), record=True, width=120)
-        list_subagents(console, None)
+        settings = Settings()
+        list_subagents(console, settings)
         output = console.export_text()
         self.assertIn("No subagents configured.", output)
         self.assertIn("Configure subagents in", output)
-
-        console_empty = Console(file=io.StringIO(), record=True, width=120)
-        settings = Settings()
-        list_subagents(console_empty, settings)
-        output_empty = console_empty.export_text()
-        self.assertIn("No subagents configured.", output_empty)
 
     def test_list_subagents_populated(self) -> None:
         console = Console(file=io.StringIO(), record=True, width=120)

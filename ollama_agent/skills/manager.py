@@ -30,16 +30,13 @@ class SkillInfo:
 
 
 def _find_skill_file(skill_dir: Path) -> Path | None:
-    """Find SKILL.md (case-insensitive) inside skill_dir."""
+    """Find SKILL.md (or skill.md) inside skill_dir."""
     if not skill_dir.is_dir():
         return None
     if (skill_dir / "SKILL.md").is_file():
         return skill_dir / "SKILL.md"
     if (skill_dir / "skill.md").is_file():
         return skill_dir / "skill.md"
-    for item in skill_dir.iterdir():
-        if item.is_file() and item.name.lower() == "skill.md":
-            return item
     return None
 
 
@@ -56,7 +53,7 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
         raise ValueError(_("Unclosed YAML frontmatter"))
     yaml_str = stripped[first_line_end + 1 : match.start()]
     try:
-        meta = yaml.safe_load(yaml_str) or {}
+        meta = yaml.safe_load(yaml_str)
     except yaml.YAMLError as exc:
         raise ValueError(_("Invalid YAML frontmatter: {exc}", exc=exc)) from exc
     if not isinstance(meta, dict):
@@ -73,13 +70,11 @@ def _read_skill(skill_dir: Path) -> SkillInfo:
         raise ValueError(_("SKILL.md exceeds 10 MB: {path}", path=skill_file))
     raw = skill_file.read_text(encoding="utf-8")
     meta, _body = _parse_frontmatter(raw)
-    name = meta.get("name")
-    description = meta.get("description")
-    if not name or not description:
+    if "name" not in meta or "description" not in meta or not meta["name"] or not meta["description"]:
         raise ValueError(
             _("Skill frontmatter must define non-empty 'name' and 'description': {path}", path=skill_file)
         )
-    return SkillInfo(name=str(name), description=str(description), content=raw)
+    return SkillInfo(name=str(meta["name"]), description=str(meta["description"]), content=raw)
 
 
 class SkillManager(BaseFileStoreManager[SkillInfo]):
@@ -126,10 +121,6 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
     def find_matches(self, prefix: str) -> list[tuple[str, SkillInfo]]:
         """Return all skills whose id starts with *prefix*."""
         prefix = self.validate_skill_id(prefix)
-        try:
-            return [(prefix, self.get(prefix))]
-        except FileNotFoundError:
-            pass
         return sorted(self._collect_skills(prefix).items(), key=lambda x: x[1].name.lower())
 
     def list_all(self) -> list[tuple[str, SkillInfo]]:
