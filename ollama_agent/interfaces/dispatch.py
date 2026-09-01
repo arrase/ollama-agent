@@ -31,7 +31,6 @@ from ..skills import SkillError, SkillsContext, create_skill, delete_skill, list
 from ..tasks.commands import TaskError, TasksContext, create_task, delete_task, list_tasks, run_task
 from .model_commands import (
     list_models,
-    set_context_window,
     set_model_param,
     show_context_window,
     show_effort,

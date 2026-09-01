@@ -12,7 +12,6 @@ from pydantic import Field
 from ..i18n import _
 from .common import (
     ALLOWED_REASONING_EFFORTS,
-    DEFAULT_REASONING_EFFORT,
     ReasoningEffortValue,
 )
 
@@ -262,6 +261,7 @@ class OllamaChatModel(ChatOllama):
     min_p: float | None = None
     presence_penalty: float | None = None
     effective_params: dict[str, tuple[Any, str]] = Field(default_factory=dict)
+    show_info: Any = Field(default=None, exclude=True)
 
     def _chat_params(
         self,
@@ -320,6 +320,7 @@ async def create_ollama_chat_model(
         "num_ctx": num_ctx,
         "profile": {"max_input_tokens": num_ctx},
         "effective_params": resolved_params,
+        "show_info": show_info,
     }
     for param, (val, _source) in resolved_params.items():
         kwargs[param] = val
