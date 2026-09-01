@@ -43,7 +43,7 @@ def extract_text(content: Any, *, sep: str = " ") -> str:
             return extract_text(content["text"], sep=sep)
         if "content" in content:
             return extract_text(content["content"], sep=sep)
-        return ""
+        raise TypeError("Unsupported dict content for extract_text: missing 'text' or 'content' key")
     raise TypeError(f"Unsupported content shape for extract_text: {type(content).__name__}")
 
 

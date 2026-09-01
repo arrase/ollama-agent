@@ -189,6 +189,8 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
         f1.write_text("# Doc 1\nSome useful content.", encoding="utf-8")
         f2 = sub_dir / "file2.py"
         f2.write_text("def hello(): return 'world'", encoding="utf-8")
+        f_empty = sub_dir / "empty.txt"
+        f_empty.write_text("   \n", encoding="utf-8")
 
         mock_client = MagicMock()
         self.manager._client = mock_client
@@ -219,7 +221,7 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(RAGNotLoadedError):
             await self.manager.add_file(str(f1))
 
-    def test_rag_context_find_or_exit(self) -> None:
+    def test_rag_context_resolve_database(self) -> None:
         mock_mgr = MagicMock()
         mock_mgr.list_databases.return_value = [
             {"name": "docs", "active": False, "chunks": 10},
@@ -229,13 +231,13 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
         ctx = RAGContext(rag_manager=mock_mgr, console=Console(file=io.StringIO(), record=True))
 
         # Exact match should take priority even if a prefix match exists
-        self.assertEqual(ctx._find_or_exit("docs"), "docs")
-        self.assertEqual(ctx._find_or_exit("docs_v2"), "docs_v2")
-        self.assertEqual(ctx._find_or_exit("code"), "code")
+        self.assertEqual(ctx.resolve_database("docs"), "docs")
+        self.assertEqual(ctx.resolve_database("docs_v2"), "docs_v2")
+        self.assertEqual(ctx.resolve_database("code"), "code")
 
         # Nonexistent DB
         with self.assertRaises(RAGDatabaseNotFoundError):
-            ctx._find_or_exit("nonexistent")
+            ctx.resolve_database("nonexistent")
 
         # Ambiguous prefix
         mock_mgr.list_databases.return_value = [
@@ -243,7 +245,7 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
             {"name": "alpha_2", "active": False, "chunks": 2},
         ]
         with self.assertRaises(AmbiguousRAGDatabaseError):
-            ctx._find_or_exit("alpha")
+            ctx.resolve_database("alpha")
 
     def test_rag_command_handlers(self) -> None:
         console = Console(file=io.StringIO(), record=True)
@@ -282,11 +284,10 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
         content = self.manager._read_file(f_custom, allowed_extensions=frozenset({".custom"}))
         self.assertEqual(content, "custom content")
 
-    def test_delete_sources_points_empty_set_noop(self) -> None:
+    def test_delete_source_points(self) -> None:
         mock_client = MagicMock()
-        # Should early return and not call client.delete
-        self.manager._delete_sources_points(mock_client, set())
-        mock_client.delete.assert_not_called()
+        self.manager._delete_source_points(mock_client, "/path/to/file.py")
+        mock_client.delete.assert_called_once()
 
     def test_create_database_failure_cleanup(self) -> None:
         with patch("ollama_agent.rag.manager.QdrantClient") as mock_qdrant_cls:
@@ -347,17 +348,17 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
         ]
         ctx = RAGContext(rag_manager=mock_mgr, console=Console(file=io.StringIO(), record=True))
         # "alpha" matches "Alpha" exactly (case-insensitive) instead of matching "alphabet" as prefix
-        self.assertEqual(ctx._find_or_exit("alpha"), "Alpha")
+        self.assertEqual(ctx.resolve_database("alpha"), "Alpha")
 
     def test_database_resolution_empty_name_raises(self) -> None:
         mock_mgr = MagicMock()
         mock_mgr.list_databases.return_value = [{"name": "docs", "active": False, "chunks": 5}]
         ctx = RAGContext(rag_manager=mock_mgr, console=Console(file=io.StringIO(), record=True))
         with self.assertRaises(RAGDatabaseNotFoundError) as exc:
-            ctx._find_or_exit("")
+            ctx.resolve_database("")
         self.assertIn("cannot be empty", str(exc.exception))
         with self.assertRaises(RAGDatabaseNotFoundError) as exc:
-            ctx._find_or_exit("   ")
+            ctx.resolve_database("   ")
         self.assertIn("cannot be empty", str(exc.exception))
 
     async def test_add_rag_directory_styling(self) -> None:

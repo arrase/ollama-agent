@@ -367,8 +367,6 @@
   "Failed to offload conversation history to {path}: {error}": "Error al guardar el historial de conversación en {path}: {error}",
   "Malformed summarization event: {detail}": "Evento de sumarización malformado: {detail}",
   "Tool timeout must be greater than 0, got {timeout_s}": "El tiempo de espera de herramientas debe ser mayor que 0, obtenido {timeout_s}",
-  "Agent graph is not initialized": "El grafo del agente no está inicializado",
-  "Agent model is not initialized": "El modelo del agente no está inicializado",
   "Subagent '{name}' configuration error: system_prompt cannot be empty": "Error de configuración del subagente '{name}': system_prompt no puede estar vacío",
   "unknown": "desconocido",
   "{label} not found: {prefix}": "{label} no encontrada: {prefix}",

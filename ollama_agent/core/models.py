@@ -36,15 +36,13 @@ async def _show_model(model: str, base_url: str) -> Any:
         ) from exc
 
 
-def _parse_modelfile_param(text: str | None, param_name: str) -> str | None:
-    if not text:
-        return None
+def _parse_modelfile_param(text: str, param_name: str) -> str | None:
     pattern = rf"^\s*(?:PARAMETER\s+)?{re.escape(param_name)}\s+([^\s\n]+)"
     match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
     return match.group(1).strip("\"'") if match else None
 
 
-def _parse_num_ctx(text: str | None) -> int | None:
+def _parse_num_ctx(text: str) -> int | None:
     val = _parse_modelfile_param(text, "num_ctx")
     return int(val) if val and val.isdigit() else None
 
@@ -107,13 +105,13 @@ async def model_supports_thinking(
     return "thinking" in await get_model_capabilities(model, base_url, show_info=show_info)
 
 
-def _get_model_info(response: Any) -> dict[str, Any]:
+def _get_model_info(response: Any) -> dict[str, Any] | None:
     """Return the model metadata dict from the supported SDK attribute shapes."""
     for attr in ("model_info", "modelinfo"):
         info = getattr(response, attr, None)
         if isinstance(info, dict):
             return info
-    return {}
+    return None
 
 
 async def resolve_context_window(
@@ -143,11 +141,15 @@ async def resolve_context_window(
     response = show_info if show_info is not None else await _show_model(model, base_url)
 
     model_info = _get_model_info(response)
-    if resolved := _model_context_length(model_info):
+    if model_info is not None and (resolved := _model_context_length(model_info)):
         return resolved
 
-    for field_name in ("parameters", "modelfile"):
-        if resolved := _parse_num_ctx(getattr(response, field_name, None)):
+    meta_sources = [
+        getattr(response, "parameters", None),
+        getattr(response, "modelfile", None),
+    ]
+    for text in [t for t in meta_sources if t]:
+        if resolved := _parse_num_ctx(text):
             return resolved
 
     raise ModelContextWindowError(
@@ -236,7 +238,7 @@ async def resolve_model_parameters(
             continue
 
         found_val: Any = None
-        for text in meta_sources:
+        for text in [t for t in meta_sources if t]:
             raw = _parse_modelfile_param(text, param)
             if raw is None and param == "repeat_penalty":
                 raw = _parse_modelfile_param(text, "repetition_penalty")

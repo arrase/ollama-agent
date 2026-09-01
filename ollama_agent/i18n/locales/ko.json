@@ -367,8 +367,6 @@
   "Failed to offload conversation history to {path}: {error}": "대화 기록을 {path}에 저장하지 못했습니다: {error}",
   "Malformed summarization event: {detail}": "잘못된 형식의 요약 이벤트: {detail}",
   "Tool timeout must be greater than 0, got {timeout_s}": "도구 시간 초과는 0보다 커야 합니다. 현재 값: {timeout_s}",
-  "Agent graph is not initialized": "에이전트 그래프가 초기화되지 않았습니다",
-  "Agent model is not initialized": "에이전트 모델이 초기화되지 않았습니다",
   "Subagent '{name}' configuration error: system_prompt cannot be empty": "서브 에이전트 '{name}' 구성 오류: system_prompt는 비워둘 수 없습니다",
   "unknown": "알 수 없음",
   "{label} not found: {prefix}": "{label} 찾을 수 없음: {prefix}",

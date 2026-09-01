@@ -35,8 +35,9 @@ class TestCommonUtilities(unittest.TestCase):
                 with self.assertRaises(TypeError):
                     extract_text(unknown)
 
-    def test_extract_text_dict_without_text_returns_empty(self) -> None:
-        self.assertEqual(extract_text({"foo": "bar"}), "")
+    def test_extract_text_dict_without_text_raises_type_error(self) -> None:
+        with self.assertRaises(TypeError):
+            extract_text({"foo": "bar"})
 
     def test_validate_identifier_valid_names(self) -> None:
         self.assertEqual(validate_identifier("valid_name-123"), "valid_name-123")

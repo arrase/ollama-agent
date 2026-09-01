@@ -367,8 +367,6 @@
   "Failed to offload conversation history to {path}: {error}": "Kan gespreksgeschiedenis niet naar {path} wegschrijven: {error}",
   "Malformed summarization event: {detail}": "Misvormde samenvattingsgebeurtenis: {detail}",
   "Tool timeout must be greater than 0, got {timeout_s}": "De time-out voor hulpmiddelen moet groter zijn dan 0, ontvangen {timeout_s}",
-  "Agent graph is not initialized": "De agentgraaf is niet geïnitialiseerd",
-  "Agent model is not initialized": "Het agentmodel is niet geïnitialiseerd",
   "Subagent '{name}' configuration error: system_prompt cannot be empty": "Configuratiefout van subagent '{name}': system_prompt mag niet leeg zijn",
   "unknown": "onbekend",
   "{label} not found: {prefix}": "{label} niet gevonden: {prefix}",

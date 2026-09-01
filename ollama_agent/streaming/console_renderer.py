@@ -122,7 +122,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
             self.console.print(f"  {_('Tool:')} [bold]{name}[/bold]")
             self.console.print(f"  {_('Arguments:')} {args}")
 
-        if sys.stdin is None or not sys.stdin.isatty():
+        if not sys.stdin.isatty():
             hint = _(
                 "Cannot request tool approval in a non-interactive session. Re-run with -y (--yolo) to auto-approve sensitive tools."
             )

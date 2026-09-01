@@ -88,7 +88,7 @@ class RAGManager:
                 continue
             is_active = path.name == self._current_db
             chunks = None
-            if is_active and self._client is not None:
+            if is_active:
                 try:
                     info = self._client.get_collection(self.COLLECTION_NAME)
                     chunks = info.points_count
@@ -114,9 +114,8 @@ class RAGManager:
 
         db_path.mkdir(parents=True, exist_ok=True)
 
-        client: QdrantClient | None = None
+        client = QdrantClient(path=str(db_path))
         try:
-            client = QdrantClient(path=str(db_path))
             client.create_collection(
                 collection_name=self.COLLECTION_NAME,
                 vectors_config=VectorParams(
@@ -125,14 +124,10 @@ class RAGManager:
                 ),
             )
         except Exception as e:
-            if client is not None:
-                client.close()
-                client = None
-            shutil.rmtree(db_path, ignore_errors=True)
+            shutil.rmtree(db_path)
             raise RAGError(_("Failed to create database '{name}': {e}", name=name, e=e)) from e
         finally:
-            if client is not None:
-                client.close()
+            client.close()
 
         logger.info("Created RAG database: %s", name)
         return name
@@ -161,9 +156,7 @@ class RAGManager:
         if not db_path.exists():
             raise RAGError(_("Database '{name}' not found", name=name))
 
-        # Unload current database if any
-        if self._client is not None:
-            self._client.close()
+        self.unload()
 
         try:
             self._client = QdrantClient(path=str(db_path))
@@ -255,20 +248,22 @@ class RAGManager:
             if not file_path.is_file():
                 continue
 
-            if extensions and file_path.suffix.lower() not in extensions:
+            if file_path.suffix.lower() not in extensions:
                 results["skipped"] += 1
                 continue
 
             try:
                 content = self._read_file(file_path, allowed_extensions=extensions)
-                if not content.strip():
-                    raise RAGError(_("File is empty: {file_path}", file_path=file_path))
-
-                chunks = self._chunk_text(content)
-                all_file_chunks.append((file_path, chunks))
             except Exception as e:
-                logger.warning("Failed to process %s: %s", file_path, e)
+                logger.warning("Failed to read %s: %s", file_path, e)
                 results["failed"] += 1
+                continue
+
+            if not content.strip():
+                continue
+
+            chunks = self._chunk_text(content)
+            all_file_chunks.append((file_path, chunks))
 
         for file_path, chunks in all_file_chunks:
             source = str(file_path)
@@ -387,14 +382,8 @@ class RAGManager:
 
     def _delete_source_points(self, client: QdrantClient, source: str) -> None:
         """Delete all points previously indexed for a given source path."""
-        self._delete_sources_points(client, {source})
-
-    def _delete_sources_points(self, client: QdrantClient, sources: set[str]) -> None:
-        """Delete all points previously indexed for the given source paths."""
-        if not sources:
-            return
         filt = Filter(
-            must=[FieldCondition(key="source", match=MatchAny(any=sorted(sources)))]
+            must=[FieldCondition(key="source", match=MatchAny(any=[source]))]
         )
         try:
             client.delete(
@@ -402,7 +391,7 @@ class RAGManager:
             )
         except Exception as e:
             raise RAGError(
-                _("Failed to delete existing points for source '{source}': {e}", source=", ".join(sorted(sources)), e=e)
+                _("Failed to delete existing points for source '{source}': {e}", source=source, e=e)
             ) from e
 
     def _chunk_text(self, text: str) -> list[str]:

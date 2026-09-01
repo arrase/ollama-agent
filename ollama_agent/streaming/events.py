@@ -42,13 +42,12 @@ async def stream_agent_events(
                 etype = event["type"]
                 if etype in ignored:
                     continue
+                if etype == "interrupt":
+                    interrupt_event = event
+                    continue
                 if etype == "error":
                     completed = False
-                    renderer.on_event(event)
-                elif etype == "interrupt":
-                    interrupt_event = event
-                else:
-                    renderer.on_event(event)
+                renderer.on_event(event)
 
             if interrupt_event is not None:
                 decisions = await renderer.handle_interrupt(interrupt_event, runtime)

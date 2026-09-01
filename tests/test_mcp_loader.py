@@ -17,6 +17,7 @@ from ollama_agent.mcp.commands import (
 from ollama_agent.mcp.loader import (
     MCPConfigError,
     _build_mcp_connection,
+    _load_tools_from_connections,
     _read_main_config,
     _resolve_env,
     load_main_mcp_tools,
@@ -305,6 +306,25 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(status.transport, "stdio")
             self.assertEqual(status.target, "invalid-cmd")
             self.assertIn("Command not found", status.error)
+
+    async def test_load_tools_from_connections_empty(self) -> None:
+        tools = await _load_tools_from_connections({})
+        self.assertEqual(tools, [])
+
+    async def test_check_mcp_server_timeout(self) -> None:
+        cfg = {"type": "http", "url": "https://mcp.example.com"}
+        mock_client = MagicMock()
+        mock_client.get_tools = AsyncMock(side_effect=TimeoutError())
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("ollama_agent.mcp.commands.MultiServerMCPClient", return_value=mock_client):
+            status = await check_mcp_server("slow-server", cfg, timeout=1.0)
+            self.assertEqual(status.name, "slow-server")
+            self.assertEqual(status.status, "failed")
+            self.assertEqual(status.transport, "http")
+            self.assertEqual(status.target, "https://mcp.example.com")
+            self.assertIn("timed out", status.error)
 
     async def test_check_mcp_server_invalid_config(self) -> None:
         status = await check_mcp_server("invalid-server", {"unknown": "bad"})

@@ -367,8 +367,6 @@
   "Failed to offload conversation history to {path}: {error}": "会話履歴を {path} に退避できませんでした: {error}",
   "Malformed summarization event: {detail}": "不正な要約イベントです: {detail}",
   "Tool timeout must be greater than 0, got {timeout_s}": "ツールのタイムアウトは 0 より大きい必要があります（現在値: {timeout_s}）",
-  "Agent graph is not initialized": "エージェントのグラフが初期化されていません",
-  "Agent model is not initialized": "エージェントのモデルが初期化されていません",
   "Subagent '{name}' configuration error: system_prompt cannot be empty": "サブエージェント '{name}' の設定エラー: system_prompt は空にできません",
   "unknown": "不明",
   "{label} not found: {prefix}": "{label}が見つかりません: {prefix}",

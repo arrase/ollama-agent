@@ -30,8 +30,7 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(_parse_num_ctx("num_ctx 4096"), 4096)
         self.assertEqual(_parse_num_ctx("  num_ctx   16384  "), 16384)
 
-    def test_parse_num_ctx_invalid_or_none(self) -> None:
-        self.assertIsNone(_parse_num_ctx(None))
+    def test_parse_num_ctx_invalid(self) -> None:
         self.assertIsNone(_parse_num_ctx(""))
         self.assertIsNone(_parse_num_ctx("temperature 0.7"))
 
@@ -83,7 +82,7 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         response_sdk = MagicMock(model_info=None, modelinfo={"gemma.context_length": 8192})
         self.assertEqual(_get_model_info(response_sdk), {"gemma.context_length": 8192})
 
-        self.assertEqual(_get_model_info(MagicMock(model_info="nope", modelinfo=None)), {})
+        self.assertIsNone(_get_model_info(MagicMock(model_info="nope", modelinfo=None)))
 
     @patch("ollama_agent.core.models.get_model_capabilities")
     async def test_model_supports_tools(self, mock_caps: AsyncMock) -> None:
@@ -264,7 +263,7 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(_parse_modelfile_param(text, "top_k"), "30")
         self.assertEqual(_parse_modelfile_param(text, "repeat_penalty"), "1.15")
         self.assertIsNone(_parse_modelfile_param(text, "min_p"))
-        self.assertIsNone(_parse_modelfile_param(None, "temperature"))
+        self.assertIsNone(_parse_modelfile_param("", "temperature"))
 
     def test_validate_reasoning_effort(self) -> None:
         self.assertEqual(validate_reasoning_effort("  HIGH  "), "high")

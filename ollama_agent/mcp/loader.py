@@ -53,7 +53,7 @@ def _build_mcp_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, An
     """
     transport = cfg.get("transport") or cfg.get("type")
 
-    if cfg.get("command"):
+    if "command" in cfg:
         args = cfg.get("args", [])
         if not isinstance(args, list):
             raise MCPConfigError(
@@ -77,8 +77,7 @@ def _build_mcp_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, An
                 out["env"] = resolved
         return out
 
-    url = cfg.get("url") or cfg.get("httpUrl")
-    if url:
+    if "url" in cfg:
         if transport is not None and transport not in _KNOWN_TRANSPORTS:
             raise MCPConfigError(
                 _(
@@ -87,7 +86,7 @@ def _build_mcp_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, An
                     transport=transport,
                 )
             )
-        out = {"transport": transport if transport is not None else "http", "url": url}
+        out = {"transport": transport if transport is not None else "http", "url": cfg["url"]}
         for k in ("headers", "timeout", "sse_read_timeout", "session_kwargs"):
             if k in cfg:
                 out[k] = cfg[k]
@@ -152,22 +151,8 @@ async def _connect_and_load(name: str, conn: dict[str, Any]) -> list[Any]:
     return tools
 
 
-async def load_main_mcp_tools() -> list[Any]:
-    """Load flat MCP tools for the main agent from mcp.json.
-
-    Raises MCPConfigError when the config is unreadable, malformed, or any
-    server fails to connect.
-    """
-    servers_cfg = await _read_main_config()
-
-    connections: dict[str, dict[str, Any]] = {}
-    for name, cfg in servers_cfg.items():
-        if not isinstance(cfg, dict):
-            raise MCPConfigError(
-                _("MCP server '{name}': configuration must be an object", name=name)
-            )
-        connections[name] = _build_mcp_connection(name, cfg)
-
+async def _load_tools_from_connections(connections: dict[str, dict[str, Any]]) -> list[Any]:
+    """Connect to multiple MCP servers concurrently and return all discovered tools."""
     if not connections:
         return []
 
@@ -185,6 +170,25 @@ async def load_main_mcp_tools() -> list[Any]:
     return [tool for t in tasks for tool in t.result()]
 
 
+async def load_main_mcp_tools() -> list[Any]:
+    """Load flat MCP tools for the main agent from mcp.json.
+
+    Raises MCPConfigError when the config is unreadable, malformed, or any
+    server fails to connect.
+    """
+    servers_cfg = await _read_main_config()
+
+    connections: dict[str, dict[str, Any]] = {}
+    for name, cfg in servers_cfg.items():
+        if not isinstance(cfg, dict):
+            raise MCPConfigError(
+                _("MCP server '{name}': configuration must be an object", name=name)
+            )
+        connections[name] = _build_mcp_connection(name, cfg)
+
+    return await _load_tools_from_connections(connections)
+
+
 async def load_subagent_mcp_tools(
     subagent_name: str,
     mcp_servers: list[SubAgentMCPServer],
@@ -199,7 +203,7 @@ async def load_subagent_mcp_tools(
     seen_names: set[str] = set()
     connections: dict[str, dict[str, Any]] = {}
     for srv in mcp_servers:
-        name = srv.name.strip() if srv.name else ""
+        name = srv.name.strip()
         if not name:
             raise MCPConfigError(
                 _("Subagent '{subagent_name}': MCP server name cannot be empty", subagent_name=subagent_name)
@@ -211,17 +215,6 @@ async def load_subagent_mcp_tools(
         seen_names.add(name)
         connections[name] = _build_mcp_connection(name, {"command": srv.command, "args": srv.args, "env": srv.env})
 
-    tasks: list[asyncio.Task[list[Any]]] = []
-    try:
-        async with asyncio.TaskGroup() as tg:
-            for name, conn in connections.items():
-                tasks.append(tg.create_task(_connect_and_load(name, conn)))
-    except ExceptionGroup as eg:
-        for exc in eg.exceptions:
-            if isinstance(exc, MCPConfigError):
-                raise exc from eg
-        raise
-
-    tools = [tool for t in tasks for tool in t.result()]
+    tools = await _load_tools_from_connections(connections)
     _log.info("Subagent '%s': loaded %d MCP tools", subagent_name, len(tools))
     return tools

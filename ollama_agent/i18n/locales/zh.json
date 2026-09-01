@@ -367,8 +367,6 @@
   "Failed to offload conversation history to {path}: {error}": "会话历史转存到 {path} 失败：{error}",
   "Malformed summarization event: {detail}": "格式错误的摘要事件：{detail}",
   "Tool timeout must be greater than 0, got {timeout_s}": "工具超时时间必须大于 0，当前为 {timeout_s}",
-  "Agent graph is not initialized": "智能体图未初始化",
-  "Agent model is not initialized": "智能体模型未初始化",
   "Subagent '{name}' configuration error: system_prompt cannot be empty": "子智能体 '{name}' 配置错误：system_prompt 不能为空",
   "unknown": "未知",
   "{label} not found: {prefix}": "{label} 未找到: {prefix}",

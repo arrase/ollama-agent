@@ -41,8 +41,8 @@ def _normalize_lang(raw: str) -> str:
 def detect_system_language() -> str:
     """Detect the system language code, falling back to DEFAULT_LOCALE."""
     for var in ("LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"):
-        val = os.environ.get(var)
-        if val is not None and val.strip():
+        val = os.environ.get(var, "").strip()
+        if val:
             for part in val.split(":"):
                 if part.strip():
                     norm = _normalize_lang(part)
@@ -88,10 +88,7 @@ def set_locale(lang: str | None = None) -> str:
 
 def get_text(message: str, **kwargs: Any) -> str:
     """Translate a message string with optional format arguments."""
-    if _current_locale == DEFAULT_LOCALE:
-        template = message
-    else:
-        template = _translations.get(message, message)
+    template = _translations.get(message, message)
     if kwargs:
         return template.format(**kwargs)
     return template

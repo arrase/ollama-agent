@@ -26,7 +26,7 @@ class RAGContext:
     rag_manager: RAGManager
     console: Console = field(default_factory=Console)
 
-    def _find_or_exit(self, name: str) -> str:
+    def resolve_database(self, name: str) -> str:
         """Find a database by name/prefix or raise RAGError."""
         target = name.strip()
         if not target:
@@ -79,7 +79,7 @@ def create_rag_database(ctx: RAGContext, name: str) -> None:
 
 def delete_rag_database(ctx: RAGContext, name: str) -> None:
     """Delete a RAG database."""
-    full_name = ctx._find_or_exit(name)
+    full_name = ctx.resolve_database(name)
     ctx.rag_manager.delete_database(full_name)
     ctx.console.print(
         f"[green]✓ {_('Deleted RAG database: {full_name}', full_name=full_name)}[/green]"
@@ -88,7 +88,7 @@ def delete_rag_database(ctx: RAGContext, name: str) -> None:
 
 def load_rag_database(ctx: RAGContext, name: str) -> None:
     """Load a RAG database."""
-    full_name = ctx._find_or_exit(name)
+    full_name = ctx.resolve_database(name)
     ctx.rag_manager.load_database(full_name)
     ctx.console.print(
         f"[green]✓ {_('Loaded RAG database: {full_name}', full_name=full_name)}[/green]"

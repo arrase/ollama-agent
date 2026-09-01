@@ -710,7 +710,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock._get_commands.return_value = {}
 
         task = MagicMock(title="My Task", model="task-model", reasoning_effort="high", prompt="Do things")
-        repl_mock._task_ctx._find_or_exit.return_value = ("my-task", task)
+        repl_mock._task_ctx._resolve_task.return_value = ("my-task", task)
 
         app = OllamaAgentApp(repl_mock)
         async with app.run_test() as pilot:

@@ -18,9 +18,6 @@ class StreamingRenderer(ABC):
     def on_event(self, event: dict[str, Any]) -> None:
         """Dispatch event to type-specific handler (on_<type>)."""
         etype = event["type"]
-        if etype == "event":
-            _log.debug("Skipping event with unroutable type: %s", etype)
-            return
         handler = getattr(self, f"on_{etype}", None)
         if not callable(handler) or handler == self.on_event:
             _log.debug("Unhandled event type skipped: %s", etype)

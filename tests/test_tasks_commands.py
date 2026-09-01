@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 from rich.console import Console
 
-from ollama_agent.settings import load_settings
+from ollama_agent.settings import Settings, load_settings
 from ollama_agent.tasks.commands import (
     AmbiguousTaskError,
     TasksContext,
@@ -146,13 +146,27 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
                 model="gemma4:26b",
             )
 
-    def test_find_or_exit_errors(self) -> None:
+    def test_create_task_default_reasoning_effort(self) -> None:
+        create_task(
+            self.ctx,
+            "default-effort-task",
+            title="Default Effort Task",
+            prompt="summarize",
+            model="gemma4:26b",
+        )
+        task = self.mgr.get("default-effort-task")
+        self.assertEqual(task.reasoning_effort, "medium")
+
+    def test_tasks_context_default_settings(self) -> None:
+        self.assertIsInstance(self.ctx.settings, Settings)
+
+    def test_resolve_task_errors(self) -> None:
         with self.assertRaises(TaskNotFoundError):
-            self.ctx._find_or_exit("missing_task")
+            self.ctx._resolve_task("missing_task")
 
         create_task(self.ctx, "deploy-prod", title="Prod Deploy", prompt="deploy", model="gemma4:26b")
         create_task(self.ctx, "deploy-staging", title="Staging Deploy", prompt="deploy", model="gemma4:26b")
 
         with self.assertRaises(AmbiguousTaskError):
-            self.ctx._find_or_exit("deploy")
+            self.ctx._resolve_task("deploy")
 

@@ -42,10 +42,6 @@ class SkillsContext:
             matches = self.skill_manager.find_matches(skill_id)
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
-        except (FileNotFoundError, OSError) as exc:
-            raise SkillNotFoundError(
-                _("{label} not found: {prefix}", label=_("Skill"), prefix=skill_id)
-            ) from exc
         return resolve_unique_match(
             matches,
             skill_id,
@@ -114,7 +110,7 @@ def delete_skill(ctx: SkillsContext, skill_id: str) -> None:
     sid, info = ctx._resolve_skill(skill_id)
     try:
         ctx.skill_manager.delete(sid)
-    except (FileNotFoundError, OSError) as exc:
+    except FileNotFoundError as exc:
         raise SkillNotFoundError(str(exc)) from exc
     except ValueError as exc:
         raise SkillError(str(exc)) from exc

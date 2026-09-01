@@ -298,11 +298,51 @@ class TestConfigManagement(unittest.TestCase):
             Settings.from_dict({"modeel": {"name": "llama3"}})
         self.assertIn("modeel", str(ctx.exception))
 
+    def test_find_agents_file_default_start_dir(self) -> None:
+        orig_cwd = Path.cwd()
+        proj_dir = Path(self.temp_dir.name) / "default_dir"
+        proj_dir.mkdir()
+        agents_file = proj_dir / "AGENTS.md"
+        agents_file.write_text("# Default\n", encoding="utf-8")
+        try:
+            os.chdir(proj_dir)
+            found = find_agents_file()
+            self.assertEqual(found, agents_file)
+        finally:
+            os.chdir(orig_cwd)
+
+    def test_dataclass_from_dict_none_returns_default(self) -> None:
+        model = _dataclass_from_dict(ModelSettings, None)
+        self.assertIsInstance(model, ModelSettings)
+        self.assertEqual(model.base_url, "http://localhost:11434")
+
     def test_dataclass_from_dict_rejects_non_dict(self) -> None:
         with self.assertRaises(ValueError):
             _dataclass_from_dict(ModelSettings, "not-a-dict")
         with self.assertRaises(ValueError):
             _dataclass_from_dict(ModelSettings, 123)
+
+    def test_subagents_from_list_parsing(self) -> None:
+        self.assertEqual(_subagents_from_list(None), [])
+        raw = [
+            {
+                "name": "explorer",
+                "description": "Explores",
+            },
+            {
+                "name": "tester",
+                "mcp_servers": [
+                    {"name": "fetch", "command": "uvx", "args": ["mcp-server-fetch"]}
+                ],
+            },
+        ]
+        subagents = _subagents_from_list(raw)
+        self.assertEqual(len(subagents), 2)
+        self.assertEqual(subagents[0].name, "explorer")
+        self.assertEqual(subagents[0].mcp_servers, [])
+        self.assertEqual(subagents[1].name, "tester")
+        self.assertEqual(len(subagents[1].mcp_servers), 1)
+        self.assertEqual(subagents[1].mcp_servers[0].name, "fetch")
 
     def test_subagents_from_list_validation(self) -> None:
         with self.assertRaises(ValueError):

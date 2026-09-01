@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-import logging
 import mimetypes
 import os
 import re
@@ -13,8 +12,6 @@ from urllib.parse import unquote, urlparse
 from urllib.request import url2pathname
 
 from ..i18n import _
-
-_log = logging.getLogger(__name__)
 
 
 class PromptProcessingError(Exception):
@@ -61,7 +58,7 @@ _MIME_EXTENSIONS: dict[str, str] = {
 }
 
 
-def get_file_type(file_path: Path) -> str:
+def get_file_type(file_path: Path) -> str | None:
     """Guess the MIME type of a file, prioritizing explicit text overrides and custom extensions."""
     suffix = file_path.suffix.lower()
     if suffix == ".ts":
@@ -69,7 +66,7 @@ def get_file_type(file_path: Path) -> str:
     if suffix in _MIME_EXTENSIONS:
         return _MIME_EXTENSIONS[suffix]
     mime, _encoding = mimetypes.guess_type(str(file_path))
-    return mime or ""
+    return mime
 
 
 class ResolvedContext(NamedTuple):
@@ -81,8 +78,10 @@ class ResolvedContext(NamedTuple):
     warnings: list[str]
 
 
-def _multimodal_kind(mime: str) -> str | None:
+def _multimodal_kind(mime: str | None) -> str | None:
     """Map a MIME type to a LangChain multimodal type, or None for text."""
+    if not mime:
+        return None
     if mime.startswith("image/"):
         return "image"
     if mime.startswith("video/"):
@@ -105,13 +104,9 @@ def classify_multimodal_file(file_path: Path) -> str | None:
 
 def is_binary_file(file_path: Path) -> bool:
     """Check if a file is binary by searching for null bytes in the first block."""
-    try:
-        with file_path.open("rb") as f:
-            chunk = f.read(1024)
-            return b"\x00" in chunk
-    except OSError as exc:
-        _log.warning("Could not read file %s to check for binary content: %s", file_path, exc)
-        return False
+    with file_path.open("rb") as f:
+        chunk = f.read(1024)
+        return b"\x00" in chunk
 
 
 def _check_file_size(file_path: Path, max_file_size: int) -> int:

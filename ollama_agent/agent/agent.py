@@ -285,8 +285,6 @@ class AgentRuntime:
         async with self._init_lock:
             if self.graph is None:
                 await self.reload()
-            if self.graph is None:
-                raise RuntimeError(_("Agent graph is not initialized"))
         config: dict[str, Any] = {"configurable": {"thread_id": thread}}
         return self.graph, thread, config
 
@@ -369,12 +367,10 @@ class AgentRuntime:
     async def compact_context(self, thread_id: str = "") -> dict[str, Any]:
         """Compact conversation history for the specified thread into a summary."""
         graph, _thread, config = await self._ensure_graph(thread_id)
-        if self._model is None:
-            raise RuntimeError(_("Agent model is not initialized"))
 
         state = await graph.aget_state(config)
-        values: dict[str, Any] = state.values if state and state.values else {}
-        raw_messages = list(values.get("messages") or [])
+        values: dict[str, Any] = state.values
+        raw_messages = list(values.get("messages", []))
         if not raw_messages:
             return {"success": False, "message": _("No messages in session to compact.")}
 
@@ -424,17 +420,17 @@ class AgentRuntime:
         """Return the raw stored messages for a thread (empty when unknown)."""
         graph, _thread, config = await self._ensure_graph(thread_id)
         state = await graph.aget_state(config)
-        values: dict[str, Any] = state.values if state and state.values else {}
-        return list(values.get("messages") or [])
+        values: dict[str, Any] = state.values
+        return list(values.get("messages", []))
 
     async def count_effective_tokens(self, thread_id: str = "") -> int:
         """Count tokens of the effective context for a thread (after compaction)."""
         graph, _thread, config = await self._ensure_graph(thread_id)
         state = await graph.aget_state(config)
-        values: dict[str, Any] = state.values if state and state.values else {}
+        values: dict[str, Any] = state.values
         effective = apply_summarization_event(
             self._summarization_engine,
-            list(values.get("messages") or []),
+            list(values.get("messages", [])),
             values.get(SUMMARIZATION_STATE_KEY),
         )
         return count_tokens_approximately(effective)
