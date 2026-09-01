@@ -443,5 +443,7 @@
   "Queue position {pos} out of range (queue has {count} items).": "कतार स्थिति {pos} सीमा से बाहर है (कतार में {count} आइटम हैं)।",
   "Queued ({count})": "कतारबद्ध ({count})",
   "more": "अधिक",
-  "tokens": "टोकन"
+  "tokens": "टोकन",
+  "Usage: /effort [set <level>]": "उपयोग: /effort [set <level>]",
+  "Usage: /context [set <size>]": "उपयोग: /context [set <size>]"
 }

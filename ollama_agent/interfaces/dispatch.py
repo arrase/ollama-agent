@@ -194,9 +194,12 @@ def build_repl_handlers(
     def handle_model(args: list[str]) -> object:
         if not args or args[0] == "list":
             return list_models(console, current_model(), base_url())
-        if args[0] in ("set", "use", "switch") and len(args) > 1:
-            return switch_model(args[1])
-        if len(args) == 1 and args[0] != "list":
+        if args[0] in ("set", "use", "switch"):
+            if len(args) > 1:
+                return switch_model(args[1])
+            console.print(f"[red]{_('Usage: /model [list | set <model>]')}[/red]")
+            return None
+        if len(args) == 1:
             return switch_model(args[0])
         console.print(f"[red]{_('Usage: /model [list | set <model>]')}[/red]")
         return None
@@ -205,15 +208,23 @@ def build_repl_handlers(
         if not args:
             show_effort(console, get_runtime())
             return None
-        target = args[1] if args[0] in ("set", "use", "switch") and len(args) > 1 else args[0]
-        return switch_effort(target)
+        if args[0] in ("set", "use", "switch"):
+            if len(args) > 1:
+                return switch_effort(args[1])
+            console.print(f"[red]{_('Usage: /effort [set <level>]')}[/red]")
+            return None
+        return switch_effort(args[0])
 
     def handle_context(args: list[str]) -> object:
         if not args:
             show_context_window(console, get_runtime())
             return None
-        target = args[1] if args[0] in ("set", "use", "switch") and len(args) > 1 else args[0]
-        return switch_context_window(target)
+        if args[0] in ("set", "use", "switch"):
+            if len(args) > 1:
+                return switch_context_window(args[1])
+            console.print(f"[red]{_('Usage: /context [set <size>]')}[/red]")
+            return None
+        return switch_context_window(args[0])
 
     def handle_params(args: list[str]) -> object:
         if not args or args[0] == "list":

@@ -138,7 +138,7 @@ async def generate_summary(model: Any, messages: list[Any]) -> str:
     formatted = get_buffer_string(messages, format="xml")
     prompt = DEEPAGENTS_DEFAULT_SUMMARY_PROMPT.format(messages=formatted).rstrip()
     response = await model.ainvoke(prompt)
-    return response.text.strip()
+    return response.content.strip()
 
 
 async def offload_history(backend: Any, messages: list[Any], path: str) -> str:

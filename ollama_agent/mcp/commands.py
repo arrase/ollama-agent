@@ -51,8 +51,8 @@ async def check_mcp_server(
         target = str(conn["url"])
 
     try:
-        client = MultiServerMCPClient({name: conn})  # type: ignore[dict-item,arg-type]
-        tools = await asyncio.wait_for(client.get_tools(), timeout=timeout)
+        async with MultiServerMCPClient({name: conn}) as client:  # type: ignore[dict-item,arg-type]
+            tools = await asyncio.wait_for(client.get_tools(), timeout=timeout)
     except asyncio.TimeoutError:
         return MCPServerStatus(
             name=name,

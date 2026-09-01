@@ -443,5 +443,7 @@
   "Queue position {pos} out of range (queue has {count} items).": "Wachtrijpositie {pos} buiten bereik (wachtrij heeft {count} items).",
   "Queued ({count})": "In wachtrij ({count})",
   "more": "meer",
-  "tokens": "tokens"
+  "tokens": "tokens",
+  "Usage: /effort [set <level>]": "Gebruik: /effort [set <niveau>]",
+  "Usage: /context [set <size>]": "Gebruik: /context [set <grootte>]"
 }

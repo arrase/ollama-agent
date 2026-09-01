@@ -367,10 +367,8 @@ class AgentRuntime:
 
         session_id = new_session_id(values)
         history_path = f"{HISTORY_PATH_PREFIX}/{session_id}.md"
-        summary, file_path = await asyncio.gather(
-            generate_summary(self._model, to_summarize),
-            offload_history(self._backend, to_summarize, history_path),
-        )
+        summary = await generate_summary(self._model, to_summarize)
+        file_path = await offload_history(self._backend, to_summarize, history_path)
 
         new_event: dict[str, Any] = {
             "cutoff_index": compute_state_cutoff(self._summarization_engine, prior_event, cutoff),

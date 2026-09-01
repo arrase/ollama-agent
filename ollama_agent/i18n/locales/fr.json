@@ -443,5 +443,7 @@
   "Queue position {pos} out of range (queue has {count} items).": "Position de file d'attente {pos} hors limites (la file contient {count} éléments).",
   "Queued ({count})": "En file d'attente ({count})",
   "more": "de plus",
-  "tokens": "tokens"
+  "tokens": "tokens",
+  "Usage: /effort [set <level>]": "Utilisation : /effort [set <niveau>]",
+  "Usage: /context [set <size>]": "Utilisation : /context [set <taille>]"
 }

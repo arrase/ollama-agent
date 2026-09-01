@@ -61,6 +61,7 @@ class TaskManager(BaseFileStoreManager[Task]):
         path = self._path(task_id)
         if path.exists() and not overwrite:
             raise FileExistsError(_("Task already exists: {task_id}", task_id=task_id))
+        path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = path.with_suffix(".tmp")
         tmp_path.write_text(
             yaml.safe_dump(asdict(task), allow_unicode=True), encoding="utf-8"

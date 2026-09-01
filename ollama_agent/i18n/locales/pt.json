@@ -443,5 +443,7 @@
   "Queue position {pos} out of range (queue has {count} items).": "Posição de fila {pos} fora do intervalo (a fila tem {count} itens).",
   "Queued ({count})": "Na fila ({count})",
   "more": "mais",
-  "tokens": "tokens"
+  "tokens": "tokens",
+  "Usage: /effort [set <level>]": "Uso: /effort [set <nível>]",
+  "Usage: /context [set <size>]": "Uso: /context [set <tamanho>]"
 }

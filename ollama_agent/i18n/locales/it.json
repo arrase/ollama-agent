@@ -443,5 +443,7 @@
   "Queue position {pos} out of range (queue has {count} items).": "Posizione della coda {pos} fuori intervallo (la coda contiene {count} elementi).",
   "Queued ({count})": "In coda ({count})",
   "more": "altri",
-  "tokens": "token"
+  "tokens": "token",
+  "Usage: /effort [set <level>]": "Uso: /effort [set <livello>]",
+  "Usage: /context [set <size>]": "Uso: /context [set <dimensione>]"
 }

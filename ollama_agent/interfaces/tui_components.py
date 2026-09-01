@@ -46,7 +46,7 @@ class AgentHeader(Static):
             else (ms.context_window if isinstance(ms.context_window, int) else 0)
         )
 
-        if isinstance(num_ctx, int) and num_ctx > 0:
+        if isinstance(num_ctx, int) and num_ctx > 0 and isinstance(tokens, (int, float)):
             tokens_val = tokens
             pct = int((tokens_val / num_ctx) * 100)
             if pct > 90:

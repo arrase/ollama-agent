@@ -266,6 +266,8 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         mock_tool.name = "search_tool"
         mock_client = MagicMock()
         mock_client.get_tools = AsyncMock(return_value=[mock_tool])
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("ollama_agent.mcp.commands.MultiServerMCPClient", return_value=mock_client):
             status = await check_mcp_server("test-server", cfg)
@@ -280,6 +282,8 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         cfg = {"command": "invalid-cmd"}
         mock_client = MagicMock()
         mock_client.get_tools = AsyncMock(side_effect=RuntimeError("Command not found"))
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("ollama_agent.mcp.commands.MultiServerMCPClient", return_value=mock_client):
             status = await check_mcp_server("bad-server", cfg)
@@ -347,6 +351,8 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             mock_tool.name = "tavily_search"
             mock_client = MagicMock()
             mock_client.get_tools = AsyncMock(return_value=[mock_tool])
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
 
             with patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path), \
                  patch("ollama_agent.mcp.commands.MultiServerMCPClient", return_value=mock_client):
