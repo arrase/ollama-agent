@@ -69,6 +69,7 @@ tests/
 ├── test_mcp_loader.py             # MCP server configs, env expansions & connection handling
 ├── test_models.py                 # Capability checks, context window resolution & reasoning
 ├── test_prompt_processor.py       # @-mentions parsing, multimodal attachments & safety
+├── test_prompt_queue.py           # Asynchronous prompt queue, non-blocking execution & FIFO draining
 ├── test_rag.py                    # RAG operations, Qdrant client & embeddings
 ├── test_rag_manager.py            # Document chunking, batch embeddings & stale point cleanup
 ├── test_resource_manager.py       # Abstract BaseFileStoreManager tests
@@ -134,7 +135,7 @@ ollama-agent/
 │   │   ├── dispatch.py      # Unified CLI/REPL command handler registry
 │   │   ├── model_commands.py# Model listing with tool capabilities, model switching
 │   │   ├── session_commands.py # SQLite session management, markdown export, compaction
-│   │   ├── tui_components.py# Textual TUI widgets (header, footer, input, messages, approvals)
+│   │   ├── tui_components.py# Textual TUI widgets (header, footer, input, messages, approvals, prompt queue, system notices)
 │   │   ├── repl.py          # Interactive Textual REPL application & autocomplete
 │   │   └── repl.css         # Styling for Textual REPL interface
 │   ├── mcp/                 # Model Context Protocol integration
@@ -160,11 +161,11 @@ ollama-agent/
 │   │   ├── console_renderer.py # Rich live console renderer for CLI output
 │   │   ├── events.py        # stream_agent_events and non-interactive runner
 │   │   ├── interrupts.py    # Tool interrupt and human approval streaming handlers
-│   │   └── parsers.py       # streaming_text and streaming_reasoning chunk parsers
+│   │   └── parsers.py       # ThinkTagParser, streaming_text, and streaming_reasoning chunk parsers
 │   └── tasks/               # Saved task management
 │       ├── commands.py      # Task CLI and REPL handlers
 │       └── manager.py       # TaskManager and Task YAML serializer
-├── tests/                   # Automated unit test suite (25 test modules)
+├── tests/                   # Automated unit test suite (26 test modules)
 ├── docs/                    # MkDocs documentation source files
 ├── mkdocs.yml               # MkDocs configuration
 ├── AGENTS.md                # Development guidelines and coding conventions
