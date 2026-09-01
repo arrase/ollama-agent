@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 import io
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,6 +20,7 @@ from ollama_agent.mcp.loader import (
     MCPConfigError,
     _build_mcp_connection,
     _load_tools_from_connections,
+    _mcp_stdio_client,
     _read_main_config,
     _resolve_env,
     load_main_mcp_tools,
@@ -419,3 +422,39 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(RuntimeError):
             await reload_mcp_servers(console, runtime)
         runtime.reload.assert_awaited_once()
+
+    async def test_mcp_stdio_client_redirects_stderr_to_log_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            log_path = Path(tmp_dir) / "mcp.log"
+            captured_errlog = None
+
+            @asynccontextmanager
+            async def fake_orig_stdio(server, errlog=None):
+                nonlocal captured_errlog
+                captured_errlog = errlog
+                yield ("read_stream", "write_stream")
+
+            with patch("ollama_agent.mcp.loader.MCP_LOG_PATH", log_path), \
+                 patch("ollama_agent.mcp.loader._orig_stdio_client", fake_orig_stdio):
+                server_dummy = MagicMock()
+                async with _mcp_stdio_client(server_dummy) as streams:
+                    self.assertEqual(streams, ("read_stream", "write_stream"))
+                self.assertIsNotNone(captured_errlog)
+                self.assertNotEqual(captured_errlog, sys.stderr)
+                self.assertTrue(log_path.exists())
+
+    async def test_mcp_stdio_client_preserves_custom_errlog(self) -> None:
+        custom_stream = io.StringIO()
+        captured_errlog = None
+
+        @asynccontextmanager
+        async def fake_orig_stdio(server, errlog=None):
+            nonlocal captured_errlog
+            captured_errlog = errlog
+            yield ("read_stream", "write_stream")
+
+        with patch("ollama_agent.mcp.loader._orig_stdio_client", fake_orig_stdio):
+            server_dummy = MagicMock()
+            async with _mcp_stdio_client(server_dummy, errlog=custom_stream) as streams:
+                self.assertEqual(streams, ("read_stream", "write_stream"))
+            self.assertEqual(captured_errlog, custom_stream)

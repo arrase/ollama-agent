@@ -3,19 +3,43 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
 import re
+import sys
 from typing import Any
 
+import langchain_mcp_adapters.sessions
 from langchain_mcp_adapters.client import MultiServerMCPClient
+import mcp.client.stdio
 
 from ..i18n import _
-from ..settings import MCP_PATH, SubAgentMCPServer
+from ..settings import MCP_LOG_PATH, MCP_PATH, SubAgentMCPServer
+
 _log = logging.getLogger(__name__)
 _ENV_RE = re.compile(r"\$\{([^}]+)\}|%([^%]+)%")
 _KNOWN_TRANSPORTS = {"sse", "websocket", "http", "streamable_http", "streamable-http"}
+
+_orig_stdio_client = mcp.client.stdio.stdio_client
+
+
+@contextlib.asynccontextmanager
+async def _mcp_stdio_client(server: Any, errlog: Any = None) -> Any:
+    """Redirect stdio MCP server stderr to mcp.log to keep the TUI pristine."""
+    if errlog is not None and errlog is not sys.stderr:
+        async with _orig_stdio_client(server, errlog=errlog) as streams:
+            yield streams
+    else:
+        MCP_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with MCP_LOG_PATH.open("a", encoding="utf-8") as f:
+            async with _orig_stdio_client(server, errlog=f) as streams:
+                yield streams
+
+
+mcp.client.stdio.stdio_client = _mcp_stdio_client
+langchain_mcp_adapters.sessions.stdio_client = _mcp_stdio_client
 
 
 class MCPConfigError(RuntimeError):
