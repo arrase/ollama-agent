@@ -442,6 +442,6 @@
   "Invalid queue position '{pos}'. Usage: /queue rm <position>": "Position de file d'attente non valide '{pos}'. Utilisation : /queue rm <position>",
   "Queue position {pos} out of range (queue has {count} items).": "Position de file d'attente {pos} hors limites (la file contient {count} éléments).",
   "Queued ({count})": "En file d'attente ({count})",
-  "to clear": "pour vider",
-  "more": "de plus"
+  "more": "de plus",
+  "tokens": "tokens"
 }

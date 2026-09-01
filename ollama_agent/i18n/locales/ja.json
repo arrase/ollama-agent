@@ -442,6 +442,6 @@
   "Invalid queue position '{pos}'. Usage: /queue rm <position>": "無効なキュー位置 '{pos}'。使用法: /queue rm <位置>",
   "Queue position {pos} out of range (queue has {count} items).": "キュー位置 {pos} は範囲外です (キューには {count} 個の項目があります)。",
   "Queued ({count})": "キュー中 ({count})",
-  "to clear": "でクリア",
-  "more": "件"
+  "more": "件",
+  "tokens": "トークン"
 }

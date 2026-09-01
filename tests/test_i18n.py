@@ -1,5 +1,6 @@
 """Tests for internationalization (i18n) system."""
 
+import ast
 import json
 import os
 import re
@@ -345,6 +346,28 @@ class TestCatalogCompleteness(unittest.TestCase):
                     loc_placeholders,
                     f"Placeholder mismatch in {loc}.json for key '{key}': {key_placeholders} vs {loc_placeholders}",
                 )
+
+    def test_all_codebase_strings_present_in_catalogs(self) -> None:
+        pkg_dir = Path(__file__).parent.parent / "ollama_agent"
+        locales_dir = pkg_dir / "i18n" / "locales"
+
+        extracted_strings: set[str] = set()
+        for py_file in pkg_dir.rglob("*.py"):
+            with open(py_file, "r", encoding="utf-8") as f:
+                tree = ast.parse(f.read(), filename=str(py_file))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call):
+                    func = node.func
+                    if (isinstance(func, ast.Name) and func.id == "_") or (isinstance(func, ast.Attribute) and func.attr == "_"):
+                        if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                            extracted_strings.add(node.args[0].value)
+
+        for loc in [l for l in SUPPORTED_LOCALES if l != "en"]:
+            loc_file = locales_dir / f"{loc}.json"
+            with open(loc_file, "r", encoding="utf-8") as f:
+                catalog = json.load(f)
+            missing = [s for s in extracted_strings if s not in catalog]
+            self.assertEqual(missing, [], f"{loc}.json is missing translation for in-code strings: {missing}")
 
 
 class TestCLIAndSettingsI18n(unittest.TestCase):

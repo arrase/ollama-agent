@@ -442,6 +442,6 @@
   "Invalid queue position '{pos}'. Usage: /queue rm <position>": "Ungültige Warteschlangenposition '{pos}'. Verwendung: /queue rm <Position>",
   "Queue position {pos} out of range (queue has {count} items).": "Warteschlangenposition {pos} außerhalb des Bereichs (Warteschlange hat {count} Elemente).",
   "Queued ({count})": "In der Warteschlange ({count})",
-  "to clear": "zum Leeren",
-  "more": "weitere"
+  "more": "weitere",
+  "tokens": "Tokens"
 }

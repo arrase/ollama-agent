@@ -442,6 +442,6 @@
   "Invalid queue position '{pos}'. Usage: /queue rm <position>": "Posição de fila inválida '{pos}'. Uso: /queue rm <posição>",
   "Queue position {pos} out of range (queue has {count} items).": "Posição de fila {pos} fora do intervalo (a fila tem {count} itens).",
   "Queued ({count})": "Na fila ({count})",
-  "to clear": "para limpar",
-  "more": "mais"
+  "more": "mais",
+  "tokens": "tokens"
 }

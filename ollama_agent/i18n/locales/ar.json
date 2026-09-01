@@ -442,6 +442,6 @@
   "Invalid queue position '{pos}'. Usage: /queue rm <position>": "موضع غير صالح في قائمة الانتظار '{pos}'. الاستخدام: /queue rm <الموضع>",
   "Queue position {pos} out of range (queue has {count} items).": "موضع قائمة الانتظار {pos} خارج النطاق (تحتوي قائمة الانتظار على {count} من العناصر).",
   "Queued ({count})": "في قائمة الانتظار ({count})",
-  "to clear": "للمسح",
-  "more": "المزيد"
+  "more": "المزيد",
+  "tokens": "رموز"
 }

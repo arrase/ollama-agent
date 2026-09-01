@@ -442,6 +442,6 @@
   "Invalid queue position '{pos}'. Usage: /queue rm <position>": "잘못된 대기열 위치 '{pos}'입니다. 사용법: /queue rm <위치>",
   "Queue position {pos} out of range (queue has {count} items).": "대기열 위치 {pos}이(가) 범위를 벗어났습니다(대기열에 {count}개 항목 있음).",
   "Queued ({count})": "대기 중 ({count})",
-  "to clear": "삭제하려면",
-  "more": "개 더보기"
+  "more": "개 더보기",
+  "tokens": "토큰"
 }

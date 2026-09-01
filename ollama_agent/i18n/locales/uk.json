@@ -442,6 +442,6 @@
   "Invalid queue position '{pos}'. Usage: /queue rm <position>": "Недійсна позиція в черзі '{pos}'. Використання: /queue rm <позиція>",
   "Queue position {pos} out of range (queue has {count} items).": "Позиція в черзі {pos} поза діапазоном (черга містить {count} елементів).",
   "Queued ({count})": "У черзі ({count})",
-  "to clear": "для очищення",
-  "more": "ще"
+  "more": "ще",
+  "tokens": "токенів"
 }

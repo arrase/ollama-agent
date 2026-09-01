@@ -442,6 +442,6 @@
   "Invalid queue position '{pos}'. Usage: /queue rm <position>": "无效的队列位置 '{pos}'。用法：/queue rm <位置>",
   "Queue position {pos} out of range (queue has {count} items).": "队列位置 {pos} 超出范围（队列有 {count} 项）。",
   "Queued ({count})": "已排队 ({count})",
-  "to clear": "以清除",
-  "more": "更多"
+  "more": "更多",
+  "tokens": "Token"
 }

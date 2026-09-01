@@ -442,6 +442,6 @@
   "Invalid queue position '{pos}'. Usage: /queue rm <position>": "Posizione della coda non valida '{pos}'. Uso: /queue rm <posizione>",
   "Queue position {pos} out of range (queue has {count} items).": "Posizione della coda {pos} fuori intervallo (la coda contiene {count} elementi).",
   "Queued ({count})": "In coda ({count})",
-  "to clear": "per cancellare",
-  "more": "altri"
+  "more": "altri",
+  "tokens": "token"
 }

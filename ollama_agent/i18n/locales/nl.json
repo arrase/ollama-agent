@@ -442,6 +442,6 @@
   "Invalid queue position '{pos}'. Usage: /queue rm <position>": "Ongeldige wachtrijpositie '{pos}'. Gebruik: /queue rm <positie>",
   "Queue position {pos} out of range (queue has {count} items).": "Wachtrijpositie {pos} buiten bereik (wachtrij heeft {count} items).",
   "Queued ({count})": "In wachtrij ({count})",
-  "to clear": "om te wissen",
-  "more": "meer"
+  "more": "meer",
+  "tokens": "tokens"
 }

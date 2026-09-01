@@ -442,6 +442,6 @@
   "Invalid queue position '{pos}'. Usage: /queue rm <position>": "Nieprawidłowa pozycja w kolejce '{pos}'. Użycie: /queue rm <pozycja>",
   "Queue position {pos} out of range (queue has {count} items).": "Pozycja w kolejce {pos} poza zakresem (kolejka zawiera {count} elementów).",
   "Queued ({count})": "W kolejce ({count})",
-  "to clear": "aby wyczyścić",
-  "more": "więcej"
+  "more": "więcej",
+  "tokens": "tokenów"
 }

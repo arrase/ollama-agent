@@ -442,6 +442,6 @@
   "Invalid queue position '{pos}'. Usage: /queue rm <position>": "Недопустимая позиция в очереди '{pos}'. Использование: /queue rm <позиция>",
   "Queue position {pos} out of range (queue has {count} items).": "Позиция в очереди {pos} вне диапазона (в очереди {count} элементов).",
   "Queued ({count})": "В очереди ({count})",
-  "to clear": "для очистки",
-  "more": "еще"
+  "more": "еще",
+  "tokens": "токенов"
 }

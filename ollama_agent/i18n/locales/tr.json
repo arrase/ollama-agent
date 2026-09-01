@@ -442,6 +442,6 @@
   "Invalid queue position '{pos}'. Usage: /queue rm <position>": "Geçersiz kuyruk konumu '{pos}'. Kullanım: /queue rm <konum>",
   "Queue position {pos} out of range (queue has {count} items).": "Kuyruk konumu {pos} aralık dışında (kuyrukta {count} öğe var).",
   "Queued ({count})": "Kuyrukta ({count})",
-  "to clear": "temizlemek için",
-  "more": "daha fazla"
+  "more": "daha fazla",
+  "tokens": "belirteç"
 }

@@ -442,6 +442,6 @@
   "Invalid queue position '{pos}'. Usage: /queue rm <position>": "Posición de cola no válida '{pos}'. Uso: /queue rm <posición>",
   "Queue position {pos} out of range (queue has {count} items).": "Posición de cola {pos} fuera de rango (la cola tiene {count} elementos).",
   "Queued ({count})": "En cola ({count})",
-  "to clear": "para limpiar",
-  "more": "más"
+  "more": "más",
+  "tokens": "tokens"
 }

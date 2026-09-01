@@ -442,6 +442,6 @@
   "Invalid queue position '{pos}'. Usage: /queue rm <position>": "अमान्य कतार स्थिति '{pos}'। उपयोग: /queue rm <स्थिति>",
   "Queue position {pos} out of range (queue has {count} items).": "कतार स्थिति {pos} सीमा से बाहर है (कतार में {count} आइटम हैं)।",
   "Queued ({count})": "कतारबद्ध ({count})",
-  "to clear": "साफ़ करने के लिए",
-  "more": "अधिक"
+  "more": "अधिक",
+  "tokens": "टोकन"
 }
