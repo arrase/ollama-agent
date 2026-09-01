@@ -462,5 +462,15 @@
   "Expected mapping for subagent, got {type_name}": "subagent için eşleme bekleniyordu, {type_name} alındı",
   "Expected list for mcp_servers, got {type_name}": "mcp_servers için liste bekleniyordu, {type_name} alındı",
   "Expected mapping for Task, got {type_name}": "Task için eşleme bekleniyordu, {type_name} alındı",
-  "Path traversal detected: {item_id}": "Yol geçişi algılandı: {item_id}"
+  "Path traversal detected: {item_id}": "Yol geçişi algılandı: {item_id}",
+  "Enable stealth mode (do not save conversation to SQLite history)": "Gizli modu etkinleştir (sohbeti SQLite geçmişine kaydetme)",
+  "Toggle stealth mode or set it explicitly (on/off)": "Gizli modu aç/kapat veya açıkça ayarla (on/off)",
+  "Enable stealth mode (no SQLite history)": "Gizli modu etkinleştir (SQLite geçmişi yok)",
+  "Disable stealth mode": "Gizli modu devre dışı bırak",
+  "Usage: /stealth [on|off]": "Kullanım: /stealth [on|off]",
+  "STEALTH: ON": "GİZLİ: AÇIK",
+  "STEALTH: OFF": "GİZLİ: KAPALI",
+  "chat history will not be saved to SQLite": "sohbet geçmişi SQLite'a kaydedilmeyecek",
+  "chat history will be saved to SQLite": "sohbet geçmişi SQLite'a kaydedilecek",
+  "Stealth mode is now {status} ({desc})": "Gizli mod artık {status} ({desc})"
 }

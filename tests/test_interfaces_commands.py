@@ -41,6 +41,7 @@ def _repl_handler_kwargs(**overrides: object) -> dict:
         "base_url": lambda: "http://localhost:11434",
         "switch_model": AsyncMock(),
         "handle_yolo": lambda _: None,
+        "handle_stealth": lambda _: None,
         "handle_queue": lambda _: None,
         "get_runtime": lambda: MagicMock(),
         "current_thread_id": lambda: "",
@@ -589,7 +590,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             mock_del.assert_called_once()
 
     def test_handle_cli_commands_prompt(self) -> None:
-        args = argparse.Namespace(command=None, prompt="hello world", yolo=True, rag=None)
+        args = argparse.Namespace(command=None, prompt="hello world", yolo=True, stealth=False, rag=None)
         settings = Settings()
         with patch("ollama_agent.interfaces.cli.run_non_interactive", AsyncMock()) as mock_run:
             with patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()):
@@ -598,7 +599,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
                 mock_run.assert_awaited_once()
 
     def test_handle_cli_commands_prompt_with_rag(self) -> None:
-        args = argparse.Namespace(command=None, prompt="query with rag", yolo=False, rag="my_db")
+        args = argparse.Namespace(command=None, prompt="query with rag", yolo=False, stealth=False, rag="my_db")
         settings = Settings()
         with patch("ollama_agent.interfaces.cli.run_non_interactive", AsyncMock()) as mock_run:
             with patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()), \

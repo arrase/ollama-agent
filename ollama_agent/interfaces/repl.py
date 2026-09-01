@@ -107,6 +107,7 @@ def _get_root_commands() -> list[tuple[str, str]]:
         ("/agents", _("Manage configured subagents")),
         ("/queue", _("Show or clear the prompt queue")),
         ("/yolo", _("Toggle YOLO mode or set it explicitly (on/off)")),
+        ("/stealth", _("Toggle stealth mode or set it explicitly (on/off)")),
         ("/new", _("Start a new chat session and clear the screen")),
         ("/clear", _("Start a new chat session and clear the screen (alias for /new)")),
         ("/exit", _("Exit the REPL")),
@@ -174,6 +175,10 @@ def _get_subcommands() -> dict[str, list[tuple[str, str]]]:
             ("on", _("Enable YOLO mode (bypasses confirmations)")),
             ("off", _("Disable YOLO mode")),
         ],
+        "/stealth": [
+            ("on", _("Enable stealth mode (no SQLite history)")),
+            ("off", _("Disable stealth mode")),
+        ],
     }
 
 
@@ -186,7 +191,7 @@ def _is_immediate_command(val: str) -> bool:
     cmd = parts[0].lower()
     sub = parts[1].lower() if len(parts) > 1 else ""
 
-    if cmd in ("/exit", "/quit", "/queue", "/yolo"):
+    if cmd in ("/exit", "/quit", "/queue", "/yolo", "/stealth"):
         return True
     if cmd == "/model" and (not sub or sub == "list"):
         return True
@@ -370,20 +375,30 @@ class OllamaAgentApp(App):
 
     def on_mount(self) -> None:
         self.query_one(ReplInput).focus()
-        self.update_yolo_ui()
+        self.update_mode_ui()
 
-    def update_yolo_ui(self) -> None:
+    def update_mode_ui(self) -> None:
         prompt_char = self.query_one("#prompt-char")
         input_container = self.query_one("#input-container")
-        input_container.set_class(self.repl.runtime.yolo_mode, "yolo-mode")
-        if self.repl.runtime.yolo_mode:
+        yolo = self.repl.runtime.yolo_mode
+        stealth = self.repl.runtime.stealth_mode
+
+        input_container.set_class(yolo, "yolo-mode")
+        input_container.set_class(stealth, "stealth-mode")
+
+        if yolo and stealth:
+            prompt_char.styles.color = "#e879f9"  # Fuchsia / Dual mode
+        elif yolo:
             prompt_char.styles.color = "#f87171"  # Red / Coral
+        elif stealth:
+            prompt_char.styles.color = "#c084fc"  # Purple / Violet
         else:
             prompt_char.styles.color = "#38bdf8"  # Sky Blue
 
-        # Update the header immediately
         header = self.query_one(AgentHeader)
         header.update_header()
+
+    update_yolo_ui = update_mode_ui
 
     def _update_queue_ui(self) -> None:
         footer = self.query_one(AgentFooter)
@@ -874,7 +889,7 @@ class OllamaAgentApp(App):
                     settings.model.reasoning_effort = prev_effort
                     self.repl.runtime.yolo_mode = prev_yolo
                     await self.repl.runtime.reload()
-                    self.update_yolo_ui()
+                    self.update_mode_ui()
                 return
 
             commands = self.repl._get_commands()
@@ -892,8 +907,8 @@ class OllamaAgentApp(App):
             if output:
                 self.show_system_output(Text.from_ansi(output), title=cmd_line)
 
-            if cmd == "/yolo":
-                self.update_yolo_ui()
+            if cmd in ("/yolo", "/stealth"):
+                self.update_mode_ui()
             elif cmd == "/queue":
                 self._update_queue_ui()
             elif cmd in ("/model", "/effort", "/context", "/rag"):
@@ -995,6 +1010,7 @@ class OllamaREPL:
                 base_url=lambda: self.runtime.settings.model.base_url,
                 switch_model=self._switch_model,
                 handle_yolo=self._handle_yolo_cmd,
+                handle_stealth=self._handle_stealth_cmd,
                 handle_queue=self._handle_queue_cmd,
                 get_runtime=lambda: self.runtime,
                 current_thread_id=lambda: self.runtime.thread_id,
@@ -1045,7 +1061,7 @@ class OllamaREPL:
             elif val in ("off", "false", "no", "0"):
                 self.runtime.yolo_mode = False
             else:
-                self.console.print(f"[red]{_('Usage: /yolo [on|off]')}[/red]")
+                self.console.print(f"[red]{escape(_('Usage: /yolo [on|off]'))}[/red]")
                 return
         else:
             self.runtime.yolo_mode = not self.runtime.yolo_mode
@@ -1053,6 +1069,32 @@ class OllamaREPL:
         status = _("on") if self.runtime.yolo_mode else _("off")
         color = "red" if self.runtime.yolo_mode else "green"
         self.console.print(f"[bold {color}]{_('YOLO mode is now {status}', status=status)}[/bold {color}]")
+
+    async def _handle_stealth_cmd(self, args: list[str]) -> None:
+        if args:
+            val = args[0].lower()
+            if val in ("on", "true", "yes", "1"):
+                self.runtime.stealth_mode = True
+            elif val in ("off", "false", "no", "0"):
+                self.runtime.stealth_mode = False
+            else:
+                self.console.print(f"[red]{escape(_('Usage: /stealth [on|off]'))}[/red]")
+                return
+        else:
+            self.runtime.stealth_mode = not self.runtime.stealth_mode
+
+        await self.runtime.reload()
+
+        status = _("on") if self.runtime.stealth_mode else _("off")
+        color = "#c084fc" if self.runtime.stealth_mode else "green"
+        desc = (
+            _("chat history will not be saved to SQLite")
+            if self.runtime.stealth_mode
+            else _("chat history will be saved to SQLite")
+        )
+        self.console.print(
+            f"[bold {color}]{_('Stealth mode is now {status} ({desc})', status=status, desc=desc)}[/bold {color}]"
+        )
 
     def _handle_queue_cmd(self, args: list[str]) -> None:
         queue = self.app._prompt_queue if self.app is not None else None

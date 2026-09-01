@@ -462,5 +462,15 @@
   "Expected mapping for subagent, got {type_name}": "Oczekiwano mapowania dla subagent, otrzymano {type_name}",
   "Expected list for mcp_servers, got {type_name}": "Oczekiwano listy dla mcp_servers, otrzymano {type_name}",
   "Expected mapping for Task, got {type_name}": "Oczekiwano mapowania dla Task, otrzymano {type_name}",
-  "Path traversal detected: {item_id}": "Wykryto przejście po ścieżce: {item_id}"
+  "Path traversal detected: {item_id}": "Wykryto przejście po ścieżce: {item_id}",
+  "Enable stealth mode (do not save conversation to SQLite history)": "Włącz tryb incognito (nie zapisuj historii rozmów w SQLite)",
+  "Toggle stealth mode or set it explicitly (on/off)": "Przełącz tryb incognito lub ustaw jawnie (on/off)",
+  "Enable stealth mode (no SQLite history)": "Włącz tryb incognito (brak historii SQLite)",
+  "Disable stealth mode": "Wyłącz tryb incognito",
+  "Usage: /stealth [on|off]": "Użycie: /stealth [on|off]",
+  "STEALTH: ON": "STEALTH: WŁ",
+  "STEALTH: OFF": "STEALTH: WYŁ",
+  "chat history will not be saved to SQLite": "historia czatu nie zostanie zapisana w SQLite",
+  "chat history will be saved to SQLite": "historia czatu zostanie zapisana w SQLite",
+  "Stealth mode is now {status} ({desc})": "Tryb incognito jest teraz {status} ({desc})"
 }

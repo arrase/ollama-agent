@@ -82,7 +82,11 @@ def main() -> None:
             handle_cli_commands(args, settings)
             return
 
-        runtime = AgentRuntime(settings=settings, yolo_mode=args.yolo)
+        runtime = AgentRuntime(
+            settings=settings,
+            yolo_mode=args.yolo,
+            stealth_mode=args.stealth,
+        )
         repl = OllamaREPL(
             runtime=runtime,
             rag_database=args.rag,

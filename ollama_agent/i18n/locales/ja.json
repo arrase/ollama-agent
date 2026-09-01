@@ -462,5 +462,15 @@
   "Expected mapping for subagent, got {type_name}": "subagent にはマッピングが必要ですが、{type_name} を受け取りました",
   "Expected list for mcp_servers, got {type_name}": "mcp_servers にはリストが必要ですが、{type_name} を受け取りました",
   "Expected mapping for Task, got {type_name}": "Task にはマッピングが必要ですが、{type_name} を受け取りました",
-  "Path traversal detected: {item_id}": "パストラバーサルが検出されました: {item_id}"
+  "Path traversal detected: {item_id}": "パストラバーサルが検出されました: {item_id}",
+  "Enable stealth mode (do not save conversation to SQLite history)": "ステルスモードを有効にする（会話をSQLite履歴に保存しない）",
+  "Toggle stealth mode or set it explicitly (on/off)": "ステルスモードの切り替えまたは明示的設定 (on/off)",
+  "Enable stealth mode (no SQLite history)": "ステルスモードを有効にする（SQLite履歴なし）",
+  "Disable stealth mode": "ステルスモードを無効にする",
+  "Usage: /stealth [on|off]": "使用法: /stealth [on|off]",
+  "STEALTH: ON": "ステルス: ON",
+  "STEALTH: OFF": "ステルス: OFF",
+  "chat history will not be saved to SQLite": "チャット履歴はSQLiteに保存されません",
+  "chat history will be saved to SQLite": "チャット履歴はSQLiteに保存されます",
+  "Stealth mode is now {status} ({desc})": "ステルスモードは現在 {status} です ({desc})"
 }

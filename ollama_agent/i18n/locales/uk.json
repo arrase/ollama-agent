@@ -462,5 +462,15 @@
   "Expected mapping for subagent, got {type_name}": "Очікувалося зіставлення для subagent, отримано {type_name}",
   "Expected list for mcp_servers, got {type_name}": "Очікувався список для mcp_servers, отримано {type_name}",
   "Expected mapping for Task, got {type_name}": "Очікувалося зіставлення для Task, отримано {type_name}",
-  "Path traversal detected: {item_id}": "Виявлено обхід шляху: {item_id}"
+  "Path traversal detected: {item_id}": "Виявлено обхід шляху: {item_id}",
+  "Enable stealth mode (do not save conversation to SQLite history)": "Увімкнути прихований режим (не зберігати історію в SQLite)",
+  "Toggle stealth mode or set it explicitly (on/off)": "Перемкнути прихований режим або встановити явно (on/off)",
+  "Enable stealth mode (no SQLite history)": "Увімкнути прихований режим (без історії SQLite)",
+  "Disable stealth mode": "Вимкнути прихований режим",
+  "Usage: /stealth [on|off]": "Використання: /stealth [on|off]",
+  "STEALTH: ON": "ПРИХОВАНИЙ: УВІМК",
+  "STEALTH: OFF": "ПРИХОВАНИЙ: ВИМК",
+  "chat history will not be saved to SQLite": "історія чату не зберігатиметься в SQLite",
+  "chat history will be saved to SQLite": "історія чату зберігатиметься в SQLite",
+  "Stealth mode is now {status} ({desc})": "Прихований режим тепер {status} ({desc})"
 }

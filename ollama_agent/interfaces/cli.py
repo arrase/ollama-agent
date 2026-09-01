@@ -85,6 +85,12 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help=_("Enable YOLO mode (bypasses all tool execution confirmation prompts)"),
     )
+    parser.add_argument(
+        "-s",
+        "--stealth",
+        action="store_true",
+        help=_("Enable stealth mode (do not save conversation to SQLite history)"),
+    )
 
 
 def _add_subcommands(parser: argparse.ArgumentParser) -> None:
@@ -292,7 +298,11 @@ def handle_cli_commands(
             return True
 
     if args.prompt:
-        runtime = AgentRuntime(settings=settings, yolo_mode=args.yolo)
+        runtime = AgentRuntime(
+            settings=settings,
+            yolo_mode=args.yolo,
+            stealth_mode=args.stealth,
+        )
         completed = True
 
         async def _run() -> None:
