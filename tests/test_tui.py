@@ -905,10 +905,17 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
                 mock_stream.assert_called_once()
                 self.assertEqual(mock_stream.call_args[0][0], "First queued prompt")
 
-            # 4. /queue clear clears the queue
+            # 4. /queue clear clears the queue without stopping execution
             app._prompt_queue.append(QueuedItem("Third prompt"))
             self.assertEqual(len(app._prompt_queue), 2)
             repl._handle_queue_cmd(["clear"])
+            self.assertEqual(len(app._prompt_queue), 0)
+            self.assertEqual(footer._queued_count, 0)
+
+            # 5. Esc cancellation clears queue and stops generation
+            app._prompt_queue.append(QueuedItem("Fourth prompt"))
+            self.assertEqual(len(app._prompt_queue), 1)
+            app.action_cancel_generation()
             self.assertEqual(len(app._prompt_queue), 0)
             self.assertEqual(footer._queued_count, 0)
 

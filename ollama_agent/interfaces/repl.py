@@ -282,6 +282,12 @@ class OllamaAgentApp(App):
     ]
 
     def action_cancel_generation(self) -> None:
+        if self._prompt_queue:
+            self._prompt_queue.clear()
+            self._update_queue_ui()
+            scroll = self.query_one("#chat-scroll")
+            scroll.mount(SystemMessage(f"[bold #f87171]🛑 {_('Prompt queue cleared.')}[/bold #f87171]"))
+            self._deferred_scroll()
         if self._is_generating and self._current_worker is not None:
             self._current_worker.cancel()
         elif self._is_approval_pending:
@@ -293,7 +299,7 @@ class OllamaAgentApp(App):
             self._deferred_scroll()
 
     def action_cancel_or_quit(self) -> None:
-        if self._is_generating or self._is_approval_pending:
+        if self._is_generating or self._is_approval_pending or self._prompt_queue:
             self.action_cancel_generation()
         else:
             self.exit()
@@ -918,6 +924,10 @@ class OllamaAgentApp(App):
                 await stream_agent_events(self.repl.runtime, prompt, _TUIStreamingRenderer(self, scroll, agent_msg), auto_close=True)
             except asyncio.CancelledError:
                 scroll.mount(SystemMessage(f"[bold #f87171]🛑 {_('Execution interrupted by user.')}[/bold #f87171]"))
+                if self._prompt_queue:
+                    self._prompt_queue.clear()
+                    self._update_queue_ui()
+                    scroll.mount(SystemMessage(f"[bold #f87171]🛑 {_('Prompt queue cleared.')}[/bold #f87171]"))
                 self._deferred_scroll()
                 inp = self.query_one(ReplInput)
                 inp.disabled = False

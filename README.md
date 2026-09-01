@@ -208,9 +208,9 @@ In Ollama Agent, the user input is **never locked**. You can freely type and sub
 - **Unblocked Tool Approvals**: The prompt input box remains active while a tool confirmation modal (`ToolApprovalWidget`) is shown, allowing you to queue follow-up prompts while reviewing pending tool actions.
 - **Queue Management (`/queue`)**:
   - `/queue`: Lists all currently queued prompts with their position numbers.
-  - `/queue rm <position>` (aliases: `/queue remove <position>`, `/queue delete <position>`): Removes a specific prompt from the queue by its 1-based index (e.g. `/queue rm 2` or `/queue rm #2`). Includes full Level 2 autocompletion with prompt text previews.
-  - `/queue clear`: Clears all pending prompts from the queue.
-- **Cancellation**: Pressing `Esc` or `Ctrl+C` cancels active generation or pending tool approvals without losing queued prompts (which are managed exclusively via `/queue clear` and `/queue rm`).
+  - `/queue rm <position>` (aliases: `/queue remove <position>`, `/queue delete <position>`): Removes a specific prompt from the queue without interrupting the active stream (e.g. `/queue rm 2` or `/queue rm #2`). Includes full Level 2 autocompletion with prompt text previews.
+  - `/queue clear`: Clears all pending prompts from the queue while letting active stream generation continue uninterrupted.
+- **Cancellation**: Pressing `Esc` or `Ctrl+C` cancels active generation or pending tool approvals and purges the prompt queue.
 
 ---
 
