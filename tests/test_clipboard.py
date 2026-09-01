@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -33,10 +34,24 @@ class TestClipboard(unittest.TestCase):
         args, kwargs = mock_run.call_args
         self.assertEqual(args[0], ["pbcopy"])
         self.assertEqual(kwargs["input"], b"hello mac")
+        self.assertEqual(kwargs["stdout"], subprocess.DEVNULL)
+        self.assertEqual(kwargs["stderr"], subprocess.DEVNULL)
 
     @patch("sys.platform", "darwin")
     @patch("subprocess.run", return_value=_proc(returncode=1))
     def test_copy_darwin_failure_raises(self, mock_run: MagicMock) -> None:
+        with self.assertRaises(ClipboardError):
+            copy_to_system_clipboard("hello mac")
+
+    @patch("sys.platform", "darwin")
+    @patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd=["pbcopy"], timeout=3.0))
+    def test_copy_timeout_raises_clipboard_error(self, mock_run: MagicMock) -> None:
+        with self.assertRaises(ClipboardError):
+            copy_to_system_clipboard("hello mac")
+
+    @patch("sys.platform", "darwin")
+    @patch("subprocess.run", side_effect=OSError("command failed"))
+    def test_copy_oserror_raises_clipboard_error(self, mock_run: MagicMock) -> None:
         with self.assertRaises(ClipboardError):
             copy_to_system_clipboard("hello mac")
 
@@ -157,6 +172,18 @@ class TestClipboard(unittest.TestCase):
     @patch("sys.platform", "darwin")
     @patch("subprocess.run", return_value=_proc(returncode=1, stderr="boom"))
     def test_get_clipboard_failure_raises(self, mock_run: MagicMock) -> None:
+        with self.assertRaises(ClipboardError):
+            get_system_clipboard()
+
+    @patch("sys.platform", "darwin")
+    @patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd=["pbpaste"], timeout=3.0))
+    def test_get_clipboard_timeout_raises(self, mock_run: MagicMock) -> None:
+        with self.assertRaises(ClipboardError):
+            get_system_clipboard()
+
+    @patch("sys.platform", "darwin")
+    @patch("subprocess.run", side_effect=OSError("command failed"))
+    def test_get_clipboard_oserror_raises(self, mock_run: MagicMock) -> None:
         with self.assertRaises(ClipboardError):
             get_system_clipboard()
 

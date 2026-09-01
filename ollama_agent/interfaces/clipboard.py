@@ -37,26 +37,34 @@ def _configure_win32_clipboard(u32: Any, k32: Any) -> None:
 
 
 def _copy_via_command(cmd: list[str], text: str) -> None:
-    proc = subprocess.run(
-        cmd,
-        input=text.encode("utf-8"),
-        capture_output=True,
-        timeout=3.0,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            cmd,
+            input=text.encode("utf-8"),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=3.0,
+            check=False,
+        )
+    except (subprocess.SubprocessError, OSError) as exc:
+        raise ClipboardError(f"'{cmd[0]}' failed: {exc}") from exc
     if proc.returncode != 0:
         raise ClipboardError(f"'{cmd[0]}' exited with code {proc.returncode}")
 
 
 def _paste_via_command(cmd: list[str]) -> str:
-    proc = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=3.0,
+            check=False,
+        )
+    except (subprocess.SubprocessError, OSError) as exc:
+        raise ClipboardError(f"'{cmd[0]}' failed: {exc}") from exc
     if proc.returncode != 0:
         raise ClipboardError(f"'{cmd[0]}' exited with code {proc.returncode}: {proc.stderr.strip()}")
     return proc.stdout
