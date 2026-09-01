@@ -8,6 +8,7 @@ from itertools import islice
 from typing import TYPE_CHECKING, Any
 
 from rich.markup import escape
+from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal
@@ -167,6 +168,36 @@ class PromptQueueWidget(Static):
         self.update("\n".join(lines))
 
 
+# ─── System Output Widget ────────────────────────────────────────────────────
+
+class SystemOutputWidget(Static):
+    """Dedicated TUI widget displaying system notifications and slash command outputs."""
+
+    can_focus = False
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.display = False
+
+    def show_output(self, content: str | Text, title: str | None = None) -> None:
+        self.display = True
+        display_title = title if title is not None else _("System Output")
+        header = f"[bold #38bdf8]⚙ {escape(display_title) if isinstance(display_title, str) else display_title}[/bold #38bdf8]  [dim]({_('esc to dismiss')})[/dim]"
+        if isinstance(content, Text):
+            header_text = Text.from_markup(header + "\n")
+            self.update(Text.assemble(header_text, content))
+        else:
+            self.update(f"{header}\n{content}")
+
+    def show_notice(self, notice: str | Text) -> None:
+        self.display = True
+        self.update(notice)
+
+    def clear_output(self) -> None:
+        self.display = False
+        self.update("")
+
+
 # ─── Custom Input ─────────────────────────────────────────────────────────────
 
 class ReplInput(TextArea):
@@ -204,9 +235,8 @@ class ReplInput(TextArea):
             db_entries = await asyncio.to_thread(load_past_user_prompts)
         except HistoryError as exc:
             _log.warning("Prompt history unavailable: %s", exc)
-            self.app.query_one("#chat-scroll").mount(
-                SystemMessage(f"[yellow]⚠ {_('Prompt history unavailable: {exc}', exc=exc)}[/yellow]")
-            )
+            if hasattr(self.app, "show_system_notice"):
+                self.app.show_system_notice(f"[yellow]⚠ {_('Prompt history unavailable: {exc}', exc=exc)}[/yellow]")
             db_entries = []
         self._history = list(db_entries)
         self._history_index = len(self._history)

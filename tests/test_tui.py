@@ -24,6 +24,7 @@ from ollama_agent.interfaces.tui_components import (
     AgentResponse,
     ReplInput,
     SystemMessage,
+    SystemOutputWidget,
     ToolApprovalWidget,
     ToolCallMessage,
     ToolOutputMessage,
@@ -163,6 +164,26 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(tool_outputs), 1)
             sys_msgs = agent_msg.query(SystemMessage)
             self.assertEqual(len(sys_msgs), 2)
+
+    def test_system_output_widget_lifecycle(self) -> None:
+        widget = SystemOutputWidget()
+        self.assertFalse(widget.display)
+
+        # Show notice
+        widget.show_notice("🛑 Prompt queue cleared.")
+        self.assertTrue(widget.display)
+        self.assertIn("Prompt queue cleared", str(widget.render()))
+
+        # Show output with title
+        widget.show_output("Model table content", title="/model list")
+        self.assertTrue(widget.display)
+        rendered = str(widget.render())
+        self.assertIn("/model list", rendered)
+        self.assertIn("Model table content", rendered)
+
+        # Clear output
+        widget.clear_output()
+        self.assertFalse(widget.display)
 
     async def test_repl_input_history_and_keys(self) -> None:
         inp = ReplInput()
@@ -628,9 +649,10 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
 
             # 2. Unknown command
             await app._run_slash_command("/unknown-cmd")
-            sys_msgs = list(chat_scroll.query(SystemMessage))
-            self.assertTrue(len(sys_msgs) > 0)
-            self.assertIn("Unknown command", str(sys_msgs[-1].render()))
+            self.assertEqual(len(list(chat_scroll.query(SystemMessage))), 0)
+            sys_out = app.query_one(SystemOutputWidget)
+            self.assertTrue(sys_out.display)
+            self.assertIn("Unknown command", str(sys_out.render()))
 
             # 3. /yolo command
             await app._run_slash_command("/yolo")
@@ -647,6 +669,8 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
                 self.assertEqual(len(list(chat_scroll.query(UserMessage))), 1)
                 self.assertEqual(len(list(chat_scroll.query(AgentResponse))), 1)
+                self.assertEqual(len(list(chat_scroll.query(SystemMessage))), 0)
+                self.assertIn("Resumed session", str(sys_out.render()))
 
             # 5. /effort command updates header
             with patch.object(app.query_one(AgentHeader), "update_header") as mock_update_header:
@@ -977,4 +1001,100 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(app._prompt_queue), 0)
                 self.assertEqual(footer._queued_count, 0)
                 mock_slash.assert_called_once_with("/compact")
+
+    async def test_slash_command_output_renders_in_system_output_not_in_chat(self) -> None:
+        runtime_mock = MagicMock()
+        runtime_mock.settings.model.name = "qwen2.5-coder:32b"
+        runtime_mock.settings.model.reasoning_effort = "high"
+        runtime_mock.yolo_mode = False
+        repl = OllamaREPL(runtime=runtime_mock)
+        app = OllamaAgentApp(repl)
+
+        async with app.run_test() as pilot:
+            chat_scroll = app.query_one("#chat-scroll")
+            sys_out = app.query_one(SystemOutputWidget)
+
+            mock_spec = MagicMock()
+            async def fake_handler(args: list[str]) -> None:
+                repl.console.print("Models: llama3, mistral")
+            mock_spec.handler = fake_handler
+
+            with patch.dict(app.repl._get_commands(), {"/model": mock_spec}):
+                await app._run_slash_command("/model list")
+                await pilot.pause()
+
+            # Chat scroll MUST remain completely clean of system messages
+            self.assertEqual(len(list(chat_scroll.query(SystemMessage))), 0)
+            self.assertEqual(len(list(chat_scroll.query(UserMessage))), 0)
+            self.assertEqual(len(list(chat_scroll.query(AgentResponse))), 0)
+
+            # System output widget MUST be visible and contain the captured output
+            self.assertTrue(sys_out.display)
+            rendered = str(sys_out.render())
+            self.assertIn("/model list", rendered)
+            self.assertIn("Models: llama3, mistral", rendered)
+
+    async def test_esc_dismisses_system_output_when_idle(self) -> None:
+        runtime_mock = MagicMock()
+        runtime_mock.settings.model.name = "qwen2.5-coder:32b"
+        runtime_mock.settings.model.reasoning_effort = "high"
+        runtime_mock.yolo_mode = False
+        repl = OllamaREPL(runtime=runtime_mock)
+        app = OllamaAgentApp(repl)
+
+        async with app.run_test():
+            sys_out = app.query_one(SystemOutputWidget)
+            app.show_system_notice("A notice to dismiss")
+            self.assertTrue(sys_out.display)
+
+            # Press Escape when idle
+            app.action_cancel_generation()
+            self.assertFalse(sys_out.display)
+
+    async def test_submitting_new_prompt_dismisses_system_output(self) -> None:
+        runtime_mock = MagicMock()
+        runtime_mock.settings.model.name = "qwen2.5-coder:32b"
+        runtime_mock.settings.model.reasoning_effort = "high"
+        runtime_mock.yolo_mode = False
+        repl = OllamaREPL(runtime=runtime_mock)
+        app = OllamaAgentApp(repl)
+
+        async with app.run_test():
+            inp = app.query_one(ReplInput)
+            sys_out = app.query_one(SystemOutputWidget)
+
+            app.show_system_notice("Previous notice")
+            self.assertTrue(sys_out.display)
+
+            with patch.object(app, "_run_stream", new_callable=AsyncMock):
+                app.on_repl_input_submitted(ReplInput.Submitted(inp, "Hello agent"))
+
+            self.assertFalse(sys_out.display)
+
+    async def test_esc_dismisses_system_output_without_cancelling_active_worker(self) -> None:
+        runtime_mock = MagicMock()
+        runtime_mock.settings.model.name = "qwen2.5-coder:32b"
+        runtime_mock.settings.model.reasoning_effort = "high"
+        runtime_mock.yolo_mode = False
+        repl = OllamaREPL(runtime=runtime_mock)
+        app = OllamaAgentApp(repl)
+
+        async with app.run_test():
+            sys_out = app.query_one(SystemOutputWidget)
+            mock_worker = MagicMock()
+            app._is_generating = True
+            app._current_worker = mock_worker
+
+            # Show system output (e.g. from /model list while generating)
+            app.show_system_output("Models list...", title="/model list")
+            self.assertTrue(sys_out.display)
+
+            # First Escape: dismisses SystemOutputWidget, worker remains untouched
+            app.action_cancel_generation()
+            self.assertFalse(sys_out.display)
+            mock_worker.cancel.assert_not_called()
+
+            # Second Escape: now that SystemOutputWidget is closed, cancels worker
+            app.action_cancel_generation()
+            mock_worker.cancel.assert_called_once()
 

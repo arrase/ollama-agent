@@ -445,5 +445,8 @@
   "more": "más",
   "tokens": "tokens",
   "Usage: /effort [set <level>]": "Uso: /effort [set <nivel>]",
-  "Usage: /context [set <size>]": "Uso: /context [set <tamaño>]"
+  "Usage: /context [set <size>]": "Uso: /context [set <tamaño>]",
+  "System Output": "Salida del sistema",
+  "esc to dismiss": "esc para descartar",
+  "Context Compacted": "Contexto compactado"
 }

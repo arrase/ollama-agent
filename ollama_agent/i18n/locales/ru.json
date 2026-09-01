@@ -445,5 +445,8 @@
   "more": "еще",
   "tokens": "токенов",
   "Usage: /effort [set <level>]": "Использование: /effort [set <уровень>]",
-  "Usage: /context [set <size>]": "Использование: /context [set <размер>]"
+  "Usage: /context [set <size>]": "Использование: /context [set <размер>]",
+  "System Output": "Вывод системы",
+  "esc to dismiss": "esc для закрытия",
+  "Context Compacted": "Контекст сжат"
 }

@@ -445,5 +445,8 @@
   "more": "개 더보기",
   "tokens": "토큰",
   "Usage: /effort [set <level>]": "사용법: /effort [set <레벨>]",
-  "Usage: /context [set <size>]": "사용법: /context [set <크기>]"
+  "Usage: /context [set <size>]": "사용법: /context [set <크기>]",
+  "System Output": "시스템 출력",
+  "esc to dismiss": "esc 키로 닫기",
+  "Context Compacted": "컨텍스트 압축됨"
 }

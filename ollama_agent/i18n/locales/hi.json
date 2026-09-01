@@ -445,5 +445,8 @@
   "more": "अधिक",
   "tokens": "टोकन",
   "Usage: /effort [set <level>]": "उपयोग: /effort [set <level>]",
-  "Usage: /context [set <size>]": "उपयोग: /context [set <size>]"
+  "Usage: /context [set <size>]": "उपयोग: /context [set <size>]",
+  "System Output": "सिस्टम आउटपुट",
+  "esc to dismiss": "खारिज करने के लिए esc",
+  "Context Compacted": "संदर्भ संक्षिप्त किया गया"
 }

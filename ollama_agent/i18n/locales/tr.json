@@ -445,5 +445,8 @@
   "more": "daha fazla",
   "tokens": "belirteç",
   "Usage: /effort [set <level>]": "Kullanım: /effort [set <seviye>]",
-  "Usage: /context [set <size>]": "Kullanım: /context [set <boyut>]"
+  "Usage: /context [set <size>]": "Kullanım: /context [set <boyut>]",
+  "System Output": "Sistem Çıktısı",
+  "esc to dismiss": "kapatmak için esc",
+  "Context Compacted": "Bağlam Sıkıştırıldı"
 }
