@@ -197,7 +197,7 @@ The prompt input box (`ReplInput`) provides intuitive editing, history navigatio
      - `/session resume `, `/session switch `, `/session delete ` -> Dynamic list of session IDs + step counts.
      - `/rag load `, `/rag delete ` -> Dynamic list of RAG databases + chunk counts.
   4. *Filesystem*: Path autocompletion for `@-mentions` with directory traversal.
-* **Interrupt / Cancel (`Esc` / `Ctrl+C`)**: `Esc` cancels active generation, dismisses autocompletion, or purges pending prompts from the queue. `Ctrl+C` cancels generation or queue if active, or exits the REPL if idle.
+* **Interrupt / Cancel (`Esc` / `Ctrl+C`)**: `Esc` cancels active generation or dismisses autocompletion without affecting queued prompts. `Ctrl+C` cancels generation if active, or exits the REPL if idle.
 * **Clipboard Shortcuts**:
   - Copy: `Super+C`, `Ctrl+Shift+C`, `Ctrl+Insert`, or mouse selection.
   - Paste: `Super+V`, `Ctrl+V`, `Shift+Insert`.
@@ -225,7 +225,7 @@ Normal chat prompts and commands that mutate graph state (e.g., `/model set`, `/
   * Run `/queue` to inspect all pending prompts and their indices.
   * Run `/queue rm <position>` (aliases: `remove`, `delete`) to remove a single prompt by its 1-based index (e.g. `/queue rm 2` or `/queue rm #2`).
   * Run `/queue clear` to purge all queued items.
-  * Press `Esc` or `Ctrl+C` to cancel current generation and purge the queue simultaneously.
+  * Press `Esc` or `Ctrl+C` to cancel current generation or tool approvals (queued items remain in queue for sequential processing).
 
 ---
 

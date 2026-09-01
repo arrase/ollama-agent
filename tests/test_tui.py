@@ -905,15 +905,12 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
                 mock_stream.assert_called_once()
                 self.assertEqual(mock_stream.call_args[0][0], "First queued prompt")
 
-            # 4. Cancellation clears the queue
+            # 4. /queue clear clears the queue
             app._prompt_queue.append(QueuedItem("Third prompt"))
             self.assertEqual(len(app._prompt_queue), 2)
-            app.action_cancel_generation()
+            repl._handle_queue_cmd(["clear"])
             self.assertEqual(len(app._prompt_queue), 0)
             self.assertEqual(footer._queued_count, 0)
-            chat_scroll = app.query_one("#chat-scroll")
-            sys_msgs = list(chat_scroll.query(SystemMessage))
-            self.assertTrue(any("Prompt queue cleared" in str(m.render()) for m in sys_msgs))
 
     async def test_app_tool_approval_allows_queueing_and_resumes(self) -> None:
         runtime_mock = MagicMock()

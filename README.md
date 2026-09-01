@@ -210,7 +210,7 @@ In Ollama Agent, the user input is **never locked**. You can freely type and sub
   - `/queue`: Lists all currently queued prompts with their position numbers.
   - `/queue rm <position>` (aliases: `/queue remove <position>`, `/queue delete <position>`): Removes a specific prompt from the queue by its 1-based index (e.g. `/queue rm 2` or `/queue rm #2`). Includes full Level 2 autocompletion with prompt text previews.
   - `/queue clear`: Clears all pending prompts from the queue.
-- **Cancellation**: Pressing `Esc` or `Ctrl+C` purges the prompt queue, cancels active generation or pending tool approvals, and resets the queue badge and preview widget.
+- **Cancellation**: Pressing `Esc` or `Ctrl+C` cancels active generation or pending tool approvals without losing queued prompts (which are managed exclusively via `/queue clear` and `/queue rm`).
 
 ---
 

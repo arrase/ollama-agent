@@ -151,7 +151,7 @@ class PromptQueueWidget(Static):
 
         self.display = True
         count = len(queue)
-        header = f"[bold #38bdf8]⏳ {_('Queued ({count})', count=count)}[/bold #38bdf8] [dim]• esc {_('to clear')}[/dim]"
+        header = f"[bold #38bdf8]⏳ {_('Queued ({count})', count=count)}[/bold #38bdf8]"
         lines = [header]
 
         for i, item in enumerate(islice(queue, 3), 1):

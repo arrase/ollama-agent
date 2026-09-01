@@ -78,7 +78,6 @@ class TestPromptQueueWidget(unittest.TestCase):
         self.assertTrue(widget.display)
         rendered = str(widget.render())
         self.assertIn("Queued (2)", rendered)
-        self.assertIn("esc to clear", rendered)
         self.assertIn("#1 Prompt alpha", rendered)
         self.assertIn("#2 Prompt beta", rendered)
 
@@ -427,30 +426,28 @@ class TestQueueDrainingBehavior(unittest.IsolatedAsyncioTestCase):
 
 
 class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
-    """Unit tests for Esc / Ctrl+C cancellation clearing the prompt queue and badges."""
+    """Unit tests for Esc / Ctrl+C cancellation behavior with the prompt queue."""
 
-    async def test_cancel_generation_clears_queue_and_updates_footer(self) -> None:
+    async def test_cancel_generation_preserves_queue_and_cancels_worker(self) -> None:
         repl, _ = _create_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             footer = app.query_one(AgentFooter)
-            chat_scroll = app.query_one("#chat-scroll")
 
             app._prompt_queue.append(QueuedItem("Queued prompt 1"))
             app._prompt_queue.append(QueuedItem("Queued prompt 2"))
             app._update_queue_ui()
 
-            self.assertEqual(footer._queued_count, 2)
+            mock_worker = MagicMock()
+            app._is_generating = True
+            app._current_worker = mock_worker
 
             app.action_cancel_generation()
 
-            self.assertEqual(len(app._prompt_queue), 0)
-            self.assertEqual(footer._queued_count, 0)
-            self.assertNotIn("queued", str(footer.render()))
-
-            sys_msgs = list(chat_scroll.query(SystemMessage))
-            msg_texts = [str(m.render()) for m in sys_msgs]
-            self.assertTrue(any("Prompt queue cleared" in t for t in msg_texts))
+            # Worker cancelled, but queue remains intact
+            mock_worker.cancel.assert_called_once()
+            self.assertEqual(len(app._prompt_queue), 2)
+            self.assertEqual(footer._queued_count, 2)
 
     async def test_cancel_generation_cancels_worker_and_approval(self) -> None:
         repl, _ = _create_mock_repl()
@@ -486,21 +483,13 @@ class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
         async with app.run_test():
             with patch.object(app, "action_cancel_generation") as mock_cancel, \
                  patch.object(app, "exit") as mock_exit:
-                # 1. Non-empty queue cancels generation, does not exit
-                app._prompt_queue.append(QueuedItem("Task"))
-                app.action_cancel_or_quit()
-                mock_cancel.assert_called_once()
-                mock_exit.assert_not_called()
-
-                # 2. Generating cancels generation, does not exit
-                mock_cancel.reset_mock()
-                app._prompt_queue.clear()
+                # 1. Generating cancels generation, does not exit
                 app._is_generating = True
                 app.action_cancel_or_quit()
                 mock_cancel.assert_called_once()
                 mock_exit.assert_not_called()
 
-                # 3. Approval pending cancels generation, does not exit
+                # 2. Approval pending cancels generation, does not exit
                 mock_cancel.reset_mock()
                 app._is_generating = False
                 app._is_approval_pending = True
@@ -508,39 +497,41 @@ class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
                 mock_cancel.assert_called_once()
                 mock_exit.assert_not_called()
 
-                # 4. Idle with empty queue exits
+                # 3. Idle (even with queued items) exits cleanly
                 mock_cancel.reset_mock()
                 app._is_approval_pending = False
+                app._prompt_queue.append(QueuedItem("Task"))
                 app.action_cancel_or_quit()
                 mock_cancel.assert_not_called()
                 mock_exit.assert_called_once()
 
-    async def test_run_stream_cancelled_error_clears_queue(self) -> None:
+    async def test_run_stream_cancelled_error_drains_subsequent_queue(self) -> None:
         repl, _ = _create_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             chat_scroll = app.query_one("#chat-scroll")
-            footer = app.query_one(AgentFooter)
             inp = app.query_one(ReplInput)
 
-            app._prompt_queue.append(QueuedItem("Stale queued prompt"))
+            app._prompt_queue.append(QueuedItem("Subsequent queued prompt"))
             app._update_queue_ui()
 
             agent_msg = AgentResponse()
 
-            with patch("ollama_agent.interfaces.repl.stream_agent_events", side_effect=asyncio.CancelledError()):
+            with patch.object(app, "_process_next_in_queue") as mock_process, \
+                 patch("ollama_agent.interfaces.repl.stream_agent_events", side_effect=asyncio.CancelledError()):
                 with self.assertRaises(asyncio.CancelledError):
                     await app._run_stream("Trigger prompt", chat_scroll, agent_msg)
 
-            self.assertEqual(len(app._prompt_queue), 0)
-            self.assertEqual(footer._queued_count, 0)
+                # Queue was preserved (not cleared on error) and process_next_in_queue was triggered in finally
+                self.assertEqual(len(app._prompt_queue), 1)
+                mock_process.assert_called_once()
+
             self.assertFalse(inp.disabled)
             self.assertFalse(app._is_approval_pending)
 
             sys_msgs = list(chat_scroll.query(SystemMessage))
             msg_texts = [str(m.render()) for m in sys_msgs]
             self.assertTrue(any("Execution interrupted by user" in t for t in msg_texts))
-            self.assertTrue(any("Prompt queue cleared" in t for t in msg_texts))
 
 
 class TestToolApprovalModalAndQueue(unittest.IsolatedAsyncioTestCase):
