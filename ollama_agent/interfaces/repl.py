@@ -387,7 +387,7 @@ class OllamaAgentApp(App):
         input_container.set_class(stealth, "stealth-mode")
 
         if yolo and stealth:
-            prompt_char.styles.color = "#e879f9"  # Fuchsia / Dual mode
+            prompt_char.styles.color = "#fbbf24"  # Amber / Dual mode
         elif yolo:
             prompt_char.styles.color = "#f87171"  # Red / Coral
         elif stealth:

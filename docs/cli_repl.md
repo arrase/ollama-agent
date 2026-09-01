@@ -343,7 +343,7 @@ When Stealth mode is active:
 1. Checkpoints are kept in-memory (`MemorySaver`) for multi-turn execution during the session, but no history is written to SQLite.
 2. The header displays `STEALTH: ON` with a purple highlight badge (`#c084fc`).
 3. The prompt chevron (`❯ `) and focused input border turn **purple** (`#c084fc`).
-4. **Dual Mode (YOLO + Stealth)**: When both YOLO and Stealth modes are active simultaneously, both header badges light up (`[YOLO: ON] │ [STEALTH: ON]`), and the prompt chevron and focused input border turn **fuchsia / magenta** (`#e879f9`).
+4. **Dual Mode (YOLO + Stealth)**: When both YOLO and Stealth modes are active simultaneously, both header badges light up (`[YOLO: ON] │ [STEALTH: ON]`), and the prompt chevron and focused input border turn **amber / warm gold** (`#fbbf24`).
 
 ---
 

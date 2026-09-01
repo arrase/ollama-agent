@@ -468,8 +468,8 @@
   "Enable stealth mode (no SQLite history)": "Abilita modalità stealth (nessuna cronologia SQLite)",
   "Disable stealth mode": "Disabilita modalità stealth",
   "Usage: /stealth [on|off]": "Uso: /stealth [on|off]",
-  "STEALTH: ON": "STEALTH: ON",
-  "STEALTH: OFF": "STEALTH: OFF",
+  "STEALTH: ON": "STEALTH: ATTIVO",
+  "STEALTH: OFF": "STEALTH: DISATTIVO",
   "chat history will not be saved to SQLite": "la cronologia non verrà salvata in SQLite",
   "chat history will be saved to SQLite": "la cronologia verrà salvata in SQLite",
   "Stealth mode is now {status} ({desc})": "La modalità stealth è ora {status} ({desc})"

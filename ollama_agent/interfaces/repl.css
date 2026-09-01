@@ -107,7 +107,7 @@ SystemOutputWidget, #system-output {
 }
 
 #input-container.yolo-mode.stealth-mode:focus-within {
-    border: round #e879f9;
+    border: round #fbbf24;
 }
 
 #input-bar {

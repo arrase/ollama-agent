@@ -468,8 +468,8 @@
   "Enable stealth mode (no SQLite history)": "ステルスモードを有効にする（SQLite履歴なし）",
   "Disable stealth mode": "ステルスモードを無効にする",
   "Usage: /stealth [on|off]": "使用法: /stealth [on|off]",
-  "STEALTH: ON": "ステルス: ON",
-  "STEALTH: OFF": "ステルス: OFF",
+  "STEALTH: ON": "ステルス: 有効",
+  "STEALTH: OFF": "ステルス: 無効",
   "chat history will not be saved to SQLite": "チャット履歴はSQLiteに保存されません",
   "chat history will be saved to SQLite": "チャット履歴はSQLiteに保存されます",
   "Stealth mode is now {status} ({desc})": "ステルスモードは現在 {status} です ({desc})"

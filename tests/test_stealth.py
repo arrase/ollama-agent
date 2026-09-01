@@ -180,4 +180,4 @@ class TestStealthMode(unittest.IsolatedAsyncioTestCase):
         app.update_mode_ui()
         input_container.set_class.assert_any_call(True, "yolo-mode")
         input_container.set_class.assert_any_call(True, "stealth-mode")
-        self.assertEqual(prompt_char.styles.color, "#e879f9")
+        self.assertEqual(prompt_char.styles.color, "#fbbf24")

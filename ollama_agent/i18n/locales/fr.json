@@ -468,8 +468,8 @@
   "Enable stealth mode (no SQLite history)": "Activer le mode furtif (aucun historique SQLite)",
   "Disable stealth mode": "Désactiver le mode furtif",
   "Usage: /stealth [on|off]": "Utilisation : /stealth [on|off]",
-  "STEALTH: ON": "FURTIF : ACTIF",
-  "STEALTH: OFF": "FURTIF : INACTIF",
+  "STEALTH: ON": "FURTIF : ACTIVÉ",
+  "STEALTH: OFF": "FURTIF : DÉSACTIVÉ",
   "chat history will not be saved to SQLite": "l'historique de chat ne sera pas enregistré dans SQLite",
   "chat history will be saved to SQLite": "l'historique de chat sera enregistré dans SQLite",
   "Stealth mode is now {status} ({desc})": "Le mode furtif est maintenant {status} ({desc})"
