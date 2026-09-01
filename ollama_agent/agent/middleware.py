@@ -14,6 +14,8 @@ from typing import Any
 
 from langchain.agents.middleware import wrap_tool_call
 
+from langchain_core.messages import ToolMessage
+
 from ..i18n import _
 from .builtin_tools import get_tool_timeout
 
@@ -39,10 +41,13 @@ async def _stream_tool_events(request: Any, handler: Any) -> Any:
     timeout_s = get_tool_timeout()
     try:
         result = await asyncio.wait_for(handler(request), timeout=timeout_s)
-    except asyncio.TimeoutError as exc:
-        raise TimeoutError(
-            _("Tool '{tool_name}' timed out after {timeout_s}s", tool_name=tool_name, timeout_s=timeout_s)
-        ) from exc
+    except asyncio.TimeoutError:
+        result = ToolMessage(
+            content=_("Tool '{tool_name}' timed out after {timeout_s}s", tool_name=tool_name, timeout_s=timeout_s),
+            tool_call_id=request.tool_call.get("id", ""),
+            name=tool_name,
+            status="error",
+        )
 
     content = result.content if hasattr(result, "content") else result
     content_str = str(content)

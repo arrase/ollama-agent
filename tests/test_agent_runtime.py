@@ -109,21 +109,29 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         out_event = mock_runtime.stream_writer.call_args_list[1][0][0]
         self.assertEqual(out_event["agent_name"], "researcher")
 
-    async def test_stream_tool_events_timeout_raises(self) -> None:
+    async def test_stream_tool_events_timeout_returns_tool_message(self) -> None:
         async def slow_handler(req: Any) -> Any:
             await asyncio.sleep(0.5)
             return "done"
 
+        mock_runtime = MagicMock()
         req = ToolCallRequest(
             tool_call={"name": "slow_tool", "args": {}, "id": "call-3"},
             tool=None,
             state={},
-            runtime=MagicMock(),
+            runtime=mock_runtime,
         )
 
         with patch("ollama_agent.agent.middleware.get_tool_timeout", return_value=0.01):
-            with self.assertRaises(TimeoutError):
-                await _stream_tool_events(req, slow_handler)
+            result = await _stream_tool_events(req, slow_handler)
+
+        self.assertEqual(result.tool_call_id, "call-3")
+        self.assertEqual(result.name, "slow_tool")
+        self.assertEqual(result.status, "error")
+        self.assertIn("timed out after 0.01s", result.content)
+        self.assertEqual(mock_runtime.stream_writer.call_count, 2)
+        call_events = [c[0][0]["type"] for c in mock_runtime.stream_writer.call_args_list]
+        self.assertEqual(call_events, ["tool_call", "tool_output"])
 
     async def test_build_subagents_valid(self) -> None:
         ms = ModelSettings(name="gemma4:26b", base_url="http://localhost:11434")
