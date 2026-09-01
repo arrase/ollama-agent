@@ -202,11 +202,11 @@ async def load_subagent_mcp_tools(
         name = srv.name.strip() if srv.name else ""
         if not name:
             raise MCPConfigError(
-                f"Subagent '{subagent_name}': MCP server name cannot be empty"
+                _("Subagent '{subagent_name}': MCP server name cannot be empty", subagent_name=subagent_name)
             )
         if name in seen_names:
             raise MCPConfigError(
-                f"Subagent '{subagent_name}': duplicate MCP server name '{name}'"
+                _("Subagent '{subagent_name}': duplicate MCP server name '{name}'", subagent_name=subagent_name, name=name)
             )
         seen_names.add(name)
         connections[name] = _build_mcp_connection(name, {"command": srv.command, "args": srv.args, "env": srv.env})

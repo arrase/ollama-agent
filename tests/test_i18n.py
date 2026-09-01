@@ -240,8 +240,8 @@ class TestI18nTranslations(unittest.TestCase):
         )
         set_locale("en")
         self.assertEqual(
-            _("Prompt added to queue (position #{pos})", pos=1),
-            "Prompt added to queue (position #1)",
+            _("Queued prompts ({count}):", count=1),
+            "Queued prompts (1):",
         )
         self.assertEqual(
             _("Prompt queue cleared ({count} removed).", count=3),
@@ -265,8 +265,8 @@ class TestI18nTranslations(unittest.TestCase):
         )
         set_locale("es")
         self.assertEqual(
-            _("Prompt added to queue (position #{pos})", pos=1),
-            "Prompt añadido a la cola (posición #1)",
+            _("Queued prompts ({count}):", count=1),
+            "Prompts en cola (1):",
         )
         self.assertEqual(
             _("Prompt queue cleared ({count} removed).", count=3),
@@ -368,6 +368,8 @@ class TestCatalogCompleteness(unittest.TestCase):
                 catalog = json.load(f)
             missing = [s for s in extracted_strings if s not in catalog]
             self.assertEqual(missing, [], f"{loc}.json is missing translation for in-code strings: {missing}")
+            dead = [s for s in catalog if s not in extracted_strings]
+            self.assertEqual(dead, [], f"{loc}.json contains dead/unused translation keys: {dead}")
 
 
 class TestCLIAndSettingsI18n(unittest.TestCase):
