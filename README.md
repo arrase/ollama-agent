@@ -23,7 +23,7 @@
   - [Live Context Usage & Token Gauge](#live-context-usage--token-gauge)
   - [Human-in-the-Loop (HITL) & YOLO Mode](#human-in-the-loop-hitl--yolo-mode)
   - [File & Directory Context (`@-mentions`)](#file--directory-context--mentions)
-  - [Context Compression & Compaction (`/compact`)](#context-compression--compaction-compact)
+  - [Context Compression & Compaction](#context-compression--compaction)
 - [CLI Reference & Automation](#cli-reference--automation)
   - [Global Options & Flags](#global-options--flags)
   - [Non-Interactive Mode](#non-interactive-mode)
@@ -63,7 +63,7 @@
 - 🦙 **Native Ollama Integration**: Direct communication via Ollama's native API (`langchain-ollama`) — no OpenAI compatibility proxy required.
 - 🧠 **Native Thinking / Reasoning Traces**: Harnesses Ollama's native reasoning support. Configurable effort levels (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`) per model and session.
 - 📊 **Automatic Context Resolution & Live Monitor**: Dynamically inspects model context limits (`num_ctx`) and displays real-time token consumption with color-coded gauge alerts in the TUI header.
-- 🗜️ **Context Compression & Compaction**: Automatic background summarization and history offloading at 85% context capacity, plus on-demand context compaction anytime via `/compact` or `/compress`.
+- 🗜️ **Context Compression & Compaction**: Automatic background summarization and history offloading at 85% context capacity, plus on-demand context compaction via the agent's built-in `compact_conversation` tool.
 - 🔄 **Per-Session Model Switching**: Change models mid-conversation (`/model set <name>`) while preserving the conversation context for the active session.
 - 🛡️ **Human-in-the-Loop (HITL) & YOLO Mode**: Interactive terminal approval widget before executing shell commands or editing files, with full bypass available via YOLO mode (`-y` or `/yolo`).
 - 🕶️ **Stealth Mode (In-Memory Privacy)**: Run conversations without persisting chat history to SQLite (`-s` or `/stealth`), keeping all state in-memory during the session.
@@ -166,7 +166,6 @@ The REPL provides built-in slash commands for managing models, sessions, tasks, 
 | `/params` | `/params [list \| set <parameter> <value>]` | Inspect active sampling parameters and resolution sources, or dynamically update parameter values for the active session. |
 | `/queue` | `/queue [list \| clear \| rm <position>]` | Inspect pending prompts in the queue, remove a specific item by index (`/queue rm 2`, aliases: `remove`, `delete`), or clear all queued prompts. |
 | `/session` | `/session [list \| search <query> \| resume <id> (alias: switch) \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume previous threads, export to Markdown, or delete history. |
-| `/compact` | `/compact` (alias: `/compress`) | Manually compact conversation history into a structured summary to reclaim context window tokens. |
 | `/task` | `/task [list \| create [<id>] \| run <id> [key=value ...] [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` initiates an interactive conversational creation flow with the agent. Supports dynamic Jinja2 template variables. |
 | `/skill` | `/skill [list \| show <id> \| create [<id>] \| delete <id>]` | Manage agent skills. `/skill create` initiates an interactive conversational creation flow with the agent. |
 | `/rag` | `/rag [status \| list \| create <name> \| load <name> \| unload \| add <path> [--dir] \| delete <name>]` | Manage local RAG vector databases, index files/directories, and toggle active knowledge bases. |
@@ -204,7 +203,7 @@ In Ollama Agent, the user input is **never locked**. You can freely type and sub
   - Inspection & List commands: `/queue`, `/model list`, `/effort`, `/context`, `/params list`, `/session list`, `/session search`, `/session export`, `/task list`, `/skill list`, `/skill show`, `/rag status`, `/rag list`, `/mcp list`, `/agents list`.
   - Mode toggles: `/yolo`, `/stealth` (toggle or on/off).
   - Lifecycle: `/exit`, `/quit`.
-- **Enqueued Prompts & Stateful Commands**: Normal conversation prompts and state-mutating commands (e.g. `/model set`, `/compact`, `/session resume`, `/session new`, `/clear`, `/task run`, `/skill create`) are placed in a FIFO queue. A system message (`⏳ Prompt added to queue (position #N)`) notifies you of your queue position, and the bottom status bar displays a live indicator (`⏳ N queued`).
+- **Enqueued Prompts & Stateful Commands**: Normal conversation prompts and state-mutating commands (e.g. `/model set`, `/session resume`, `/session new`, `/clear`, `/task run`, `/skill create`) are placed in a FIFO queue. A system message (`⏳ Prompt added to queue (position #N)`) notifies you of your queue position, and the bottom status bar displays a live indicator (`⏳ N queued`).
 - **Persistent TUI Queue Panel**: When prompts are in the queue, a dedicated `PromptQueueWidget` card automatically appears above the input container, displaying the active item count, prompt previews, and position numbers in real time. It automatically collapses when the queue is drained.
 - **Unblocked Tool Approvals**: The prompt input box remains active while a tool confirmation modal (`ToolApprovalWidget`) is shown, allowing you to queue follow-up prompts while reviewing pending tool actions.
 - **Queue Management (`/queue`)**:
@@ -310,13 +309,13 @@ Common programming decorators (e.g. `@staticmethod`, `@property`, `@decorator`) 
 
 ---
 
-### Context Compression & Compaction (`/compact`)
+### Context Compression & Compaction
 
-To prevent conversation degradation and context overflow errors, Ollama Agent features both automatic context compression and on-demand compaction.
+To prevent conversation degradation and context overflow errors, Ollama Agent features both automatic context compression and proactive tool-driven compaction.
 
 ```mermaid
 flowchart LR
-    A[Full Conversation Turns] -->|Auto at 85% context OR /compact| B[Summarization Engine]
+    A[Full Conversation Turns] -->|Auto at 85% context OR compact_conversation| B[Summarization Engine]
     B --> C[Structured Summary\n• Session Intent\n• Key Decisions\n• Artifacts\n• Next Steps]
     B --> D[Durable History Saved to\n/conversation_history/session_id.md]
     C --> E[Reclaimed Context Window]
@@ -329,17 +328,9 @@ flowchart LR
    - **History Preservation**: Evicted turns are saved to `<cwd>/conversation_history/{session_id}.md` (a dedicated `session_<uuid>` id, appended across repeated compactions of the same thread) for durable offline recovery.
    - **Overflow Recovery**: Catches context overflow errors dynamically, summarizes older turns, and retries the turn seamlessly.
 
-2. **On-Demand Compaction (`/compact` or `/compress`)**:
-   - Type `/compact` (or `/compress`) anytime in the REPL to immediately compress prior messages, offload history, and refresh the token gauge:
-
-```text
-❯ /compact
-⚡ Compacting conversation context...
-✓ Context compacted successfully:
-  • Messages summarized: 14
-  • Recent messages preserved: 2
-  • History offloaded to: /conversation_history/session_9f86d081884c7d659a2feaa0c55ad015.md
-```
+2. **Agent-Driven Compaction Tool (`compact_conversation`)**:
+   - The agent is equipped with the `compact_conversation` tool and can proactively summarize older messages when moving to a new topic or when the context grows long.
+   - You can also ask the agent directly in natural language (e.g., *"compact the conversation history"* or *"comprime el contexto"*) and the agent will execute the tool in-graph.
 
 ---
 

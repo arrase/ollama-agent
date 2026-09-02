@@ -171,8 +171,6 @@ class TestIsImmediateCommand(unittest.TestCase):
             "/session switch sess_abc",
             "/clear",
             "/new",
-            "/compact",
-            "/compress",
             "/task create write_unit_tests",
             "/task run task_123",
             "/skill create custom_skill",
@@ -228,12 +226,12 @@ class TestPromptQueueFIFO(unittest.IsolatedAsyncioTestCase):
 
             app._is_generating = True
 
-            app.on_repl_input_submitted(ReplInput.Submitted(inp, "/compact"))
+            app.on_repl_input_submitted(ReplInput.Submitted(inp, "/task run task_123"))
             app.on_repl_input_submitted(ReplInput.Submitted(inp, "/model set llama3:latest"))
             app.on_repl_input_submitted(ReplInput.Submitted(inp, "/session new"))
 
             self.assertEqual(len(app._prompt_queue), 3)
-            self.assertEqual(app._prompt_queue[0].text, "/compact")
+            self.assertEqual(app._prompt_queue[0].text, "/task run task_123")
             self.assertEqual(app._prompt_queue[1].text, "/model set llama3:latest")
             self.assertEqual(app._prompt_queue[2].text, "/session new")
             self.assertEqual(footer._queued_count, 3)
@@ -247,14 +245,14 @@ class TestPromptQueueFIFO(unittest.IsolatedAsyncioTestCase):
             app._is_generating = True
 
             app.on_repl_input_submitted(ReplInput.Submitted(inp, "First prompt"))
-            app.on_repl_input_submitted(ReplInput.Submitted(inp, "/compact"))
+            app.on_repl_input_submitted(ReplInput.Submitted(inp, "/task run task_123"))
             app.on_repl_input_submitted(ReplInput.Submitted(inp, "Second prompt"))
             app.on_repl_input_submitted(ReplInput.Submitted(inp, "/session resume sess_xyz"))
 
             queue_items = [item.text for item in app._prompt_queue]
             self.assertEqual(
                 queue_items,
-                ["First prompt", "/compact", "Second prompt", "/session resume sess_xyz"],
+                ["First prompt", "/task run task_123", "Second prompt", "/session resume sess_xyz"],
             )
 
     async def test_empty_or_whitespace_input_not_queued(self) -> None:
@@ -390,7 +388,7 @@ class TestQueueDrainingBehavior(unittest.IsolatedAsyncioTestCase):
         async with app.run_test():
             footer = app.query_one(AgentFooter)
 
-            app._prompt_queue.append(QueuedItem("/compact"))
+            app._prompt_queue.append(QueuedItem("/task run task_123"))
             app._update_queue_ui()
             self.assertEqual(footer._queued_count, 1)
 
@@ -399,14 +397,14 @@ class TestQueueDrainingBehavior(unittest.IsolatedAsyncioTestCase):
 
                 self.assertEqual(len(app._prompt_queue), 0)
                 self.assertEqual(footer._queued_count, 0)
-                mock_slash.assert_called_once_with("/compact")
+                mock_slash.assert_called_once_with("/task run task_123")
 
     async def test_sequential_queue_draining_flow(self) -> None:
-        repl, runtime = _create_mock_repl()
+        repl, _ = _create_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test() as pilot:
             app._prompt_queue.append(QueuedItem("Prompt 1"))
-            app._prompt_queue.append(QueuedItem("/compact"))
+            app._prompt_queue.append(QueuedItem("/session new"))
             app._prompt_queue.append(QueuedItem("Prompt 2"))
             app._update_queue_ui()
 
@@ -416,15 +414,11 @@ class TestQueueDrainingBehavior(unittest.IsolatedAsyncioTestCase):
                 if isinstance(prompt, str):
                     streamed_prompts.append(prompt)
 
-            mock_compact = AsyncMock(return_value={"success": True, "compacted_tokens": 100})
-
-            with patch("ollama_agent.interfaces.repl.stream_agent_events", side_effect=fake_stream_events), \
-                 patch("ollama_agent.interfaces.repl.compact_session", mock_compact):
+            with patch("ollama_agent.interfaces.repl.stream_agent_events", side_effect=fake_stream_events):
                 app._process_next_in_queue()
                 await pilot.pause()
 
             self.assertEqual(streamed_prompts, ["Prompt 1", "Prompt 2"])
-            mock_compact.assert_awaited_once()
             self.assertEqual(len(app._prompt_queue), 0)
 
 

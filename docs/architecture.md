@@ -94,29 +94,29 @@ sequenceDiagram
 
 ### 2. Context Compression & Compaction Engine
 
-To prevent conversation degradation and context overflow errors, Ollama Agent integrates both automatic background summarization and on-demand context compaction.
+To prevent conversation degradation and context overflow errors, Ollama Agent integrates both automatic background summarization and proactive tool-driven compaction.
 
 ```mermaid
 flowchart LR
-    A[Conversation Turns] -->|Auto at 85% capacity OR /compact| B[Summarization Engine]
+    A[Conversation Turns] -->|Auto at 85% capacity OR compact_conversation| B[Summarization Engine]
     B --> C[Structured Summary\n• Session Intent\n• Key Decisions\n• Artifacts\n• Next Steps]
     B --> D[Durable History Saved to\n/conversation_history/session_UUID.md]
     C --> E[Reclaimed Context Window]
 ```
 
-1. **Automatic Background Summarization**:
-   - Built into DeepAgents via `create_summarization_tool_middleware(model, backend)`.
+1. **Automatic Background Summarization (`SummarizationMiddleware`)**:
+   - Built into DeepAgents and initialized in the agent pipeline.
    - **Trigger Threshold**: Automatically triggers when conversation tokens reach **85%** of the model's `max_input_tokens` (or 170k token fallback).
    - **Token Retention**: Compresses older turns into a structured summary while preserving the most recent **10%** of tokens (or 6 messages).
    - **Tool Argument Pruning**: Large arguments in past tool calls are truncated to 2,000 characters.
+   - **Media & History Offloading**: Evicted message turns and inline media are safely offloaded to `/conversation_history/session_<uuid>.md` on the persistent backend.
    - **Context Overflow Recovery**: Catches context window errors from the LLM and triggers emergency summarization.
 
-2. **On-Demand Context Compaction (`/compact` or `/compress`)**:
-   - Manually executed anytime via `AgentRuntime.compact_context()` (`ollama_agent/agent/compaction.py`).
-   - **Recent Message Preservation**: Preserves the last **2** messages (`KEEP_RECENT_MESSAGES = 2`).
-   - **Safe Cutoff Resolution**: Uses `find_safe_cutoff()` to ensure tool call `AIMessage` items are never separated from their corresponding `ToolMessage` execution results.
-   - **History Offloading**: Appends evicted message turns to `/conversation_history/session_<uuid>.md` using strict read-modify-write appending, raising `HistoryOffloadError` if offloading fails.
-   - **Summary Integration**: Creates a consolidated `HumanMessage` tagged with `lc_source="summarization"`, recalculates token usage via `count_tokens_approximately()`, and updates the header gauge immediately.
+2. **Agent-Driven Compaction Tool (`compact_conversation`)**:
+   - Exposed to the agent via `create_summarization_tool_middleware(model, backend)`.
+   - **Tool Execution**: Enables the model to proactively compact context when transitioning to new subtasks or when requested by the user in natural language (*"compact conversation"*, *"comprime el contexto"*).
+   - **Eligibility Gating**: Implements an eligibility gate requiring conversation tokens to reach at least ~50% of the threshold before compaction runs.
+   - **In-Graph State Update**: Emits a `Command(update={"_summarization_event": ...})` within the LangGraph graph loop to cleanly update state without out-of-band mutations.
 
 ---
 

@@ -19,7 +19,6 @@ from ollama_agent.agent.agent import AgentRuntime, _prepare_instructions
 from ollama_agent.agent.builtin_tools import rag_search, set_rag_manager
 from ollama_agent.agent.middleware import _stream_tool_events
 from ollama_agent.agent.subagents import build_subagents, list_subagents
-from tests.test_compaction import make_summarization_engine
 from ollama_agent.core.prompt_processor import PromptProcessingError
 from ollama_agent.settings.config import (
     ModelSettings,
@@ -526,128 +525,35 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(events[0]["type"], "error")
             self.assertIn("Invalid file mention", events[0]["content"])
 
-    async def test_compact_context_empty_or_too_few(self) -> None:
+    async def test_count_effective_tokens_without_and_with_summary(self) -> None:
         settings = Settings()
         runtime = AgentRuntime(settings=settings)
-        runtime._model = MagicMock()
-        runtime._summarization_engine = make_summarization_engine()
         mock_graph = MagicMock()
-        mock_state_empty = MagicMock(values={})
-        mock_graph.aget_state = AsyncMock(return_value=mock_state_empty)
+
+        # Without summarization event
+        msg1 = HumanMessage(content="Hello")
+        msg2 = AIMessage(content="World")
+        mock_graph.aget_state = AsyncMock(return_value=MagicMock(values={"messages": [msg1, msg2]}))
         runtime.graph = mock_graph
 
-        # Empty messages
-        res = await runtime.compact_context("thread-1")
-        self.assertFalse(res["success"])
-        self.assertIn("No messages", res["message"])
+        count = await runtime.count_effective_tokens("thread-1")
+        self.assertGreater(count, 0)
 
-        # 1 message (< keep threshold)
-        mock_state_single = MagicMock(values={"messages": [HumanMessage(content="hello")]})
-        mock_graph.aget_state = AsyncMock(return_value=mock_state_single)
-        res2 = await runtime.compact_context("thread-1")
-        self.assertFalse(res2["success"])
-        self.assertIn("Not enough messages", res2["message"])
-
-    async def test_compact_context_success(self) -> None:
-        settings = Settings()
-        runtime = AgentRuntime(settings=settings)
-        runtime._backend = MagicMock()
-        runtime._model = MagicMock()
-        runtime._summarization_engine = make_summarization_engine()
-
-        msg1 = HumanMessage(content="First prompt")
-        msg2 = AIMessage(content="First answer", tool_calls=[])
-        msg3 = HumanMessage(content="Second prompt")
-        msg4 = AIMessage(content="Second answer")
-
-        mock_state = MagicMock(
-            values={
-                "messages": [msg1, msg2, msg3, msg4],
-                "_summarization_event": None,
-            }
+        # With summarization event
+        summary_msg = HumanMessage(content="Summary of earlier conversation")
+        mock_graph.aget_state = AsyncMock(
+            return_value=MagicMock(
+                values={
+                    "messages": [msg1, msg2],
+                    "_summarization_event": {
+                        "cutoff_index": 1,
+                        "summary_message": summary_msg,
+                    },
+                }
+            )
         )
-        mock_graph = MagicMock()
-        mock_graph.aget_state = AsyncMock(return_value=mock_state)
-        mock_graph.aupdate_state = AsyncMock()
-        runtime.graph = mock_graph
-
-        async def fake_summary(model: Any, messages: list[Any]) -> str:
-            self.assertEqual(messages, [msg1, msg2])
-            return "Summary of first turn"
-
-        async def fake_offload(backend: Any, messages: list[Any], path: str) -> str:
-            self.assertEqual(messages, [msg1, msg2])
-            return "/conversation_history/session-abc.md"
-
-        with (
-            patch("ollama_agent.agent.agent.generate_summary", side_effect=fake_summary),
-            patch("ollama_agent.agent.agent.offload_history", side_effect=fake_offload),
-        ):
-            res = await runtime.compact_context("thread-1")
-
-        self.assertTrue(res["success"])
-        self.assertEqual(res["messages_summarized"], 2)
-        self.assertEqual(res["messages_preserved"], 2)
-        self.assertEqual(res["file_path"], "/conversation_history/session-abc.md")
-        self.assertEqual(res["summary"], "Summary of first turn")
-
-        mock_graph.aupdate_state.assert_awaited_once()
-        update_call = mock_graph.aupdate_state.call_args
-        self.assertEqual(update_call[0][0], {"configurable": {"thread_id": "thread-1"}})
-        new_event = update_call[0][1]["_summarization_event"]
-        self.assertEqual(new_event["cutoff_index"], 2)
-        self.assertEqual(new_event["file_path"], "/conversation_history/session-abc.md")
-        self.assertIn("session-abc.md", new_event["summary_message"].content)
-        self.assertGreater(runtime.last_context_tokens, 0)
-
-    async def test_compact_context_chained_prior_event(self) -> None:
-        """A second compaction must translate the cutoff to absolute state index."""
-        settings = Settings()
-        runtime = AgentRuntime(settings=settings)
-        runtime._backend = MagicMock()
-        runtime._model = MagicMock()
-        runtime._summarization_engine = make_summarization_engine()
-
-        prior_summary = HumanMessage(content="prior summary", additional_kwargs={"lc_source": "summarization"})
-        msg3 = HumanMessage(content="Third prompt")
-        msg4 = AIMessage(content="Third answer")
-        msg5 = HumanMessage(content="Fourth prompt")
-        msg6 = AIMessage(content="Fourth answer")
-
-        prior_event = {
-            "cutoff_index": 2,
-            "summary_message": prior_summary,
-            "file_path": "/conversation_history/s.md",
-        }
-        mock_state = MagicMock(
-            values={
-                # Raw state: [old1, old2, summary, msg3..msg6]; effective starts at the summary.
-                "messages": ["old1", "old2", prior_summary, msg3, msg4, msg5, msg6],
-                "_summarization_event": prior_event,
-                "_summarization_session_id": "session_fixed",
-            }
-        )
-        mock_graph = MagicMock()
-        mock_graph.aget_state = AsyncMock(return_value=mock_state)
-        mock_graph.aupdate_state = AsyncMock()
-        runtime.graph = mock_graph
-
-        with (
-            patch("ollama_agent.agent.agent.generate_summary", AsyncMock(return_value="new summary")),
-            patch(
-                "ollama_agent.agent.agent.offload_history",
-                AsyncMock(return_value="/conversation_history/session_fixed.md"),
-            ),
-        ):
-            res = await runtime.compact_context("t")
-
-        self.assertTrue(res["success"])
-        # Effective = [prior_summary, summary, msg3, msg4, msg5, msg6]; keep 2
-        # -> effective cutoff 4; absolute = 2 + 4 - 1 = 5
-        new_event = mock_graph.aupdate_state.call_args[0][1]["_summarization_event"]
-        self.assertEqual(new_event["cutoff_index"], 5)
-        self.assertEqual(new_event["file_path"], "/conversation_history/session_fixed.md")
-        self.assertIn("session_fixed.md", new_event["summary_message"].content)
+        count_with_summary = await runtime.count_effective_tokens("thread-1")
+        self.assertGreater(count_with_summary, 0)
 
     async def test_sqlite_checkpointer_initializes_tables(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

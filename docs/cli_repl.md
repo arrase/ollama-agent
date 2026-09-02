@@ -13,7 +13,7 @@ The REPL (Read-Eval-Print Loop) is the default mode when launching `ollama-agent
 * **Stateful Sessions**: Multi-turn conversation history stored and checkpointed in SQLite (`~/.ollama-agent/history.db`).
 * **Rich Markdown Formatting**: Real-time streaming output with syntax-highlighted code blocks, thinking containers, and status cards.
 * **Live Context & Token Gauge**: Dynamic header showing consumed tokens vs. model context limit (`num_ctx`) with color-coded alert thresholds.
-* **Context Compaction**: Reclaim tokens on demand via `/compact` or `/compress` with persistent history offloading to `/conversation_history/session_<uuid>.md`.
+* **Context Compaction**: Reclaim tokens automatically or on-demand via the agent's built-in `compact_conversation` tool with persistent history offloading to `/conversation_history/session_<uuid>.md`.
 * **Human-in-the-Loop (HITL) Approvals**: Inline approval widgets before executing shell commands or editing files, with YOLO mode bypass.
 * **3-Level Tab Autocompletion**: Autocompletion for slash commands, subcommands, entities (models, sessions, tasks, skills, RAG databases), and `@-mention` file paths.
 * **System Clipboard Integration**: Native copy and paste across macOS, Linux (Wayland / X11), and Windows.
@@ -170,7 +170,6 @@ Slash commands provide full application control directly within the REPL:
 | `/params` | `/params [list \| set <parameter> <value>]` | Inspect active sampling parameters and resolution sources, or dynamically update parameter values for the active session. |
 | `/queue` | `/queue [list \| clear \| rm <position>]` | Inspect pending prompts in the queue, remove an item by index (`/queue rm <id>`, aliases: `remove`, `delete`), or clear all queued prompts. |
 | `/session` | `/session [list \| search <query> \| resume <id> (alias: switch) \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume threads, export to Markdown, or delete history. |
-| `/compact` | `/compact` (alias: `/compress`) | Manually compact conversation history into a structured summary to reclaim context window tokens. |
 | `/task` | `/task [list \| create [<id>] \| run <id> [key=value ...] [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` launches an interactive conversational creation flow with the agent. Supports dynamic Jinja2 template variables. |
 | `/skill` | `/skill [list \| show <id> \| create [<id>] \| delete <id>]` | Manage agent skills. `/skill create` launches an interactive conversational creation flow with the agent. |
 | `/rag` | `/rag [status \| list \| create <name> \| load <name> \| unload \| add <path> [--dir] \| delete <name>]` | Manage local RAG databases, index documents, and toggle active knowledge bases. |
@@ -193,7 +192,7 @@ The prompt input box (`ReplInput`) provides intuitive editing, history navigatio
 * **Cursor Navigation (`↑` / `↓`)**: Move freely between lines in multiline text.
 * **Command History**: Pressing `↑` anywhere on row 0 recalls prior user prompts; pressing `↓` on the last line at the end of the text navigates forward. Slash commands (`/cmd`) are filtered out from stored history.
 * **Tab Autocompletion (`Tab`)**: Activates 3-level autocompletion:
-  1. *Level 0*: Root slash commands (`/mo` -> `/model`, `/co` -> `/compact`, `/qu` -> `/queue`).
+  1. *Level 0*: Root slash commands (`/mo` -> `/model`, `/co` -> `/context`, `/qu` -> `/queue`).
   2. *Level 1*: Subcommands (`/task ` -> `list`, `create`, `run`, `delete`, `/queue ` -> `clear`, `rm`, `remove`, `delete`).
   3. *Level 2*: Dynamic entities:
      - `/model set ` -> Dynamic list of available Ollama models + disk size.
@@ -221,7 +220,7 @@ Slash commands that perform read-only queries or instant state toggles execute i
 * **Toggles & Exit**: `/yolo`, `/stealth`, `/exit`, `/quit`.
 
 #### Enqueued Prompts & Stateful Commands
-Normal chat prompts and commands that mutate graph state (e.g., `/model set`, `/compact`, `/session resume`, `/session new`, `/task run`, `/skill create`) are placed in a FIFO queue:
+Normal chat prompts and commands that mutate graph state (e.g., `/model set`, `/session resume`, `/session new`, `/task run`, `/skill create`) are placed in a FIFO queue:
 
 * **Queue Feedback**: Submitting an item while busy renders a subtle notification (`⏳ Prompt added to queue (position #N)`) and updates the footer counter (`⏳ N queued`).
 * **Persistent TUI Queue Panel**: A dedicated `PromptQueueWidget` card renders above the input container whenever items are queued, showing prompt previews and position numbers in real time.
@@ -252,7 +251,7 @@ The dynamic header bar monitors token consumption and model parameters in real t
 
 ---
 
-### Context Compression & Compaction (`/compact`)
+### Context Compression & Compaction
 
 To prevent conversation degradation and context overflow errors:
 
@@ -260,18 +259,10 @@ To prevent conversation degradation and context overflow errors:
    - Triggers automatically when conversation tokens reach **85%** of `max_input_tokens`.
    - Compresses older turns into a structured summary while keeping the most recent **10%** of tokens (or 6 messages) intact.
    - Large tool arguments are truncated to 2,000 characters.
-   - Evicted turns are appended to `/conversation_history/session_<uuid>.md`.
-2. **On-Demand Compaction (`/compact` or `/compress`)**:
-   - Type `/compact` anytime in the REPL to immediately compress prior messages, preserve the last 2 messages (`KEEP_RECENT_MESSAGES = 2`), offload history, and refresh the token gauge:
-
-```text
-❯ /compact
-⚡ Compacting conversation context...
-✓ Context compacted successfully:
-  • Messages summarized: 14
-  • Recent messages preserved: 2
-  • History offloaded to: /conversation_history/session_9f86d081884c7d659a2feaa0c55ad015.md
-```
+   - Evicted turns and inline media are appended to `/conversation_history/session_<uuid>.md`.
+2. **Agent-Driven Compaction Tool (`compact_conversation`)**:
+   - The agent can proactively call the `compact_conversation` tool when context gets long or when transitioning between major topics.
+   - You can also request compaction directly in natural language (e.g. *"compact conversation history"* or *"comprime el contexto"*).
 
 ---
 
