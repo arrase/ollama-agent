@@ -10,7 +10,7 @@ from rich import box
 from rich.console import Console
 from rich.table import Table
 
-from ..core import create_ollama_chat_model, validate_reasoning_effort
+from ..core import create_ollama_chat_model, get_model_creation_kwargs
 from ..i18n import _
 from ..mcp import load_subagent_mcp_tools
 from ..settings import (
@@ -56,7 +56,7 @@ def list_subagents(
             if sa.context_window
             else f"[dim]{settings.model.context_window} ({_('inherited')})[/dim]"
         )
-        mcp_str = ", ".join(srv.name for srv in sa.mcp_servers if srv.name) if sa.mcp_servers else "[dim]-[/dim]"
+        mcp_str = ", ".join(srv.name for srv in sa.mcp_servers) if sa.mcp_servers else "[dim]-[/dim]"
 
         table.add_row(
             sa.name,
@@ -103,21 +103,13 @@ async def _build_spec(
         "system_prompt": rendered_prompt + environment_block(include_cwd=False),
     }
 
-    name = sa.model or model_settings.name
-    num_ctx = sa.context_window or model_settings.context_window
-    spec["model"] = await create_ollama_chat_model(
-        model=name,
-        base_url=model_settings.base_url,
-        context_window=num_ctx,
-        reasoning_effort=validate_reasoning_effort(model_settings.reasoning_effort),
-        temperature=model_settings.temperature,
-        top_p=model_settings.top_p,
-        top_k=model_settings.top_k,
-        min_p=model_settings.min_p,
-        presence_penalty=model_settings.presence_penalty,
-        repeat_penalty=model_settings.repeat_penalty,
+    model_kwargs = get_model_creation_kwargs(
+        model_settings,
+        model=sa.model,
+        context_window=sa.context_window,
         warn_callback=_log.warning,
     )
+    spec["model"] = await create_ollama_chat_model(**model_kwargs)
 
     spec["skills"] = SKILL_ROOTS
 

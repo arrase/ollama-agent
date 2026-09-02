@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessageChunk
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
 
@@ -25,7 +25,6 @@ from ollama_agent.settings.config import (
     Settings,
     SubAgentSettings,
 )
-from ollama_agent.streaming.parsers import ThinkTagParser
 
 _DEFAULT_INSTRUCTIONS = (
     resources.files("ollama_agent.settings")
@@ -43,31 +42,6 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
 
     def tearDown(self) -> None:
         set_rag_manager(None)
-
-    def test_process_message_chunk_text(self) -> None:
-        parser = ThinkTagParser()
-        chunk = MagicMock(type="ai", content="Hello world", additional_kwargs={})
-        events = parser.process_chunk(chunk)
-        self.assertEqual(events, [{"type": "text_delta", "content": "Hello world"}])
-
-    def test_process_message_chunk_reasoning(self) -> None:
-        parser = ThinkTagParser()
-        chunk = MagicMock(type="ai", content="", additional_kwargs={"reasoning_content": "thinking..."})
-        events = parser.process_chunk(chunk)
-        self.assertEqual(events, [{"type": "reasoning_delta", "content": "thinking..."}])
-
-        # When reasoning is hidden
-        parser2 = ThinkTagParser()
-        self.assertEqual(parser2.process_chunk(chunk, hide_reasoning=True), [])
-
-    def test_process_message_chunk_tool_chunk_ignored(self) -> None:
-        parser = ThinkTagParser()
-        chunk = MagicMock(type="tool", content="output", additional_kwargs={})
-        self.assertEqual(parser.process_chunk(chunk), [])
-
-        # Real ToolMessageChunk
-        real_tool_chunk = ToolMessageChunk(content="output", tool_call_id="call-1")
-        self.assertEqual(parser.process_chunk(real_tool_chunk), [])
 
     async def test_stream_tool_events_emits_events_and_result(self) -> None:
         mock_runtime = MagicMock()
@@ -242,7 +216,6 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
                     "instructions\n{% if runtime.allow_traversal %}fs_traversal{% else %}fs_sandboxed{% endif %}"
                 ),
             ),
-            patch("ollama_agent.agent.agent.ensure_memory_file"),
         ):
             set_rag_manager(None)
             await runtime.reload()
@@ -282,7 +255,6 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
                     "rag_policy_content"
                 ),
             ),
-            patch("ollama_agent.agent.agent.ensure_memory_file"),
         ):
             await runtime.reload()
             self.assertIn("rag_policy_content", runtime._instructions)
@@ -323,10 +295,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
     def test_prepare_instructions_allow_traversal_true(self) -> None:
         settings = Settings()
         settings.runtime.allow_traversal = True
-        with (
-            patch("ollama_agent.agent.agent.load_instructions", return_value=_DEFAULT_INSTRUCTIONS),
-            patch("ollama_agent.agent.agent.ensure_memory_file"),
-        ):
+        with patch("ollama_agent.agent.agent.load_instructions", return_value=_DEFAULT_INSTRUCTIONS):
             instructions = _prepare_instructions(settings)
         self.assertIn("You have full access to the host filesystem", instructions)
         self.assertNotIn("operate on a virtual root", instructions)
@@ -335,10 +304,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
     def test_prepare_instructions_allow_traversal_false(self) -> None:
         settings = Settings()
         settings.runtime.allow_traversal = False
-        with (
-            patch("ollama_agent.agent.agent.load_instructions", return_value=_DEFAULT_INSTRUCTIONS),
-            patch("ollama_agent.agent.agent.ensure_memory_file"),
-        ):
+        with patch("ollama_agent.agent.agent.load_instructions", return_value=_DEFAULT_INSTRUCTIONS):
             instructions = _prepare_instructions(settings)
         self.assertIn("operate on a virtual root", instructions)
         self.assertNotIn("You have full access to the host filesystem", instructions)
@@ -357,10 +323,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             "RAG Active: {{ rag_active }}\n"
             "RAG DB: {{ rag_database }}"
         )
-        with (
-            patch("ollama_agent.agent.agent.load_instructions", return_value=custom_template),
-            patch("ollama_agent.agent.agent.ensure_memory_file"),
-        ):
+        with patch("ollama_agent.agent.agent.load_instructions", return_value=custom_template):
             instructions = _prepare_instructions(settings)
             self.assertIn("Model: test-model", instructions)
             self.assertIn("Traversal: True", instructions)
@@ -372,10 +335,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
     def test_prepare_instructions_rag_inactive(self) -> None:
         settings = Settings()
         set_rag_manager(None)
-        with (
-            patch("ollama_agent.agent.agent.load_instructions", return_value=_DEFAULT_INSTRUCTIONS),
-            patch("ollama_agent.agent.agent.ensure_memory_file"),
-        ):
+        with patch("ollama_agent.agent.agent.load_instructions", return_value=_DEFAULT_INSTRUCTIONS):
             instructions = _prepare_instructions(settings)
         self.assertNotIn("# RAG POLICY", instructions)
 
@@ -384,10 +344,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         mock_mgr = MagicMock()
         mock_mgr.current_database = "knowledge_base"
         set_rag_manager(mock_mgr)
-        with (
-            patch("ollama_agent.agent.agent.load_instructions", return_value=_DEFAULT_INSTRUCTIONS),
-            patch("ollama_agent.agent.agent.ensure_memory_file"),
-        ):
+        with patch("ollama_agent.agent.agent.load_instructions", return_value=_DEFAULT_INSTRUCTIONS):
             instructions = _prepare_instructions(settings)
         self.assertIn("# RAG POLICY", instructions)
         self.assertIn("('knowledge_base')", instructions)

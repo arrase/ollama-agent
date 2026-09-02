@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from rich.console import Console
 
-from ollama_agent.streaming import extract_action_requests
+from ollama_agent.streaming import build_approval_decisions, extract_action_requests
 from ollama_agent.streaming.base import StreamingRenderer
 from ollama_agent.streaming.console_renderer import ConsoleStreamingRenderer
 from ollama_agent.streaming.events import stream_agent_events
@@ -103,7 +103,7 @@ class TestStreamingSystem(unittest.IsolatedAsyncioTestCase):
         mock_runtime.run_streamed = fake_stream
 
         renderer = DummyRenderer()
-        await stream_agent_events(mock_runtime, "test prompt", renderer, auto_close=True)
+        await stream_agent_events(mock_runtime, "test prompt", renderer)
 
         self.assertTrue(renderer.closed)
         types = [e["type"] for e in renderer.events]
@@ -235,7 +235,7 @@ class TestInterruptHandling(unittest.IsolatedAsyncioTestCase):
 
 
 class TestExtractActionRequests(unittest.TestCase):
-    """Tests for the strict interrupt payload extraction helper."""
+    """Tests for direct interrupt payload extraction."""
 
     @staticmethod
     def _event(action_requests: Any) -> dict[str, Any]:
@@ -249,32 +249,58 @@ class TestExtractActionRequests(unittest.TestCase):
         self.assertEqual(extract_action_requests(self._event(requests)), requests)
 
     def test_valid_tuple_payload(self) -> None:
-        requests = ({"name": "write_file", "args": {"file_path": "/test"}},)
+        requests = [{"name": "write_file", "args": {"file_path": "/test"}}]
         event = {
             "type": "interrupt",
             "interrupts": (SimpleNamespace(value={"action_requests": requests}),),
         }
-        self.assertEqual(extract_action_requests(event), list(requests))
+        self.assertEqual(extract_action_requests(event), requests)
 
     def test_missing_interrupts_raises(self) -> None:
-        with self.assertRaises(ValueError):
+        with self.assertRaises(KeyError):
             extract_action_requests({"type": "interrupt"})
 
     def test_empty_interrupts_raises(self) -> None:
-        with self.assertRaises(ValueError):
+        with self.assertRaises(IndexError):
             extract_action_requests({"type": "interrupt", "interrupts": []})
 
-    def test_non_mapping_value_raises(self) -> None:
-        event = {"type": "interrupt", "interrupts": [SimpleNamespace(value=None)]}
-        with self.assertRaises(ValueError):
+    def test_missing_value_attribute_raises(self) -> None:
+        event = {"type": "interrupt", "interrupts": [SimpleNamespace()]}
+        with self.assertRaises(AttributeError):
             extract_action_requests(event)
 
-    def test_missing_or_empty_action_requests_raises(self) -> None:
-        for payload in ({}, {"action_requests": []}, {"action_requests": None}):
-            with self.subTest(payload=payload), self.assertRaises(ValueError):
-                extract_action_requests({"type": "interrupt", "interrupts": [SimpleNamespace(value=payload)]})
+    def test_missing_action_requests_raises(self) -> None:
+        event = {"type": "interrupt", "interrupts": [SimpleNamespace(value={})]}
+        with self.assertRaises(KeyError):
+            extract_action_requests(event)
 
-    def test_malformed_action_request_raises(self) -> None:
-        for requests in ([{"name": "execute"}], [{"args": {}}], ["not-a-dict"]):
-            with self.subTest(requests=requests), self.assertRaises(ValueError):
-                extract_action_requests(self._event(requests))
+
+class TestBuildApprovalDecisions(unittest.TestCase):
+    """Tests for build_approval_decisions helper."""
+
+    def setUp(self) -> None:
+        self.requests = [{"name": "execute", "args": {"command": "ls"}}]
+
+    def test_approve(self) -> None:
+        decisions = build_approval_decisions(self.requests, "approve")
+        self.assertEqual(decisions, [{"type": "approve"}])
+
+    def test_allow(self) -> None:
+        runtime = SimpleNamespace(auto_approved_tools=set())
+        decisions = build_approval_decisions(self.requests, "allow", runtime=runtime)
+        self.assertEqual(decisions, [{"type": "approve"}])
+        self.assertIn("execute", runtime.auto_approved_tools)
+
+    def test_reject_default_message(self) -> None:
+        decisions = build_approval_decisions(self.requests, "reject")
+        self.assertEqual(len(decisions), 1)
+        self.assertEqual(decisions[0]["type"], "reject")
+        self.assertIn("execute", decisions[0]["message"])
+
+    def test_reject_custom_message(self) -> None:
+        decisions = build_approval_decisions(self.requests, "reject", reject_message="Custom rejection")
+        self.assertEqual(decisions, [{"type": "reject", "message": "Custom rejection"}])
+
+    def test_unknown_action_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            build_approval_decisions(self.requests, "unknown")

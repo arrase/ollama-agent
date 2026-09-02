@@ -7,7 +7,6 @@ import os
 import re
 from collections import deque
 from collections.abc import Iterator
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -40,9 +39,8 @@ from ..tasks import (
     parse_var_assignments,
 )
 from .clipboard import ClipboardError, copy_to_system_clipboard, get_system_clipboard
-from .dispatch import REPLCommand, build_repl_handlers, safe_call
+from .dispatch import REPLHandler, build_repl_handlers, safe_call
 from .model_commands import (
-    _list_models_sync,
     set_context_window,
     set_effort,
     set_model,
@@ -68,11 +66,11 @@ from .tui_components import (
 _AT_MENTION_RE = re.compile(r"""(?:^|[\s\(\[\{<])@(?:"([^"]*)|'([^']*)|([^\s"'\(\[\{<>,;]*))$""")
 
 
-@dataclass(frozen=True)
-class QueuedItem:
-    """Item waiting in the prompt queue."""
-
-    text: str
+def _list_models_sync(base_url: str) -> list[Any]:
+    """Fetch the list of available Ollama models synchronously."""
+    client = ollama.Client(host=base_url)
+    response = client.list()
+    return list(response.models)
 
 
 class MainScreen(Screen):
@@ -181,34 +179,28 @@ def _get_subcommands() -> dict[str, list[tuple[str, str]]]:
     }
 
 
+IMMEDIATE_COMMANDS: frozenset[tuple[str, str]] = frozenset({
+    ("/exit", "*"), ("/quit", "*"), ("/queue", "*"), ("/yolo", "*"), ("/stealth", "*"),
+    ("/model", ""), ("/model", "list"),
+    ("/effort", ""),
+    ("/context", ""),
+    ("/params", ""), ("/params", "list"),
+    ("/session", ""), ("/session", "list"), ("/session", "search"), ("/session", "export"), ("/session", "delete"),
+    ("/task", ""), ("/task", "list"), ("/task", "delete"),
+    ("/skill", ""), ("/skill", "list"), ("/skill", "show"), ("/skill", "delete"),
+    ("/rag", ""), ("/rag", "status"), ("/rag", "list"), ("/rag", "create"), ("/rag", "delete"), ("/rag", "load"), ("/rag", "unload"),
+    ("/mcp", ""), ("/mcp", "list"), ("/mcp", "status"),
+    ("/agents", ""), ("/agents", "list"),
+})
+
+
 def _is_immediate_command(val: str) -> bool:
-    if not val.startswith("/"):
-        return False
     parts = val.split()
     if not parts:
         return False
     cmd = parts[0].lower()
     sub = parts[1].lower() if len(parts) > 1 else ""
-
-    if cmd in ("/exit", "/quit", "/queue", "/yolo", "/stealth"):
-        return True
-    if cmd == "/model" and (not sub or sub == "list"):
-        return True
-    if cmd in ("/effort", "/context") and not sub:
-        return True
-    if cmd == "/params" and (not sub or sub == "list"):
-        return True
-    if cmd == "/session" and (not sub or sub in ("list", "search", "export", "delete")):
-        return True
-    if cmd == "/task" and (not sub or sub in ("list", "delete")):
-        return True
-    if cmd == "/skill" and (not sub or sub in ("list", "show", "delete")):
-        return True
-    if cmd == "/rag" and (not sub or sub in ("status", "list", "create", "delete", "load", "unload")):
-        return True
-    if cmd == "/mcp" and (not sub or sub in ("list", "status")):
-        return True
-    return bool(cmd == "/agents" and (not sub or sub == "list"))
+    return (cmd, "*") in IMMEDIATE_COMMANDS or (cmd, sub) in IMMEDIATE_COMMANDS
 
 
 class _TUIStreamingRenderer(StreamingRenderer):
@@ -346,7 +338,7 @@ class OllamaAgentApp(App):
         self.repl.app = self
         self._is_generating = False
         self._is_approval_pending = False
-        self._prompt_queue: deque[QueuedItem] = deque()
+        self._prompt_queue: deque[str] = deque()
         self._current_worker: Worker | None = None
 
     def compose(self) -> ComposeResult:
@@ -375,13 +367,10 @@ class OllamaAgentApp(App):
         self.run_worker(self._warmup_agent(), group="warmup")
 
     async def _warmup_agent(self) -> None:
-        try:
-            res = self.repl.runtime._ensure_graph()
-            if inspect.isawaitable(res):
-                await res
-            self.query_one(AgentHeader).update_header()
-        except Exception as exc:
-            logging.warning("Agent runtime warmup failed: %s", exc)
+        res = self.repl.runtime._ensure_graph()
+        if inspect.isawaitable(res):
+            await res
+        self.query_one(AgentHeader).update_header()
 
     def update_mode_ui(self) -> None:
         prompt_char = self.query_one("#prompt-char")
@@ -432,7 +421,7 @@ class OllamaAgentApp(App):
             return
 
         if self._is_generating or self._is_approval_pending:
-            self._prompt_queue.append(QueuedItem(text=val))
+            self._prompt_queue.append(val)
             self._update_queue_ui()
             return
 
@@ -451,15 +440,15 @@ class OllamaAgentApp(App):
             return
         item = self._prompt_queue.popleft()
         self._update_queue_ui()
-        if item.text.startswith("/"):
-            self._current_worker = self.run_worker(self._run_slash_command(item.text))
+        if item.startswith("/"):
+            self._current_worker = self.run_worker(self._run_slash_command(item))
         else:
             scroll = self.query_one("#chat-scroll")
-            scroll.mount(UserMessage(item.text))
+            scroll.mount(UserMessage(item))
             agent_msg = AgentResponse()
             scroll.mount(agent_msg)
             self._deferred_scroll()
-            self._current_worker = self.run_worker(self._run_stream(item.text, scroll, agent_msg))
+            self._current_worker = self.run_worker(self._run_stream(item, scroll, agent_msg))
 
     # ── Autocomplete ──────────────────────────────────────────────────────
 
@@ -600,7 +589,7 @@ class OllamaAgentApp(App):
                 for idx, item in enumerate(self._prompt_queue, 1):
                     if clean_arg and not str(idx).startswith(clean_arg):
                         continue
-                    text = item.text.replace("\n", " ")
+                    text = item.replace("\n", " ")
                     preview = escape(text[:57] + "..." if len(text) > 60 else text)
                     items.append(
                         (
@@ -877,7 +866,7 @@ class OllamaAgentApp(App):
                 target_id = positional[0]
                 var_args = positional[1:]
                 try:
-                    tid, t = self.repl._task_ctx._resolve_task(target_id)
+                    tid, t = self.repl._task_ctx.resolve_task(target_id)
                     variables = parse_var_assignments(var_args)
                     rendered_prompt = t.render(variables)
                 except (TaskError, ValueError, TemplateError) as exc:
@@ -912,12 +901,12 @@ class OllamaAgentApp(App):
                 self.show_system_notice(f"[bold #f87171]✕ {_('Unknown command: {cmd}', cmd=cmd)}[/bold #f87171]")
                 return
 
-            spec = commands[cmd]
+            handler = commands[cmd]
             scroll_w = scroll.size.width if scroll.size.width > 10 else self.size.width
             self.repl.console.width = max(40, scroll_w - 6)
             self.repl.console.height = 25
             with self.repl.console.capture() as capture:
-                await safe_call(spec.handler, args, console=self.repl.console)
+                await safe_call(handler, args, console=self.repl.console)
             output = capture.get()
             if output:
                 self.show_system_output(Text.from_ansi(output), title=cmd_line)
@@ -951,7 +940,6 @@ class OllamaAgentApp(App):
                     self.repl.runtime,
                     prompt,
                     _TUIStreamingRenderer(self, scroll, agent_msg),
-                    auto_close=True,
                 )
             except asyncio.CancelledError:
                 self.show_system_notice(f"[bold #f87171]🛑 {_('Execution interrupted by user.')}[/bold #f87171]")
@@ -1002,7 +990,7 @@ class OllamaREPL:
         self._skills_ctx = SkillsContext(console=self.console)
         self._initial_rag_database = rag_database
         self._rag_ctx: RAGContext | None = None
-        self._commands: dict[str, REPLCommand] | None = None
+        self._commands: dict[str, REPLHandler] | None = None
         self.app: OllamaAgentApp | None = None
 
     def _get_rag_ctx(self) -> RAGContext:
@@ -1012,7 +1000,7 @@ class OllamaREPL:
             set_rag_manager(mgr)
         return self._rag_ctx
 
-    def _get_commands(self) -> dict[str, REPLCommand]:
+    def _get_commands(self) -> dict[str, REPLHandler]:
         """Lazily build and cache REPL command handlers."""
         if self._commands is None:
             self._commands = build_repl_handlers(
@@ -1110,19 +1098,18 @@ class OllamaREPL:
         )
 
     def _handle_queue_cmd(self, args: list[str]) -> None:
-        queue = self.app._prompt_queue if self.app is not None else None
+        queue = self.app._prompt_queue if self.app is not None else deque()
         if not args or args[0] == "list":
             if not queue:
                 self.console.print(f"[dim]{_('Prompt queue is empty.')}[/dim]")
                 return
             self.console.print(f"[bold #38bdf8]{_('Queued prompts ({count}):', count=len(queue))}[/bold #38bdf8]")
             for i, item in enumerate(queue, 1):
-                self.console.print(f"  [dim]#{i}[/dim] {item.text}")
+                self.console.print(f"  [dim]#{i}[/dim] {item}")
             return
         if args[0] == "clear":
-            count = len(queue) if queue is not None else 0
-            if queue is not None:
-                queue.clear()
+            count = len(queue)
+            queue.clear()
             if self.app is not None:
                 self.app._update_queue_ui()
             msg = _("Prompt queue cleared ({count} removed).", count=count)
@@ -1153,7 +1140,7 @@ class OllamaREPL:
             del queue[pos - 1]
             if self.app is not None:
                 self.app._update_queue_ui()
-            truncated_text = item.text.replace("\n", " ")
+            truncated_text = item.replace("\n", " ")
             if len(truncated_text) > 60:
                 truncated_text = truncated_text[:57] + "..."
             msg = _("Removed #{pos} from prompt queue: {text}", pos=pos, text=truncated_text)

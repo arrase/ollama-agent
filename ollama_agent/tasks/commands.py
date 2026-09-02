@@ -11,8 +11,8 @@ from rich.markup import escape
 from rich.table import Table
 
 from ..agent import AgentRuntime
-from ..core import DEFAULT_REASONING_EFFORT
-from ..core.resource_manager import require_text, resolve_unique_match
+from ..core import DEFAULT_REASONING_EFFORT, ReasoningEffortValue
+from ..core.resource_manager import require_text
 from ..i18n import _
 from ..settings import Settings, load_settings
 from ..streaming import run_non_interactive
@@ -43,18 +43,16 @@ class TasksContext:
     task_manager: TaskManager = field(default_factory=TaskManager)
     settings: Settings = field(default_factory=load_settings)
 
-    def _resolve_task(self, task_id: str) -> tuple[str, Task]:
-        try:
-            matches = self.task_manager.find_matches(task_id)
-        except ValueError as exc:
-            raise ValidationError(str(exc)) from exc
-        return resolve_unique_match(
-            matches,
+    def resolve_task(self, task_id: str) -> tuple[str, Task]:
+        return self.task_manager.resolve(
             task_id,
             label=_("Task"),
             not_found_error=TaskNotFoundError,
             ambiguous_error=AmbiguousTaskError,
+            validation_error=ValidationError,
         )
+
+    _resolve_task = resolve_task
 
     def _require(self, value: str, name: str) -> str:
         return require_text(value, name, ValidationError)
@@ -104,7 +102,7 @@ async def run_task(
     variables: dict[str, Any] | None = None,
     yolo: bool = False,
 ) -> None:
-    tid, t = ctx._resolve_task(task_id)
+    tid, t = ctx.resolve_task(task_id)
     try:
         rendered_prompt = t.render(variables)
     except (ValueError, TemplateError) as exc:
@@ -128,7 +126,7 @@ async def run_task(
 
 
 def delete_task(ctx: TasksContext, task_id: str) -> None:
-    tid, t = ctx._resolve_task(task_id)
+    tid, t = ctx.resolve_task(task_id)
     ctx.task_manager.delete(tid)
     ctx.console.print(f"[green]✓ {_('Task deleted: {title} ({tid})', title=escape(t.title), tid=escape(tid))}[/green]")
 
@@ -140,7 +138,7 @@ def create_task(
     title: str,
     prompt: str,
     model: str,
-    reasoning_effort: str = DEFAULT_REASONING_EFFORT,
+    reasoning_effort: ReasoningEffortValue = DEFAULT_REASONING_EFFORT,
     force: bool = False,
 ) -> None:
     title = ctx._require(title, _("Title"))

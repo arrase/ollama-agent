@@ -416,6 +416,7 @@
   "System Output": "시스템 출력",
   "esc to dismiss": "esc 키로 닫기",
   "Limit must be greater than 0": "제한은 0보다 커야 합니다",
+  "Limit must be greater than 0, got {limit}": "제한은 0보다 커야 합니다. 현재 값: {limit}",
   "Failed to query vector database: {e}": "벡터 데이터베이스를 쿼리하지 못했습니다: {e}",
   "Failed to get collection info: {e}": "컬렉션 정보를 가져오지 못했습니다: {e}",
   "Failed to create database '{name}': {e}": "데이터베이스 '{name}' 생성에 실패했습니다: {e}",
@@ -449,5 +450,9 @@
   "Unsupported input type '{type}' for input '{name}'": "입력 '{name}'에 대해 지원되지 않는 입력 유형 '{type}'",
   "Database": "데이터베이스",
   "Database name": "데이터베이스 이름",
-  "Search query cannot be empty.": "검색 쿼리는 비워 둘 수 없습니다."
+  "Search query cannot be empty.": "검색 쿼리는 비워 둘 수 없습니다.",
+  "Expected mapping for inputs in Task": "Task의 inputs에 매핑이 필요합니다",
+  "Invalid input definition for '{name}'": "'{name}'에 대한 잘못된 입력 정의입니다",
+  "MCP server '{name}': 'command' must be a non-empty string": "MCP 서버 '{name}': 'command'은(는) 빈 문자열이 아니어야 합니다",
+  "MCP server '{name}': 'url' must be a non-empty string": "MCP 서버 '{name}': 'url'은(는) 빈 문자열이 아니어야 합니다"
 }

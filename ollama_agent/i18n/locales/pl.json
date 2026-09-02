@@ -416,6 +416,7 @@
   "System Output": "Wyjście systemowe",
   "esc to dismiss": "esc, aby zamknąć",
   "Limit must be greater than 0": "Limit musi być większy niż 0",
+  "Limit must be greater than 0, got {limit}": "Limit musi być większy niż 0, otrzymano {limit}",
   "Failed to query vector database: {e}": "Nie udało się wykonać zapytania do bazy wektorowej: {e}",
   "Failed to get collection info: {e}": "Nie udało się pobrać informacji o kolekcji: {e}",
   "Failed to create database '{name}': {e}": "Nie udało się utworzyć bazy danych '{name}': {e}",
@@ -449,5 +450,9 @@
   "Unsupported input type '{type}' for input '{name}'": "Nieobsługiwany typ parametru '{type}' dla parametru '{name}'",
   "Database": "Baza danych",
   "Database name": "Nazwa bazy danych",
-  "Search query cannot be empty.": "Zapytanie wyszukiwania nie może być puste."
+  "Search query cannot be empty.": "Zapytanie wyszukiwania nie może być puste.",
+  "Expected mapping for inputs in Task": "Oczekiwano mapowania dla inputs w Task",
+  "Invalid input definition for '{name}'": "Nieprawidłowa definicja danych wejściowych dla '{name}'",
+  "MCP server '{name}': 'command' must be a non-empty string": "Serwer MCP '{name}': 'command' musi być niepustym ciągiem znaków",
+  "MCP server '{name}': 'url' must be a non-empty string": "Serwer MCP '{name}': 'url' musi być niepustym ciągiem znaków"
 }

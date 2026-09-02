@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from rich.console import Console
 
-from ollama_agent.core import ModelCapabilityError
+from ollama_agent.core import ModelCapabilityError, ModelContextWindowError
 from ollama_agent.i18n import set_locale
 from ollama_agent.interfaces.cli import create_argument_parser, handle_cli_commands
 from ollama_agent.interfaces.dispatch import (
@@ -17,8 +17,8 @@ from ollama_agent.interfaces.dispatch import (
 )
 from ollama_agent.main import _extract_early_language, main
 from ollama_agent.rag.commands import RAGContext
-from ollama_agent.rag import RAGManager, RAGSettings
-from ollama_agent.settings.config import Settings
+from ollama_agent.rag import RAGManager
+from ollama_agent.settings import RAGSettings, Settings
 from ollama_agent.skills.commands import SkillsContext
 from ollama_agent.tasks.commands import TasksContext
 
@@ -204,9 +204,9 @@ class TestDispatchAndCLI(unittest.TestCase):
         )
 
         # Inline-intercepted branches are gone from the registry handlers.
-        task_handler = handlers["/task"].handler
-        skill_handler = handlers["/skill"].handler
-        session_handler = handlers["/session"].handler
+        task_handler = handlers["/task"]
+        skill_handler = handlers["/skill"]
+        session_handler = handlers["/session"]
 
         # /task create and /task run now report unknown subcommand.
         task_handler(["create", "my-task"])
@@ -243,7 +243,7 @@ class TestDispatchAndCLI(unittest.TestCase):
             patch("sys.argv", ["ollama-agent", "task", "list"]),
             patch("ollama_agent.main.set_locale", return_value="en"),
             patch("ollama_agent.main.load_settings", return_value=Settings()),
-            patch("ollama_agent.main.handle_cli_commands", return_value=True) as mock_handle,
+            patch("ollama_agent.main.handle_subcommand") as mock_handle,
         ):
             main()
             mock_handle.assert_called_once()
@@ -265,7 +265,6 @@ class TestDispatchAndCLI(unittest.TestCase):
             patch("ollama_agent.main.set_locale", return_value="en"),
             patch("ollama_agent.main.load_settings", return_value=mock_settings),
             patch("ollama_agent.main.ensure_model_configured", return_value="qwen3:32b") as mock_ensure,
-            patch("ollama_agent.main.handle_cli_commands", return_value=False),
             patch("ollama_agent.main.AgentRuntime") as mock_runtime_cls,
             patch("ollama_agent.main.OllamaREPL") as mock_repl_cls,
             patch("asyncio.run") as mock_asyncio_run,
@@ -279,6 +278,19 @@ class TestDispatchAndCLI(unittest.TestCase):
             mock_repl_cls.assert_called_once()
             mock_asyncio_run.assert_called_once()
 
+    def test_main_prompt_flow(self) -> None:
+        mock_settings = Settings()
+        with (
+            patch("sys.argv", ["ollama-agent", "-p", "hello world"]),
+            patch("ollama_agent.main.set_locale", return_value="en"),
+            patch("ollama_agent.main.load_settings", return_value=mock_settings),
+            patch("ollama_agent.main.ensure_model_configured", return_value="qwen3:32b") as mock_ensure,
+            patch("ollama_agent.main.run_prompt_session") as mock_prompt_session,
+        ):
+            main()
+            mock_ensure.assert_called_once_with(mock_settings)
+            mock_prompt_session.assert_called_once()
+
     def test_main_model_capability_error_exits(self) -> None:
         with (
             patch("sys.argv", ["ollama-agent"]),
@@ -286,6 +298,19 @@ class TestDispatchAndCLI(unittest.TestCase):
             patch("ollama_agent.main.Console"),
             patch("ollama_agent.main.load_settings", return_value=Settings()),
             patch("ollama_agent.main.ensure_model_configured", side_effect=ModelCapabilityError("Model unsupported")),
+        ):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 1)
+
+    def test_main_context_window_error_exits(self) -> None:
+        with (
+            patch("sys.argv", ["ollama-agent", "-c", "invalid"]),
+            patch("ollama_agent.main.set_locale", return_value="en"),
+            patch("ollama_agent.main.Console"),
+            patch("ollama_agent.main.load_settings", return_value=Settings()),
+            patch("ollama_agent.main.ensure_model_configured", return_value="qwen3:32b"),
+            patch("ollama_agent.main.AgentRuntime", side_effect=ModelContextWindowError("Invalid context window")),
         ):
             with self.assertRaises(SystemExit) as cm:
                 main()

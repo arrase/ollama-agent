@@ -416,6 +416,7 @@
   "System Output": "系统输出",
   "esc to dismiss": "按 esc 关闭",
   "Limit must be greater than 0": "限制必须大于 0",
+  "Limit must be greater than 0, got {limit}": "限制必须大于 0，当前为 {limit}",
   "Failed to query vector database: {e}": "查询向量数据库失败：{e}",
   "Failed to get collection info: {e}": "获取集合信息失败：{e}",
   "Failed to create database '{name}': {e}": "创建数据库 '{name}' 失败：{e}",
@@ -449,5 +450,9 @@
   "Unsupported input type '{type}' for input '{name}'": "输入 '{name}' 的输入类型不受支持 '{type}'",
   "Database": "知识库",
   "Database name": "知识库名称",
-  "Search query cannot be empty.": "搜索查询不能为空。"
+  "Search query cannot be empty.": "搜索查询不能为空。",
+  "Expected mapping for inputs in Task": "Task 中的 inputs 预期为映射",
+  "Invalid input definition for '{name}'": "'{name}' 的输入定义无效",
+  "MCP server '{name}': 'command' must be a non-empty string": "MCP 服务器 '{name}': 'command' 必须是非空字符串",
+  "MCP server '{name}': 'url' must be a non-empty string": "MCP 服务器 '{name}': 'url' 必须是非空字符串"
 }

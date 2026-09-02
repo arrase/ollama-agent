@@ -82,6 +82,11 @@ def set_locale(lang: str | None = None) -> str:
     return _current_locale
 
 
+def get_locale() -> str:
+    """Return the active application locale code."""
+    return _current_locale
+
+
 def get_text(message: str, **kwargs: Any) -> str:
     """Translate a message string with optional format arguments."""
     template = _translations.get(message, message)
@@ -97,6 +102,7 @@ __all__ = [
     "SUPPORTED_LOCALES",
     "_",
     "detect_system_language",
+    "get_locale",
     "get_text",
     "set_locale",
 ]

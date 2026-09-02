@@ -12,6 +12,7 @@ from ollama_agent.i18n import (
     SUPPORTED_LOCALES,
     _,
     detect_system_language,
+    get_locale,
     set_locale,
 )
 from ollama_agent.interfaces.cli import create_argument_parser
@@ -110,6 +111,14 @@ class TestI18nLocaleManagement(unittest.TestCase):
     def test_set_unsupported_locale_raises_value_error(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unsupported language: unsupported_lang"):
             set_locale("unsupported_lang")
+
+    def test_get_locale(self) -> None:
+        set_locale("en")
+        self.assertEqual(get_locale(), "en")
+        set_locale("es")
+        self.assertEqual(get_locale(), "es")
+        set_locale("fr")
+        self.assertEqual(get_locale(), "fr")
 
 
 class TestI18nTranslations(unittest.TestCase):

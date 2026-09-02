@@ -21,6 +21,7 @@ from ..settings import MCP_LOG_PATH, MCP_PATH, SubAgentMCPServer
 _log = logging.getLogger(__name__)
 _ENV_RE = re.compile(r"\$\{([^}]+)\}|%([^%]+)%")
 _KNOWN_TRANSPORTS = {"sse", "websocket", "http", "streamable_http", "streamable-http"}
+DEFAULT_MCP_TIMEOUT: float = 10.0
 
 _orig_stdio_client = mcp.client.stdio.stdio_client
 
@@ -76,12 +77,15 @@ def _build_mcp_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, An
     unsupported transport.
     """
     if "command" in cfg:
-        args = cfg.get("args", [])
+        command = cfg["command"]
+        if not isinstance(command, str) or not command.strip():
+            raise MCPConfigError(_("MCP server '{name}': 'command' must be a non-empty string", name=server_name))
+        args = cfg["args"] if "args" in cfg else []
         if not isinstance(args, list):
             raise MCPConfigError(_("MCP server '{name}': 'args' must be a list", name=server_name))
         out: dict[str, Any] = {
             "transport": "stdio",
-            "command": cfg["command"],
+            "command": command,
             "args": args,
         }
         if "cwd" in cfg:
@@ -96,8 +100,17 @@ def _build_mcp_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, An
         return out
 
     if "url" in cfg:
-        transport = cfg.get("transport") or cfg.get("type")
-        if transport is not None and transport not in _KNOWN_TRANSPORTS:
+        url = cfg["url"]
+        if not isinstance(url, str) or not url.strip():
+            raise MCPConfigError(_("MCP server '{name}': 'url' must be a non-empty string", name=server_name))
+        if "transport" in cfg:
+            transport = cfg["transport"]
+        elif "type" in cfg:
+            transport = cfg["type"]
+        else:
+            transport = "http"
+
+        if transport not in _KNOWN_TRANSPORTS:
             raise MCPConfigError(
                 _(
                     "MCP server '{name}': unsupported transport '{transport}'",
@@ -105,7 +118,7 @@ def _build_mcp_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, An
                     transport=transport,
                 )
             )
-        out = {"transport": transport if transport is not None else "http", "url": cfg["url"]}
+        out = {"transport": transport, "url": url}
         for k in ("headers", "timeout", "sse_read_timeout", "session_kwargs"):
             if k in cfg:
                 out[k] = cfg[k]
@@ -156,7 +169,7 @@ async def _connect_and_load(name: str, conn: dict[str, Any]) -> list[Any]:
     Raises MCPConfigError when the connection or tool loading fails.
     """
     try:
-        async with asyncio.timeout(10.0):
+        async with asyncio.timeout(DEFAULT_MCP_TIMEOUT):
             client = MultiServerMCPClient({name: conn})  # type: ignore[dict-item,arg-type]
             tools = await client.get_tools()
     except Exception as exc:
@@ -229,7 +242,7 @@ async def load_subagent_mcp_tools(
                 )
             )
         seen_names.add(name)
-        connections[name] = _build_mcp_connection(name, {"command": srv.command, "args": srv.args, "env": srv.env})
+        connections[name] = _build_mcp_connection(name, srv.to_dict())
 
     tools = await _load_tools_from_connections(connections)
     _log.info("Subagent '%s': loaded %d MCP tools", subagent_name, len(tools))

@@ -18,9 +18,10 @@ from textual.widgets import Button, Collapsible, Markdown, OptionList, Static, T
 
 from ..agent.episodic_memory import HistoryError, load_past_user_prompts
 from ..i18n import _
+from ..streaming import build_approval_decisions
 
 if TYPE_CHECKING:
-    from .repl import OllamaAgentApp, OllamaREPL, QueuedItem
+    from .repl import OllamaAgentApp, OllamaREPL
 
 _log = logging.getLogger(__name__)
 
@@ -43,23 +44,16 @@ class AgentHeader(Static):
         ms = self.repl.runtime.settings.model
         tokens = self.repl.runtime.last_context_tokens
         eff_ctx = self.repl.runtime.effective_context_window
-        if isinstance(eff_ctx, int) and eff_ctx > 0:
-            num_ctx = eff_ctx
-        elif isinstance(ms.context_window, int):
-            num_ctx = ms.context_window
-        else:
-            num_ctx = 0
+        num_ctx = (
+            eff_ctx
+            if (isinstance(eff_ctx, int) and eff_ctx > 0)
+            else (ms.context_window if isinstance(ms.context_window, int) else 0)
+        )
 
-        if num_ctx > 0 and isinstance(tokens, (int, float)):
-            tokens_val = tokens
-            pct = int((tokens_val / num_ctx) * 100)
-            if pct > 90:
-                color = "#f87171"
-            elif pct > 75:
-                color = "#fbbf24"
-            else:
-                color = "#38bdf8"
-            tok_str = f"{tokens_val / 1000:.1f}k" if tokens_val >= 1000 else str(int(tokens_val))
+        if num_ctx and tokens:
+            pct = int((tokens / num_ctx) * 100)
+            color = "#f87171" if pct > 90 else "#fbbf24" if pct > 75 else "#38bdf8"
+            tok_str = f"{tokens / 1000:.1f}k" if tokens >= 1000 else str(int(tokens))
             ctx_str = f"{num_ctx / 1000:.1f}k" if num_ctx >= 1000 else str(int(num_ctx))
             ctx_label = _("Context:")
             ctx_info = (
@@ -170,7 +164,7 @@ class PromptQueueWidget(Static):
 
     can_focus = False
 
-    def update_queue(self, queue: Sequence[QueuedItem]) -> None:
+    def update_queue(self, queue: Sequence[str]) -> None:
         if not queue:
             self.display = False
             return
@@ -181,7 +175,7 @@ class PromptQueueWidget(Static):
         lines = [header]
 
         for i, item in enumerate(islice(queue, 3), 1):
-            text = item.text.replace("\n", " ")
+            text = item.replace("\n", " ")
             if len(text) > 60:
                 text = text[:57] + "..."
             lines.append(f"  [dim]#{i}[/dim] {escape(text)}")
@@ -531,11 +525,11 @@ class AgentResponse(Container):
 
     def add_error(self, content: str) -> None:
         self._reset_active_stream()
-        self.mount(SystemMessage(f"[bold #f87171]✕ {_('Error:')}[/bold #f87171] [red]{escape(content)}[/red]"))
+        self.mount(Static(f"[bold #f87171]✕ {_('Error:')}[/bold #f87171] [red]{escape(content)}[/red]", classes="system-message"))
 
     def add_warning(self, content: str) -> None:
         self._reset_active_stream()
-        self.mount(SystemMessage(f"[bold #fbbf24]⚠ {_('Warning:')}[/bold #fbbf24] [yellow]{escape(content)}[/yellow]"))
+        self.mount(Static(f"[bold #fbbf24]⚠ {_('Warning:')}[/bold #fbbf24] [yellow]{escape(content)}[/yellow]", classes="system-message"))
 
 
 class ToolCallMessage(Static):
@@ -559,12 +553,6 @@ class ToolOutputMessage(Static):
             f"  [#34d399]✓[/#34d399] {prefix}[dim]{_('output received')}[/dim]{suffix}",
             **kwargs,
         )
-
-
-class SystemMessage(Static):
-    """Command output or system-level notice."""
-
-    pass
 
 
 class ToolApprovalWidget(Container):
@@ -657,18 +645,18 @@ class ToolApprovalWidget(Container):
         for child in self.buttons_container.query(Button):
             child.disabled = True
 
-        decisions = []
-        for req in self.action_requests:
-            name = req["name"]
-            if decision_type == "approve-btn":
-                decisions.append({"type": "approve"})
-            elif decision_type == "reject-btn":
-                decisions.append({"type": "reject", "message": _("User rejected executing tool '{name}'.", name=name)})
-            elif decision_type == "allow-btn":
-                self.app_ref.repl.runtime.auto_approved_tools.add(name)
-                decisions.append({"type": "approve"})
-            elif decision_type == "cancel-btn":
-                decisions.append({"type": "reject", "message": _("User cancelled the execution.")})
+        if decision_type == "approve-btn":
+            decisions = build_approval_decisions(self.action_requests, "approve")
+        elif decision_type == "reject-btn":
+            decisions = build_approval_decisions(self.action_requests, "reject")
+        elif decision_type == "allow-btn":
+            decisions = build_approval_decisions(self.action_requests, "allow", runtime=self.app_ref.repl.runtime)
+        elif decision_type == "cancel-btn":
+            decisions = build_approval_decisions(
+                self.action_requests, "reject", reject_message=_("User cancelled the execution.")
+            )
+        else:
+            decisions = []
 
         self.buttons_container.remove()
         self.buttons_container = None

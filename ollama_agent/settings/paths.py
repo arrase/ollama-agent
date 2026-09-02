@@ -23,3 +23,16 @@ TASKS_DIR = APP_DIR / "tasks"
 RAG_DIR = APP_DIR / "rag"
 SKILLS_DIR = APP_DIR / "skills"
 BUILTIN_SKILLS_DIR = Path(__file__).resolve().parent.parent / "skills" / "builtin"
+
+
+def find_agents_file(start_dir: Path = Path(".")) -> Path | None:
+    """Find AGENTS.md in the given directory or its parent hierarchy up to git root."""
+    current = start_dir.resolve()
+    for parent in [current, *current.parents]:
+        for candidate in ("AGENTS.md", "agents.md", ".agents.md"):
+            target = parent / candidate
+            if target.is_file():
+                return target
+        if (parent / ".git").exists():
+            break
+    return None

@@ -279,7 +279,7 @@ ToolOutputMessage {
 }
 
 /* ── System Messages ───────────────────────────────────────────────────── */
-SystemMessage {
+SystemMessage, .system-message {
     margin: 1 0 1 2;
     padding: 0;
     color: #e6edf3;

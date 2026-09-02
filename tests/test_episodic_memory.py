@@ -241,9 +241,9 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
             output_active = await search_past_conversations.ainvoke({"query": "FastAPI"})
             self.assertIn("No relevant past conversations found", output_active)
 
-            # Limit sanitization
-            output_limit = await search_past_conversations.ainvoke({"query": "React Vite", "limit": -5})
-            self.assertIn("react", output_limit.lower())
+            # Non-positive limit raises ValueError
+            with self.assertRaises(ValueError):
+                await search_past_conversations.ainvoke({"query": "React Vite", "limit": -5})
 
     def test_tool_timeout_setter_getter(self) -> None:
         set_tool_timeout(45)

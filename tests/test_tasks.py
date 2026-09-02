@@ -33,7 +33,6 @@ class TestTaskManager(unittest.TestCase):
 
         loaded = self.mgr.get("run-tests")
         self.assertIsNotNone(loaded)
-        assert loaded is not None
         self.assertEqual(loaded.title, "Run tests")
         self.assertEqual(loaded.prompt, "pytest -v")
 
@@ -319,6 +318,15 @@ class TestTaskManager(unittest.TestCase):
         self.assertEqual(task.render(), "count=0, active=False, prefix=''")
         self.assertEqual(task.render({"count": 5}), "count=5, active=False, prefix=''")
         self.assertEqual(task.render({"active": True}), "count=0, active=True, prefix=''")
+
+    def test_render_explicit_none_does_not_swallow_none(self) -> None:
+        task = Task(
+            title="ExplicitNone",
+            prompt="val={{ val }}",
+            model="m",
+            inputs={"val": TaskInput(type="string", default="fallback")},
+        )
+        self.assertEqual(task.render({"val": None}), "val=None")
 
     def test_render_undefined_variable_in_block_raises(self) -> None:
         task = Task(

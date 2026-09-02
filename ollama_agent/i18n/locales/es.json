@@ -416,6 +416,7 @@
   "System Output": "Salida del sistema",
   "esc to dismiss": "esc para descartar",
   "Limit must be greater than 0": "El límite debe ser mayor que 0",
+  "Limit must be greater than 0, got {limit}": "El límite debe ser mayor que 0, obtenido {limit}",
   "Failed to query vector database: {e}": "Error al consultar la base de datos vectorial: {e}",
   "Failed to get collection info: {e}": "Error al obtener información de la colección: {e}",
   "Failed to create database '{name}': {e}": "Error al crear la base de datos '{name}': {e}",
@@ -449,5 +450,9 @@
   "Unsupported input type '{type}' for input '{name}'": "Tipo de entrada no compatible '{type}' para la entrada '{name}'",
   "Database": "Base de datos",
   "Database name": "Nombre de la base de datos",
-  "Search query cannot be empty.": "La consulta de búsqueda no puede estar vacía."
+  "Search query cannot be empty.": "La consulta de búsqueda no puede estar vacía.",
+  "Expected mapping for inputs in Task": "Se esperaba un mapeo para inputs en Task",
+  "Invalid input definition for '{name}'": "Definición de entrada no válida para '{name}'",
+  "MCP server '{name}': 'command' must be a non-empty string": "Servidor MCP '{name}': 'command' debe ser una cadena no vacía",
+  "MCP server '{name}': 'url' must be a non-empty string": "Servidor MCP '{name}': 'url' debe ser una cadena no vacía"
 }

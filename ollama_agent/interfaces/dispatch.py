@@ -4,17 +4,14 @@ from __future__ import annotations
 
 import argparse
 import inspect
-from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 from rich.console import Console
 
 from ..agent import AgentRuntime, list_subagents
 from ..agent.episodic_memory import HistoryError
-from ..core import DEFAULT_REASONING_EFFORT
 from ..i18n import _
-from ..mcp import list_mcp_servers, reload_mcp_servers
-from ..mcp.loader import MCPConfigError
+from ..mcp import MCPConfigError, list_mcp_servers, reload_mcp_servers
 from ..rag import (
     RAGContext,
     RAGError,
@@ -53,13 +50,7 @@ from .session_commands import (
 )
 
 CLIHandler = Callable[[], Any]
-
-
-@dataclass(frozen=True)
-class REPLCommand:
-    """Declarative REPL command description."""
-
-    handler: Callable[[list[str]], object]
+REPLHandler = Callable[[list[str]], object]
 
 
 async def safe_call(
@@ -124,8 +115,8 @@ def build_cli_handlers(
             args.task_id,
             title=args.title,
             prompt=args.task_prompt,
-            model=(args.task_model or args.model or ""),
-            reasoning_effort=(args.task_effort or args.effort or DEFAULT_REASONING_EFFORT),
+            model=args.task_model,
+            reasoning_effort=args.task_effort,
             force=args.force,
         ),
         ("rag", "list"): lambda: list_rag_databases(rag_ctx),
@@ -179,7 +170,7 @@ def build_repl_handlers(
     current_thread_id: Callable[[], str],
     switch_effort: Callable[[str], Awaitable[None]],
     switch_context_window: Callable[[str], Awaitable[None]],
-) -> dict[str, REPLCommand]:
+) -> dict[str, REPLHandler]:
     """Build the REPL command registry for unified slash commands.
 
     Only commands not intercepted inline by the TUI app are registered
@@ -368,19 +359,19 @@ def build_repl_handlers(
         console.print(f"[red]{err_msg}[/red]")
         return None
 
-    cmds: dict[str, REPLCommand] = {
-        "/queue": REPLCommand(handle_queue),
-        "/yolo": REPLCommand(handle_yolo),
-        "/stealth": REPLCommand(handle_stealth),
-        "/session": REPLCommand(handle_session),
-        "/model": REPLCommand(handle_model),
-        "/effort": REPLCommand(handle_effort),
-        "/context": REPLCommand(handle_context),
-        "/params": REPLCommand(handle_params),
-        "/task": REPLCommand(handle_task),
-        "/skill": REPLCommand(handle_skill),
-        "/rag": REPLCommand(handle_rag),
-        "/mcp": REPLCommand(handle_mcp),
-        "/agents": REPLCommand(handle_agents),
+    cmds: dict[str, REPLHandler] = {
+        "/queue": handle_queue,
+        "/yolo": handle_yolo,
+        "/stealth": handle_stealth,
+        "/session": handle_session,
+        "/model": handle_model,
+        "/effort": handle_effort,
+        "/context": handle_context,
+        "/params": handle_params,
+        "/task": handle_task,
+        "/skill": handle_skill,
+        "/rag": handle_rag,
+        "/mcp": handle_mcp,
+        "/agents": handle_agents,
     }
     return cmds

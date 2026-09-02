@@ -416,6 +416,7 @@
   "System Output": "Вывод системы",
   "esc to dismiss": "esc для закрытия",
   "Limit must be greater than 0": "Лимит должен быть больше 0",
+  "Limit must be greater than 0, got {limit}": "Лимит должен быть больше 0, получено {limit}",
   "Failed to query vector database: {e}": "Не удалось выполнить запрос к векторной базе данных: {e}",
   "Failed to get collection info: {e}": "Не удалось получить информацию о коллекции: {e}",
   "Failed to create database '{name}': {e}": "Не удалось создать базу данных '{name}': {e}",
@@ -449,5 +450,9 @@
   "Unsupported input type '{type}' for input '{name}'": "Неподдерживаемый тип ввода '{type}' для ввода '{name}'",
   "Database": "База данных",
   "Database name": "Имя базы данных",
-  "Search query cannot be empty.": "Поисковый запрос не может быть пустым."
+  "Search query cannot be empty.": "Поисковый запрос не может быть пустым.",
+  "Expected mapping for inputs in Task": "Ожидалось сопоставление для inputs в Task",
+  "Invalid input definition for '{name}'": "Недопустимое определение ввода для '{name}'",
+  "MCP server '{name}': 'command' must be a non-empty string": "MCP-сервер '{name}': 'command' должен быть непустой строкой",
+  "MCP server '{name}': 'url' must be a non-empty string": "MCP-сервер '{name}': 'url' должен быть непустой строкой"
 }

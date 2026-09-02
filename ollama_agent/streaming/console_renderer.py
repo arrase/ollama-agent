@@ -13,7 +13,7 @@ from rich.padding import Padding
 
 from ..i18n import _
 from .base import StreamingRenderer
-from .interrupts import extract_action_requests
+from .interrupts import build_approval_decisions, extract_action_requests
 
 if TYPE_CHECKING:
     from ..agent import AgentRuntime
@@ -127,25 +127,20 @@ class ConsoleStreamingRenderer(StreamingRenderer):
                 self.console.file.flush()
                 choice = (await asyncio.to_thread(input)).strip().lower()
                 if choice == "y":
-                    return [{"type": "approve"} for _ in action_requests]
-                elif choice == "n":
-                    return [
-                        {"type": "reject", "message": _("User rejected executing tool '{name}'.", name=req["name"])}
-                        for req in action_requests
-                    ]
-                elif choice == "a":
-                    for r in action_requests:
-                        runtime.auto_approved_tools.add(r["name"])
-                    return [{"type": "approve"} for _ in action_requests]
-                elif choice == "c":
-                    self.console.print(f"  [red]✗ {_('Cancelled')}[/red]\n")
-                    return None
-                else:
-                    invalid_msg = _("Invalid choice. Please enter 'y', 'n', 'a', or 'c'.")
-                    self.console.print(f"  [red]{invalid_msg}[/red]")
+                    return build_approval_decisions(action_requests, "approve")
+                if choice == "n":
+                    return build_approval_decisions(action_requests, "reject")
+                if choice == "a":
+                    return build_approval_decisions(action_requests, "allow", runtime=runtime)
+                if choice == "c":
+                    break
+                invalid_msg = _("Invalid choice. Please enter 'y', 'n', 'a', or 'c'.")
+                self.console.print(f"  [red]{invalid_msg}[/red]")
         except EOFError:
-            self.console.print(f"  [red]✗ {_('Cancelled')}[/red]\n")
-            return None
+            pass
+
+        self.console.print(f"  [red]✗ {_('Cancelled')}[/red]\n")
+        return None
 
     def close(self) -> None:
         self._end_reasoning()

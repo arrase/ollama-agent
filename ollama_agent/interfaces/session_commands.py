@@ -31,7 +31,7 @@ _serializer = JsonPlusSerializer()
 
 def is_current(thread_id: str, current_thread_id: str) -> bool:
     """Return whether *thread_id* is the current session (exact match or bidirectional prefix match)."""
-    if not thread_id.strip() or not current_thread_id.strip():
+    if not thread_id or not current_thread_id:
         return False
     return (
         thread_id == current_thread_id
@@ -88,11 +88,7 @@ def list_sessions(
     current_thread_id: str = "",
 ) -> list[dict[str, Any]]:
     """List available chat sessions with step counts, timestamps, and current session indicator."""
-    try:
-        sessions = get_available_sessions(db_path)
-    except HistoryError as exc:
-        console.print(f"[red]{exc}[/red]")
-        return []
+    sessions = get_available_sessions(db_path)
     if not sessions:
         console.print(f"[yellow]{_('No saved sessions found in history.')}[/yellow]")
         return []
@@ -141,11 +137,7 @@ def resume_session(
     db_path: Path = HISTORY_DB_PATH,
 ) -> str | None:
     """Resume a previous session by thread ID or prefix."""
-    try:
-        sessions = available_sessions if available_sessions is not None else get_available_sessions(db_path)
-    except HistoryError as exc:
-        console.print(f"[red]{exc}[/red]")
-        return None
+    sessions = available_sessions if available_sessions is not None else get_available_sessions(db_path)
     if not sessions:
         console.print(f"[red]{_('No sessions available to resume.')}[/red]")
         return None
@@ -177,11 +169,7 @@ def delete_session(
     db_path: Path = HISTORY_DB_PATH,
 ) -> bool:
     """Delete a session from the SQLite checkpoint database."""
-    try:
-        sessions = get_available_sessions(db_path)
-    except HistoryError as exc:
-        console.print(f"[red]{exc}[/red]")
-        return False
+    sessions = get_available_sessions(db_path)
     resolved = resolve_session_id(target_id, sessions)
     if resolved is None:
         not_found_msg = _("Session '{target_id}' not found.", target_id=target_id)
@@ -211,11 +199,7 @@ async def export_session(
     db_path: Path = HISTORY_DB_PATH,
 ) -> Path | None:
     """Export conversation messages from a session to a Markdown file."""
-    try:
-        sessions = get_available_sessions(db_path)
-    except HistoryError as exc:
-        console.print(f"[red]{exc}[/red]")
-        return None
+    sessions = get_available_sessions(db_path)
     resolved = resolve_session_id(target_id, sessions)
     if resolved is None:
         not_found_msg = _("Session '{target_id}' not found.", target_id=target_id)
@@ -239,8 +223,8 @@ async def export_session(
     ]
 
     for msg in messages:
-        role = getattr(msg, "type", "unknown")
-        content = extract_text(getattr(msg, "content", ""))
+        role = msg.type
+        content = extract_text(msg.content)
 
         if role in ("human", "user"):
             lines.extend([f"## 👤 {user_label}", "", content, ""])
@@ -248,16 +232,16 @@ async def export_session(
             lines.extend([f"## 🤖 {asst_label}", ""])
             if content:
                 lines.extend([content, ""])
-            for tc in getattr(msg, "tool_calls", None) or []:
-                tc_name = tc.get("name", "tool") if isinstance(tc, dict) else getattr(tc, "name", "tool")
-                tc_args = tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {})
+            for tc in getattr(msg, "tool_calls", []):
+                tc_name = tc["name"]
+                tc_args = tc["args"]
                 tool_call_hdr = _("Tool: {name}", name=tc_name)
                 args_str = (
                     json.dumps(tc_args, indent=2, ensure_ascii=False) if isinstance(tc_args, dict) else str(tc_args)
                 )
                 lines.extend([f"### ⚙ {tool_call_hdr}", "```json", args_str, "```", ""])
         elif role == "tool":
-            name = getattr(msg, "name", "tool")
+            name = msg.name
             tool_hdr = _("Tool: {name}", name=name)
             lines.extend([f"### ⚙ {tool_hdr}", "```", content, "```", ""])
 

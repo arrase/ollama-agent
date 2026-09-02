@@ -176,27 +176,20 @@ def resolve_context_files(
     def add_file(file_path: Path) -> None:
         nonlocal total_size, resolved_size, file_count
 
-        try:
-            size = file_path.stat().st_size
-        except OSError as e:
-            raise PromptProcessingError(_("Failed to read file {file_path}: {e}", file_path=file_path, e=e)) from e
-
-        mime = get_file_type(file_path)
-        attachment_type = _multimodal_kind(mime)
-        if attachment_type is not None:
-            classifications[file_path] = attachment_type
-        elif is_binary_file(file_path):
-            raise PromptProcessingError(_("Cannot read binary file as text: {file_path}", file_path=file_path))
-
         if file_count >= max_files:
             raise ContextLimitExceededError(_("Mentions limit exceeded: max {max_files} files.", max_files=max_files))
+
+        size = _check_file_size(file_path, max_file_size)
 
         if total_size + size > max_total_size:
             raise ContextLimitExceededError(
                 _("Total context size limit of {max_total_size} bytes exceeded.", max_total_size=max_total_size)
             )
 
+        mime = get_file_type(file_path)
+        attachment_type = _multimodal_kind(mime)
         if attachment_type is not None:
+            classifications[file_path] = attachment_type
             b64_data = read_binary_file_b64(file_path, max_file_size)
             binary_attachments.append(
                 {

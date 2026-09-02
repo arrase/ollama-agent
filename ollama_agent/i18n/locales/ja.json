@@ -416,6 +416,7 @@
   "System Output": "システム出力",
   "esc to dismiss": "escで閉じる",
   "Limit must be greater than 0": "制限は0より大きい必要があります",
+  "Limit must be greater than 0, got {limit}": "制限は0より大きい必要があります（現在値: {limit}）",
   "Failed to query vector database: {e}": "ベクトルデータベースのクエリに失敗しました: {e}",
   "Failed to get collection info: {e}": "コレクション情報の取得に失敗しました: {e}",
   "Failed to create database '{name}': {e}": "データベース '{name}' の作成に失敗しました: {e}",
@@ -449,5 +450,9 @@
   "Unsupported input type '{type}' for input '{name}'": "入力 '{name}' に対してサポートされていない入力タイプです '{type}'",
   "Database": "データベース",
   "Database name": "データベース名",
-  "Search query cannot be empty.": "検索クエリを空にすることはできません。"
+  "Search query cannot be empty.": "検索クエリを空にすることはできません。",
+  "Expected mapping for inputs in Task": "Task の inputs にはマッピングが必要です",
+  "Invalid input definition for '{name}'": "'{name}' の入力定義が無効です",
+  "MCP server '{name}': 'command' must be a non-empty string": "MCP サーバー '{name}': 'command' は空でない文字列である必要があります",
+  "MCP server '{name}': 'url' must be a non-empty string": "MCP サーバー '{name}': 'url' は空でない文字列である必要があります"
 }

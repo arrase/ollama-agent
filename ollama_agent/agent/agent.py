@@ -8,7 +8,7 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, AsyncGenerator, Self, cast
+from typing import Any, AsyncGenerator, Self
 
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
@@ -22,6 +22,7 @@ from ..core import (
     PromptProcessingError,
     create_ollama_chat_model,
     ensure_model_supports_tools,
+    get_model_creation_kwargs,
     process_prompt_mentions,
     validate_reasoning_effort,
 )
@@ -71,7 +72,6 @@ def _prepare_instructions(settings: Settings) -> str:
     }
     instructions = render_prompt_template(base_instructions, context)
     os_info = environment_block(include_cwd=True)
-    ensure_memory_file(MEMORY_PATH)
     return instructions + os_info
 
 
@@ -89,8 +89,8 @@ class AgentRuntime:
     effective_model_params: dict[str, tuple[Any, str]] = field(default_factory=dict, init=False)
     graph: Any = field(default=None, init=False, repr=False)
     _instructions: str = field(default="", init=False)
-    _checkpointer: Any = field(default=None, init=False, repr=False)
-    _memory_checkpointer: Any = field(default=None, init=False, repr=False)
+    _checkpointer: AsyncSqliteSaver | None = field(default=None, init=False, repr=False)
+    _memory_checkpointer: MemorySaver | None = field(default=None, init=False, repr=False)
     _checkpointer_stack: contextlib.AsyncExitStack = field(
         default_factory=contextlib.AsyncExitStack, init=False, repr=False
     )
@@ -110,29 +110,13 @@ class AgentRuntime:
     async def _build_graph(self) -> Any:
         ms = self.settings.model
 
-        model_coro = create_ollama_chat_model(
-            model=ms.name,
-            base_url=ms.base_url,
-            context_window=ms.context_window,
-            reasoning_effort=validate_reasoning_effort(ms.reasoning_effort),
-            temperature=ms.temperature,
-            top_p=ms.top_p,
-            top_k=ms.top_k,
-            min_p=ms.min_p,
-            presence_penalty=ms.presence_penalty,
-            repeat_penalty=ms.repeat_penalty,
-            warn_callback=_log.warning,
-        )
+        model_coro = create_ollama_chat_model(**get_model_creation_kwargs(ms, warn_callback=_log.warning))
         mcp_coro = load_main_mcp_tools()
         subagents_coro = build_subagents(
             self.settings.subagents,
             model_settings=self.settings.model,
         )
-        checkpointer_coro = (
-            asyncio.sleep(0, result=self._get_memory_checkpointer())
-            if self.stealth_mode
-            else self._sqlite_checkpointer()
-        )
+        checkpointer_coro = self._get_memory_checkpointer() if self.stealth_mode else self._sqlite_checkpointer()
 
         model, mcp_tools, subagents, checkpointer = await asyncio.gather(
             model_coro,
@@ -160,6 +144,7 @@ class AgentRuntime:
         SKILLS_DIR.mkdir(parents=True, exist_ok=True)
         TASKS_DIR.mkdir(parents=True, exist_ok=True)
         BUILTIN_SKILLS_DIR.mkdir(parents=True, exist_ok=True)
+        ensure_memory_file(MEMORY_PATH)
 
         agent_backend = FilesystemBackend(
             root_dir=MEMORY_PATH.parent,
@@ -242,12 +227,12 @@ class AgentRuntime:
 
         return create_deep_agent(**kwargs)
 
-    def _get_memory_checkpointer(self) -> Any:
+    async def _get_memory_checkpointer(self) -> MemorySaver:
         if self._memory_checkpointer is None:
             self._memory_checkpointer = MemorySaver()
         return self._memory_checkpointer
 
-    async def _sqlite_checkpointer(self) -> Any:
+    async def _sqlite_checkpointer(self) -> AsyncSqliteSaver:
         if self._checkpointer is None:
             saver = AsyncSqliteSaver.from_conn_string(str(HISTORY_DB_PATH))
             self._checkpointer = await self._checkpointer_stack.enter_async_context(saver)
@@ -316,15 +301,12 @@ class AgentRuntime:
             stream_mode=["messages", "custom"],
         ):
             if mode == "custom" and isinstance(event, dict) and event.get("type"):
-                yield cast(dict[str, Any], event)
+                yield event
                 continue
-
             if mode == "messages":
-                chunk = event[0] if isinstance(event, tuple) and event else event
+                chunk = event[0]
                 meta = chunk.response_metadata
-                # Usage metadata is the only trusted token source; when the
-                # host does not report it, last_context_tokens stays 0 (= unknown).
-                if isinstance(meta, dict) and "prompt_eval_count" in meta:
+                if "prompt_eval_count" in meta:
                     self.last_context_tokens = int(meta.get("eval_count", 0)) + int(meta["prompt_eval_count"])
                 for result in parser.process_chunk(chunk, hide_reasoning=hide_reasoning):
                     yield result

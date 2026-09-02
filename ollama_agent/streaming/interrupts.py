@@ -5,39 +5,35 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 
+from ..i18n import _
+
+
 def extract_action_requests(interrupt_event: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """Extract validated action requests from a streaming interrupt event.
+    """Extract action requests from a streaming interrupt event."""
+    return interrupt_event["interrupts"][0].value["action_requests"]
 
-    This is the single integration point for parsing the ``{"interrupts": [...]}``
-    payload emitted by :meth:`AgentRuntime.run_streamed`. Consumers outside the
-    streaming package (e.g. ``ollama_agent/interfaces/repl.py``) must import this
-    helper instead of re-implementing the parse, so any change to the interrupt
-    format only needs to happen here.
 
-    Args:
-        interrupt_event: Event mapping with a non-empty ``"interrupts"`` list;
-            the first interrupt's ``value`` must be a mapping holding an
-            ``"action_requests"`` list of dicts with ``name`` and ``args`` keys.
+def build_approval_decisions(
+    action_requests: list[dict[str, Any]],
+    action: str,  # "approve", "reject", or "allow"
+    *,
+    runtime: Any = None,
+    reject_message: str | None = None,
+) -> list[dict[str, Any]]:
+    """Consolidate LangGraph approval/rejection payload construction used across CLI and TUI."""
+    if action == "allow" and runtime:
+        for req in action_requests:
+            runtime.auto_approved_tools.add(req["name"])
 
-    Returns:
-        The validated action requests list.
+    if action in ("approve", "allow"):
+        return [{"type": "approve"} for _ in action_requests]
 
-    Raises:
-        ValueError: If the interrupt payload is malformed.
-    """
-    interrupts = interrupt_event.get("interrupts")
-    if not isinstance(interrupts, (list, tuple)) or not interrupts:
-        raise ValueError("Malformed interrupt event: 'interrupts' must be a non-empty list or tuple")
+    if action == "reject":
+        if reject_message:
+            return [{"type": "reject", "message": reject_message} for _ in action_requests]
+        return [
+            {"type": "reject", "message": _("User rejected executing tool '{name}'.", name=req["name"])}
+            for req in action_requests
+        ]
 
-    value = getattr(interrupts[0], "value", None)
-    if not isinstance(value, Mapping):
-        raise ValueError("Malformed interrupt payload: first interrupt has no mapping 'value'")
-
-    action_requests = value.get("action_requests")
-    if not isinstance(action_requests, (list, tuple)) or not action_requests:
-        raise ValueError("Malformed interrupt payload: 'action_requests' must be a non-empty list or tuple")
-
-    for req in action_requests:
-        if not isinstance(req, dict) or "name" not in req or "args" not in req:
-            raise ValueError(f"Malformed action request: {req!r}")
-    return list(action_requests)
+    raise ValueError(f"Unknown action: {action}")

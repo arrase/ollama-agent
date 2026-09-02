@@ -32,13 +32,6 @@ VALID_SAMPLING_PARAMS: dict[str, type] = {
 }
 
 
-def _list_models_sync(base_url: str) -> list[Any]:
-    """Fetch the list of available Ollama models synchronously."""
-    client = ollama.Client(host=base_url)
-    response = client.list()
-    return list(response.models)
-
-
 async def _list_models(base_url: str) -> list[Any]:
     """Fetch the list of available Ollama models asynchronously."""
     client = ollama.AsyncClient(host=base_url)
@@ -87,7 +80,7 @@ async def set_model(
     model_name: str,
     *,
     runtime: AgentRuntime,
-) -> str:
+) -> str | None:
     """Switch to model_name, returning the new model name."""
     try:
         base_url = runtime.settings.model.base_url
@@ -98,11 +91,11 @@ async def set_model(
                 model_name=model_name,
             )
             console.print(f"[red]{not_found_msg}[/red]")
-            return runtime.settings.model.name
+            return None
     except (ollama.ResponseError, OSError) as exc:
         err_msg = _("Error checking model: {exc}", exc=exc)
         console.print(f"[red]{err_msg}[/red]")
-        return runtime.settings.model.name
+        return None
 
     current = runtime.settings.model.name
     if model_name == current:
@@ -117,11 +110,11 @@ async def set_model(
                 model_name=model_name,
             )
             console.print(f"[red]{no_tools_msg}[/red]")
-            return current
+            return None
     except ModelCapabilityError as exc:
         err_msg = _("Cannot verify model capabilities: {exc}", exc=exc)
         console.print(f"[red]{err_msg}[/red]")
-        return current
+        return None
 
     try:
         await runtime.set_model(model_name)
@@ -135,7 +128,7 @@ async def set_model(
     except (ollama.ResponseError, OSError) as exc:
         failed_msg = _("Failed to switch to model '{model_name}': {exc}", model_name=model_name, exc=exc)
         console.print(f"[red]{failed_msg}[/red]")
-        return current
+        return None
 
 
 def show_effort(console: Console, runtime: AgentRuntime) -> None:
@@ -157,7 +150,7 @@ async def set_effort(
     effort: str,
     *,
     runtime: AgentRuntime,
-) -> str:
+) -> str | None:
     """Switch reasoning effort level, returning the new effort level."""
     norm_effort = effort.lower().strip()
     if norm_effort not in ALLOWED_REASONING_EFFORTS:
@@ -168,7 +161,7 @@ async def set_effort(
             valid_list=valid_list,
         )
         console.print(f"[red]{err_msg}[/red]")
-        return runtime.settings.model.reasoning_effort
+        return None
 
     current = runtime.settings.model.reasoning_effort
     if norm_effort == current:
@@ -192,7 +185,7 @@ async def set_effort(
             exc=exc,
         )
         console.print(f"[red]{failed_msg}[/red]")
-        return current
+        return None
 
 
 def show_context_window(console: Console, runtime: AgentRuntime) -> None:
@@ -226,7 +219,7 @@ async def set_context_window(
     context_window: str,
     *,
     runtime: AgentRuntime,
-) -> str:
+) -> str | None:
     """Switch context window size, returning the new context window."""
     norm = context_window.strip().lower()
     val: int | str
@@ -237,7 +230,7 @@ async def set_context_window(
     else:
         err_msg = _("Invalid context_window '{value}'. Expected a positive integer or 'max'.", value=context_window)
         console.print(f"[red]{err_msg}[/red]")
-        return str(runtime.settings.model.context_window)
+        return None
 
     current = runtime.settings.model.context_window
     if val == current:
@@ -260,7 +253,7 @@ async def set_context_window(
     except (ollama.ResponseError, OSError, ValueError, ModelContextWindowError) as exc:
         failed_msg = _("Failed to switch context window to '{val}': {exc}", val=val, exc=exc)
         console.print(f"[red]{failed_msg}[/red]")
-        return str(current)
+        return None
 
 
 def show_model_params(console: Console, runtime: AgentRuntime) -> None:
@@ -350,7 +343,7 @@ def ensure_model_configured(
     """Ensure the configured model is available in Ollama, or prompt the user to choose one."""
     base_url = settings.model.base_url
     try:
-        models = _list_models_sync(base_url)
+        models = asyncio.run(_list_models(base_url))
         available_models = [m for m in models if m.model]
     except (httpx.HTTPError, ollama.ResponseError, OSError) as exc:
         raise ModelCapabilityError(

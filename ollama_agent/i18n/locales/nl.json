@@ -416,6 +416,7 @@
   "System Output": "Systeemuitvoer",
   "esc to dismiss": "esc om te sluiten",
   "Limit must be greater than 0": "Limiet moet groter zijn dan 0",
+  "Limit must be greater than 0, got {limit}": "Limiet moet groter zijn dan 0, ontvangen {limit}",
   "Failed to query vector database: {e}": "Fout bij bevragen van vectordatabase: {e}",
   "Failed to get collection info: {e}": "Fout bij ophalen van collectie-informatie: {e}",
   "Failed to create database '{name}': {e}": "Fout bij aanmaken van database '{name}': {e}",
@@ -449,5 +450,9 @@
   "Unsupported input type '{type}' for input '{name}'": "Niet-ondersteund invoertype '{type}' voor invoer '{name}'",
   "Database": "Database",
   "Database name": "Databasenaam",
-  "Search query cannot be empty.": "Zoekopdracht mag niet leeg zijn."
+  "Search query cannot be empty.": "Zoekopdracht mag niet leeg zijn.",
+  "Expected mapping for inputs in Task": "Mapping verwacht voor inputs in Task",
+  "Invalid input definition for '{name}'": "Ongeldige invoerdefinitie voor '{name}'",
+  "MCP server '{name}': 'command' must be a non-empty string": "MCP-server '{name}': 'command' moet een niet-lege tekenreeks zijn",
+  "MCP server '{name}': 'url' must be a non-empty string": "MCP-server '{name}': 'url' moet een niet-lege tekenreeks zijn"
 }

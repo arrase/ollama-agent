@@ -1,4 +1,5 @@
-from ..settings import RAGSettings
+"""RAG (Retrieval-Augmented Generation) package for document indexing and retrieval."""
+
 from .commands import (
     AmbiguousRAGDatabaseError,
     RAGContext,
@@ -20,8 +21,6 @@ from .manager import (
 )
 
 __all__ = [
-    # Settings
-    "RAGSettings",
     # Manager
     "RAGError",
     "RAGDatabaseExistsError",

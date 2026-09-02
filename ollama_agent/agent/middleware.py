@@ -23,6 +23,7 @@ async def _stream_tool_events(request: Any, handler: Any) -> Any:
     """Emit tool_call / tool_output events and enforce tool timeout."""
     runtime = request.runtime
     tool_name = request.tool_call["name"]
+    tool_call_id = request.tool_call["id"]
     agent_name = None
 
     args = request.tool_call.get("args")
@@ -43,7 +44,7 @@ async def _stream_tool_events(request: Any, handler: Any) -> Any:
     except asyncio.TimeoutError:
         result = ToolMessage(
             content=_("Tool '{tool_name}' timed out after {timeout_s}s", tool_name=tool_name, timeout_s=timeout_s),
-            tool_call_id=request.tool_call.get("id", ""),
+            tool_call_id=tool_call_id,
             name=tool_name,
             status="error",
         )

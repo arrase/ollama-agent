@@ -11,11 +11,9 @@ from textual.widgets import OptionList
 from rich.console import Console
 
 from ollama_agent.agent.episodic_memory import HistoryError
-from ollama_agent.interfaces.dispatch import REPLCommand
 from ollama_agent.interfaces.repl import (
     OllamaAgentApp,
     OllamaREPL,
-    QueuedItem,
     _TUIStreamingRenderer,
     _is_immediate_command,
 )
@@ -25,7 +23,6 @@ from ollama_agent.interfaces.tui_components import (
     AgentResponse,
     PromptQueueWidget,
     ReplInput,
-    SystemMessage,
     SystemOutputWidget,
     ToolApprovalWidget,
     ToolCallMessage,
@@ -165,7 +162,7 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(tool_calls), 1)
             tool_outputs = agent_msg.query(ToolOutputMessage)
             self.assertEqual(len(tool_outputs), 1)
-            sys_msgs = agent_msg.query(SystemMessage)
+            sys_msgs = agent_msg.query(".system-message")
             self.assertEqual(len(sys_msgs), 2)
 
     def test_system_output_widget_lifecycle(self) -> None:
@@ -624,8 +621,8 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
                 repl_mock.runtime.settings.model.reasoning_effort = args[0]
 
         repl_mock._get_commands.return_value = {
-            "/yolo": REPLCommand(handler=_toggle_yolo),
-            "/effort": REPLCommand(handler=_set_effort),
+            "/yolo": _toggle_yolo,
+            "/effort": _set_effort,
         }
 
         app = OllamaAgentApp(repl_mock)
@@ -661,7 +658,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
 
             # 2. Unknown command
             await app._run_slash_command("/unknown-cmd")
-            self.assertEqual(len(list(chat_scroll.query(SystemMessage))), 0)
+            self.assertEqual(len(list(chat_scroll.query(".system-message"))), 0)
             sys_out = app.query_one(SystemOutputWidget)
             self.assertTrue(sys_out.display)
             self.assertIn("Unknown command", str(sys_out.render()))
@@ -681,7 +678,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
                 self.assertEqual(len(list(chat_scroll.query(UserMessage))), 1)
                 self.assertEqual(len(list(chat_scroll.query(AgentResponse))), 1)
-                self.assertEqual(len(list(chat_scroll.query(SystemMessage))), 0)
+                self.assertEqual(len(list(chat_scroll.query(".system-message"))), 0)
                 self.assertIn("Resumed session", str(sys_out.render()))
 
             # 5. /effort command updates header
@@ -718,7 +715,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
 
         task = MagicMock(title="My Task", model="task-model", reasoning_effort="high", prompt="Do things")
         task.render.return_value = "Do things"
-        repl_mock._task_ctx._resolve_task.return_value = ("my-task", task)
+        repl_mock._task_ctx.resolve_task.return_value = ("my-task", task)
 
         app = OllamaAgentApp(repl_mock)
         async with app.run_test() as pilot:
@@ -752,7 +749,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
 
         task = MagicMock(title="Param Task", model="task-model", reasoning_effort="high", prompt="P")
         task.render.return_value = "Rendered: file=src/app.py mode=strict"
-        repl_mock._task_ctx._resolve_task.return_value = ("param-task", task)
+        repl_mock._task_ctx.resolve_task.return_value = ("param-task", task)
 
         app = OllamaAgentApp(repl_mock)
         async with app.run_test() as pilot:
@@ -775,7 +772,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock._get_commands.return_value = {}
 
         task = MagicMock(title="Param Task", model="task-model", reasoning_effort="high")
-        repl_mock._task_ctx._resolve_task.return_value = ("param-task", task)
+        repl_mock._task_ctx.resolve_task.return_value = ("param-task", task)
 
         app = OllamaAgentApp(repl_mock)
         async with app.run_test() as pilot:
@@ -802,7 +799,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
 
         task = MagicMock(title="Param Task", model="task-model", reasoning_effort="high")
         task.render.side_effect = ValueError("Missing required input: file")
-        repl_mock._task_ctx._resolve_task.return_value = ("param-task", task)
+        repl_mock._task_ctx.resolve_task.return_value = ("param-task", task)
 
         app = OllamaAgentApp(repl_mock)
         async with app.run_test() as pilot:
@@ -845,7 +842,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(tool_calls), 1)
             tool_outputs = agent_msg.query(ToolOutputMessage)
             self.assertEqual(len(tool_outputs), 1)
-            sys_msgs = agent_msg.query(SystemMessage)
+            sys_msgs = agent_msg.query(".system-message")
             self.assertEqual(len(sys_msgs), 2)
 
 
@@ -885,10 +882,6 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
         await repl.cleanup()
         rag_ctx_mock.rag_manager.unload.assert_called_once()
         runtime_mock.aclose.assert_awaited_once()
-
-    def test_queued_item_dataclass(self) -> None:
-        item = QueuedItem(text="Hello world")
-        self.assertEqual(item.text, "Hello world")
 
     def test_is_immediate_command(self) -> None:
         # Immediate / safe commands
@@ -961,8 +954,8 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
         # Setup app with queue items
         app = OllamaAgentApp(repl)
         async with app.run_test():
-            app._prompt_queue.append(QueuedItem("Prompt 1"))
-            app._prompt_queue.append(QueuedItem("Prompt 2"))
+            app._prompt_queue.append("Prompt 1")
+            app._prompt_queue.append("Prompt 2")
 
             repl.console = Console(file=io.StringIO())
             repl._handle_queue_cmd(["list"])
@@ -1001,8 +994,8 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
             app.on_repl_input_submitted(ReplInput.Submitted(inp, "Second queued prompt"))
 
             self.assertEqual(len(app._prompt_queue), 2)
-            self.assertEqual(app._prompt_queue[0].text, "First queued prompt")
-            self.assertEqual(app._prompt_queue[1].text, "Second queued prompt")
+            self.assertEqual(app._prompt_queue[0], "First queued prompt")
+            self.assertEqual(app._prompt_queue[1], "Second queued prompt")
 
             # Check footer queued count
             footer = app.query_one(AgentFooter)
@@ -1022,14 +1015,14 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(mock_stream.call_args[0][0], "First queued prompt")
 
             # 4. /queue clear clears the queue without stopping execution
-            app._prompt_queue.append(QueuedItem("Third prompt"))
+            app._prompt_queue.append("Third prompt")
             self.assertEqual(len(app._prompt_queue), 2)
             repl._handle_queue_cmd(["clear"])
             self.assertEqual(len(app._prompt_queue), 0)
             self.assertEqual(footer._queued_count, 0)
 
             # 5. Esc cancellation clears queue and stops generation
-            app._prompt_queue.append(QueuedItem("Fourth prompt"))
+            app._prompt_queue.append("Fourth prompt")
             self.assertEqual(len(app._prompt_queue), 1)
             app.action_cancel_generation()
             self.assertEqual(len(app._prompt_queue), 0)
@@ -1083,7 +1076,7 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
             app._is_generating = True
             app.on_repl_input_submitted(ReplInput.Submitted(inp, "/task run my_task"))
             self.assertEqual(len(app._prompt_queue), 1)
-            self.assertEqual(app._prompt_queue[0].text, "/task run my_task")
+            self.assertEqual(app._prompt_queue[0], "/task run my_task")
             self.assertEqual(footer._queued_count, 1)
 
             # Drain queue
@@ -1106,19 +1099,15 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
             chat_scroll = app.query_one("#chat-scroll")
             sys_out = app.query_one(SystemOutputWidget)
 
-            mock_spec = MagicMock()
-
             async def fake_handler(args: list[str]) -> None:
                 repl.console.print("Models: llama3, mistral")
 
-            mock_spec.handler = fake_handler
-
-            with patch.dict(app.repl._get_commands(), {"/model": mock_spec}):
+            with patch.dict(app.repl._get_commands(), {"/model": fake_handler}):
                 await app._run_slash_command("/model list")
                 await pilot.pause()
 
             # Chat scroll MUST remain completely clean of system messages
-            self.assertEqual(len(list(chat_scroll.query(SystemMessage))), 0)
+            self.assertEqual(len(list(chat_scroll.query(".system-message"))), 0)
             self.assertEqual(len(list(chat_scroll.query(UserMessage))), 0)
             self.assertEqual(len(list(chat_scroll.query(AgentResponse))), 0)
 
@@ -1209,7 +1198,7 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
 
             q = app.query_one(PromptQueueWidget)
             for i in range(4):
-                app._prompt_queue.append(QueuedItem(f"Item {i}"))
+                app._prompt_queue.append(f"Item {i}")
             app._update_queue_ui()
             await pilot.pause()
             self.assertGreaterEqual(q.outer_size.height, 7)

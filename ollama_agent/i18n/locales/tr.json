@@ -416,6 +416,7 @@
   "System Output": "Sistem Çıktısı",
   "esc to dismiss": "kapatmak için esc",
   "Limit must be greater than 0": "Limit 0'dan büyük olmalıdır",
+  "Limit must be greater than 0, got {limit}": "Limit 0'dan büyük olmalıdır, alınan {limit}",
   "Failed to query vector database: {e}": "Vektör veritabanı sorgulanamadı: {e}",
   "Failed to get collection info: {e}": "Koleksiyon bilgisi alınamadı: {e}",
   "Failed to create database '{name}': {e}": "'{name}' veritabanı oluşturulamadı: {e}",
@@ -449,5 +450,9 @@
   "Unsupported input type '{type}' for input '{name}'": "'{name}' girdisi için desteklenmeyen girdi türü '{type}'",
   "Database": "Veritabanı",
   "Database name": "Veritabanı adı",
-  "Search query cannot be empty.": "Arama sorgusu boş olamaz."
+  "Search query cannot be empty.": "Arama sorgusu boş olamaz.",
+  "Expected mapping for inputs in Task": "Task içindeki inputs için eşleme bekleniyordu",
+  "Invalid input definition for '{name}'": "'{name}' için geçersiz giriş tanımı",
+  "MCP server '{name}': 'command' must be a non-empty string": "MCP sunucusu '{name}': 'command' boş olmayan bir dize olmalıdır",
+  "MCP server '{name}': 'url' must be a non-empty string": "MCP sunucusu '{name}': 'url' boş olmayan bir dize olmalıdır"
 }
