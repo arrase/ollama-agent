@@ -16,7 +16,6 @@ from ollama_agent.interfaces.repl import (
     _is_immediate_command,
 )
 from ollama_agent.interfaces.tui_components import AgentHeader
-from ollama_agent.settings import Settings
 
 
 class TestStealthMode(unittest.IsolatedAsyncioTestCase):

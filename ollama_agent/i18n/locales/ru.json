@@ -290,9 +290,6 @@
   "Subagent '{name}' configuration error: description cannot be empty": "Ошибка конфигурации субагента '{name}': описание не может быть пустым",
   "Reset: Restored default configuration at {path}": "Сброс: Восстановлена конфигурация по умолчанию в {path}",
   "Reset: Restored default system prompt at {path}": "Сброс: Восстановлен системный промпт по умолчанию в {path}",
-  "Reset: Restored default traversal policy at {path}": "Сброс: Восстановлена политика обхода по умолчанию в {path}",
-  "Reset: Restored default sandboxed policy at {path}": "Сброс: Восстановлена политика песочницы по умолчанию в {path}",
-  "Reset: Restored default RAG policy at {path}": "Сброс: Восстановлена политика RAG по умолчанию в {path}",
   "Invalid reset option '{option}'. Expected one of: {valid}": "Недопустимый вариант сброса '{option}'. Ожидался один из: {valid}",
   "Arguments:": "Аргументы:",
   "Copy": "Копировать",
@@ -465,5 +462,11 @@
   "chat history will be saved to SQLite": "история чата будет сохранена в SQLite",
   "Stealth mode is now {status} ({desc})": "Скрытый режим теперь {status} ({desc})",
   "Subagent '{subagent_name}': MCP server name cannot be empty": "Подагент '{subagent_name}': имя сервера MCP не может быть пустым",
-  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "Подагент '{subagent_name}': дублирующееся имя сервера MCP '{name}'"
+  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "Подагент '{subagent_name}': дублирующееся имя сервера MCP '{name}'",
+  "Missing required input: {name}": "Отсутствует обязательный ввод: {name}",
+  "Invalid boolean value for input '{name}': {val}": "Недопустимое логическое значение для ввода '{name}': {val}",
+  "Invalid number value for input '{name}': {val}": "Недопустимое числовое значение для ввода '{name}': {val}",
+  "Invalid variable assignment '{item}'. Expected 'key=value'.": "Недопустимое присваивание переменной '{item}'. Ожидалось 'ключ=значение'.",
+  "Variable assignments in key=value format (e.g. file=src/app.py strict=true)": "Присваивания переменных в формате ключ=значение (напр. file=src/app.py strict=true)",
+  "Variable assignment in key=value format": "Присваивание переменной в формате ключ=значение"
 }

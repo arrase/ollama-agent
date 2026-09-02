@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from jinja2 import Environment, StrictUndefined
 import yaml  # type: ignore[import-untyped]
 
 from ..core import (
@@ -22,13 +23,68 @@ from ..settings.paths import TASKS_DIR
 
 
 @dataclass(slots=True)
+class TaskInput:
+    """Input definition for parameterized task templates."""
+
+    description: str = ""
+    default: Any = None
+    required: bool = False
+    type: str = "string"  # "string", "boolean", "number"
+
+
+def _coerce_value(name: str, val: Any, expected_type: str) -> Any:
+    if val is None:
+        return None
+    if expected_type == "boolean":
+        if isinstance(val, bool):
+            return val
+        if isinstance(val, str):
+            norm = val.strip().lower()
+            if norm in ("true", "1", "yes"):
+                return True
+            if norm in ("false", "0", "no"):
+                return False
+            raise ValueError(_("Invalid boolean value for input '{name}': {val}", name=name, val=val))
+        if isinstance(val, (int, float)):
+            if val in (1, 1.0):
+                return True
+            if val in (0, 0.0):
+                return False
+            raise ValueError(_("Invalid boolean value for input '{name}': {val}", name=name, val=val))
+        raise ValueError(_("Invalid boolean value for input '{name}': {val}", name=name, val=val))
+    if expected_type == "number":
+        if isinstance(val, bool):
+            raise ValueError(_("Invalid number value for input '{name}': {val}", name=name, val=val))
+        if isinstance(val, (int, float)):
+            return val
+        if isinstance(val, str):
+            val_str = val.strip()
+            try:
+                return int(val_str)
+            except ValueError:
+                try:
+                    return float(val_str)
+                except ValueError as exc:
+                    raise ValueError(
+                        _("Invalid number value for input '{name}': {val}", name=name, val=val)
+                    ) from exc
+        raise ValueError(_("Invalid number value for input '{name}': {val}", name=name, val=val))
+    if expected_type == "string":
+        if isinstance(val, str):
+            return val
+        return str(val)
+    return val
+
+
+@dataclass(slots=True)
 class Task:
-    """A saved task with title, prompt, model, and reasoning effort."""
+    """A saved task with title, prompt, model, reasoning effort, and inputs."""
 
     title: str
     prompt: str
     model: str
     reasoning_effort: ReasoningEffortValue = field(default=DEFAULT_REASONING_EFFORT)
+    inputs: dict[str, TaskInput] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.reasoning_effort = validate_reasoning_effort(self.reasoning_effort)
@@ -39,12 +95,44 @@ class Task:
             raise ValueError(
                 _("Expected mapping for Task, got {type_name}", type_name=type(d).__name__)
             )
+        inputs: dict[str, TaskInput] = {}
+        if "inputs" in d and isinstance(d["inputs"], dict):
+            for name, input_data in d["inputs"].items():
+                if isinstance(input_data, TaskInput):
+                    inputs[name] = input_data
+                elif isinstance(input_data, dict):
+                    inputs[name] = TaskInput(
+                        description=input_data.get("description", ""),
+                        default=input_data.get("default", None),
+                        required=input_data.get("required", False),
+                        type=input_data.get("type", "string"),
+                    )
         return cls(
             title=d["title"],
             prompt=d["prompt"],
             model=d["model"],
             reasoning_effort=d["reasoning_effort"],
+            inputs=inputs,
         )
+
+    def render(self, variables: dict[str, Any] | None = None) -> str:
+        """Render the task prompt template using provided variables."""
+        merged_vars: dict[str, Any] = dict(variables) if variables else {}
+
+        for name, inp in self.inputs.items():
+            if name not in merged_vars or merged_vars[name] is None:
+                if inp.default is not None:
+                    merged_vars[name] = inp.default
+
+        for name, inp in self.inputs.items():
+            if inp.required and (name not in merged_vars or merged_vars[name] is None):
+                raise ValueError(_("Missing required input: {name}", name=name))
+            if name in merged_vars:
+                merged_vars[name] = _coerce_value(name, merged_vars[name], inp.type)
+
+        env = Environment(undefined=StrictUndefined, trim_blocks=True, lstrip_blocks=True)
+        template = env.from_string(self.prompt)
+        return template.render(**merged_vars)
 
 
 class TaskManager(BaseFileStoreManager[Task]):

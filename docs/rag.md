@@ -118,7 +118,7 @@ ollama-agent --rag project-docs
 
 ## 4. Automatic Retrieval Workflow (`rag_search`)
 
-When a database is loaded, the interactive REPL dynamically recompiles the LangGraph runtime (`runtime.reload()`), injecting the `rag_search` tool into the agent's tool set and updating the dynamic system prompt with `rag_policy.md` live.
+When a database is loaded, the interactive REPL dynamically recompiles the LangGraph runtime (`runtime.reload()`), injecting the `rag_search` tool into the agent's tool set and enabling the dynamic system prompt's RAG policy section via unified Jinja2 conditional rendering (`{% if rag_active %}`).
 
 ```python
 @tool

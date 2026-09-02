@@ -142,13 +142,20 @@ flowchart TD
 
 ### Configuration in `settings.yaml`
 
-Subagents are defined under the `subagents` array in `~/.ollama-agent/settings.yaml`:
+Subagents are defined under the `subagents` array in `~/.ollama-agent/settings.yaml`. Subagent system prompts support full **Jinja2 templating** (`subagent`, `model_settings` context variables):
 
 ```yaml
 subagents:
   - name: "code-reviewer"
     description: "Specialist in analyzing code quality, design patterns, and potential security bugs."
-    system_prompt: "You are an expert software reviewer. Analyze code changes carefully and provide actionable feedback."
+    system_prompt: |
+      You are {{ subagent.name }}, a {{ subagent.description }}.
+      Base model: {{ model_settings.name }}.
+      {% if model_settings.reasoning_effort in ['high', 'xhigh'] %}
+      Perform exhaustive analysis and examine all subtle security implications.
+      {% else %}
+      Focus on critical defects, design patterns, and immediate architectural issues.
+      {% endif %}
     model: "gemma4:26b"
     context_window: 16384
     mcp_servers:
@@ -160,7 +167,7 @@ subagents:
 
   - name: "sql-analyst"
     description: "Specialist for querying customer databases and generating analytics reports."
-    system_prompt: "You are a database engineer. Execute SQL queries and interpret results."
+    system_prompt: "You are {{ subagent.name }}, a {{ subagent.description }}. Execute SQL queries and interpret results."
     mcp_servers:
       - name: "sqlite-server"
         command: "uvx"
@@ -188,10 +195,19 @@ ollama-agent agents list
 | :--- | :--- | :--- | :--- |
 | `name` | `string` | *(Required)* | Unique name for the subagent used during tool calls. |
 | `description` | `string` | *(Required)* | Detailed description of when and how the main agent should delegate to this subagent. |
-| `system_prompt` | `string` | *(Required)* | Dedicated system prompt instructions. OS environment info is appended automatically. |
+| `system_prompt` | `string` | *(Required)* | Dedicated system prompt instructions supporting Jinja2 templating (`subagent`, `model_settings`). OS environment info is appended automatically. |
 | `model` | `string` | `""` | Ollama model name. If omitted or empty, inherits the main agent's configured model. |
 | `context_window` | `integer` \| `string` | `0` | Context window size (`num_ctx`), or `'max'` for maximum model context. If `0` or omitted, inherits the main agent's setting. |
 | `mcp_servers` | `array` | `[]` | Dedicated MCP server definitions attached exclusively to this subagent. |
+
+#### Jinja2 Subagent Template Context Variables
+
+Each subagent's `system_prompt` is rendered as a Jinja2 template with strict undefined variable evaluation (`StrictUndefined`) before initialization:
+
+| Context Variable | Type | Description | Key Attributes |
+| :--- | :--- | :--- | :--- |
+| `subagent` | `SubAgentSettings` | Current subagent configuration object | `subagent.name`, `subagent.description`, `subagent.model`, `subagent.context_window`, `subagent.mcp_servers` |
+| `model_settings` | `ModelSettings` | Orchestrator model configuration object | `model_settings.name`, `model_settings.base_url`, `model_settings.context_window`, `model_settings.reasoning_effort`, `model_settings.temperature` |
 
 #### Subagent MCP Server Fields (`mcp_servers`)
 - **`name`**: Identifier for the MCP server.

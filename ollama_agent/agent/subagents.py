@@ -13,7 +13,13 @@ from rich.table import Table
 from ..core import create_ollama_chat_model, validate_reasoning_effort
 from ..i18n import _
 from ..mcp import load_subagent_mcp_tools
-from ..settings import SETTINGS_PATH, ModelSettings, Settings, SubAgentSettings
+from ..settings import (
+    SETTINGS_PATH,
+    ModelSettings,
+    Settings,
+    SubAgentSettings,
+    render_prompt_template,
+)
 from .environment import SKILL_ROOTS, environment_block
 
 _log = logging.getLogger(__name__)
@@ -45,7 +51,11 @@ def list_subagents(
 
     for sa in settings.subagents:
         model_str = sa.model or f"[dim]{settings.model.name} ({_('inherited')})[/dim]"
-        ctx_str = str(sa.context_window) if sa.context_window else f"[dim]{settings.model.context_window} ({_('inherited')})[/dim]"
+        ctx_str = (
+            str(sa.context_window)
+            if sa.context_window
+            else f"[dim]{settings.model.context_window} ({_('inherited')})[/dim]"
+        )
         mcp_str = ", ".join(srv.name for srv in sa.mcp_servers if srv.name) if sa.mcp_servers else "[dim]-[/dim]"
 
         table.add_row(
@@ -65,10 +75,7 @@ async def build_subagents(
     model_settings: ModelSettings,
 ) -> list[dict[str, Any]]:
     """Convert ``SubAgentSettings`` into dicts for ``create_deep_agent(subagents=...)``."""
-    tasks = [
-        _build_spec(sa, model_settings=model_settings)
-        for sa in subagent_settings
-    ]
+    tasks = [_build_spec(sa, model_settings=model_settings) for sa in subagent_settings]
     return await asyncio.gather(*tasks)
 
 
@@ -83,14 +90,17 @@ async def _build_spec(
     if not sa.description:
         raise ValueError(_("Subagent '{name}' configuration error: description cannot be empty", name=sa.name))
     if not sa.system_prompt:
-        raise ValueError(
-            _("Subagent '{name}' configuration error: system_prompt cannot be empty", name=sa.name)
-        )
+        raise ValueError(_("Subagent '{name}' configuration error: system_prompt cannot be empty", name=sa.name))
+
+    rendered_prompt = render_prompt_template(
+        sa.system_prompt,
+        {"subagent": sa, "model_settings": model_settings},
+    )
 
     spec: dict[str, Any] = {
         "name": sa.name,
         "description": sa.description,
-        "system_prompt": sa.system_prompt + environment_block(include_cwd=False),
+        "system_prompt": rendered_prompt + environment_block(include_cwd=False),
     }
 
     name = sa.model or model_settings.name

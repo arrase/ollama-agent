@@ -362,7 +362,7 @@ class TestCatalogCompleteness(unittest.TestCase):
                         if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
                             extracted_strings.add(node.args[0].value)
 
-        for loc in [l for l in SUPPORTED_LOCALES if l != "en"]:
+        for loc in [loc_code for loc_code in SUPPORTED_LOCALES if loc_code != "en"]:
             loc_file = locales_dir / f"{loc}.json"
             with open(loc_file, "r", encoding="utf-8") as f:
                 catalog = json.load(f)

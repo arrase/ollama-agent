@@ -290,9 +290,6 @@
   "Subagent '{name}' configuration error: description cannot be empty": "सब-एजेंट '{name}' कॉन्फ़िगरेशन त्रुटि: विवरण खाली नहीं हो सकता",
   "Reset: Restored default configuration at {path}": "रीसेट: {path} पर डिफ़ॉल्ट कॉन्फ़िगरेशन पुनर्स्थापित किया गया",
   "Reset: Restored default system prompt at {path}": "रीसेट: {path} पर डिफ़ॉल्ट सिस्टम प्रॉम्प्ट पुनर्स्थापित किया गया",
-  "Reset: Restored default traversal policy at {path}": "रीसेट: {path} पर डिफ़ॉल्ट ट्रैवर्सल नीति पुनर्स्थापित की गई",
-  "Reset: Restored default sandboxed policy at {path}": "रीसेट: {path} पर डिफ़ॉल्ट सैंडबॉक्स नीति पुनर्स्थापित की गई",
-  "Reset: Restored default RAG policy at {path}": "रीसेट: {path} पर डिफ़ॉल्ट RAG नीति पुनर्स्थापित की गई",
   "Invalid reset option '{option}'. Expected one of: {valid}": "अमान्य रीसेट विकल्प '{option}'। इनमें से एक अपेक्षित था: {valid}",
   "Arguments:": "तर्क:",
   "Copy": "कॉपी करें",
@@ -465,5 +462,11 @@
   "chat history will be saved to SQLite": "चैट इतिहास SQLite में सहेजा जाएगा",
   "Stealth mode is now {status} ({desc})": "स्टेल्थ मोड अब {status} है ({desc})",
   "Subagent '{subagent_name}': MCP server name cannot be empty": "उप-एजेंट '{subagent_name}': MCP सर्वर का नाम खाली नहीं हो सकता",
-  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "उप-एजेंट '{subagent_name}': डुप्लिकेट MCP सर्वर नाम '{name}'"
+  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "उप-एजेंट '{subagent_name}': डुप्लिकेट MCP सर्वर नाम '{name}'",
+  "Missing required input: {name}": "आवश्यक इनपुट गायब है: {name}",
+  "Invalid boolean value for input '{name}': {val}": "इनपुट '{name}' के लिए अमान्य बूलियन मान: {val}",
+  "Invalid number value for input '{name}': {val}": "इनपुट '{name}' के लिए अमान्य संख्या मान: {val}",
+  "Invalid variable assignment '{item}'. Expected 'key=value'.": "अमान्य चर असाइनमेंट '{item}'। 'key=value' अपेक्षित है।",
+  "Variable assignments in key=value format (e.g. file=src/app.py strict=true)": "key=value प्रारूप में चर असाइनमेंट (उदा. file=src/app.py strict=true)",
+  "Variable assignment in key=value format": "key=value प्रारूप में चर असाइनमेंट"
 }

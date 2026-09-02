@@ -290,9 +290,6 @@
   "Subagent '{name}' configuration error: description cannot be empty": "子智能体 '{name}' 配置错误：描述不能为空",
   "Reset: Restored default configuration at {path}": "重置：已恢复默认配置到 {path}",
   "Reset: Restored default system prompt at {path}": "重置：已恢复默认系统提示词到 {path}",
-  "Reset: Restored default traversal policy at {path}": "重置：已恢复默认遍历策略到 {path}",
-  "Reset: Restored default sandboxed policy at {path}": "重置：已恢复默认沙箱策略到 {path}",
-  "Reset: Restored default RAG policy at {path}": "重置：已恢复默认 RAG 策略到 {path}",
   "Invalid reset option '{option}'. Expected one of: {valid}": "无效的重置选项 '{option}'。期望值为之一：{valid}",
   "Arguments:": "参数：",
   "Copy": "复制",
@@ -465,5 +462,11 @@
   "chat history will be saved to SQLite": "聊天记录将保存到 SQLite",
   "Stealth mode is now {status} ({desc})": "隐身模式现在为 {status} ({desc})",
   "Subagent '{subagent_name}': MCP server name cannot be empty": "子智能体 '{subagent_name}'：MCP 服务器名称不能为空",
-  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "子智能体 '{subagent_name}'：重复的 MCP 服务器名称 '{name}'"
+  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "子智能体 '{subagent_name}'：重复的 MCP 服务器名称 '{name}'",
+  "Missing required input: {name}": "缺少必需的输入：{name}",
+  "Invalid boolean value for input '{name}': {val}": "输入 '{name}' 的布尔值无效：{val}",
+  "Invalid number value for input '{name}': {val}": "输入 '{name}' 的数值无效：{val}",
+  "Invalid variable assignment '{item}'. Expected 'key=value'.": "无效的变量赋值 '{item}'。应为 'key=value'。",
+  "Variable assignments in key=value format (e.g. file=src/app.py strict=true)": "key=value 格式的变量赋值（例如 file=src/app.py strict=true）",
+  "Variable assignment in key=value format": "key=value 格式的变量赋值"
 }

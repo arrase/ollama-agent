@@ -290,9 +290,6 @@
   "Subagent '{name}' configuration error: description cannot be empty": "서브에이전트 '{name}' 구성 오류: 설명은 비어 있을 수 없습니다",
   "Reset: Restored default configuration at {path}": "초기화: {path}에 기본 설정을 복원했습니다",
   "Reset: Restored default system prompt at {path}": "초기화: {path}에 기본 시스템 프롬프트를 복원했습니다",
-  "Reset: Restored default traversal policy at {path}": "초기화: {path}에 기본 접근 정책을 복원했습니다",
-  "Reset: Restored default sandboxed policy at {path}": "초기화: {path}에 기본 샌드박스 정책을 복원했습니다",
-  "Reset: Restored default RAG policy at {path}": "초기화: {path}에 기본 RAG 정책을 복원했습니다",
   "Invalid reset option '{option}'. Expected one of: {valid}": "잘못된 초기화 옵션 '{option}'입니다. 다음 중 하나여야 합니다: {valid}",
   "Arguments:": "인자:",
   "Copy": "복사",
@@ -465,5 +462,11 @@
   "chat history will be saved to SQLite": "대화 기록이 SQLite에 저장됩니다",
   "Stealth mode is now {status} ({desc})": "스텔스 모드가 현재 {status} 상태입니다 ({desc})",
   "Subagent '{subagent_name}': MCP server name cannot be empty": "서브에이전트 '{subagent_name}': MCP 서버 이름은 비워 둘 수 없습니다",
-  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "서브에이전트 '{subagent_name}': 중복된 MCP 서버 이름 '{name}'"
+  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "서브에이전트 '{subagent_name}': 중복된 MCP 서버 이름 '{name}'",
+  "Missing required input: {name}": "필수 입력 항목 누락: {name}",
+  "Invalid boolean value for input '{name}': {val}": "입력 '{name}'에 대한 잘못된 부울 값: {val}",
+  "Invalid number value for input '{name}': {val}": "입력 '{name}'에 대한 잘못된 숫자 값: {val}",
+  "Invalid variable assignment '{item}'. Expected 'key=value'.": "유효하지 않은 변수 할당 '{item}'입니다. 'key=value' 형식이어야 합니다.",
+  "Variable assignments in key=value format (e.g. file=src/app.py strict=true)": "key=value 형식의 변수 할당 (예: file=src/app.py strict=true)",
+  "Variable assignment in key=value format": "key=value 형식의 변수 할당"
 }

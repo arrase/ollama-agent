@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from rich.console import Console
 
 from ollama_agent.core import ModelCapabilityError
-from ollama_agent.interfaces.cli import create_argument_parser
+from ollama_agent.interfaces.cli import create_argument_parser, handle_cli_commands
 from ollama_agent.interfaces.dispatch import (
     build_cli_handlers,
     build_repl_handlers,
@@ -82,12 +82,31 @@ class TestDispatchAndCLI(unittest.TestCase):
         self.assertEqual(args3.task_id, "my-task")
         self.assertFalse(args3.yolo)
 
+    def test_task_run_vars_argument_parsing(self) -> None:
+        parser = create_argument_parser()
+        args1 = parser.parse_args(["task", "run", "my-task", "file=app.py", "strict=true"])
+        self.assertEqual(args1.task_id, "my-task")
+        self.assertEqual(args1.vars, ["file=app.py", "strict=true"])
+        self.assertEqual(args1.flag_vars, [])
+
+        args2 = parser.parse_args(["task", "run", "my-task", "--var", "file=app.py", "--var", "mode=fast"])
+        self.assertEqual(args2.task_id, "my-task")
+        self.assertEqual(args2.vars, [])
+        self.assertEqual(args2.flag_vars, ["file=app.py", "mode=fast"])
+
+        args3 = parser.parse_args(["task", "run", "my-task", "file=app.py", "--var", "mode=fast", "-y"])
+        self.assertEqual(args3.task_id, "my-task")
+        self.assertEqual(args3.vars, ["file=app.py"])
+        self.assertEqual(args3.flag_vars, ["mode=fast"])
+        self.assertTrue(args3.yolo)
+
     def test_argument_parser_language_choices(self) -> None:
         parser = create_argument_parser()
         args = parser.parse_args(["-l", "es"])
         self.assertEqual(args.language, "es")
-        with self.assertRaises(SystemExit):
-            parser.parse_args(["-l", "klingon"])
+        with patch("sys.stderr", new_callable=io.StringIO):
+            with self.assertRaises(SystemExit):
+                parser.parse_args(["-l", "klingon"])
 
     def test_build_cli_handlers_registry(self) -> None:
         parser = create_argument_parser()
@@ -224,7 +243,8 @@ class TestDispatchAndCLI(unittest.TestCase):
 
     def test_main_rejects_prompt_with_subcommand(self) -> None:
         with patch("sys.argv", ["ollama-agent", "task", "list", "-p", "hello"]), \
-             patch("ollama_agent.main.set_locale", return_value="en"):
+             patch("ollama_agent.main.set_locale", return_value="en"), \
+             patch("sys.stderr", new_callable=io.StringIO):
             with self.assertRaises(SystemExit) as cm:
                 main()
         self.assertEqual(cm.exception.code, 2)
@@ -302,6 +322,30 @@ class TestDispatchAndCLI(unittest.TestCase):
             handlers = _build_cli_handlers(args)
             asyncio.run(handlers[("session", "export")]())
             mock_export.assert_called_once()
+
+    def test_cli_task_run_dispatch(self) -> None:
+        parser = create_argument_parser()
+        args = parser.parse_args(["task", "run", "my-task", "file=app.py", "--var", "mode=fast", "-y"])
+
+        with patch("ollama_agent.interfaces.dispatch.run_task", AsyncMock()) as mock_run_task:
+            handlers = _build_cli_handlers(args)
+            asyncio.run(handlers[("task", "run")]())
+            mock_run_task.assert_awaited_once()
+            call_args = mock_run_task.call_args
+            self.assertEqual(call_args.args[1], "my-task")
+            self.assertEqual(call_args.kwargs["variables"], {"file": "app.py", "mode": "fast"})
+            self.assertTrue(call_args.kwargs["yolo"])
+
+    def test_handle_cli_commands_task_run_validation_error(self) -> None:
+        parser = create_argument_parser()
+        args = parser.parse_args(["task", "run", "my-task", "invalid_var"])
+        with (
+            patch("sys.stdout", new_callable=io.StringIO),
+            patch("sys.stderr", new_callable=io.StringIO),
+        ):
+            with self.assertRaises(SystemExit) as cm:
+                handle_cli_commands(args, Settings())
+            self.assertEqual(cm.exception.code, 1)
 
 
 if __name__ == "__main__":

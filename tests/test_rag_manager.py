@@ -211,7 +211,10 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
 
         # Batch failure during add_directory: embeddings raise before any
         # deletion happens, so no indexed content is lost.
-        with patch.object(RAGManager, "_get_embeddings", AsyncMock(side_effect=RAGError("Ollama connection failed"))):
+        with (
+            patch.object(RAGManager, "_get_embeddings", AsyncMock(side_effect=RAGError("Ollama connection failed"))),
+            patch("logging.Logger.warning"),
+        ):
             res = await self.manager.add_directory(str(sub_dir))
             self.assertEqual(res["added"], 0)
             self.assertEqual(res["failed"], 2)
@@ -334,7 +337,10 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
                 raise RAGError("Embed failed for doc 1")
             return [[0.1, 0.2, 0.3, 0.4]] * len(texts)
 
-        with patch.object(RAGManager, "_get_embeddings", side_effect=mock_embed):
+        with (
+            patch.object(RAGManager, "_get_embeddings", side_effect=mock_embed),
+            patch("logging.Logger.warning"),
+        ):
             res = await self.manager.add_directory(str(sub_dir))
             self.assertEqual(res["added"], 1)
             self.assertEqual(res["failed"], 1)

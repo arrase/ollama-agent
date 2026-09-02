@@ -290,9 +290,6 @@
   "Subagent '{name}' configuration error: description cannot be empty": "サブエージェント '{name}' 設定エラー: 説明を空にすることはできません",
   "Reset: Restored default configuration at {path}": "リセット: {path} の初期設定を復元しました",
   "Reset: Restored default system prompt at {path}": "リセット: {path} の初期システムプロンプトを復元しました",
-  "Reset: Restored default traversal policy at {path}": "リセット: {path} の初期走査ポリシーを復元しました",
-  "Reset: Restored default sandboxed policy at {path}": "リセット: {path} の初期サンドボックスポリシーを復元しました",
-  "Reset: Restored default RAG policy at {path}": "リセット: {path} の初期RAGポリシーを復元しました",
   "Invalid reset option '{option}'. Expected one of: {valid}": "無効なリセットオプション '{option}' です。次のいずれかを指定してください: {valid}",
   "Arguments:": "引数:",
   "Copy": "コピー",
@@ -465,5 +462,11 @@
   "chat history will be saved to SQLite": "チャット履歴はSQLiteに保存されます",
   "Stealth mode is now {status} ({desc})": "ステルスモードは現在 {status} です ({desc})",
   "Subagent '{subagent_name}': MCP server name cannot be empty": "サブエージェント '{subagent_name}': MCPサーバー名は空にできません",
-  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "サブエージェント '{subagent_name}': 重複したMCPサーバー名 '{name}'"
+  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "サブエージェント '{subagent_name}': 重複したMCPサーバー名 '{name}'",
+  "Missing required input: {name}": "必須の入力がありません: {name}",
+  "Invalid boolean value for input '{name}': {val}": "入力 '{name}' のブール値が無効です: {val}",
+  "Invalid number value for input '{name}': {val}": "入力 '{name}' の数値が無効です: {val}",
+  "Invalid variable assignment '{item}'. Expected 'key=value'.": "無効な変数代入 '{item}' です。'key=value' が必要です。",
+  "Variable assignments in key=value format (e.g. file=src/app.py strict=true)": "key=value 形式の変数代入 (例: file=src/app.py strict=true)",
+  "Variable assignment in key=value format": "key=value 形式の変数代入"
 }

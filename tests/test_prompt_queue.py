@@ -18,7 +18,6 @@ from ollama_agent.interfaces.repl import (
 )
 from ollama_agent.interfaces.tui_components import (
     AgentFooter,
-    AgentHeader,
     AgentResponse,
     PromptQueueWidget,
     ReplInput,
@@ -838,8 +837,6 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
         repl, runtime = _create_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test() as pilot:
-            chat_scroll = app.query_one("#chat-scroll")
-
             app._prompt_queue.append(QueuedItem("/session new"))
             app._prompt_queue.append(QueuedItem("First message in fresh session"))
             app._update_queue_ui()

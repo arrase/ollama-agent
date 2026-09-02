@@ -29,7 +29,15 @@ from ..rag import (
     unload_rag_database,
 )
 from ..skills import SkillError, SkillsContext, create_skill, delete_skill, list_skills, show_skill
-from ..tasks.commands import TaskError, TasksContext, create_task, delete_task, list_tasks, run_task
+from ..tasks.commands import (
+    TaskError,
+    TasksContext,
+    create_task,
+    delete_task,
+    list_tasks,
+    parse_var_assignments,
+    run_task,
+)
 from .model_commands import (
     list_models,
     set_model_param,
@@ -98,6 +106,11 @@ def build_cli_handlers(
     """Map parsed CLI subcommands to their synchronous or async handler functions."""
     console = Console()
 
+    async def task_run() -> None:
+        raw_vars = list(args.vars) + list(args.flag_vars or [])
+        variables = parse_var_assignments(raw_vars)
+        await run_task(task_ctx, args.task_id, variables=variables, yolo=args.yolo)
+
     async def rag_add() -> None:
         load_rag_database(rag_ctx, args.database)
         if args.dir:
@@ -108,7 +121,7 @@ def build_cli_handlers(
     return {
         ("task", "list"): lambda: list_tasks(task_ctx),
         ("task", "delete"): lambda: delete_task(task_ctx, args.task_id),
-        ("task", "run"): lambda: run_task(task_ctx, args.task_id, yolo=args.yolo),
+        ("task", "run"): task_run,
         ("task", "create"): lambda: create_task(
             task_ctx,
             args.task_id,

@@ -87,24 +87,70 @@ Skills can be managed via the CLI or REPL slash commands:
 
 ## 2. Task Automation System
 
-Tasks represent saved, re-executable automation routines containing pre-defined prompts, model assignments, and reasoning effort levels.
+Tasks represent saved, re-executable automation routines containing pre-defined Jinja2 prompt templates, dynamic input parameters, model assignments, and reasoning effort levels.
 
 ### Task Storage Format (`~/.ollama-agent/tasks/<task_id>.yaml`)
 
 Tasks are stored as individual YAML files under `~/.ollama-agent/tasks/` and mounted under the virtual route `/tasks/`:
 
 ```yaml
-title: "Repository Tree Analyzer"
-prompt: "List the repository structure and describe the purpose of each top-level directory."
+title: "Single File Code Review"
+prompt: |
+  Review the source code in @{{ target_file }}.
+  Focus on identifying bugs, security vulnerabilities, and code smell.
+  {% if strict %}
+  Enforce strict PEP 8 compliance and flag all style warnings.
+  {% else %}
+  Focus primarily on correctness and high-impact design issues.
+  {% endif %}
 model: "gemma4:26b"
-reasoning_effort: "medium"
+reasoning_effort: "high"
+inputs:
+  target_file:
+    description: "Path to the target file to review"
+    type: "string"
+    required: true
+  strict:
+    description: "Enable strict review mode"
+    type: "boolean"
+    default: false
 ```
 
-#### Task Data Model Fields:
-- **`title`**: Descriptive title of the task.
-- **`prompt`**: Instruction prompt to execute.
-- **`model`**: Optional Ollama model designated for this task (inherits active session model if omitted).
-- **`reasoning_effort`**: Reasoning effort setting (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`).
+#### Task Schema Fields:
+- **`title`** (*string*, required): Descriptive title of the task.
+- **`prompt`** (*string*, required): Instruction prompt template to execute (supports full Jinja2 templating).
+- **`model`** (*string*, optional): Specific Ollama model designated for this task (inherits active session model if omitted or `""`).
+- **`reasoning_effort`** (*string*, optional): Reasoning effort setting (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). Default is `medium`.
+- **`inputs`** (*mapping*, optional): Parameter definitions expected by the template:
+  - **`description`** (*string*, optional): Human-readable parameter explanation.
+  - **`type`** (*string*, optional): Expected data type (`string`, `boolean`, `number`). Defaults to `string`.
+  - **`required`** (*boolean*, optional): Whether the input must be supplied. Defaults to `false`.
+  - **`default`** (*any*, optional): Fallback value used when the parameter is not provided.
+
+### Jinja2 Templating Engine & Dynamic Context
+
+Task prompts are rendered using a strict Jinja2 environment (`trim_blocks=True`, `lstrip_blocks=True`):
+
+- **Variable Interpolation**: `{{ target_file }}` inserts variable values directly into the prompt.
+- **Dynamic File Context (`@-mentions`)**: `@{{ target_file }}` evaluates the variable first, producing an `@-mention` (e.g. `@src/auth.py`) which the prompt processor expands with file contents.
+- **Conditional Logic**: `{% if strict %}...{% else %}...{% endif %}` controls instruction branches.
+- **Loops & Iteration**: `{% for item in items %}...{% endfor %}` formats structured data or lists.
+- **Filters & Defaults**: `{{ branch | default('main') }}` provides template-level fallbacks.
+
+### Input Type Coercion
+
+Variables passed via CLI or REPL are automatically coerced according to the input's `type` field:
+
+| Type | Accepted Inputs | Output Value / Behavior |
+| :--- | :--- | :--- |
+| **`string`** | Any value | String representation (`str(val)`). |
+| **`boolean`** | `true`, `1`, `yes` (case-insensitive) / `1`, `1.0` / `True` | `True` |
+| | `false`, `0`, `no` (case-insensitive) / `0`, `0.0` / `False` | `False` |
+| | Any other value | Raises `ValueError` ("Invalid boolean value"). |
+| **`number`** | `42`, `"42"` / `3.14`, `"3.14"` | `int` or `float` |
+| | Non-numeric string or boolean | Raises `ValueError` ("Invalid number value"). |
+
+Missing required inputs immediately fail fast with a clear error: `Missing required input: <name>`.
 
 ### Task Management Commands
 
@@ -112,15 +158,41 @@ reasoning_effort: "medium"
 | :--- | :--- | :--- | :--- |
 | **List Tasks** | `ollama-agent task list` | `/task list` (or `/task`) | List all saved tasks. |
 | **Create Task** | `ollama-agent task create <id> --title <t> --task-prompt <p> [--task-model <m>] [--task-effort <e>] [--force]` | `/task create [<id>]` | Save a new task template via CLI or interactive interview. |
-| **Run Task** | `ollama-agent task run <id> [-y]` | `/task run <id> [-y]` | Execute a saved task non-interactively or in REPL. |
+| **Run Task** | `ollama-agent task run <id> [key=value ...] [--var key=value] [-y]` | `/task run <id> [key=value ...] [-y]` | Execute a saved task non-interactively or in REPL. |
 | **Delete Task** | `ollama-agent task delete <id>` | `/task delete <id>` | Delete a saved task definition. |
+
+### Running Tasks with Dynamic Variables
+
+#### CLI Execution Syntax
+Variables can be passed as positional `key=value` arguments or using `--var key=value`:
+
+```bash
+# Run with positional variable assignments
+ollama-agent task run code-review target_file=src/app.py strict=true -y
+
+# Run with --var flags
+ollama-agent task run code-review --var target_file=src/app.py --var strict=true
+
+# Mixed positional and flag syntax
+ollama-agent task run code-review target_file=src/app.py --var strict=false
+```
+
+#### REPL Execution Syntax
+In the interactive REPL, variables are passed as positional `key=value` arguments following the task ID:
+
+```text
+/task run code-review target_file=src/app.py strict=true
+/task run code-review target_file=src/app.py strict=true -y
+```
 
 ### Task Execution Behavior
 When running a task (`task run <id>` or `/task run <id>`):
-1. `TaskManager` resolves the task ID or prefix.
-2. The runtime temporarily overrides `settings.model.name` and `settings.model.reasoning_effort` with the values defined in the task.
-3. The prompt is streamed non-interactively or inside the interactive REPL session with live tool tracking.
-4. When execution finishes, prior session parameters and YOLO state are safely restored.
+1. `TaskManager` resolves the task ID or unique prefix.
+2. Template variables are parsed, defaults are applied, required fields are validated, and values are type-coerced.
+3. The prompt template is rendered via Jinja2.
+4. The runtime temporarily overrides `settings.model.name` and `settings.model.reasoning_effort` with the values defined in the task.
+5. The rendered prompt is executed and streamed (non-interactively or in the active REPL viewport) with live tool execution and dynamic `@-mentions` expansion.
+6. When execution completes, prior session parameters, model settings, and YOLO states are cleanly restored.
 
 ---
 

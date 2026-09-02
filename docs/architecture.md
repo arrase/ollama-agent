@@ -88,7 +88,7 @@ sequenceDiagram
   - `/tasks/`: Routed to `FilesystemBackend` pointing to saved YAML prompt tasks in `~/.ollama-agent/tasks/`.
   - `/project/`: Optional route to `FilesystemBackend` pointing to the repository root when `AGENTS.md` is discovered in an ancestor directory.
   - Default route: `LocalShellBackend` operating on the current working directory (`Path.cwd().resolve()`).
-- **Dynamic System Instructions**: The system prompt is constructed dynamically by blending base instructions, filesystem policy directives (traversal mode vs sandboxed mode), dynamic RAG search policies (`rag_policy.md`), and local environment runtime metadata (`platform.system()`, `platform.release()`).
+- **Dynamic System Instructions**: The system prompt is constructed dynamically using unified Jinja2 template rendering, evaluating filesystem policy directives (traversal mode vs sandboxed mode), conditional RAG search policies (`{% if rag_active %}`), and local environment runtime metadata (`platform.system()`, `platform.release()`).
 
 ---
 

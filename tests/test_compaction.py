@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from deepagents.backends import FilesystemBackend
 from deepagents.backends.protocol import FILE_NOT_FOUND, EditResult, FileDownloadResponse, WriteResult
@@ -60,7 +61,8 @@ class TestApplySummarizationEvent(unittest.TestCase):
     def test_out_of_bounds_cutoff_returns_summary_only(self) -> None:
         summary = HumanMessage(content="s")
         event = {"cutoff_index": 10, "summary_message": summary, "file_path": None}
-        self.assertEqual(apply_summarization_event(self.engine, ["a"], event), [summary])
+        with patch("deepagents.middleware.summarization.logger.warning"):
+            self.assertEqual(apply_summarization_event(self.engine, ["a"], event), [summary])
 
 
 class TestCutoff(unittest.TestCase):
