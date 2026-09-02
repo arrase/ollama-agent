@@ -26,15 +26,19 @@ class StreamingRenderer(ABC):
 
     def on_text_delta(self, event: dict[str, Any]) -> None:
         """Handle a text delta event."""
+        return None
 
     def on_reasoning_delta(self, event: dict[str, Any]) -> None:
         """Handle a reasoning delta event."""
+        return None
 
     def on_tool_call(self, event: dict[str, Any]) -> None:
         """Handle a tool call event."""
+        return None
 
     def on_tool_output(self, event: dict[str, Any]) -> None:
         """Handle a tool output event."""
+        return None
 
     @abstractmethod
     def on_error(self, event: dict[str, Any]) -> None:
@@ -44,9 +48,7 @@ class StreamingRenderer(ABC):
     def on_warning(self, event: dict[str, Any]) -> None:
         """Handle a warning event."""
 
-    async def handle_interrupt(
-        self, event: dict[str, Any], runtime: AgentRuntime
-    ) -> list[dict[str, Any]] | None:
+    async def handle_interrupt(self, event: dict[str, Any], runtime: AgentRuntime) -> list[dict[str, Any]] | None:
         """Handle an interrupt event. Returning None aborts the run."""
         return None
 

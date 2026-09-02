@@ -41,7 +41,9 @@ class TestDispatchAndCLI(unittest.TestCase):
 
     def test_argument_parser_flags(self) -> None:
         parser = create_argument_parser()
-        args = parser.parse_args(["-m", "llama3:8b", "-e", "high", "-c", "16384", "-y", "-s", "--prompt", "hello", "--rag", "docs_db"])
+        args = parser.parse_args(
+            ["-m", "llama3:8b", "-e", "high", "-c", "16384", "-y", "-s", "--prompt", "hello", "--rag", "docs_db"]
+        )
         self.assertEqual(args.model, "llama3:8b")
         self.assertEqual(args.effort, "high")
         self.assertEqual(args.num_ctx, "16384")
@@ -225,40 +227,48 @@ class TestDispatchAndCLI(unittest.TestCase):
     def test_main_config_reset(self) -> None:
         # Patch set_locale so the system language does not leak into other tests.
         mock_console = MagicMock()
-        with patch("sys.argv", ["ollama-agent", "--config-reset", "config-file"]), \
-             patch("ollama_agent.main.set_locale", return_value="en"), \
-             patch("ollama_agent.main.reset_config", return_value=["Reset successful"]) as mock_reset, \
-             patch("ollama_agent.main.Console", return_value=mock_console):
+        with (
+            patch("sys.argv", ["ollama-agent", "--config-reset", "config-file"]),
+            patch("ollama_agent.main.set_locale", return_value="en"),
+            patch("ollama_agent.main.reset_config", return_value=["Reset successful"]) as mock_reset,
+            patch("ollama_agent.main.Console", return_value=mock_console),
+        ):
             main()
             mock_reset.assert_called_once_with("config-file")
             mock_console.print.assert_called_once_with("Reset successful")
 
     def test_main_cli_commands_handled(self) -> None:
-        with patch("sys.argv", ["ollama-agent", "task", "list"]), \
-             patch("ollama_agent.main.set_locale", return_value="en"), \
-             patch("ollama_agent.main.load_settings", return_value=Settings()), \
-             patch("ollama_agent.main.handle_cli_commands", return_value=True) as mock_handle:
+        with (
+            patch("sys.argv", ["ollama-agent", "task", "list"]),
+            patch("ollama_agent.main.set_locale", return_value="en"),
+            patch("ollama_agent.main.load_settings", return_value=Settings()),
+            patch("ollama_agent.main.handle_cli_commands", return_value=True) as mock_handle,
+        ):
             main()
             mock_handle.assert_called_once()
 
     def test_main_rejects_prompt_with_subcommand(self) -> None:
-        with patch("sys.argv", ["ollama-agent", "task", "list", "-p", "hello"]), \
-             patch("ollama_agent.main.set_locale", return_value="en"), \
-             patch("sys.stderr", new_callable=io.StringIO):
+        with (
+            patch("sys.argv", ["ollama-agent", "task", "list", "-p", "hello"]),
+            patch("ollama_agent.main.set_locale", return_value="en"),
+            patch("sys.stderr", new_callable=io.StringIO),
+        ):
             with self.assertRaises(SystemExit) as cm:
                 main()
         self.assertEqual(cm.exception.code, 2)
 
     def test_main_repl_flow(self) -> None:
         mock_settings = Settings()
-        with patch("sys.argv", ["ollama-agent", "-m", "qwen3:32b", "-e", "high", "--builtin-tool-timeout", "40"]), \
-             patch("ollama_agent.main.set_locale", return_value="en"), \
-             patch("ollama_agent.main.load_settings", return_value=mock_settings), \
-             patch("ollama_agent.main.ensure_model_configured", return_value="qwen3:32b") as mock_ensure, \
-             patch("ollama_agent.main.handle_cli_commands", return_value=False), \
-             patch("ollama_agent.main.AgentRuntime") as mock_runtime_cls, \
-             patch("ollama_agent.main.OllamaREPL") as mock_repl_cls, \
-             patch("asyncio.run") as mock_asyncio_run:
+        with (
+            patch("sys.argv", ["ollama-agent", "-m", "qwen3:32b", "-e", "high", "--builtin-tool-timeout", "40"]),
+            patch("ollama_agent.main.set_locale", return_value="en"),
+            patch("ollama_agent.main.load_settings", return_value=mock_settings),
+            patch("ollama_agent.main.ensure_model_configured", return_value="qwen3:32b") as mock_ensure,
+            patch("ollama_agent.main.handle_cli_commands", return_value=False),
+            patch("ollama_agent.main.AgentRuntime") as mock_runtime_cls,
+            patch("ollama_agent.main.OllamaREPL") as mock_repl_cls,
+            patch("asyncio.run") as mock_asyncio_run,
+        ):
             main()
             mock_ensure.assert_called_once_with(mock_settings)
             self.assertEqual(mock_settings.model.name, "qwen3:32b")
@@ -269,11 +279,13 @@ class TestDispatchAndCLI(unittest.TestCase):
             mock_asyncio_run.assert_called_once()
 
     def test_main_model_capability_error_exits(self) -> None:
-        with patch("sys.argv", ["ollama-agent"]), \
-             patch("ollama_agent.main.set_locale", return_value="en"), \
-             patch("ollama_agent.main.Console"), \
-             patch("ollama_agent.main.load_settings", return_value=Settings()), \
-             patch("ollama_agent.main.ensure_model_configured", side_effect=ModelCapabilityError("Model unsupported")):
+        with (
+            patch("sys.argv", ["ollama-agent"]),
+            patch("ollama_agent.main.set_locale", return_value="en"),
+            patch("ollama_agent.main.Console"),
+            patch("ollama_agent.main.load_settings", return_value=Settings()),
+            patch("ollama_agent.main.ensure_model_configured", side_effect=ModelCapabilityError("Model unsupported")),
+        ):
             with self.assertRaises(SystemExit) as cm:
                 main()
             self.assertEqual(cm.exception.code, 1)
@@ -285,9 +297,11 @@ class TestDispatchAndCLI(unittest.TestCase):
         mock_add_file = AsyncMock()
         mock_add_dir = AsyncMock()
 
-        with patch("ollama_agent.interfaces.dispatch.load_rag_database", mock_load), \
-             patch("ollama_agent.interfaces.dispatch.add_rag_file", mock_add_file), \
-             patch("ollama_agent.interfaces.dispatch.add_rag_directory", mock_add_dir):
+        with (
+            patch("ollama_agent.interfaces.dispatch.load_rag_database", mock_load),
+            patch("ollama_agent.interfaces.dispatch.add_rag_file", mock_add_file),
+            patch("ollama_agent.interfaces.dispatch.add_rag_directory", mock_add_dir),
+        ):
             handlers = _build_cli_handlers(args_file)
             asyncio.run(handlers[("rag", "add")]())
             mock_load.assert_called_once()
@@ -299,9 +313,11 @@ class TestDispatchAndCLI(unittest.TestCase):
         mock_add_dir.reset_mock()
 
         args_dir = parser.parse_args(["rag", "add", "docs_db", "./docs", "--dir"])
-        with patch("ollama_agent.interfaces.dispatch.load_rag_database", mock_load), \
-             patch("ollama_agent.interfaces.dispatch.add_rag_file", mock_add_file), \
-             patch("ollama_agent.interfaces.dispatch.add_rag_directory", mock_add_dir):
+        with (
+            patch("ollama_agent.interfaces.dispatch.load_rag_database", mock_load),
+            patch("ollama_agent.interfaces.dispatch.add_rag_file", mock_add_file),
+            patch("ollama_agent.interfaces.dispatch.add_rag_directory", mock_add_dir),
+        ):
             handlers = _build_cli_handlers(args_dir)
             asyncio.run(handlers[("rag", "add")]())
             mock_load.assert_called_once()
@@ -312,8 +328,10 @@ class TestDispatchAndCLI(unittest.TestCase):
         parser = create_argument_parser()
         args = parser.parse_args(["session", "export", "sess-123", "-o", "export.md"])
 
-        with patch("ollama_agent.interfaces.dispatch.AgentRuntime") as mock_runtime_cls, \
-             patch("ollama_agent.interfaces.dispatch.export_session", AsyncMock()) as mock_export:
+        with (
+            patch("ollama_agent.interfaces.dispatch.AgentRuntime") as mock_runtime_cls,
+            patch("ollama_agent.interfaces.dispatch.export_session", AsyncMock()) as mock_export,
+        ):
             mock_runtime = MagicMock()
             mock_runtime.__aenter__ = AsyncMock(return_value=mock_runtime)
             mock_runtime.__aexit__ = AsyncMock(return_value=None)

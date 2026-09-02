@@ -31,9 +31,7 @@ async def _show_model(model: str, base_url: str) -> Any:
         client = ollama.AsyncClient(host=host)
         return await client.show(model)
     except Exception as exc:
-        raise ModelCapabilityError(
-            _("Failed to fetch metadata for '{model}': {exc}", model=model, exc=exc)
-        ) from exc
+        raise ModelCapabilityError(_("Failed to fetch metadata for '{model}': {exc}", model=model, exc=exc)) from exc
 
 
 def _parse_modelfile_param(text: str, param_name: str) -> str | None:
@@ -48,11 +46,7 @@ def _parse_num_ctx(text: str) -> int | None:
 
 
 def _model_context_length(model_info: dict[str, Any]) -> int | None:
-    values = [
-        int(v)
-        for k, v in model_info.items()
-        if str(k).endswith("context_length") and str(v).isdigit()
-    ]
+    values = [int(v) for k, v in model_info.items() if str(k).endswith("context_length") and str(v).isdigit()]
     return max(values, default=None)
 
 
@@ -153,7 +147,11 @@ async def resolve_context_window(
             return resolved
 
     raise ModelContextWindowError(
-        _("Failed to determine the context window for '{model}'. Define context_window in the settings or config file.", model=model)
+        _(
+            "Failed to determine the context window for '{model}'. "
+            "Define context_window in the settings or config file.",
+            model=model,
+        )
     )
 
 
@@ -179,7 +177,11 @@ async def resolve_ollama_reasoning(
     if "gpt-oss" in lower_name:
         if effort == "disabled":
             warn_callback(
-                _("Model '{model}' is a thinking-only model. reasoning_effort='disabled' is not supported; thinking will remain enabled.", model=model)
+                _(
+                    "Model '{model}' is a thinking-only model. reasoning_effort='disabled' is not supported; "
+                    "thinking will remain enabled.",
+                    model=model,
+                )
             )
             return True
         if effort in ("hide", "enabled"):
@@ -247,9 +249,7 @@ async def resolve_model_parameters(
                     found_val = int(raw) if is_int else float(raw)
                     break
                 except ValueError:
-                    warn_callback(
-                        _("Ignoring invalid value '{raw}' for parameter '{param}'.", raw=raw, param=param)
-                    )
+                    warn_callback(_("Ignoring invalid value '{raw}' for parameter '{param}'.", raw=raw, param=param))
 
         if found_val is not None:
             resolved[param] = (found_val, "modelfile")
@@ -297,12 +297,8 @@ async def create_ollama_chat_model(
     """Create a native ChatOllama model with resolved runtime settings."""
     host = base_url.rstrip("/")
     show_info = await _show_model(model, host)
-    reasoning = await resolve_ollama_reasoning(
-        model, reasoning_effort, host, warn_callback, show_info=show_info
-    )
-    num_ctx = await resolve_context_window(
-        model, context_window, host, show_info=show_info
-    )
+    reasoning = await resolve_ollama_reasoning(model, reasoning_effort, host, warn_callback, show_info=show_info)
+    num_ctx = await resolve_context_window(model, context_window, host, show_info=show_info)
     resolved_params = await resolve_model_parameters(
         model,
         host,
@@ -337,5 +333,9 @@ def validate_reasoning_effort(effort: str) -> ReasoningEffortValue:
     if normalized in ALLOWED_REASONING_EFFORTS:
         return cast(ReasoningEffortValue, normalized)
     raise ValueError(
-        _("Invalid reasoning effort '{effort}'. Allowed values are: {allowed}", effort=effort, allowed=sorted(ALLOWED_REASONING_EFFORTS))
+        _(
+            "Invalid reasoning effort '{effort}'. Allowed values are: {allowed}",
+            effort=effort,
+            allowed=sorted(ALLOWED_REASONING_EFFORTS),
+        )
     )

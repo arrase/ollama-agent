@@ -21,6 +21,7 @@ def environment_block(*, include_cwd: bool) -> str:
     if include_cwd:
         cwd = Path.cwd().resolve()
         lines.append(
-            f'Working Directory: {cwd} (directory where shell commands start in; this is what execute(command="pwd") reports)'
+            f"Working Directory: {cwd} "
+            '(directory where shell commands start in; this is what execute(command="pwd") reports)'
         )
     return "\n\n" + "\n".join(lines) + "\n"

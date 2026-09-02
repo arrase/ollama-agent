@@ -131,9 +131,7 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         required=False,
         help=_("Reasoning effort to save with the task (low, medium, high, xhigh, disabled, hide, enabled)"),
     )
-    task_create.add_argument(
-        "--force", action="store_true", help=_("Overwrite task if it already exists")
-    )
+    task_create.add_argument("--force", action="store_true", help=_("Overwrite task if it already exists"))
 
     task_run = task_sub.add_parser("run", help=_("Execute a saved task"))
     task_run.add_argument("task_id", type=str, help=_("Task ID or prefix to execute"))
@@ -175,9 +173,7 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
     rag_create.add_argument("name", type=str, help=_("Name for the new RAG database"))
 
     rag_delete = rag_sub.add_parser("delete", help=_("Delete a RAG database"))
-    rag_delete.add_argument(
-        "name", type=str, help=_("Name or prefix of the database to delete")
-    )
+    rag_delete.add_argument("name", type=str, help=_("Name or prefix of the database to delete"))
 
     rag_add = rag_sub.add_parser("add", help=_("Add file(s) to a RAG database"))
     rag_add.add_argument("database", type=str, help=_("Name of the RAG database"))
@@ -205,18 +201,14 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
     skill_create = skill_sub.add_parser("create", help=_("Create a new skill"))
     skill_create.add_argument("skill_id", type=str, help=_("Skill ID (directory name)"))
     skill_create.add_argument("--name", type=str, required=True, help=_("Skill name"))
-    skill_create.add_argument(
-        "--description", type=str, required=True, help=_("Skill description")
-    )
+    skill_create.add_argument("--description", type=str, required=True, help=_("Skill description"))
     skill_create.add_argument(
         "--instructions",
         type=str,
         required=True,
         help=_("Skill instructions (markdown body)"),
     )
-    skill_create.add_argument(
-        "--force", action="store_true", help=_("Overwrite skill if it already exists")
-    )
+    skill_create.add_argument("--force", action="store_true", help=_("Overwrite skill if it already exists"))
 
     skill_delete = skill_sub.add_parser("delete", help=_("Delete a skill"))
     skill_delete.add_argument("skill_id", type=str, help=_("Skill ID or prefix to delete"))
@@ -232,9 +224,7 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
 
     session_sub.add_parser("list", help=_("List all past chat sessions"))
 
-    session_search = session_sub.add_parser(
-        "search", help=_("Search past chat sessions by query keyword")
-    )
+    session_search = session_sub.add_parser("search", help=_("Search past chat sessions by query keyword"))
     session_search.add_argument("query", type=str, help=_("Search query string"))
 
     session_del = session_sub.add_parser("delete", help=_("Delete a chat session from history"))
@@ -280,9 +270,7 @@ def create_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def handle_cli_commands(
-    args: argparse.Namespace, settings: Settings
-) -> bool:
+def handle_cli_commands(args: argparse.Namespace, settings: Settings) -> bool:
     """Handle CLI commands and return True if a command was handled."""
     ctx = TasksContext(settings=settings)
     rag_ctx = RAGContext(rag_manager=RAGManager(settings.rag))
@@ -333,7 +321,7 @@ def handle_cli_commands(
         try:
             asyncio.run(_run())
         except KeyboardInterrupt:
-            raise SystemExit(130)
+            raise SystemExit(130) from None
 
         if not completed:
             raise SystemExit(1)

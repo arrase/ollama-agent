@@ -29,7 +29,6 @@ from .paths import (
     MCP_PATH,
     MEMORY_PATH,
     RAG_DIR,
-    PROMPTS_DIR,
     SETTINGS_PATH,
     SKILLS_DIR,
     TASKS_DIR,
@@ -47,7 +46,6 @@ __all__ = [
     "MCP_PATH",
     "MEMORY_PATH",
     "RAG_DIR",
-    "PROMPTS_DIR",
     "SETTINGS_PATH",
     "SKILLS_DIR",
     "TASKS_DIR",
@@ -69,4 +67,3 @@ __all__ = [
     "reset_config",
     "save_settings",
 ]
-

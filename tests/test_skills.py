@@ -80,9 +80,7 @@ class TestSkillsManager(unittest.TestCase):
     def test_read_skill_requires_name_and_description(self) -> None:
         skill_dir = self.skills_dir / "incomplete"
         skill_dir.mkdir()
-        (skill_dir / "SKILL.md").write_text(
-            "---\nname: Only Name\n---\nbody", encoding="utf-8"
-        )
+        (skill_dir / "SKILL.md").write_text("---\nname: Only Name\n---\nbody", encoding="utf-8")
         with self.assertRaises(ValueError):
             _read_skill(skill_dir)
 

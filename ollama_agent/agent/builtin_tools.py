@@ -52,13 +52,6 @@ def get_active_thread_id() -> str:
 async def rag_search(query: str, top_k: int | None = None) -> RAGToolResult:
     """Search the loaded RAG database for relevant document chunks."""
     mgr = get_rag_manager()
-    if mgr is None:
-        return {"success": False, "error": _("RAG manager not initialized")}
-    if mgr.current_database is None:
-        return {
-            "success": False,
-            "error": _("No RAG database loaded. Use /rag load <name> first."),
-        }
     try:
         results = await mgr.search(query, top_k)
         context_parts: list[str] = []
@@ -73,7 +66,9 @@ async def rag_search(query: str, top_k: int | None = None) -> RAGToolResult:
 
 @tool
 async def search_past_conversations(query: str, limit: int = 3) -> str:
-    """Search past conversation sessions and episodic memory by keywords, topics, or dates (e.g. 'yesterday', 'auth', 'database'). Returns timestamped excerpts of previous sessions."""
+    """Search past conversation sessions and episodic memory by keywords, topics, or dates
+    (e.g. 'yesterday', 'auth', 'database'). Returns timestamped excerpts of previous sessions.
+    """
     safe_limit = max(1, limit)
     try:
         results = await asyncio.to_thread(

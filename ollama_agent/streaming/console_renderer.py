@@ -80,35 +80,25 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         prefix = self._agent_prefix(event)
         tool_name = event["name"]
         tool_msg = _("Calling tool: {tool_name}", tool_name=tool_name)
-        self.console.print(
-            f"  [yellow]✦ {prefix}{tool_msg}[/yellow]"
-        )
+        self.console.print(f"  [yellow]✦ {prefix}{tool_msg}[/yellow]")
 
     def on_tool_output(self, event: dict[str, Any]) -> None:
         self._toggle_live(False)
         prefix = self._agent_prefix(event)
         suffix = f" ({_('{output_len} chars', output_len=event['output_len'])})"
-        self.console.print(
-            f"  [dim cyan]✓ {prefix}{_('Tool output received')}{suffix}[/dim cyan]\n"
-        )
+        self.console.print(f"  [dim cyan]✓ {prefix}{_('Tool output received')}{suffix}[/dim cyan]\n")
 
     def on_error(self, event: dict[str, Any]) -> None:
         self._end_reasoning()
         self._toggle_live(False)
-        self.console.print(
-            f"  [red]❌ {_('Error:')} {event['content']}[/red]"
-        )
+        self.console.print(f"  [red]❌ {_('Error:')} {event['content']}[/red]")
 
     def on_warning(self, event: dict[str, Any]) -> None:
         self._end_reasoning()
         self._toggle_live(False)
-        self.console.print(
-            f"  [yellow]⚠ {_('Warning:')} {event['content']}[/yellow]"
-        )
+        self.console.print(f"  [yellow]⚠ {_('Warning:')} {event['content']}[/yellow]")
 
-    async def handle_interrupt(
-        self, event: dict[str, Any], runtime: AgentRuntime
-    ) -> list[dict[str, Any]] | None:
+    async def handle_interrupt(self, event: dict[str, Any], runtime: AgentRuntime) -> list[dict[str, Any]] | None:
         self._toggle_live(False)
         self._end_reasoning()
 
@@ -124,7 +114,8 @@ class ConsoleStreamingRenderer(StreamingRenderer):
 
         if not sys.stdin.isatty():
             hint = _(
-                "Cannot request tool approval in a non-interactive session. Re-run with -y (--yolo) to auto-approve sensitive tools."
+                "Cannot request tool approval in a non-interactive session. "
+                "Re-run with -y (--yolo) to auto-approve sensitive tools."
             )
             self.console.print(f"  [red]❌ {hint}[/red]")
             return None
@@ -138,10 +129,10 @@ class ConsoleStreamingRenderer(StreamingRenderer):
                 if choice == "y":
                     return [{"type": "approve"} for _ in action_requests]
                 elif choice == "n":
-                    return [{
-                        "type": "reject",
-                        "message": _("User rejected executing tool '{name}'.", name=req["name"])
-                    } for req in action_requests]
+                    return [
+                        {"type": "reject", "message": _("User rejected executing tool '{name}'.", name=req["name"])}
+                        for req in action_requests
+                    ]
                 elif choice == "a":
                     for r in action_requests:
                         runtime.auto_approved_tools.add(r["name"])
@@ -152,7 +143,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
                 else:
                     invalid_msg = _("Invalid choice. Please enter 'y', 'n', 'a', or 'c'.")
                     self.console.print(f"  [red]{invalid_msg}[/red]")
-        except (EOFError, KeyboardInterrupt):
+        except EOFError:
             self.console.print(f"  [red]✗ {_('Cancelled')}[/red]\n")
             return None
 

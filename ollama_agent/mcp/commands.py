@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -28,8 +28,8 @@ class MCPServerStatus:
     transport: str
     target: str
     status: Literal["active", "failed"]
-    tools: list[str] = field(default_factory=list)
-    error: str = ""
+    tools: list[str]
+    error: str
 
 
 async def check_mcp_server(
@@ -45,10 +45,7 @@ async def check_mcp_server(
         return MCPServerStatus(name=name, transport="", target="", status="failed", tools=[], error=str(exc))
 
     transport = conn["transport"]
-    if "command" in conn:
-        target = f"{conn['command']} {' '.join(conn['args'])}".strip()
-    else:
-        target = conn["url"]
+    target = f"{conn['command']} {' '.join(conn['args'])}".strip() if "command" in conn else conn["url"]
 
     try:
         async with asyncio.timeout(timeout):
@@ -78,20 +75,19 @@ async def check_mcp_server(
 
 async def list_mcp_servers(
     console: Console,
-    settings: Settings | None = None,
+    settings: Settings,
 ) -> None:
     """List all configured MCP servers and display their connection status."""
     servers_cfg = await _read_main_config()
 
     subagent_servers: dict[str, dict[str, Any]] = {}
-    if settings:
-        for sa in settings.subagents:
-            for srv in sa.mcp_servers:
-                subagent_servers[f"{srv.name} ({sa.name})"] = {
-                    "command": srv.command,
-                    "args": srv.args,
-                    "env": srv.env,
-                }
+    for sa in settings.subagents:
+        for srv in sa.mcp_servers:
+            subagent_servers[f"{srv.name} ({sa.name})"] = {
+                "command": srv.command,
+                "args": srv.args,
+                "env": srv.env,
+            }
 
     all_servers = {**servers_cfg, **subagent_servers}
     if not all_servers:
@@ -101,10 +97,7 @@ async def list_mcp_servers(
         )
         return
 
-    tasks = [
-        check_mcp_server(name, cfg)
-        for name, cfg in all_servers.items()
-    ]
+    tasks = [check_mcp_server(name, cfg) for name, cfg in all_servers.items()]
     statuses: list[MCPServerStatus] = await asyncio.gather(*tasks)
 
     table = Table(
@@ -124,10 +117,7 @@ async def list_mcp_servers(
             status_text = "[bold green]● Active[/bold green]"
             if st.tools:
                 escaped_tools = [escape(t) for t in st.tools]
-                tools_str = (
-                    f"[green]{len(st.tools)} {_('tools')}:[/green] "
-                    f"[dim]{', '.join(escaped_tools)}[/dim]"
-                )
+                tools_str = f"[green]{len(st.tools)} {_('tools')}:[/green] [dim]{', '.join(escaped_tools)}[/dim]"
             else:
                 tools_str = f"[green]{_('0 tools available')}[/green]"
         else:

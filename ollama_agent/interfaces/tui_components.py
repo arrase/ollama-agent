@@ -20,12 +20,13 @@ from ..agent.episodic_memory import HistoryError, load_past_user_prompts
 from ..i18n import _
 
 if TYPE_CHECKING:
-    from .repl import OllamaREPL, OllamaAgentApp, QueuedItem
+    from .repl import OllamaAgentApp, OllamaREPL, QueuedItem
 
 _log = logging.getLogger(__name__)
 
 
 # ─── Header ──────────────────────────────────────────────────────────────────
+
 
 class AgentHeader(Static):
     """Dynamic TUI Header displaying agent status information."""
@@ -42,7 +43,12 @@ class AgentHeader(Static):
         ms = self.repl.runtime.settings.model
         tokens = self.repl.runtime.last_context_tokens
         eff_ctx = self.repl.runtime.effective_context_window
-        num_ctx = eff_ctx if isinstance(eff_ctx, int) and eff_ctx > 0 else (ms.context_window if isinstance(ms.context_window, int) else 0)
+        if isinstance(eff_ctx, int) and eff_ctx > 0:
+            num_ctx = eff_ctx
+        elif isinstance(ms.context_window, int):
+            num_ctx = ms.context_window
+        else:
+            num_ctx = 0
 
         if num_ctx > 0 and isinstance(tokens, (int, float)):
             tokens_val = tokens
@@ -55,13 +61,23 @@ class AgentHeader(Static):
                 color = "#38bdf8"
             tok_str = f"{tokens_val / 1000:.1f}k" if tokens_val >= 1000 else str(int(tokens_val))
             ctx_str = f"{num_ctx / 1000:.1f}k" if num_ctx >= 1000 else str(int(num_ctx))
-            ctx_info = f"  [dim]│[/dim]  [bold #8b949e]{_('Context:')}[/bold #8b949e] [bold {color}]{tok_str}/{ctx_str} ({pct}%)[/bold {color}]"
+            ctx_label = _("Context:")
+            ctx_info = (
+                f"  [dim]│[/dim]  [bold #8b949e]{ctx_label}[/bold #8b949e] "
+                f"[bold {color}]{tok_str}/{ctx_str} ({pct}%)[/bold {color}]"
+            )
         else:
             ctx_info = ""
 
         rag_ctx = self.repl._rag_ctx
         rag_db = rag_ctx.rag_manager.current_database if rag_ctx else None
-        rag_info = f"  [dim]│[/dim]  [bold #8b949e]{_('RAG:')}[/bold #8b949e] [bold #a78bfa]{escape(str(rag_db))}[/bold #a78bfa]" if rag_db else ""
+        rag_label = _("RAG:")
+        rag_info = (
+            f"  [dim]│[/dim]  [bold #8b949e]{rag_label}[/bold #8b949e] "
+            f"[bold #a78bfa]{escape(str(rag_db))}[/bold #a78bfa]"
+            if rag_db
+            else ""
+        )
         yolo = self.repl.runtime.yolo_mode
         stealth = self.repl.runtime.stealth_mode
 
@@ -77,13 +93,16 @@ class AgentHeader(Static):
         )
         self.update(
             f"[bold #38bdf8]● ollama-agent[/bold #38bdf8]  [dim]│[/dim]  "
-            f"[bold #8b949e]{_('Model:')}[/bold #8b949e] [bold #e6edf3]{escape(str(ms.name))}[/bold #e6edf3]{ctx_info}  [dim]│[/dim]  "
-            f"[bold #8b949e]{_('Effort:')}[/bold #8b949e] [#e6edf3]{escape(str(ms.reasoning_effort))}[/#e6edf3]{rag_info}  [dim]│[/dim]  "
+            f"[bold #8b949e]{_('Model:')}[/bold #8b949e] "
+            f"[bold #e6edf3]{escape(str(ms.name))}[/bold #e6edf3]{ctx_info}  [dim]│[/dim]  "
+            f"[bold #8b949e]{_('Effort:')}[/bold #8b949e] "
+            f"[#e6edf3]{escape(str(ms.reasoning_effort))}[/#e6edf3]{rag_info}  [dim]│[/dim]  "
             f"{yolo_status}  [dim]│[/dim]  {stealth_status}"
         )
 
 
 # ─── Footer ──────────────────────────────────────────────────────────────────
+
 
 class AgentFooter(Static):
     """Dynamic TUI Footer displaying keyboard shortcuts and live status."""
@@ -145,6 +164,7 @@ class AgentFooter(Static):
 
 # ─── Prompt Queue Widget ─────────────────────────────────────────────────────
 
+
 class PromptQueueWidget(Static):
     """Widget displaying currently queued prompts and commands."""
 
@@ -175,6 +195,7 @@ class PromptQueueWidget(Static):
 
 # ─── System Output Widget ────────────────────────────────────────────────────
 
+
 class SystemOutputWidget(Static):
     """Dedicated TUI widget displaying system notifications and slash command outputs."""
 
@@ -204,6 +225,7 @@ class SystemOutputWidget(Static):
 
 
 # ─── Custom Input ─────────────────────────────────────────────────────────────
+
 
 class ReplInput(TextArea):
     """Interactive input field that captures Tab/arrow keys for autocomplete."""
@@ -265,6 +287,7 @@ class ReplInput(TextArea):
 
     class Submitted(Message):
         """Emitted when the user submits the input."""
+
         def __init__(self, input_widget: ReplInput, value: str) -> None:
             super().__init__()
             self.input = input_widget
@@ -344,15 +367,14 @@ class ReplInput(TextArea):
                     return True
             event.stop()
             event.prevent_default()
-            if self._history:
-                if self._history_index < len(self._history):
-                    self._history_index += 1
-                    if self._history_index == len(self._history):
-                        self.text = self._temp_input
-                    else:
-                        self.text = self._history[self._history_index]
-                    self.action_cursor_line_end()
-                    self._update_height()
+            if self._history and self._history_index < len(self._history):
+                self._history_index += 1
+                if self._history_index == len(self._history):
+                    self.text = self._temp_input
+                else:
+                    self.text = self._history[self._history_index]
+                self.action_cursor_line_end()
+                self._update_height()
             return True
         return False
 
@@ -387,6 +409,7 @@ class ReplInput(TextArea):
 
 
 # ─── Chat Message Widgets ─────────────────────────────────────────────────────
+
 
 class UserMessage(Container):
     """Rendered user prompt."""
@@ -462,9 +485,7 @@ class AgentResponse(Container):
 
         if self.current_thinking_text is not None:
             self._thinking_chunks.append(delta)
-            self.current_thinking_text.update(
-                Text("".join(self._thinking_chunks), style="dim italic #8b949e")
-            )
+            self.current_thinking_text.update(Text("".join(self._thinking_chunks), style="dim italic #8b949e"))
 
     def append_text(self, delta: str) -> None:
         self._stop_thinking_animation()
@@ -543,6 +564,7 @@ class ToolOutputMessage(Static):
 
 class SystemMessage(Static):
     """Command output or system-level notice."""
+
     pass
 
 
@@ -551,7 +573,14 @@ class ToolApprovalWidget(Container):
 
     BUTTON_IDS = ["approve-btn", "reject-btn", "allow-btn", "cancel-btn"]
 
-    def __init__(self, action_requests: list[dict[str, Any]], app_ref: OllamaAgentApp, scroll: Any, agent_msg: AgentResponse, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        action_requests: list[dict[str, Any]],
+        app_ref: OllamaAgentApp,
+        scroll: Any,
+        agent_msg: AgentResponse,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self.action_requests = action_requests
         self.app_ref = app_ref
@@ -564,7 +593,8 @@ class ToolApprovalWidget(Container):
         for req in self.action_requests:
             name = escape(str(req["name"]))
             args = escape(str(req["args"]))
-            yield Static(f"{_('Tool:')} [bold #38bdf8]{name}[/bold #38bdf8]\n{_('Arguments:')} [dim]{args}[/dim]", classes="approval-details")
+            details = f"{_('Tool:')} [bold #38bdf8]{name}[/bold #38bdf8]\n{_('Arguments:')} [dim]{args}[/dim]"
+            yield Static(details, classes="approval-details")
 
         with Horizontal(classes="approval-buttons") as buttons:
             self.buttons_container = buttons
@@ -579,7 +609,6 @@ class ToolApprovalWidget(Container):
             buttons.first().focus()
         else:
             self.call_after_refresh(lambda: self.query_one("#approve-btn", Button).focus())
-
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         event.stop()
@@ -635,18 +664,12 @@ class ToolApprovalWidget(Container):
             if decision_type == "approve-btn":
                 decisions.append({"type": "approve"})
             elif decision_type == "reject-btn":
-                decisions.append({
-                    "type": "reject",
-                    "message": _("User rejected executing tool '{name}'.", name=name)
-                })
+                decisions.append({"type": "reject", "message": _("User rejected executing tool '{name}'.", name=name)})
             elif decision_type == "allow-btn":
                 self.app_ref.repl.runtime.auto_approved_tools.add(name)
                 decisions.append({"type": "approve"})
             elif decision_type == "cancel-btn":
-                decisions.append({
-                    "type": "reject",
-                    "message": _("User cancelled the execution.")
-                })
+                decisions.append({"type": "reject", "message": _("User cancelled the execution.")})
 
         self.buttons_container.remove()
         self.buttons_container = None

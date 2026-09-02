@@ -11,8 +11,7 @@ from pathlib import Path
 APP_DIR = Path.home() / ".ollama-agent"
 
 SETTINGS_PATH = APP_DIR / "settings.yaml"
-PROMPTS_DIR = APP_DIR / "prompts"
-INSTRUCTIONS_PATH = PROMPTS_DIR / "instructions.md"
+INSTRUCTIONS_PATH = APP_DIR / "prompts" / "instructions.md"
 HISTORY_DB_PATH = APP_DIR / "history.db"
 MEMORY_PATH = APP_DIR / "MEMORY.md"
 AGENTS_MD_NAME = "AGENTS.md"
@@ -24,4 +23,3 @@ TASKS_DIR = APP_DIR / "tasks"
 RAG_DIR = APP_DIR / "rag"
 SKILLS_DIR = APP_DIR / "skills"
 BUILTIN_SKILLS_DIR = Path(__file__).resolve().parent.parent / "skills" / "builtin"
-

@@ -199,8 +199,10 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             mock_client = MagicMock()
             mock_client.get_tools = AsyncMock(return_value=[mock_tool])
 
-            with patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path), \
-                 patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client):
+            with (
+                patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path),
+                patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client),
+            ):
                 tools = await load_main_mcp_tools()
                 self.assertEqual(tools, [mock_tool])
         finally:
@@ -223,8 +225,10 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             mock_client = MagicMock()
             mock_client.get_tools = AsyncMock(side_effect=RuntimeError("boom"))
 
-            with patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path), \
-                 patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client):
+            with (
+                patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path),
+                patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client),
+            ):
                 with self.assertRaisesRegex(MCPConfigError, "fetch.*boom"):
                     await load_main_mcp_tools()
         finally:
@@ -333,7 +337,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             missing = Path(tmp_dir) / "mcp.json"
             with patch("ollama_agent.mcp.loader.MCP_PATH", missing):
-                await list_mcp_servers(console)
+                await list_mcp_servers(console, settings=Settings())
                 out = console.export_text()
                 self.assertIn("No MCP servers configured", out)
 
@@ -346,7 +350,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         try:
             with patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path):
                 with self.assertRaises(MCPConfigError):
-                    await list_mcp_servers(console)
+                    await list_mcp_servers(console, settings=Settings())
         finally:
             tmp_path.unlink(missing_ok=True)
 
@@ -370,9 +374,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
                 SubAgentSettings(
                     name="researcher",
                     description="Researcher",
-                    mcp_servers=[
-                        SubAgentMCPServer(name="sub-mcp", command="uvx", args=["sub-tool"])
-                    ],
+                    mcp_servers=[SubAgentMCPServer(name="sub-mcp", command="uvx", args=["sub-tool"])],
                 )
             ]
 
@@ -381,8 +383,10 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             mock_client = MagicMock()
             mock_client.get_tools = AsyncMock(return_value=[mock_tool])
 
-            with patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path), \
-                 patch("ollama_agent.mcp.commands.MultiServerMCPClient", return_value=mock_client):
+            with (
+                patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path),
+                patch("ollama_agent.mcp.commands.MultiServerMCPClient", return_value=mock_client),
+            ):
                 await list_mcp_servers(console, settings=settings)
                 out = console.export_text()
                 self.assertIn("Model Context Protocol (MCP) Servers", out)
@@ -434,8 +438,10 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
                 captured_errlog = errlog
                 yield ("read_stream", "write_stream")
 
-            with patch("ollama_agent.mcp.loader.MCP_LOG_PATH", log_path), \
-                 patch("ollama_agent.mcp.loader._orig_stdio_client", fake_orig_stdio):
+            with (
+                patch("ollama_agent.mcp.loader.MCP_LOG_PATH", log_path),
+                patch("ollama_agent.mcp.loader._orig_stdio_client", fake_orig_stdio),
+            ):
                 server_dummy = MagicMock()
                 async with _mcp_stdio_client(server_dummy) as streams:
                     self.assertEqual(streams, ("read_stream", "write_stream"))

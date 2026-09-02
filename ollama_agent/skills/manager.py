@@ -71,9 +71,7 @@ def _read_skill(skill_dir: Path) -> SkillInfo:
     raw = skill_file.read_text(encoding="utf-8")
     meta, _body = _parse_frontmatter(raw)
     if "name" not in meta or "description" not in meta or not meta["name"] or not meta["description"]:
-        raise ValueError(
-            _("Skill frontmatter must define non-empty 'name' and 'description': {path}", path=skill_file)
-        )
+        raise ValueError(_("Skill frontmatter must define non-empty 'name' and 'description': {path}", path=skill_file))
     return SkillInfo(name=str(meta["name"]), description=str(meta["description"]), content=raw)
 
 

@@ -62,11 +62,7 @@ def _load_translations(lang: str) -> dict[str, str]:
     """Load translation mapping for a given language code."""
     if lang == DEFAULT_LOCALE:
         return {}
-    data = (
-        resources.files(__name__)
-        .joinpath("locales", f"{lang}.json")
-        .read_text(encoding="utf-8")
-    )
+    data = resources.files(__name__).joinpath("locales", f"{lang}.json").read_text(encoding="utf-8")
     return json.loads(data)
 
 

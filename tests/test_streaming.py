@@ -191,7 +191,7 @@ class TestInterruptHandling(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(result)
         self.assertIn("Cancelled", console.export_text())
 
-    async def test_stream_agent_events_survives_keyboard_interrupt(self) -> None:
+    async def test_stream_agent_events_propagates_keyboard_interrupt(self) -> None:
         mock_runtime = MagicMock()
 
         async def fake_stream(prompt: str, thread_id: str = "") -> AsyncGenerator[dict[str, Any], None]:
@@ -200,11 +200,9 @@ class TestInterruptHandling(unittest.IsolatedAsyncioTestCase):
 
         mock_runtime.run_streamed = fake_stream
         renderer = DummyRenderer()
-        completed = await stream_agent_events(mock_runtime, "p", renderer)
-        self.assertFalse(completed)
+        with self.assertRaises(KeyboardInterrupt):
+            await stream_agent_events(mock_runtime, "p", renderer)
         self.assertTrue(renderer.closed)
-        self.assertEqual(len(renderer.warnings), 1)
-        self.assertIn("interrupted", renderer.warnings[0]["content"])
 
     async def test_stream_agent_events_aborted_interrupt_returns_false(self) -> None:
         mock_runtime = MagicMock()
@@ -227,9 +225,7 @@ class TestInterruptHandling(unittest.IsolatedAsyncioTestCase):
         mock_runtime.run_streamed = fake_stream
 
         class BrokenRenderer(DummyRenderer):
-            async def handle_interrupt(
-                self, event: dict[str, Any], runtime: Any
-            ) -> list[dict[str, Any]] | None:
+            async def handle_interrupt(self, event: dict[str, Any], runtime: Any) -> list[dict[str, Any]] | None:
                 raise ValueError("boom")
 
         renderer = BrokenRenderer()

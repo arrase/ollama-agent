@@ -65,23 +65,28 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         console = Console(file=io.StringIO())
         # Sync fn
         called_sync = False
+
         def sync_fn() -> None:
             nonlocal called_sync
             called_sync = True
+
         await safe_call(sync_fn, console=console)
         self.assertTrue(called_sync)
 
         # Async fn
         called_async = False
+
         async def async_fn() -> None:
             nonlocal called_async
             called_async = True
+
         await safe_call(async_fn, console=console)
         self.assertTrue(called_async)
 
     async def test_safe_call_requires_console(self) -> None:
         def sync_fn() -> None:
             pass
+
         with self.assertRaises(TypeError):
             await safe_call(sync_fn)
 
@@ -95,15 +100,19 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         ):
             with self.subTest(exc=type(exc).__name__):
                 console = Console(file=io.StringIO(), record=True)
+
                 def raiser(exc: Exception = exc) -> None:
                     raise exc
+
                 await safe_call(raiser, console=console)  # Should not raise
                 self.assertIn(str(exc), console.export_text())
 
     async def test_safe_call_propagates_unexpected_errors(self) -> None:
         console = Console(file=io.StringIO())
+
         def raise_exit() -> None:
             raise SystemExit(1)
+
         with self.assertRaises(SystemExit):
             await safe_call(raise_exit, console=console)
 
@@ -117,8 +126,10 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         console = Console(file=io.StringIO(), record=True)
         mock_m1 = MagicMock(model="gemma4:26b", size=1024**3 * 15)
         mock_m2 = MagicMock(model="llama3:8b", size=1024**3 * 5)
-        with patch("ollama_agent.interfaces.model_commands._list_models", AsyncMock(return_value=[mock_m1, mock_m2])), \
-             patch("ollama_agent.interfaces.model_commands.model_supports_tools", AsyncMock(return_value=True)):
+        with (
+            patch("ollama_agent.interfaces.model_commands._list_models", AsyncMock(return_value=[mock_m1, mock_m2])),
+            patch("ollama_agent.interfaces.model_commands.model_supports_tools", AsyncMock(return_value=True)),
+        ):
             await list_models(console, current_model="gemma4:26b", base_url="http://localhost:11434")
             out = console.export_text()
             self.assertIn("gemma4:26b", out)
@@ -127,7 +138,10 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
 
     async def test_list_models_error_handled(self) -> None:
         console = Console(file=io.StringIO(), record=True)
-        with patch("ollama_agent.interfaces.model_commands._list_models", AsyncMock(side_effect=ConnectionError("Cannot connect"))):
+        with patch(
+            "ollama_agent.interfaces.model_commands._list_models",
+            AsyncMock(side_effect=ConnectionError("Cannot connect")),
+        ):
             await list_models(console, current_model="gemma4:26b", base_url="http://localhost:11434")
             out = console.export_text()
             self.assertIn("Error listing models", out)
@@ -164,8 +178,10 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
 
         mock_m1 = MagicMock(model="gemma4:26b")
         mock_m2 = MagicMock(model="qwen3:32b")
-        with patch("ollama_agent.interfaces.model_commands._list_models", AsyncMock(return_value=[mock_m1, mock_m2])), \
-             patch("ollama_agent.interfaces.model_commands.model_supports_tools", AsyncMock(return_value=True)):
+        with (
+            patch("ollama_agent.interfaces.model_commands._list_models", AsyncMock(return_value=[mock_m1, mock_m2])),
+            patch("ollama_agent.interfaces.model_commands.model_supports_tools", AsyncMock(return_value=True)),
+        ):
             res = await set_model(console, "qwen3:32b", runtime=runtime)
             self.assertEqual(res, "qwen3:32b")
             runtime.set_model.assert_awaited_once_with("qwen3:32b")
@@ -543,7 +559,10 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             await safe_call(handlers["/mcp"].handler, ["reload"], console=console)
             mock_reload_mcp.assert_awaited_once_with(console, runtime=runtime)
 
-        with patch("ollama_agent.interfaces.dispatch.reload_mcp_servers", AsyncMock(side_effect=MCPConfigError("Malformed mcp.json"))):
+        with patch(
+            "ollama_agent.interfaces.dispatch.reload_mcp_servers",
+            AsyncMock(side_effect=MCPConfigError("Malformed mcp.json")),
+        ):
             await safe_call(handlers["/mcp"].handler, ["reload"], console=console)
             self.assertIn("Malformed mcp.json", console.export_text())
 
@@ -584,7 +603,9 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             mock_list.assert_called_once()
 
     def test_handle_cli_commands_session_search(self) -> None:
-        args = argparse.Namespace(command="session", subcommand="search", query="fastapi", prompt=None, yolo=False, rag=None)
+        args = argparse.Namespace(
+            command="session", subcommand="search", query="fastapi", prompt=None, yolo=False, rag=None
+        )
         settings = Settings()
         with patch("ollama_agent.interfaces.dispatch.search_sessions") as mock_search:
             handled = handle_cli_commands(args, settings)
@@ -592,7 +613,9 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             mock_search.assert_called_once()
 
     def test_handle_cli_commands_session_delete(self) -> None:
-        args = argparse.Namespace(command="session", subcommand="delete", session_id="session-123", prompt=None, yolo=False, rag=None)
+        args = argparse.Namespace(
+            command="session", subcommand="delete", session_id="session-123", prompt=None, yolo=False, rag=None
+        )
         settings = Settings()
         with patch("ollama_agent.interfaces.dispatch.delete_session") as mock_del:
             handled = handle_cli_commands(args, settings)
@@ -612,8 +635,10 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         args = argparse.Namespace(command=None, prompt="query with rag", yolo=False, stealth=False, rag="my_db")
         settings = Settings()
         with patch("ollama_agent.interfaces.cli.run_non_interactive", AsyncMock()) as mock_run:
-            with patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()), \
-                 patch("ollama_agent.interfaces.cli.load_rag_database") as mock_load_rag:
+            with (
+                patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()),
+                patch("ollama_agent.interfaces.cli.load_rag_database") as mock_load_rag,
+            ):
                 handled = handle_cli_commands(args, settings)
                 self.assertTrue(handled)
                 mock_load_rag.assert_called_once()
@@ -646,8 +671,10 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         mock_m = MagicMock(model="llama3:latest", size=1024**3 * 5)
         mock_resp = MagicMock(models=[mock_m])
 
-        with patch("ollama.Client") as mock_client_cls, \
-             patch("ollama_agent.interfaces.model_commands.save_settings") as mock_save:
+        with (
+            patch("ollama.Client") as mock_client_cls,
+            patch("ollama_agent.interfaces.model_commands.save_settings") as mock_save,
+        ):
             mock_client = MagicMock()
             mock_client.list.return_value = mock_resp
             mock_client_cls.return_value = mock_client
@@ -665,8 +692,10 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         mock_resp = MagicMock(models=[mock_m1, mock_m2])
 
         console = Console(file=io.StringIO(), record=True)
-        with patch("ollama.Client") as mock_client_cls, \
-             patch("ollama_agent.interfaces.model_commands.save_settings") as mock_save:
+        with (
+            patch("ollama.Client") as mock_client_cls,
+            patch("ollama_agent.interfaces.model_commands.save_settings") as mock_save,
+        ):
             mock_client = MagicMock()
             mock_client.list.return_value = mock_resp
             mock_client_cls.return_value = mock_client
@@ -688,8 +717,10 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         mock_resp = MagicMock(models=[mock_m1, mock_m2])
 
         console = Console(file=io.StringIO(), record=True)
-        with patch("ollama.Client") as mock_client_cls, \
-             patch("ollama_agent.interfaces.model_commands.save_settings") as mock_save:
+        with (
+            patch("ollama.Client") as mock_client_cls,
+            patch("ollama_agent.interfaces.model_commands.save_settings") as mock_save,
+        ):
             mock_client = MagicMock()
             mock_client.list.return_value = mock_resp
             mock_client_cls.return_value = mock_client
@@ -723,5 +754,3 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ModelCapabilityError) as cm:
                 ensure_model_configured(settings)
             self.assertIn("Could not connect to Ollama", str(cm.exception))
-
-

@@ -42,9 +42,7 @@ class TestTaskManager(unittest.TestCase):
             self.mgr.get("missing-task")
 
     def test_get_corrupted_task_raises(self) -> None:
-        (self.tasks_dir / "broken.yaml").write_text(
-            "title: Broken\nprompt: x\nmodel: m\n", encoding="utf-8"
-        )
+        (self.tasks_dir / "broken.yaml").write_text("title: Broken\nprompt: x\nmodel: m\n", encoding="utf-8")
         with self.assertRaises(KeyError):
             self.mgr.get("broken")
 
@@ -296,6 +294,17 @@ class TestTaskManager(unittest.TestCase):
         self.assertEqual(task.render({"text": 123}), "Value: 123")
         self.assertEqual(task.render({"text": True}), "Value: True")
 
+    def test_render_unsupported_input_type_raises(self) -> None:
+        task = Task(
+            title="CustomTypeTest",
+            prompt="Value: {{ custom }}",
+            model="m",
+            inputs={"custom": TaskInput(type="custom_type")},
+        )
+        with self.assertRaises(ValueError) as ctx:
+            task.render({"custom": "value"})
+        self.assertIn("custom_type", str(ctx.exception))
+
     def test_render_falsy_defaults(self) -> None:
         task = Task(
             title="FalsyDefaults",
@@ -357,20 +366,15 @@ class TestTaskManager(unittest.TestCase):
                 "verbose": TaskInput(type="boolean", default=False),
             },
         )
-        rendered = task.render({
-            "model_name": "qwen2.5:32b",
-            "count": "3",
-            "verbose": "yes",
-            "tags": ["prod", "gpu"],
-        })
-        expected = (
-            "Model: qwen2.5:32b\n"
-            "Iterations: 3\n"
-            "Verbose mode enabled.\n"
-            "Tags:\n"
-            "- prod\n"
-            "- gpu\n"
+        rendered = task.render(
+            {
+                "model_name": "qwen2.5:32b",
+                "count": "3",
+                "verbose": "yes",
+                "tags": ["prod", "gpu"],
+            }
         )
+        expected = "Model: qwen2.5:32b\nIterations: 3\nVerbose mode enabled.\nTags:\n- prod\n- gpu\n"
         self.assertEqual(rendered, expected)
 
 

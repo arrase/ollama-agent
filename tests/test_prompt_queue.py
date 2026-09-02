@@ -329,8 +329,10 @@ class TestQueueDrainingBehavior(unittest.IsolatedAsyncioTestCase):
         repl, _ = _create_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
-            with patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream, \
-                 patch.object(app, "_run_slash_command", new_callable=AsyncMock) as mock_slash:
+            with (
+                patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream,
+                patch.object(app, "_run_slash_command", new_callable=AsyncMock) as mock_slash,
+            ):
                 app._process_next_in_queue()
                 mock_stream.assert_not_called()
                 mock_slash.assert_not_called()
@@ -410,7 +412,9 @@ class TestQueueDrainingBehavior(unittest.IsolatedAsyncioTestCase):
 
             streamed_prompts: list[str] = []
 
-            async def fake_stream_events(rt: object, prompt: str | Command[object], renderer: object, auto_close: bool = True) -> None:
+            async def fake_stream_events(
+                rt: object, prompt: str | Command[object], renderer: object, auto_close: bool = True
+            ) -> None:
                 if isinstance(prompt, str):
                     streamed_prompts.append(prompt)
 
@@ -486,8 +490,7 @@ class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
         repl, _ = _create_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
-            with patch.object(app, "action_cancel_generation") as mock_cancel, \
-                 patch.object(app, "exit") as mock_exit:
+            with patch.object(app, "action_cancel_generation") as mock_cancel, patch.object(app, "exit") as mock_exit:
                 # 1. Generating cancels generation, does not exit
                 app._is_generating = True
                 app.action_cancel_or_quit()
@@ -634,7 +637,9 @@ class TestToolApprovalModalAndQueue(unittest.IsolatedAsyncioTestCase):
 
             processed_calls: list[object] = []
 
-            async def fake_stream_events(rt: object, prompt: str | Command[object], renderer: object, auto_close: bool = True) -> None:
+            async def fake_stream_events(
+                rt: object, prompt: str | Command[object], renderer: object, auto_close: bool = True
+            ) -> None:
                 processed_calls.append(prompt)
 
             with patch("ollama_agent.interfaces.repl.stream_agent_events", side_effect=fake_stream_events):
@@ -837,12 +842,16 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
 
             streamed: list[str] = []
 
-            async def fake_stream_events(rt: object, prompt: str | Command[object], renderer: object, auto_close: bool = True) -> None:
+            async def fake_stream_events(
+                rt: object, prompt: str | Command[object], renderer: object, auto_close: bool = True
+            ) -> None:
                 if isinstance(prompt, str):
                     streamed.append(prompt)
 
-            with patch("ollama_agent.interfaces.repl.new_session", return_value="sess_new_999"), \
-                 patch("ollama_agent.interfaces.repl.stream_agent_events", side_effect=fake_stream_events):
+            with (
+                patch("ollama_agent.interfaces.repl.new_session", return_value="sess_new_999"),
+                patch("ollama_agent.interfaces.repl.stream_agent_events", side_effect=fake_stream_events),
+            ):
                 app._process_next_in_queue()
                 await pilot.pause()
 
@@ -852,10 +861,12 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
 
     async def test_session_resume_success_drains_subsequent_queue(self) -> None:
         repl, runtime = _create_mock_repl()
-        runtime.get_thread_messages = AsyncMock(return_value=[
-            HumanMessage(content="Hello previous session"),
-            AIMessage(content="Hello! How can I help you today?"),
-        ])
+        runtime.get_thread_messages = AsyncMock(
+            return_value=[
+                HumanMessage(content="Hello previous session"),
+                AIMessage(content="Hello! How can I help you today?"),
+            ]
+        )
         runtime.count_effective_tokens = AsyncMock(return_value=128)
 
         app = OllamaAgentApp(repl)
@@ -868,12 +879,16 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
 
             streamed: list[str] = []
 
-            async def fake_stream_events(rt: object, prompt: str | Command[object], renderer: object, auto_close: bool = True) -> None:
+            async def fake_stream_events(
+                rt: object, prompt: str | Command[object], renderer: object, auto_close: bool = True
+            ) -> None:
                 if isinstance(prompt, str):
                     streamed.append(prompt)
 
-            with patch("ollama_agent.interfaces.repl.resume_session", return_value="sess_target_123"), \
-                 patch("ollama_agent.interfaces.repl.stream_agent_events", side_effect=fake_stream_events):
+            with (
+                patch("ollama_agent.interfaces.repl.resume_session", return_value="sess_target_123"),
+                patch("ollama_agent.interfaces.repl.stream_agent_events", side_effect=fake_stream_events),
+            ):
                 app._process_next_in_queue()
                 await pilot.pause()
 
@@ -899,12 +914,16 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
 
             streamed: list[str] = []
 
-            async def fake_stream_events(rt: object, prompt: str | Command[object], renderer: object, auto_close: bool = True) -> None:
+            async def fake_stream_events(
+                rt: object, prompt: str | Command[object], renderer: object, auto_close: bool = True
+            ) -> None:
                 if isinstance(prompt, str):
                     streamed.append(prompt)
 
-            with patch("ollama_agent.interfaces.repl.resume_session", return_value=None), \
-                 patch("ollama_agent.interfaces.repl.stream_agent_events", side_effect=fake_stream_events):
+            with (
+                patch("ollama_agent.interfaces.repl.resume_session", return_value=None),
+                patch("ollama_agent.interfaces.repl.stream_agent_events", side_effect=fake_stream_events),
+            ):
                 app._process_next_in_queue()
                 await pilot.pause()
 
@@ -923,12 +942,16 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
 
                     streamed: list[str] = []
 
-                    async def fake_stream_events(rt: object, prompt: str | Command[object], renderer: object, auto_close: bool = True) -> None:
+                    async def fake_stream_events(
+                        rt: object, prompt: str | Command[object], renderer: object, auto_close: bool = True
+                    ) -> None:
                         if isinstance(prompt, str):
                             streamed.append(prompt)
 
-                    with patch("ollama_agent.interfaces.repl.new_session", return_value="sess_alias_001"), \
-                         patch("ollama_agent.interfaces.repl.stream_agent_events", side_effect=fake_stream_events):
+                    with (
+                        patch("ollama_agent.interfaces.repl.new_session", return_value="sess_alias_001"),
+                        patch("ollama_agent.interfaces.repl.stream_agent_events", side_effect=fake_stream_events),
+                    ):
                         app._process_next_in_queue()
                         await pilot.pause()
 

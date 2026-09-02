@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import inspect
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Any
+from typing import Any, Awaitable, Callable
 
 from rich.console import Console
 
@@ -15,7 +15,6 @@ from ..core import DEFAULT_REASONING_EFFORT
 from ..i18n import _
 from ..mcp import list_mcp_servers, reload_mcp_servers
 from ..mcp.loader import MCPConfigError
-from ..settings import Settings
 from ..rag import (
     RAGContext,
     RAGError,
@@ -28,8 +27,9 @@ from ..rag import (
     show_rag_status,
     unload_rag_database,
 )
+from ..settings import Settings
 from ..skills import SkillError, SkillsContext, create_skill, delete_skill, list_skills, show_skill
-from ..tasks.commands import (
+from ..tasks import (
     TaskError,
     TasksContext,
     create_task,
@@ -59,9 +59,6 @@ CLIHandler = Callable[[], Any]
 class REPLCommand:
     """Declarative REPL command description."""
 
-    summary: str
-    section: str
-    usage: str | None
     handler: Callable[[list[str]], object]
 
 
@@ -258,9 +255,7 @@ def build_repl_handlers(
                     f"[dim]{_('Example: /params set temperature 0.7')}[/dim]"
                 )
                 return None
-            return set_model_param(
-                console, args[1], args[2], runtime=get_runtime()
-            )
+            return set_model_param(console, args[1], args[2], runtime=get_runtime())
         console.print(f"[red]{_('Usage: /params [list | set <parameter> <value>]')}[/red]")
         return None
 
@@ -337,12 +332,11 @@ def build_repl_handlers(
                 console.print(f"[red]{_('Usage: /rag add <path> [--dir]')}[/red]")
                 return None
             target_path = " ".join(paths).strip("\"'")
-            return (
-                add_rag_directory(get_rag_ctx(), target_path)
-                if is_dir
-                else add_rag_file(get_rag_ctx(), target_path)
-            )
-        err_msg = _("Unknown rag subcommand '{sub}'. Usage: /rag [status | list | create | delete | load | unload | add]", sub=sub)
+            return add_rag_directory(get_rag_ctx(), target_path) if is_dir else add_rag_file(get_rag_ctx(), target_path)
+        err_msg = _(
+            "Unknown rag subcommand '{sub}'. Usage: /rag [status | list | create | delete | load | unload | add]",
+            sub=sub,
+        )
         console.print(f"[red]{err_msg}[/red]")
         return None
 
@@ -367,88 +361,26 @@ def build_repl_handlers(
                 return None
             delete_session(console, args[1])
             return None
-        err_msg = _("Unknown session subcommand '{sub}'. Usage: /session [list | search <query> | delete <id>]", sub=sub)
+        err_msg = _(
+            "Unknown session subcommand '{sub}'. Usage: /session [list | search <query> | delete <id>]",
+            sub=sub,
+        )
         console.print(f"[red]{err_msg}[/red]")
         return None
 
     cmds: dict[str, REPLCommand] = {
-        "/queue": REPLCommand(
-            _("Show or clear the prompt queue"),
-            "General",
-            _("Usage: /queue [clear | rm <position>]"),
-            handle_queue,
-        ),
-        "/yolo": REPLCommand(
-            _("Toggle YOLO mode or set it explicitly (on/off)"),
-            "General",
-            _("Usage: /yolo [on|off]"),
-            handle_yolo,
-        ),
-        "/stealth": REPLCommand(
-            _("Toggle stealth mode or set it explicitly (on/off)"),
-            "General",
-            _("Usage: /stealth [on|off]"),
-            handle_stealth,
-        ),
-        "/session": REPLCommand(
-            _("Manage chat sessions"),
-            "Session Management",
-            _("Usage: /session [list | search <query> | delete <id>]"),
-            handle_session,
-        ),
-        "/model": REPLCommand(
-            _("Manage models"),
-            "Model Management",
-            _("Usage: /model [list | set <model>]"),
-            handle_model,
-        ),
-        "/effort": REPLCommand(
-            _("Show or set reasoning/thinking effort"),
-            "Model Management",
-            _("Usage: /effort [set <level>]"),
-            handle_effort,
-        ),
-        "/context": REPLCommand(
-            _("Show or set context window size (num_ctx)"),
-            "Model Management",
-            _("Usage: /context [set <size>]"),
-            handle_context,
-        ),
-        "/params": REPLCommand(
-            _("Manage model sampling parameters"),
-            "Model Management",
-            _("Usage: /params [list | set <parameter> <value>]"),
-            handle_params,
-        ),
-        "/task": REPLCommand(
-            _("Manage saved tasks"),
-            "Task Management",
-            _("Usage: /task [list | delete <id>]"),
-            handle_task,
-        ),
-        "/skill": REPLCommand(
-            _("Manage skills"),
-            "Skills Management",
-            _("Usage: /skill [list | show <id> | delete <id>]"),
-            handle_skill,
-        ),
-        "/rag": REPLCommand(
-            _("Manage RAG databases"),
-            "RAG (Document Retrieval)",
-            _("Usage: /rag [status | list | create | delete | load | unload | add]"),
-            handle_rag,
-        ),
-        "/mcp": REPLCommand(
-            _("Manage and check MCP servers"),
-            "MCP (Model Context Protocol)",
-            _("Usage: /mcp [list | reload]"),
-            handle_mcp,
-        ),
-        "/agents": REPLCommand(
-            _("Manage configured subagents"),
-            "Subagents Management",
-            _("Usage: /agents [list]"),
-            handle_agents,
-        ),
+        "/queue": REPLCommand(handle_queue),
+        "/yolo": REPLCommand(handle_yolo),
+        "/stealth": REPLCommand(handle_stealth),
+        "/session": REPLCommand(handle_session),
+        "/model": REPLCommand(handle_model),
+        "/effort": REPLCommand(handle_effort),
+        "/context": REPLCommand(handle_context),
+        "/params": REPLCommand(handle_params),
+        "/task": REPLCommand(handle_task),
+        "/skill": REPLCommand(handle_skill),
+        "/rag": REPLCommand(handle_rag),
+        "/mcp": REPLCommand(handle_mcp),
+        "/agents": REPLCommand(handle_agents),
     }
     return cmds

@@ -265,4 +265,3 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(ValidationError):
             await run_task(self.ctx, "syntax-task")
-
