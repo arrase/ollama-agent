@@ -84,6 +84,10 @@ ollama-agent task create code-review \
 # Execute a saved task (with optional YOLO mode)
 ollama-agent task run code-review -y
 
+# Execute a parameterized task with dynamic variables (positional or --var flags)
+ollama-agent task run code-review target_file=src/app.py strict=true -y
+ollama-agent task run code-review --var target_file=src/app.py --var strict=true
+
 # Delete a saved task
 ollama-agent task delete code-review
 ```
@@ -167,7 +171,7 @@ Slash commands provide full application control directly within the REPL:
 | `/queue` | `/queue [list \| clear \| rm <position>]` | Inspect pending prompts in the queue, remove an item by index (`/queue rm <id>`, aliases: `remove`, `delete`), or clear all queued prompts. |
 | `/session` | `/session [list \| search <query> \| resume <id> (alias: switch) \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume threads, export to Markdown, or delete history. |
 | `/compact` | `/compact` (alias: `/compress`) | Manually compact conversation history into a structured summary to reclaim context window tokens. |
-| `/task` | `/task [list \| create [<id>] \| run <id> [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` launches an interactive conversational creation flow with the agent. |
+| `/task` | `/task [list \| create [<id>] \| run <id> [key=value ...] [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` launches an interactive conversational creation flow with the agent. Supports dynamic Jinja2 template variables. |
 | `/skill` | `/skill [list \| show <id> \| create [<id>] \| delete <id>]` | Manage agent skills. `/skill create` launches an interactive conversational creation flow with the agent. |
 | `/rag` | `/rag [status \| list \| create <name> \| load <name> \| unload \| add <path> [--dir] \| delete <name>]` | Manage local RAG databases, index documents, and toggle active knowledge bases. |
 | `/mcp` | `/mcp [list \| reload]` | List configured MCP servers, check connection status, or reload MCP servers and rebuild tool graph mid-session. |

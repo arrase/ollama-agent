@@ -290,9 +290,6 @@
   "Subagent '{name}' configuration error: description cannot be empty": "خطأ في إعداد الوكيل الفرعي '{name}': لا يمكن أن يكون الوصف فارغًا",
   "Reset: Restored default configuration at {path}": "إعادة الضبط: استُعيدت الإعدادات الافتراضية في {path}",
   "Reset: Restored default system prompt at {path}": "إعادة الضبط: استُعيدت مطالبة النظام الافتراضية في {path}",
-  "Reset: Restored default traversal policy at {path}": "إعادة الضبط: استُعيدت سياسة العبور الافتراضية في {path}",
-  "Reset: Restored default sandboxed policy at {path}": "إعادة الضبط: استُعيدت سياسة صندوق الحماية الافتراضية في {path}",
-  "Reset: Restored default RAG policy at {path}": "إعادة الضبط: استُعيدت سياسة RAG الافتراضية في {path}",
   "Invalid reset option '{option}'. Expected one of: {valid}": "خيار إعادة ضبط غير صالح '{option}'. كان متوقعًا أحد القيم: {valid}",
   "Arguments:": "الوسائط:",
   "Copy": "نسخ",
@@ -465,5 +462,11 @@
   "chat history will be saved to SQLite": "سيتم حفظ سجل المحادثة في SQLite",
   "Stealth mode is now {status} ({desc})": "وضع التخفي الآن {status} ({desc})",
   "Subagent '{subagent_name}': MCP server name cannot be empty": "الوكيل الفرعي '{subagent_name}': لا يمكن أن يكون اسم خادم MCP فارغًا",
-  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "الوكيل الفرعي '{subagent_name}': اسم خادم MCP مكرر '{name}'"
+  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "الوكيل الفرعي '{subagent_name}': اسم خادم MCP مكرر '{name}'",
+  "Missing required input: {name}": "الإدخال المطلوب مفقود: {name}",
+  "Invalid boolean value for input '{name}': {val}": "قيمة منطقية غير صالحة للإدخال '{name}': {val}",
+  "Invalid number value for input '{name}': {val}": "قيمة رقمية غير صالحة للإدخال '{name}': {val}",
+  "Invalid variable assignment '{item}'. Expected 'key=value'.": "تعيين متغير غير صالح '{item}'. المتوقع 'مفتاح=قيمة'.",
+  "Variable assignments in key=value format (e.g. file=src/app.py strict=true)": "تعيينات المتغيرات بتنسيق مفتاح=قيمة (مثال: file=src/app.py strict=true)",
+  "Variable assignment in key=value format": "تعيين المتغير بتنسيق مفتاح=قيمة"
 }

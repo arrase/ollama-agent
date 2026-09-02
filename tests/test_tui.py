@@ -710,6 +710,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock._get_commands.return_value = {}
 
         task = MagicMock(title="My Task", model="task-model", reasoning_effort="high", prompt="Do things")
+        task.render.return_value = "Do things"
         repl_mock._task_ctx._resolve_task.return_value = ("my-task", task)
 
         app = OllamaAgentApp(repl_mock)
@@ -720,6 +721,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
 
             mock_apply.assert_called_once_with(repl_mock.runtime.settings, task)
+            task.render.assert_called_once_with({})
             mock_stream.assert_awaited_once()
             self.assertEqual(mock_stream.call_args[0][0], "Do things")
 
@@ -728,6 +730,79 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(repl_mock.runtime.settings.model.reasoning_effort, "medium")
             self.assertFalse(repl_mock.runtime.yolo_mode)
             self.assertEqual(repl_mock.runtime.reload.await_count, 2)
+
+    async def test_task_run_with_variables_in_repl(self) -> None:
+        repl_mock = MagicMock()
+        repl_mock.console = Console(file=io.StringIO())
+        repl_mock.runtime.settings.model.name = "chat-model"
+        repl_mock.runtime.settings.model.reasoning_effort = "medium"
+        repl_mock.runtime.yolo_mode = False
+        repl_mock.runtime.reload = AsyncMock()
+        repl_mock._rag_ctx = None
+        repl_mock._get_commands.return_value = {}
+
+        task = MagicMock(title="Param Task", model="task-model", reasoning_effort="high", prompt="P")
+        task.render.return_value = "Rendered: file=src/app.py mode=strict"
+        repl_mock._task_ctx._resolve_task.return_value = ("param-task", task)
+
+        app = OllamaAgentApp(repl_mock)
+        async with app.run_test() as pilot:
+            with patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream:
+                await app._run_slash_command("/task run param-task file=src/app.py mode=strict")
+                await pilot.pause()
+
+            task.render.assert_called_once_with({"file": "src/app.py", "mode": "strict"})
+            mock_stream.assert_awaited_once()
+            self.assertEqual(mock_stream.call_args[0][0], "Rendered: file=src/app.py mode=strict")
+
+    async def test_task_run_invalid_var_in_repl_shows_notice(self) -> None:
+        repl_mock = MagicMock()
+        repl_mock.console = Console(file=io.StringIO())
+        repl_mock.runtime.settings.model.name = "chat-model"
+        repl_mock.runtime.settings.model.reasoning_effort = "medium"
+        repl_mock.runtime.yolo_mode = False
+        repl_mock.runtime.reload = AsyncMock()
+        repl_mock._rag_ctx = None
+        repl_mock._get_commands.return_value = {}
+
+        task = MagicMock(title="Param Task", model="task-model", reasoning_effort="high")
+        repl_mock._task_ctx._resolve_task.return_value = ("param-task", task)
+
+        app = OllamaAgentApp(repl_mock)
+        async with app.run_test() as pilot:
+            with patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream, \
+                 patch.object(app, "show_system_notice") as mock_notice:
+                await app._run_slash_command("/task run param-task invalid_var")
+                await pilot.pause()
+
+            mock_stream.assert_not_called()
+            mock_notice.assert_called_once()
+            self.assertIn("invalid_var", mock_notice.call_args[0][0])
+
+    async def test_task_run_template_error_in_repl_shows_notice(self) -> None:
+        repl_mock = MagicMock()
+        repl_mock.console = Console(file=io.StringIO())
+        repl_mock.runtime.settings.model.name = "chat-model"
+        repl_mock.runtime.settings.model.reasoning_effort = "medium"
+        repl_mock.runtime.yolo_mode = False
+        repl_mock.runtime.reload = AsyncMock()
+        repl_mock._rag_ctx = None
+        repl_mock._get_commands.return_value = {}
+
+        task = MagicMock(title="Param Task", model="task-model", reasoning_effort="high")
+        task.render.side_effect = ValueError("Missing required input: file")
+        repl_mock._task_ctx._resolve_task.return_value = ("param-task", task)
+
+        app = OllamaAgentApp(repl_mock)
+        async with app.run_test() as pilot:
+            with patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream, \
+                 patch.object(app, "show_system_notice") as mock_notice:
+                await app._run_slash_command("/task run param-task")
+                await pilot.pause()
+
+            mock_stream.assert_not_called()
+            mock_notice.assert_called_once()
+            self.assertIn("Missing required input: file", mock_notice.call_args[0][0])
 
     async def test_tui_streaming_renderer_events(self) -> None:
         repl_mock = MagicMock()
@@ -903,6 +978,7 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
         runtime_mock.settings.model.reasoning_effort = "high"
         runtime_mock.yolo_mode = False
         repl = OllamaREPL(runtime=runtime_mock)
+        repl.console = Console(file=io.StringIO())
 
         app = OllamaAgentApp(repl)
         async with app.run_test():

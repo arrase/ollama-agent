@@ -290,9 +290,6 @@
   "Subagent '{name}' configuration error: description cannot be empty": "Alt ajan '{name}' yapılandırma hatası: açıklama boş olamaz",
   "Reset: Restored default configuration at {path}": "Sıfırlama: Varsayılan yapılandırma {path} konumunda geri yüklendi",
   "Reset: Restored default system prompt at {path}": "Sıfırlama: Varsayılan sistem istemi {path} konumunda geri yüklendi",
-  "Reset: Restored default traversal policy at {path}": "Sıfırlama: Varsayılan geçiş ilkesi {path} konumunda geri yüklendi",
-  "Reset: Restored default sandboxed policy at {path}": "Sıfırlama: Varsayılan kum havuzu ilkesi {path} konumunda geri yüklendi",
-  "Reset: Restored default RAG policy at {path}": "Sıfırlama: Varsayılan RAG ilkesi {path} konumunda geri yüklendi",
   "Invalid reset option '{option}'. Expected one of: {valid}": "Geçersiz sıfırlama seçeneği '{option}'. Şunlardan biri bekleniyordu: {valid}",
   "Arguments:": "Argümanlar:",
   "Copy": "Kopyala",
@@ -465,5 +462,11 @@
   "chat history will be saved to SQLite": "sohbet geçmişi SQLite'a kaydedilecek",
   "Stealth mode is now {status} ({desc})": "Gizli mod artık {status} ({desc})",
   "Subagent '{subagent_name}': MCP server name cannot be empty": "Alt aracı '{subagent_name}': MCP sunucu adı boş olamaz",
-  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "Alt aracı '{subagent_name}': yinelenen MCP sunucu adı '{name}'"
+  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "Alt aracı '{subagent_name}': yinelenen MCP sunucu adı '{name}'",
+  "Missing required input: {name}": "Gerekli girdi eksik: {name}",
+  "Invalid boolean value for input '{name}': {val}": "'{name}' girdisi için geçersiz boole değeri: {val}",
+  "Invalid number value for input '{name}': {val}": "'{name}' girdisi için geçersiz sayısal değer: {val}",
+  "Invalid variable assignment '{item}'. Expected 'key=value'.": "Geçersiz değişken ataması '{item}'. 'anahtar=değer' bekleniyordu.",
+  "Variable assignments in key=value format (e.g. file=src/app.py strict=true)": "anahtar=değer biçiminde değişken atamaları (ör. file=src/app.py strict=true)",
+  "Variable assignment in key=value format": "anahtar=değer biçiminde değişken ataması"
 }

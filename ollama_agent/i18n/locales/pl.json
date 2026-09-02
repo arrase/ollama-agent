@@ -290,9 +290,6 @@
   "Subagent '{name}' configuration error: description cannot be empty": "Błąd konfiguracji subagenta '{name}': opis nie może być pusty",
   "Reset: Restored default configuration at {path}": "Reset: Przywrócono domyślną konfigurację w {path}",
   "Reset: Restored default system prompt at {path}": "Reset: Przywrócono domyślny prompt systemowy w {path}",
-  "Reset: Restored default traversal policy at {path}": "Reset: Przywrócono domyślne zasady przechodzenia w {path}",
-  "Reset: Restored default sandboxed policy at {path}": "Reset: Przywrócono domyślne zasady piaskownicy w {path}",
-  "Reset: Restored default RAG policy at {path}": "Reset: Przywrócono domyślne zasady RAG w {path}",
   "Invalid reset option '{option}'. Expected one of: {valid}": "Nieprawidłowa opcja resetu '{option}'. Oczekiwano jednej z: {valid}",
   "Arguments:": "Argumenty:",
   "Copy": "Kopiuj",
@@ -465,5 +462,11 @@
   "chat history will be saved to SQLite": "historia czatu zostanie zapisana w SQLite",
   "Stealth mode is now {status} ({desc})": "Tryb incognito jest teraz {status} ({desc})",
   "Subagent '{subagent_name}': MCP server name cannot be empty": "Podagent '{subagent_name}': nazwa serwera MCP nie może być pusta",
-  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "Podagent '{subagent_name}': zduplikowana nazwa serwera MCP '{name}'"
+  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "Podagent '{subagent_name}': zduplikowana nazwa serwera MCP '{name}'",
+  "Missing required input: {name}": "Brak wymaganego parametru: {name}",
+  "Invalid boolean value for input '{name}': {val}": "Nieprawidłowa wartość logiczna dla parametru '{name}': {val}",
+  "Invalid number value for input '{name}': {val}": "Nieprawidłowa wartość liczbowa dla parametru '{name}': {val}",
+  "Invalid variable assignment '{item}'. Expected 'key=value'.": "Nieprawidłowe przypisanie zmiennej '{item}'. Oczekiwano 'klucz=wartość'.",
+  "Variable assignments in key=value format (e.g. file=src/app.py strict=true)": "Przypisania zmiennych w formacie klucz=wartość (np. file=src/app.py strict=true)",
+  "Variable assignment in key=value format": "Przypisanie zmiennej w formacie klucz=wartość"
 }

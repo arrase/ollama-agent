@@ -290,9 +290,6 @@
   "Subagent '{name}' configuration error: description cannot be empty": "Configuratiefout van subagent '{name}': beschrijving mag niet leeg zijn",
   "Reset: Restored default configuration at {path}": "Reset: Standaardconfiguratie hersteld op {path}",
   "Reset: Restored default system prompt at {path}": "Reset: Standaardsysteemprompt hersteld op {path}",
-  "Reset: Restored default traversal policy at {path}": "Reset: Standaardbeleid voor traversering hersteld op {path}",
-  "Reset: Restored default sandboxed policy at {path}": "Reset: Standaard sandbox-beleid hersteld op {path}",
-  "Reset: Restored default RAG policy at {path}": "Reset: Standaard RAG-beleid hersteld op {path}",
   "Invalid reset option '{option}'. Expected one of: {valid}": "Ongeldige resetoptie '{option}'. Verwacht wordt een van: {valid}",
   "Arguments:": "Argumenten:",
   "Copy": "Kopiëren",
@@ -465,5 +462,11 @@
   "chat history will be saved to SQLite": "chatgeschiedenis wordt opgeslagen in SQLite",
   "Stealth mode is now {status} ({desc})": "Stealth-modus is nu {status} ({desc})",
   "Subagent '{subagent_name}': MCP server name cannot be empty": "Subagent '{subagent_name}': MCP-servernaam mag niet leeg zijn",
-  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "Subagent '{subagent_name}': dubbele MCP-servernaam '{name}'"
+  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "Subagent '{subagent_name}': dubbele MCP-servernaam '{name}'",
+  "Missing required input: {name}": "Vereiste invoer ontbreekt: {name}",
+  "Invalid boolean value for input '{name}': {val}": "Ongeldige booleaanse waarde voor invoer '{name}': {val}",
+  "Invalid number value for input '{name}': {val}": "Ongeldige numerieke waarde voor invoer '{name}': {val}",
+  "Invalid variable assignment '{item}'. Expected 'key=value'.": "Ongeldige variabeletoewijzing '{item}'. 'sleutel=waarde' verwacht.",
+  "Variable assignments in key=value format (e.g. file=src/app.py strict=true)": "Variabeletoewijzingen in sleutel=waarde-indeling (bijv. file=src/app.py strict=true)",
+  "Variable assignment in key=value format": "Variabeletoewijzing in sleutel=waarde-indeling"
 }

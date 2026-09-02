@@ -278,7 +278,10 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
         app = OllamaAgentApp(repl_mock)
         async with app.run_test():
             event = events.MouseDown(None, 5, 5, 0, 0, 1, False, False, False)
-            with patch("textual.screen.Screen._forward_event", side_effect=AttributeError("'NoneType' object has no attribute 'region'")):
+            with (
+                patch("textual.screen.Screen._forward_event", side_effect=AttributeError("'NoneType' object has no attribute 'region'")),
+                patch("logging.warning"),
+            ):
                 app.screen._forward_event(event)
                 self.assertIsNone(app.screen._select_state)
 

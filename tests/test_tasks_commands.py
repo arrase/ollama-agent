@@ -19,9 +19,10 @@ from ollama_agent.tasks.commands import (
     create_task,
     delete_task,
     list_tasks,
+    parse_var_assignments,
     run_task,
 )
-from ollama_agent.tasks.manager import Task, TaskManager
+from ollama_agent.tasks.manager import Task, TaskInput, TaskManager
 
 
 class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
@@ -169,4 +170,99 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(AmbiguousTaskError):
             self.ctx._resolve_task("deploy")
+
+    def test_parse_var_assignments_valid(self) -> None:
+        raw = ["file=src/main.py", "strict=true", "count=42", "expr=a=b=c"]
+        parsed = parse_var_assignments(raw)
+        self.assertEqual(
+            parsed,
+            {
+                "file": "src/main.py",
+                "strict": "true",
+                "count": "42",
+                "expr": "a=b=c",
+            },
+        )
+
+    def test_parse_var_assignments_empty(self) -> None:
+        self.assertEqual(parse_var_assignments([]), {})
+
+    def test_parse_var_assignments_edge_cases(self) -> None:
+        raw = [
+            "query=SELECT a=b WHERE c=d",
+            "msg=hello world with spaces",
+            "empty_val=",
+            "  key_with_spaces  =value_with_spaces ",
+        ]
+        parsed = parse_var_assignments(raw)
+        self.assertEqual(
+            parsed,
+            {
+                "query": "SELECT a=b WHERE c=d",
+                "msg": "hello world with spaces",
+                "empty_val": "",
+                "key_with_spaces": "value_with_spaces ",
+            },
+        )
+
+    def test_parse_var_assignments_invalid_no_equals(self) -> None:
+        with self.assertRaises(ValidationError) as cm:
+            parse_var_assignments(["invalid_assignment"])
+        self.assertIn("invalid_assignment", str(cm.exception))
+
+    def test_parse_var_assignments_empty_key_raises(self) -> None:
+        with self.assertRaises(ValidationError) as cm1:
+            parse_var_assignments(["=value"])
+        self.assertIn("=value", str(cm1.exception))
+
+        with self.assertRaises(ValidationError) as cm2:
+            parse_var_assignments(["   =value"])
+        self.assertIn("=value", str(cm2.exception))
+
+    async def test_run_task_with_variables(self) -> None:
+        task = Task(
+            title="Render Task",
+            prompt="Analyze {{ file }} with mode={{ mode }}",
+            model="gemma4:26b",
+            inputs={
+                "file": TaskInput(description="target file", required=True),
+                "mode": TaskInput(description="run mode", default="fast"),
+            },
+        )
+        self.mgr.save("render-task", task)
+
+        with patch("ollama_agent.tasks.commands.run_non_interactive", AsyncMock(return_value=True)) as mock_run:
+            with patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()):
+                with patch("ollama_agent.tasks.commands.AgentRuntime") as mock_runtime_cls:
+                    mock_instance = AsyncMock()
+                    mock_runtime_cls.return_value = mock_instance
+                    mock_instance.__aenter__.return_value = mock_instance
+                    mock_instance.__aexit__.return_value = None
+
+                    await run_task(self.ctx, "render-task", variables={"file": "app.py"})
+                    mock_run.assert_awaited_once_with(mock_instance, "Analyze app.py with mode=fast")
+
+    async def test_run_task_missing_required_variable_raises_validation_error(self) -> None:
+        task = Task(
+            title="Required Var Task",
+            prompt="Process {{ file }}",
+            model="gemma4:26b",
+            inputs={"file": TaskInput(description="target file", required=True)},
+        )
+        self.mgr.save("req-task", task)
+
+        with self.assertRaises(ValidationError) as cm:
+            await run_task(self.ctx, "req-task", variables={})
+        self.assertIn("Missing required input: file", str(cm.exception))
+
+    async def test_run_task_template_syntax_error_raises_validation_error(self) -> None:
+        task = Task(
+            title="Syntax Error Task",
+            prompt="Bad syntax {{ unclosed",
+            model="gemma4:26b",
+        )
+        self.mgr.save("syntax-task", task)
+
+        with self.assertRaises(ValidationError):
+            await run_task(self.ctx, "syntax-task")
 

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import ollama
+from jinja2.exceptions import TemplateError
 from rich.console import Console
 from rich.markup import escape
 from rich.text import Text
@@ -44,7 +45,12 @@ from ..core.common import extract_text
 from ..i18n import _
 from ..rag import RAGContext, RAGManager, load_rag_database
 from ..skills import SkillsContext
-from ..tasks.commands import TaskError, TasksContext, apply_task_settings
+from ..tasks.commands import (
+    TaskError,
+    TasksContext,
+    apply_task_settings,
+    parse_var_assignments,
+)
 from .dispatch import REPLCommand, build_repl_handlers, safe_call
 from .model_commands import (
     _list_models_sync,
@@ -869,13 +875,17 @@ class OllamaAgentApp(App):
 
             if cmd == "/task" and args and args[0] == "run":
                 sub_args = args[1:]
-                target_id = next((a for a in sub_args if not a.startswith("-")), "")
-                if not target_id:
+                positional = [a for a in sub_args if not a.startswith("-")]
+                if not positional:
                     self.show_system_notice(f"[bold #f87171]✕ {_('Usage: /task run <id> [-y]')}[/bold #f87171]")
                     return
+                target_id = positional[0]
+                var_args = positional[1:]
                 try:
                     tid, t = self.repl._task_ctx._resolve_task(target_id)
-                except TaskError as exc:
+                    variables = parse_var_assignments(var_args)
+                    rendered_prompt = t.render(variables)
+                except (TaskError, ValueError, TemplateError) as exc:
                     self.show_system_notice(f"[red]{exc}[/red]")
                     return
 
@@ -893,7 +903,7 @@ class OllamaAgentApp(App):
                     if "-y" in sub_args or "--yolo" in sub_args:
                         self.repl.runtime.yolo_mode = True
                     await self.repl.runtime.reload()
-                    await self._run_stream(t.prompt, scroll, agent_msg)
+                    await self._run_stream(rendered_prompt, scroll, agent_msg)
                 finally:
                     settings.model.name = prev_model
                     settings.model.reasoning_effort = prev_effort

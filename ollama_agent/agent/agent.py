@@ -42,14 +42,13 @@ from ..settings import (
     ensure_prompt_files,
     find_agents_file,
     load_instructions,
-    load_fs_policy_traversal,
-    load_fs_policy_sandboxed,
-    load_rag_policy,
+    render_prompt_template,
     save_settings,
 )
 from ..streaming.parsers import ThinkTagParser
 from .builtin_tools import (
     BUILTIN_TOOLS,
+    get_rag_manager,
     get_tool_timeout,
     set_active_thread_id,
 )
@@ -76,13 +75,18 @@ _log = logging.getLogger(__name__)
 def _prepare_instructions(settings: Settings) -> str:
     ensure_prompt_files()
     base_instructions = load_instructions()
-    fs_policy = load_fs_policy_traversal() if settings.runtime.allow_traversal else load_fs_policy_sandboxed()
-    rag_policy = load_rag_policy()
-    instructions = (
-        base_instructions
-        .replace("{FILESYSTEM_POLICY}", fs_policy)
-        .replace("{RAG_POLICY}", rag_policy)
-    )
+    rag_mgr = get_rag_manager()
+    rag_active = bool(rag_mgr and rag_mgr.current_database)
+    rag_db_name = rag_mgr.current_database if rag_active else ""
+    context = {
+        "settings": settings,
+        "runtime": settings.runtime,
+        "rag": settings.rag,
+        "model": settings.model,
+        "rag_active": rag_active,
+        "rag_database": rag_db_name,
+    }
+    instructions = render_prompt_template(base_instructions, context)
     os_info = environment_block(include_cwd=True)
     ensure_memory_file(MEMORY_PATH)
     return instructions + os_info
@@ -110,9 +114,7 @@ class AgentRuntime:
     _checkpointer_stack: contextlib.AsyncExitStack = field(
         default_factory=contextlib.AsyncExitStack, init=False, repr=False
     )
-    _exit_stack: contextlib.AsyncExitStack = field(
-        default_factory=contextlib.AsyncExitStack, init=False, repr=False
-    )
+    _exit_stack: contextlib.AsyncExitStack = field(default_factory=contextlib.AsyncExitStack, init=False, repr=False)
     _init_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
 
     async def __aenter__(self) -> Self:
@@ -351,9 +353,7 @@ class AgentRuntime:
                 # host does not report it, last_context_tokens stays 0 (= unknown).
                 if isinstance(meta, dict) and "prompt_eval_count" in meta:
                     self.last_context_tokens = int(meta.get("eval_count", 0)) + int(meta["prompt_eval_count"])
-                for result in parser.process_chunk(
-                    chunk, hide_reasoning=hide_reasoning
-                ):
+                for result in parser.process_chunk(chunk, hide_reasoning=hide_reasoning):
                     yield result
 
         for result in parser.flush(hide_reasoning=hide_reasoning):
@@ -404,9 +404,7 @@ class AgentRuntime:
             },
         )
 
-        self.last_context_tokens = count_tokens_approximately(
-            [new_event["summary_message"], *preserved]
-        )
+        self.last_context_tokens = count_tokens_approximately([new_event["summary_message"], *preserved])
 
         return {
             "success": True,
@@ -459,5 +457,3 @@ class AgentRuntime:
         await self._checkpointer_stack.aclose()
         self._checkpointer = None
         self._memory_checkpointer = None
-
-

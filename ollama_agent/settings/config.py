@@ -7,18 +7,16 @@ import tempfile
 from dataclasses import asdict, dataclass, field, fields
 from importlib import resources
 from pathlib import Path
-from typing import Any, Callable, Self
+from typing import Any, Callable, Self, TypeVar
 
+from jinja2 import Environment, StrictUndefined
 import yaml  # type: ignore[import-untyped]
 
 from ..i18n import _
 from .paths import (
-    FS_POLICY_SANDBOXED_PATH,
-    FS_POLICY_TRAVERSAL_PATH,
     INSTRUCTIONS_PATH,
     MEMORY_PATH,
     RAG_DIR,
-    RAG_POLICY_PATH,
     SETTINGS_PATH,
 )
 
@@ -39,18 +37,6 @@ def _read_bundled_prompt(filename: str) -> str:
 
 def _default_instructions() -> str:
     return _read_bundled_prompt("default_instructions.md")
-
-
-def _default_traversal() -> str:
-    return _read_bundled_prompt("fs_policy_traversal.md")
-
-
-def _default_sandboxed() -> str:
-    return _read_bundled_prompt("fs_policy_sandboxed.md")
-
-
-def _default_rag_policy() -> str:
-    return _read_bundled_prompt("rag_policy.md")
 
 
 # ---------------------------------------------------------------------------
@@ -188,7 +174,10 @@ class Settings:
 # ---------------------------------------------------------------------------
 
 
-def _dataclass_from_dict[T](cls: type[T], raw: Any) -> T:
+T = TypeVar("T")
+
+
+def _dataclass_from_dict(cls: type[T], raw: Any) -> T:
     if raw is None:
         return cls()
     if not isinstance(raw, dict):
@@ -290,38 +279,21 @@ def _load_prompt_file(file_path: Path, default_factory: Callable[[], str]) -> st
     return file_path.read_text(encoding="utf-8").strip()
 
 
+def render_prompt_template(template_str: str, context: dict[str, Any]) -> str:
+    """Render a Jinja2 template string with the provided context dictionary."""
+    env = Environment(undefined=StrictUndefined, trim_blocks=True, lstrip_blocks=True)
+    template = env.from_string(template_str)
+    return template.render(context)
+
+
 def load_instructions(instructions_path: Path = INSTRUCTIONS_PATH) -> str:
     """Load agent instructions from file or return defaults."""
     return _load_prompt_file(instructions_path, _default_instructions)
 
 
-def load_fs_policy_traversal(policy_path: Path = FS_POLICY_TRAVERSAL_PATH) -> str:
-    """Load filesystem traversal policy from file or return defaults."""
-    return _load_prompt_file(policy_path, _default_traversal)
-
-
-def load_fs_policy_sandboxed(policy_path: Path = FS_POLICY_SANDBOXED_PATH) -> str:
-    """Load sandboxed filesystem policy from file or return defaults."""
-    return _load_prompt_file(policy_path, _default_sandboxed)
-
-
-def load_rag_policy(policy_path: Path = RAG_POLICY_PATH) -> str:
-    """Load RAG policy from file or return defaults."""
-    return _load_prompt_file(policy_path, _default_rag_policy)
-
-
-def ensure_prompt_files(
-    *,
-    instructions_path: Path = INSTRUCTIONS_PATH,
-    traversal_path: Path = FS_POLICY_TRAVERSAL_PATH,
-    sandboxed_path: Path = FS_POLICY_SANDBOXED_PATH,
-    rag_policy_path: Path = RAG_POLICY_PATH,
-) -> None:
-    """Ensure all default prompt files exist in the user prompts directory."""
+def ensure_prompt_files(instructions_path: Path = INSTRUCTIONS_PATH) -> None:
+    """Ensure default prompt files exist in the user prompts directory."""
     load_instructions(instructions_path)
-    load_fs_policy_traversal(traversal_path)
-    load_fs_policy_sandboxed(sandboxed_path)
-    load_rag_policy(rag_policy_path)
 
 
 # ---------------------------------------------------------------------------
@@ -365,9 +337,6 @@ def reset_config(
     *,
     settings_path: Path = SETTINGS_PATH,
     instructions_path: Path = INSTRUCTIONS_PATH,
-    traversal_path: Path = FS_POLICY_TRAVERSAL_PATH,
-    sandboxed_path: Path = FS_POLICY_SANDBOXED_PATH,
-    rag_policy_path: Path = RAG_POLICY_PATH,
 ) -> list[str]:
     """Reset configuration or system prompt to defaults."""
     if option not in VALID_RESET_OPTIONS:
@@ -383,17 +352,8 @@ def reset_config(
 
     if option in ("all", "system-prompt"):
         instructions_path.unlink(missing_ok=True)
-        traversal_path.unlink(missing_ok=True)
-        sandboxed_path.unlink(missing_ok=True)
-        rag_policy_path.unlink(missing_ok=True)
         load_instructions(instructions_path)
-        load_fs_policy_traversal(traversal_path)
-        load_fs_policy_sandboxed(sandboxed_path)
-        load_rag_policy(rag_policy_path)
         messages.append(_("Reset: Restored default system prompt at {path}", path=instructions_path))
-        messages.append(_("Reset: Restored default traversal policy at {path}", path=traversal_path))
-        messages.append(_("Reset: Restored default sandboxed policy at {path}", path=sandboxed_path))
-        messages.append(_("Reset: Restored default RAG policy at {path}", path=rag_policy_path))
 
     return messages
 

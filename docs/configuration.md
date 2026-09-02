@@ -222,21 +222,76 @@ LangChain and LangGraph automatically pick up these environment variables to sen
 
 ---
 
-## System Prompt Customization & Configuration Reset
+## Agent System Prompts & Configuration Reset
 
-### System Prompt Files
-Agent prompt instructions are managed via Markdown files located in `~/.ollama-agent/prompts/`:
+### Unified Jinja2 System Prompt Template (`instructions.md`)
+Agent system prompt instructions are managed via a single, unified Jinja2 template located at `~/.ollama-agent/prompts/instructions.md`.
 
-* `instructions.md`: Main system instructions governing agent identity, tone, tool usage guidelines, and operational constraints.
-* `fs_policy_traversal.md`: Operational policy injected when `--allow-traversal` is enabled (unrestricted filesystem access).
-* `fs_policy_sandboxed.md`: Operational policy injected when sandboxed to project boundaries (`--no-allow-traversal`).
-* `rag_policy.md`: Operational policy injected dynamically when a RAG database is loaded and active.
+When `ollama-agent` initializes, `instructions.md` is loaded and rendered dynamically using Jinja2 with strict undefined checking (`StrictUndefined`) before being supplied to the orchestrator model. If the file does not exist during startup, `ollama-agent` automatically creates it pre-populated with the bundled default Jinja2 template.
 
-If any of these files do not exist during application startup, `ollama-agent` automatically creates them pre-populated with built-in default templates.
+#### Available Jinja2 Context Variables
+
+During template rendering, the following context variables and their attributes are available:
+
+| Context Variable | Type | Description | Available Attributes |
+| :--- | :--- | :--- | :--- |
+| `runtime` | `RuntimeSettings` | Runtime behavior and security flags | `runtime.allow_traversal` (`bool`), `runtime.builtin_tool_timeout` (`int`), `runtime.collapse_thinking` (`bool`), `runtime.inherit_env` (`bool`), `runtime.language` (`str`) |
+| `settings` | `Settings` | Complete application configuration object | `settings.model`, `settings.runtime`, `settings.rag`, `settings.mentions`, `settings.subagents`, `settings.langsmith` |
+| `rag` | `RAGSettings` | Vector database and retrieval parameters | `rag.rag_dir` (`str`), `rag.embedder_model` (`str`), `rag.embedder_base_url` (`str`), `rag.embedding_dims` (`int`), `rag.default_top_k` (`int`), `rag.chunk_size` (`int`), `rag.chunk_overlap` (`int`) |
+| `model` | `ModelSettings` | LLM configuration and parameter overrides | `model.name` (`str`), `model.base_url` (`str`), `model.context_window` (`int \| str`), `model.reasoning_effort` (`str`), `model.temperature` (`float \| None`), `model.top_p` (`float \| None`), `model.top_k` (`int \| None`), `model.min_p` (`float \| None`), `model.presence_penalty` (`float \| None`), `model.repeat_penalty` (`float \| None`) |
+| `rag_active` | `bool` | Dynamic flag indicating whether a RAG database is loaded in the active session | *(boolean flag)* |
+| `rag_database` | `str` | Name of the active RAG database (or empty string when inactive) | *(string value)* |
+
+#### Conditional Filesystem & RAG Policy Logic
+
+The unified template consolidates operational policies into a single file using Jinja2 logic:
+
+- **Conditional Filesystem Policy (`runtime.allow_traversal`)**:
+  Depending on whether unrestricted host traversal is enabled or restricted to the project root, the prompt dynamically renders the appropriate filesystem rules:
+  ```jinja2
+  {% if runtime.allow_traversal %}
+  # FILESYSTEM
+  - You have full access to the host filesystem. File tools (`ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`) use REAL absolute host paths.
+  - ALWAYS pass absolute paths to file tools (e.g. `ls(path="/home/user/project")`, `read_file(file_path="/home/user/project/src/main.py")`). Relative-looking paths are anchored at the filesystem root `/`, NOT at the project directory.
+  - The current project is the `Working Directory` listed in ENVIRONMENT; that is also where shell commands (`execute`) start and what `pwd` reports. Work inside it unless the user asks otherwise.
+  - `/agent/`, `/skills/`, `/tasks/`, `/system_skills/` are virtual mounts injected into file-tool listings by the agent runtime; they are not real directories under `/`. Access them via file tools using those virtual paths, or via shell commands using their real host paths (see "Shell paths vs. virtual paths" section).
+  {% else %}
+  # FILESYSTEM
+  - File tools (`ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`) operate on a virtual root: `/` IS the project directory.
+    - `/`: Project files.
+    - `/agent/`, `/skills/`, `/tasks/`, `/system_skills/`: Virtual mounts with agent data. They are NOT real host directories.
+  - Shell commands (`execute`) run on the real host filesystem, with their working directory set to the project directory:
+    - `execute(command="pwd")` reports the REAL absolute path of that same project directory (see `Working Directory` in ENVIRONMENT). Both names refer to the same place: `read_file(file_path="/src/main.py")` and `execute(command="cat src/main.py")` read the same file.
+  - Virtual mounts (`/agent/`, `/skills/`, ...) are only accessible via file tools, never via shell commands.
+  - Do not access anything outside the project directory through shell commands.
+  {% endif %}
+  ```
+
+- **Conditional RAG Knowledge Base Policy (`rag_active`)**:
+  When a RAG database is loaded into session memory, the template dynamically activates guidance on when to invoke `rag_search`:
+  ```jinja2
+  {% if rag_active %}
+  # RAG POLICY
+  A RAG knowledge base{% if rag_database %} ('{{ rag_database }}'){% endif %} is currently loaded and active. You have access to the `rag_search` tool to retrieve relevant documents and context.
+
+  Use `rag_search` when:
+  - The user asks questions about documents, files, or content in the loaded knowledge base.
+  - The user explicitly references "the documents", "the files I added", or loaded knowledge base.
+  - Answering requires specific context or information from the indexed database.
+
+  Do NOT use `rag_search` for:
+  - General knowledge questions unrelated to the loaded documents.
+
+  Best practices:
+  - Query using specific keywords or semantic questions relevant to the target topic.
+  - Start with default `top_k` (5); increase only if initial results are insufficient.
+  - Use the `context` field for direct answer synthesis, and cite source files when relevant.
+  {% endif %}
+  ```
 
 ### Configuration Reset Options (`--config-reset`)
 
-To restore default configurations or prompts, use the `--config-reset` flag on the CLI:
+To restore default configurations or the system prompt template, use the `--config-reset` flag on the CLI:
 
 ```bash
 ollama-agent --config-reset <option>
@@ -245,5 +300,5 @@ ollama-agent --config-reset <option>
 | Reset Option | Actions Performed |
 | :--- | :--- |
 | `config-file` | Unlinks `~/.ollama-agent/settings.yaml` and re-initializes it with default settings. |
-| `system-prompt` | Unlinks `instructions.md`, `fs_policy_traversal.md`, `fs_policy_sandboxed.md`, and `rag_policy.md` and restores default system prompt templates. |
-| `all` | Performs a complete factory reset of both `settings.yaml` and all system prompt policy files. |
+| `system-prompt` | Unlinks `~/.ollama-agent/prompts/instructions.md` and restores the default Jinja2 system prompt template. |
+| `all` | Performs a complete factory reset of both `settings.yaml` and the `instructions.md` system prompt template. |

@@ -290,9 +290,6 @@
   "Subagent '{name}' configuration error: description cannot be empty": "Помилка конфігурації субагента '{name}': опис не може бути порожнім",
   "Reset: Restored default configuration at {path}": "Скидання: типову конфігурацію відновлено за шляхом {path}",
   "Reset: Restored default system prompt at {path}": "Скидання: типовий системний промпт відновлено за шляхом {path}",
-  "Reset: Restored default traversal policy at {path}": "Скидання: типову політику обходу відновлено за шляхом {path}",
-  "Reset: Restored default sandboxed policy at {path}": "Скидання: типову політику пісочниці відновлено за шляхом {path}",
-  "Reset: Restored default RAG policy at {path}": "Скидання: типову політику RAG відновлено за шляхом {path}",
   "Invalid reset option '{option}'. Expected one of: {valid}": "Недійсний варіант скидання '{option}'. Очікувалося одне з: {valid}",
   "Arguments:": "Аргументи:",
   "Copy": "Копіювати",
@@ -465,5 +462,11 @@
   "chat history will be saved to SQLite": "історія чату зберігатиметься в SQLite",
   "Stealth mode is now {status} ({desc})": "Прихований режим тепер {status} ({desc})",
   "Subagent '{subagent_name}': MCP server name cannot be empty": "Субагент '{subagent_name}': назва сервера MCP не може бути порожньою",
-  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "Субагент '{subagent_name}': дубльована назва сервера MCP '{name}'"
+  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "Субагент '{subagent_name}': дубльована назва сервера MCP '{name}'",
+  "Missing required input: {name}": "Відсутній обов'язковий ввід: {name}",
+  "Invalid boolean value for input '{name}': {val}": "Недійсне булеве значення для вводу '{name}': {val}",
+  "Invalid number value for input '{name}': {val}": "Недійсне числове значення для вводу '{name}': {val}",
+  "Invalid variable assignment '{item}'. Expected 'key=value'.": "Недійсне присвоєння змінної '{item}'. Очікувалось 'ключ=значення'.",
+  "Variable assignments in key=value format (e.g. file=src/app.py strict=true)": "Присвоєння змінних у форматі ключ=значення (напр. file=src/app.py strict=true)",
+  "Variable assignment in key=value format": "Присвоєння змінної у форматі ключ=значення"
 }

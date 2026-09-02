@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
+from jinja2.exceptions import TemplateError
 from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
@@ -58,6 +60,24 @@ class TasksContext:
         return require_text(value, name, ValidationError)
 
 
+def parse_var_assignments(args: list[str]) -> dict[str, str]:
+    """Parse 'key=value' argument strings into a dictionary."""
+    result: dict[str, str] = {}
+    for item in args:
+        if "=" not in item:
+            raise ValidationError(
+                _("Invalid variable assignment '{item}'. Expected 'key=value'.", item=item)
+            )
+        key, value = item.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise ValidationError(
+                _("Invalid variable assignment '{item}'. Expected 'key=value'.", item=item)
+            )
+        result[key] = value
+    return result
+
+
 def apply_task_settings(settings: Settings, task: Task) -> None:
     """Apply the task's model and reasoning effort onto *settings*."""
     settings.model.name = task.model
@@ -81,16 +101,26 @@ def list_tasks(ctx: TasksContext) -> None:
     ctx.console.print(table)
 
 
-async def run_task(ctx: TasksContext, task_id: str, *, yolo: bool = False) -> None:
+async def run_task(
+    ctx: TasksContext,
+    task_id: str,
+    *,
+    variables: dict[str, Any] | None = None,
+    yolo: bool = False,
+) -> None:
     tid, t = ctx._resolve_task(task_id)
+    try:
+        rendered_prompt = t.render(variables)
+    except (ValueError, TemplateError) as exc:
+        raise ValidationError(str(exc)) from exc
     ctx.console.print(
-        _("Executing: {title} ({tid})\nPrompt: {prompt}\nModel: {model} | Effort: {effort}", title=escape(t.title), tid=escape(tid), prompt=escape(t.prompt), model=escape(t.model), effort=escape(t.reasoning_effort))
+        _("Executing: {title} ({tid})\nPrompt: {prompt}\nModel: {model} | Effort: {effort}", title=escape(t.title), tid=escape(tid), prompt=escape(rendered_prompt), model=escape(t.model), effort=escape(t.reasoning_effort))
     )
     apply_task_settings(ctx.settings, t)
     runtime = AgentRuntime(settings=ctx.settings, yolo_mode=yolo)
     async with runtime:
         await runtime.reload()
-        if not await run_non_interactive(runtime, t.prompt):
+        if not await run_non_interactive(runtime, rendered_prompt):
             raise TaskError(_("Task execution failed: {tid}", tid=tid))
 
 

@@ -290,9 +290,6 @@
   "Subagent '{name}' configuration error: description cannot be empty": "Subagent '{name}' Konfigurationsfehler: Beschreibung darf nicht leer sein",
   "Reset: Restored default configuration at {path}": "Zurücksetzung: Standardkonfiguration unter {path} wiederhergestellt",
   "Reset: Restored default system prompt at {path}": "Zurücksetzung: Standard-System-Prompt unter {path} wiederhergestellt",
-  "Reset: Restored default traversal policy at {path}": "Zurücksetzung: Standard-Traversal-Richtlinie unter {path} wiederhergestellt",
-  "Reset: Restored default sandboxed policy at {path}": "Zurücksetzung: Standard-Sandbox-Richtlinie unter {path} wiederhergestellt",
-  "Reset: Restored default RAG policy at {path}": "Zurücksetzung: Standard-RAG-Richtlinie unter {path} wiederhergestellt",
   "Invalid reset option '{option}'. Expected one of: {valid}": "Ungültige Zurücksetzungsoption '{option}'. Erwartet wurde eine von: {valid}",
   "Arguments:": "Argumente:",
   "Copy": "Kopieren",
@@ -465,5 +462,11 @@
   "chat history will be saved to SQLite": "Chat-Verlauf wird in SQLite gespeichert",
   "Stealth mode is now {status} ({desc})": "Stealth-Modus ist jetzt {status} ({desc})",
   "Subagent '{subagent_name}': MCP server name cannot be empty": "Subagent '{subagent_name}': MCP-Servername darf nicht leer sein",
-  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "Subagent '{subagent_name}': doppelter MCP-Servername '{name}'"
+  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "Subagent '{subagent_name}': doppelter MCP-Servername '{name}'",
+  "Missing required input: {name}": "Erforderliche Eingabe fehlt: {name}",
+  "Invalid boolean value for input '{name}': {val}": "Ungültiger boolescher Wert für Eingabe '{name}': {val}",
+  "Invalid number value for input '{name}': {val}": "Ungültiger numerischer Wert für Eingabe '{name}': {val}",
+  "Invalid variable assignment '{item}'. Expected 'key=value'.": "Ungültige Variablenzuweisung '{item}'. 'Schlüssel=Wert' erwartet.",
+  "Variable assignments in key=value format (e.g. file=src/app.py strict=true)": "Variablenzuweisungen im Format Schlüssel=Wert (z. B. file=src/app.py strict=true)",
+  "Variable assignment in key=value format": "Variablenzuweisung im Format Schlüssel=Wert"
 }

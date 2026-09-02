@@ -290,9 +290,6 @@
   "Subagent '{name}' configuration error: description cannot be empty": "Erreur de configuration du sous-agent '{name}' : la description ne peut pas être vide",
   "Reset: Restored default configuration at {path}": "Réinitialisation : Configuration par défaut restaurée à {path}",
   "Reset: Restored default system prompt at {path}": "Réinitialisation : Invite système par défaut restaurée à {path}",
-  "Reset: Restored default traversal policy at {path}": "Réinitialisation : Politique de traversée par défaut restaurée à {path}",
-  "Reset: Restored default sandboxed policy at {path}": "Réinitialisation : Politique de bac à sable par défaut restaurée à {path}",
-  "Reset: Restored default RAG policy at {path}": "Réinitialisation : Politique RAG par défaut restaurée à {path}",
   "Invalid reset option '{option}'. Expected one of: {valid}": "Option de réinitialisation invalide '{option}'. Attendu : {valid}",
   "Arguments:": "Arguments :",
   "Copy": "Copier",
@@ -465,5 +462,11 @@
   "chat history will be saved to SQLite": "l'historique de chat sera enregistré dans SQLite",
   "Stealth mode is now {status} ({desc})": "Le mode furtif est maintenant {status} ({desc})",
   "Subagent '{subagent_name}': MCP server name cannot be empty": "Sous-agent '{subagent_name}' : le nom du serveur MCP ne peut pas être vide",
-  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "Sous-agent '{subagent_name}' : nom de serveur MCP en double '{name}'"
+  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "Sous-agent '{subagent_name}' : nom de serveur MCP en double '{name}'",
+  "Missing required input: {name}": "Entrée obligatoire manquante : {name}",
+  "Invalid boolean value for input '{name}': {val}": "Valeur booléenne non valide pour l'entrée '{name}' : {val}",
+  "Invalid number value for input '{name}': {val}": "Valeur numérique non valide pour l'entrée '{name}' : {val}",
+  "Invalid variable assignment '{item}'. Expected 'key=value'.": "Assignation de variable non valide '{item}'. 'clé=valeur' attendu.",
+  "Variable assignments in key=value format (e.g. file=src/app.py strict=true)": "Assignations de variables au format clé=valeur (ex. file=src/app.py strict=true)",
+  "Variable assignment in key=value format": "Assignation de variable au format clé=valeur"
 }

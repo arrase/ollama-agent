@@ -138,6 +138,18 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
     task_run = task_sub.add_parser("run", help=_("Execute a saved task"))
     task_run.add_argument("task_id", type=str, help=_("Task ID or prefix to execute"))
     task_run.add_argument(
+        "vars",
+        nargs="*",
+        help=_("Variable assignments in key=value format (e.g. file=src/app.py strict=true)"),
+    )
+    task_run.add_argument(
+        "--var",
+        action="append",
+        dest="flag_vars",
+        default=[],
+        help=_("Variable assignment in key=value format"),
+    )
+    task_run.add_argument(
         "-y",
         "--yolo",
         action="store_true",

@@ -69,7 +69,7 @@
 - 🕶️ **Stealth Mode (In-Memory Privacy)**: Run conversations without persisting chat history to SQLite (`-s` or `/stealth`), keeping all state in-memory during the session.
 - 📁 **Interactive `@-mentions`**: Reference local files or entire directory trees directly in prompts (e.g. `@src/main.py`, `@"data folder"`, `@.`) with path autocompletion, multimodal encoding, and binary safety.
 - 💾 **SQLite-Backed Sessions**: Durable conversation checkpoints in `~/.ollama-agent/history.db` with instant resumption (`/session resume <id>`), markdown export (`/session export`), and history management.
-- 📋 **Saved Tasks**: Save reusable prompts as YAML templates and execute them on demand via CLI (`task run`) or interactive REPL commands (`/task run`).
+- 📋 **Saved Tasks**: Save reusable prompts as YAML templates with Jinja2 expressions and dynamic input variables, executing them on demand via CLI (`task run`) or interactive REPL commands (`/task run`).
 - 🧩 **Agent Skills Standard**: Extend the agent with modular skills following the [Agent Skills specification](https://agentskills.io/specification) using progressive disclosure.
 - 📚 **Local RAG Engine**: Embed and index documents into local Qdrant vector collections with automated semantic retrieval via the agent's `rag_search` tool.
 - 🧠 **Persistent Memory & Guidelines**: Cross-session user memory (`MEMORY.md`), automatic discovery of project-level guidelines (`AGENTS.md`), and **Episodic Memory** to search past conversations and solutions (`search_past_conversations` tool and `/session search`).
@@ -167,7 +167,7 @@ The REPL provides built-in slash commands for managing models, sessions, tasks, 
 | `/queue` | `/queue [list \| clear \| rm <position>]` | Inspect pending prompts in the queue, remove a specific item by index (`/queue rm 2`, aliases: `remove`, `delete`), or clear all queued prompts. |
 | `/session` | `/session [list \| search <query> \| resume <id> (alias: switch) \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume previous threads, export to Markdown, or delete history. |
 | `/compact` | `/compact` (alias: `/compress`) | Manually compact conversation history into a structured summary to reclaim context window tokens. |
-| `/task` | `/task [list \| create [<id>] \| run <id> [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` initiates an interactive conversational creation flow with the agent. |
+| `/task` | `/task [list \| create [<id>] \| run <id> [key=value ...] [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` initiates an interactive conversational creation flow with the agent. Supports dynamic Jinja2 template variables. |
 | `/skill` | `/skill [list \| show <id> \| create [<id>] \| delete <id>]` | Manage agent skills. `/skill create` initiates an interactive conversational creation flow with the agent. |
 | `/rag` | `/rag [status \| list \| create <name> \| load <name> \| unload \| add <path> [--dir] \| delete <name>]` | Manage local RAG vector databases, index files/directories, and toggle active knowledge bases. |
 | `/mcp` | `/mcp [list \| reload]` | List configured MCP servers, check connection status, or reload MCP servers and rebuild tool graph mid-session. |
@@ -392,7 +392,7 @@ In addition to top-level flags, Ollama Agent provides dedicated CLI subcommands 
 | | `session delete` | `ollama-agent session delete <id>` | Delete a session from SQLite history. |
 | **Tasks** | `task list` | `ollama-agent task list` | List all saved YAML tasks. |
 | | `task create` | `ollama-agent task create review --title "..." --task-prompt "..."` | Create a reusable task. |
-| | `task run` | `ollama-agent task run review -y` | Execute a task from CLI. |
+| | `task run` | `ollama-agent task run review [key=value ...] [-y]` | Execute a saved task with optional dynamic variables. |
 | | `task delete` | `ollama-agent task delete review` | Delete a saved task. |
 | **Skills** | `skill list` | `ollama-agent skill list` | List all discovered agent skills. |
 | | `skill show` | `ollama-agent skill show <id>` | Display skill metadata & instructions. |
@@ -480,12 +480,12 @@ Allows the AI agent to search and recall past conversation sessions, past troubl
 
 ### Saved Tasks
 
-Tasks are reusable prompt templates stored as YAML files in `~/.ollama-agent/tasks/`.
+Tasks are reusable prompt templates stored as YAML files in `~/.ollama-agent/tasks/`. Tasks support full **Jinja2 templating** (`{{ var }}`, `{% if %}`, `{% for %}`, `{{ var | default(...) }}`), input validation, automatic type coercion (`string`, `boolean`, `number`), and dynamic `@-mentions` expansion (e.g. `@{{ target_file }}`).
 
 #### 1. CLI Task Commands
 
 ```bash
-# Create a task
+# Create a static task
 ollama-agent task create code-review \
     --title "Code Review Assistant" \
     --task-prompt "Review the git diff against main and highlight bugs, complexity, and styling issues." \
@@ -495,8 +495,12 @@ ollama-agent task create code-review \
 # List saved tasks
 ollama-agent task list
 
-# Run a task (with optional YOLO mode)
+# Run a static task (with optional YOLO mode)
 ollama-agent task run code-review -y
+
+# Run a parameterized task with dynamic variables (positional or --var flags)
+ollama-agent task run code-review target_file=src/app.py strict=true -y
+ollama-agent task run code-review --var target_file=src/app.py --var strict=true
 
 # Delete a task
 ollama-agent task delete code-review
@@ -504,19 +508,39 @@ ollama-agent task delete code-review
 
 #### 2. REPL Task Management & Conversational Flow
 
-- **Create via Agent Guidance**: Type `/task create my-task` (or `/task create`) in the REPL. The agent will guide you through clarifying the task objective, crafting a comprehensive self-contained prompt, and saving the YAML configuration in `~/.ollama-agent/tasks/`.
-- **Run in REPL**: Type `/task run code-review` (or `/task run code-review -y`) to execute the task streaming directly in the active chat.
+- **Create via Agent Guidance**: Type `/task create my-task` (or `/task create`) in the REPL. The agent will guide you through clarifying the task objective, identifying dynamic inputs, crafting a Jinja2 template prompt, and saving the YAML configuration.
+- **Run in REPL**: Type `/task run code-review` or pass dynamic variables directly:
+  ```text
+  /task run code-review target_file=src/app.py strict=true
+  /task run code-review target_file=src/app.py strict=true -y
+  ```
 - **List / Delete**: Use `/task list` and `/task delete <id>`.
 
-#### 3. Manual Task Definition
+#### 3. Task Definition with Jinja2 Templating & Inputs
 
 Create `<task_id>.yaml` inside `~/.ollama-agent/tasks/`:
 
 ```yaml
-title: "Repository Tree Analyzer"
-prompt: "List the repository structure and describe the purpose of each top-level directory."
+title: "Single File Code Review"
+prompt: |
+  Review the code in @{{ target_file }}.
+  Focus on bugs, performance, security issues, and style.
+  {% if strict %}
+  Apply strict zero-tolerance linting and flag any minor deviations.
+  {% else %}
+  Focus primarily on critical defects and architectural concerns.
+  {% endif %}
 model: "gemma4:26b"
-reasoning_effort: "medium"
+reasoning_effort: "high"
+inputs:
+  target_file:
+    description: "Relative path of the source file to review"
+    type: "string"
+    required: true
+  strict:
+    description: "Whether to enable strict review mode"
+    type: "boolean"
+    default: false
 ```
 
 ---
@@ -704,13 +728,20 @@ Global MCP servers are defined in JSON format under the `"mcpServers"` object in
 
 ### Custom Subagents
 
-Define domain-specific subagents in `~/.ollama-agent/settings.yaml` for task delegation. Each subagent operates with its own isolated context window, preventing orchestrator context bloat.
+Define domain-specific subagents in `~/.ollama-agent/settings.yaml` for task delegation. Each subagent operates with its own isolated context window, preventing orchestrator context bloat. Subagent `system_prompt` definitions support full **Jinja2 templating** evaluated with `subagent` (`SubAgentSettings`) and `model_settings` (`ModelSettings`) context variables.
 
 ```yaml
 subagents:
   - name: "researcher"
     description: "Specialist for comprehensive web research and external documentation search."
-    system_prompt: "You are a research analyst. Search thoroughly and summarize findings clearly."
+    system_prompt: |
+      You are {{ subagent.name }}, a {{ subagent.description }}.
+      Base model: {{ model_settings.name }}.
+      {% if model_settings.reasoning_effort in ['high', 'xhigh'] %}
+      Perform exhaustive analysis and verify findings against multiple sources.
+      {% else %}
+      Provide concise and direct research summaries.
+      {% endif %}
     model: "gemma4:26b"          # Optional (inherits from main agent if omitted)
     context_window: 32768        # Optional (inherits from main agent if omitted)
     mcp_servers:
@@ -722,7 +753,7 @@ subagents:
 
   - name: "sql-analyst"
     description: "Specialist for querying customer databases and generating analytics reports."
-    system_prompt: "You are a database engineer. Execute SQL queries and interpret results."
+    system_prompt: "You are {{ subagent.name }}, a {{ subagent.description }}. Execute SQL queries and interpret results."
     mcp_servers:
       - name: "sqlite-server"
         command: "uvx"
@@ -845,26 +876,53 @@ The effective context window (`num_ctx`) is resolved automatically in the follow
 
 ### Agent System Prompts
 
-System prompts are stored in `~/.ollama-agent/prompts/` and can be customized:
-- `instructions.md`: Main orchestrator behavioral instructions.
-- `fs_policy_sandboxed.md`: Virtual filesystem rules when sandboxed to project root.
-- `fs_policy_traversal.md`: Filesystem rules when traversal is enabled.
-- `rag_policy.md`: Instructions injected dynamically when a RAG database is active.
+System prompt instructions are managed via a single, unified Jinja2 template at `~/.ollama-agent/prompts/instructions.md`.
+
+When `ollama-agent` initializes, `instructions.md` is rendered dynamically using Jinja2 with strict variable evaluation (`StrictUndefined`) and injected into the agent graph:
+- **`runtime`**: Runtime settings (`runtime.allow_traversal`, `runtime.builtin_tool_timeout`, `runtime.collapse_thinking`, `runtime.inherit_env`, `runtime.language`).
+- **`settings`**: Complete `Settings` configuration object (`.model`, `.runtime`, `.rag`, `.mentions`, `.subagents`, `.langsmith`).
+- **`rag`**: RAG parameters (`rag.rag_dir`, `rag.embedder_model`, `rag.embedding_dims`, `rag.default_top_k`, etc.).
+- **`model`**: Active LLM parameters (`model.name`, `model.base_url`, `model.context_window`, `model.reasoning_effort`, `model.temperature`, etc.).
+- **`rag_active`**: Boolean flag indicating whether a RAG database is loaded in the active session.
+- **`rag_database`**: Name string of the active RAG database (or empty string when inactive).
+
+#### Conditional Policies Example
+
+The unified template uses Jinja2 conditionals to toggle operational filesystem rules based on the traversal setting and conditionally activate RAG search guidance:
+
+```jinja2
+{% if runtime.allow_traversal %}
+# FILESYSTEM
+- You have full access to the host filesystem. File tools use REAL absolute host paths.
+- ALWAYS pass absolute paths to file tools. Relative paths are anchored at root `/`.
+{% else %}
+# FILESYSTEM
+- File tools operate on a virtual root: `/` IS the project directory.
+- Virtual mounts (`/agent/`, `/skills/`, `/tasks/`) are accessible via file tools.
+- Do not access anything outside the project directory through shell commands.
+{% endif %}
+
+{% if rag_active %}
+# RAG POLICY
+A RAG knowledge base{% if rag_database %} ('{{ rag_database }}'){% endif %} is currently loaded and active. You have access to the `rag_search` tool to retrieve relevant documents and context.
+- Use `rag_search` when the user asks questions about documents in the loaded knowledge base.
+{% endif %}
+```
 
 ---
 
 ### Configuration Reset (`--config-reset`)
 
-Reset configuration files or system prompts back to package defaults:
+Reset configuration files or the system prompt template back to package defaults:
 
 ```bash
 # Reset settings.yaml only
 ollama-agent --config-reset config-file
 
-# Reset all system prompts (instructions.md, fs_policy_sandboxed.md, fs_policy_traversal.md, rag_policy.md)
+# Reset system prompt template (instructions.md)
 ollama-agent --config-reset system-prompt
 
-# Reset both configuration and prompt files
+# Reset both configuration and prompt template
 ollama-agent --config-reset all
 ```
 

@@ -76,8 +76,10 @@ tests/
 ├── test_sessions.py               # SQLite session resumption, listing, export & deletion
 ├── test_skills.py                 # SKILL.md parsing, frontmatter extraction & validation
 ├── test_skills_commands.py        # Skill CRUD operations & error handling
+├── test_stealth.py                # In-memory session execution without SQLite persistence
 ├── test_streaming.py              # Streaming event generators & async iteration
 ├── test_streaming_parsers.py      # Text & reasoning delta extraction logic
+├── test_subagents.py              # Subagent graph compilation & isolated MCP server configs
 ├── test_tasks.py                  # YAML task persistence, data model & loading
 ├── test_tasks_commands.py         # Task execution & CLI dispatch tests
 └── test_tui.py                    # Textual REPL widgets, header status & autocomplete
@@ -115,7 +117,7 @@ ollama-agent/
 │   ├── main.py              # CLI/REPL entry point, signal routing, config resets
 │   ├── agent/               # DeepAgents graph orchestration, middleware, tools & subagents
 │   │   ├── agent.py         # AgentRuntime lifecycle, backend mounting, graph construction
-│   │   ├── builtin_tools.py # Built-in tools (rag_search) and runtime context variables
+│   │   ├── builtin_tools.py # Built-in tools (rag_search, search_past_conversations) and runtime context variables
 │   │   ├── compaction.py    # Manual compaction delegating to deepagents SummarizationMiddleware
 │   │   ├── environment.py   # Shared prompt-environment helpers (OS, CWD, datetime)
 │   │   ├── episodic_memory.py # Episodic memory search engine over past conversations
@@ -148,10 +150,7 @@ ollama-agent/
 │   │   ├── config.py        # YAML configuration loader, dataclasses (ModelSettings, RAGSettings), reset logic
 │   │   ├── paths.py         # Centralized filesystem constants (~/.ollama-agent/)
 │   │   └── prompts/         # Bundled markdown prompt templates
-│   │       ├── default_instructions.md
-│   │       ├── fs_policy_sandboxed.md
-│   │       ├── fs_policy_traversal.md
-│   │       └── rag_policy.md
+│   │       └── default_instructions.md
 │   ├── skills/              # Agent Skills implementation
 │   │   ├── builtin/         # Internal application skills (skill-creator, task-creator)
 │   │   ├── commands.py      # Skill CLI and REPL handlers

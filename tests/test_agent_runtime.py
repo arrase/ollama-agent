@@ -15,13 +15,20 @@ from langgraph.types import Command
 
 from rich.console import Console
 
-from ollama_agent.agent.agent import AgentRuntime
+from ollama_agent.agent.agent import AgentRuntime, _prepare_instructions
 from ollama_agent.agent.builtin_tools import rag_search, set_rag_manager
 from ollama_agent.agent.middleware import _stream_tool_events
 from ollama_agent.agent.subagents import build_subagents, list_subagents
-from test_compaction import make_summarization_engine
+from tests.test_compaction import make_summarization_engine
 from ollama_agent.core.prompt_processor import PromptProcessingError
-from ollama_agent.settings.config import ModelSettings, Settings, SubAgentMCPServer, SubAgentSettings
+from ollama_agent.settings.config import (
+    ModelSettings,
+    RuntimeSettings,
+    Settings,
+    SubAgentMCPServer,
+    SubAgentSettings,
+    _default_instructions,
+)
 from ollama_agent.streaming.parsers import ThinkTagParser
 
 
@@ -151,6 +158,24 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(specs[0]["description"], "Writes code")
             self.assertIn("You are an expert coder", specs[0]["system_prompt"])
 
+    async def test_build_subagents_jinja2_rendering(self) -> None:
+        ms = ModelSettings(name="qwen3:32b", base_url="http://localhost:11434")
+        sa_list = [
+            SubAgentSettings(
+                name="jinja_coder",
+                description="Writes code with template",
+                system_prompt="Subagent {{ subagent.name }} uses {{ model_settings.name }}.",
+            )
+        ]
+        mock_model = MagicMock()
+
+        with patch("ollama_agent.agent.subagents.create_ollama_chat_model", AsyncMock(return_value=mock_model)):
+            specs = await build_subagents(sa_list, model_settings=ms)
+            self.assertEqual(len(specs), 1)
+            self.assertEqual(specs[0]["name"], "jinja_coder")
+            self.assertIn("Subagent jinja_coder uses qwen3:32b.", specs[0]["system_prompt"])
+            self.assertIn("Operating System:", specs[0]["system_prompt"])
+
     async def test_build_subagents_invalid_name_raises(self) -> None:
         ms = ModelSettings(name="gemma4:26b", base_url="http://localhost:11434")
         sa_list = [SubAgentSettings(name="", description="Missing name")]
@@ -261,17 +286,20 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         settings = Settings()
         runtime = AgentRuntime(settings=settings)
 
-        with patch.object(AgentRuntime, "_build_graph", AsyncMock(return_value=MagicMock())) as mock_bg, \
-             patch("ollama_agent.agent.agent.load_instructions", return_value="instructions\n{FILESYSTEM_POLICY}\n{RAG_POLICY}"), \
-             patch("ollama_agent.agent.agent.load_fs_policy_sandboxed", return_value="fs_policy"), \
-             patch("ollama_agent.agent.agent.ensure_memory_file"):
+        with (
+            patch.object(AgentRuntime, "_build_graph", AsyncMock(return_value=MagicMock())) as mock_bg,
+            patch(
+                "ollama_agent.agent.agent.load_instructions",
+                return_value="instructions\n{% if runtime.allow_traversal %}fs_traversal{% else %}fs_sandboxed{% endif %}",
+            ),
+            patch("ollama_agent.agent.agent.ensure_memory_file"),
+        ):
             set_rag_manager(None)
             await runtime.reload()
             self.assertIsNotNone(runtime.graph)
             mock_bg.assert_awaited_once()
-            self.assertIn("fs_policy", runtime._instructions)
-            self.assertNotIn("{FILESYSTEM_POLICY}", runtime._instructions)
-            self.assertNotIn("{RAG_POLICY}", runtime._instructions)
+            self.assertIn("fs_sandboxed", runtime._instructions)
+            self.assertNotIn("fs_traversal", runtime._instructions)
 
         with patch("ollama_agent.agent.agent.save_settings"), patch.object(AgentRuntime, "reload", AsyncMock()):
             msg = await runtime.set_model("qwen3:32b")
@@ -295,24 +323,28 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         mock_mgr.current_database = "active_docs"
         set_rag_manager(mock_mgr)
 
-        with patch.object(AgentRuntime, "_build_graph", AsyncMock(return_value=MagicMock())) as mock_bg, \
-             patch("ollama_agent.agent.agent.load_instructions", return_value="base\n{FILESYSTEM_POLICY}\n{RAG_POLICY}"), \
-             patch("ollama_agent.agent.agent.load_fs_policy_sandboxed", return_value="fs_sandbox"), \
-             patch("ollama_agent.agent.agent.load_rag_policy", return_value="rag_policy_content"), \
-             patch("ollama_agent.agent.agent.ensure_memory_file"):
+        with (
+            patch.object(AgentRuntime, "_build_graph", AsyncMock(return_value=MagicMock())) as mock_bg,
+            patch(
+                "ollama_agent.agent.agent.load_instructions",
+                return_value="base\n{% if runtime.allow_traversal %}fs_traversal{% else %}fs_sandbox{% endif %}\nrag_policy_content",
+            ),
+            patch("ollama_agent.agent.agent.ensure_memory_file"),
+        ):
             await runtime.reload()
             self.assertIn("rag_policy_content", runtime._instructions)
             self.assertIn("fs_sandbox", runtime._instructions)
-            self.assertNotIn("{RAG_POLICY}", runtime._instructions)
             mock_bg.assert_awaited_once()
 
         # Test tool injection in _build_graph
-        with patch("ollama_agent.agent.agent.ensure_model_supports_tools", AsyncMock()), \
-             patch("ollama_agent.agent.agent.create_ollama_chat_model", AsyncMock(return_value=MagicMock())), \
-             patch("ollama_agent.agent.agent.create_summarization_tool_middleware", return_value=MagicMock()), \
-             patch("ollama_agent.agent.agent.load_main_mcp_tools", AsyncMock(return_value=[])), \
-             patch("ollama_agent.agent.agent.create_deep_agent") as mock_cda, \
-             patch.object(AgentRuntime, "_sqlite_checkpointer", AsyncMock(return_value=MagicMock())):
+        with (
+            patch("ollama_agent.agent.agent.ensure_model_supports_tools", AsyncMock()),
+            patch("ollama_agent.agent.agent.create_ollama_chat_model", AsyncMock(return_value=MagicMock())),
+            patch("ollama_agent.agent.agent.create_summarization_tool_middleware", return_value=MagicMock()),
+            patch("ollama_agent.agent.agent.load_main_mcp_tools", AsyncMock(return_value=[])),
+            patch("ollama_agent.agent.agent.create_deep_agent") as mock_cda,
+            patch.object(AgentRuntime, "_sqlite_checkpointer", AsyncMock(return_value=MagicMock())),
+        ):
             await runtime._build_graph()
             kwargs = mock_cda.call_args.kwargs
             self.assertIn(rag_search, kwargs["tools"])
@@ -320,12 +352,14 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
 
         # When RAG is inactive, rag_search is still always present
         mock_mgr.current_database = None
-        with patch("ollama_agent.agent.agent.ensure_model_supports_tools", AsyncMock()), \
-             patch("ollama_agent.agent.agent.create_ollama_chat_model", AsyncMock(return_value=MagicMock())), \
-             patch("ollama_agent.agent.agent.create_summarization_tool_middleware", return_value=MagicMock()), \
-             patch("ollama_agent.agent.agent.load_main_mcp_tools", AsyncMock(return_value=[])), \
-             patch("ollama_agent.agent.agent.create_deep_agent") as mock_cda, \
-             patch.object(AgentRuntime, "_sqlite_checkpointer", AsyncMock(return_value=MagicMock())):
+        with (
+            patch("ollama_agent.agent.agent.ensure_model_supports_tools", AsyncMock()),
+            patch("ollama_agent.agent.agent.create_ollama_chat_model", AsyncMock(return_value=MagicMock())),
+            patch("ollama_agent.agent.agent.create_summarization_tool_middleware", return_value=MagicMock()),
+            patch("ollama_agent.agent.agent.load_main_mcp_tools", AsyncMock(return_value=[])),
+            patch("ollama_agent.agent.agent.create_deep_agent") as mock_cda,
+            patch.object(AgentRuntime, "_sqlite_checkpointer", AsyncMock(return_value=MagicMock())),
+        ):
             await runtime._build_graph()
             kwargs = mock_cda.call_args.kwargs
             self.assertIn(rag_search, kwargs["tools"])
@@ -333,6 +367,77 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         set_rag_manager(None)
         await runtime.aclose()
 
+    def test_prepare_instructions_allow_traversal_true(self) -> None:
+        settings = Settings()
+        settings.runtime.allow_traversal = True
+        with (
+            patch("ollama_agent.agent.agent.load_instructions", side_effect=_default_instructions),
+            patch("ollama_agent.agent.agent.ensure_memory_file"),
+        ):
+            instructions = _prepare_instructions(settings)
+        self.assertIn("You have full access to the host filesystem", instructions)
+        self.assertNotIn("operate on a virtual root", instructions)
+        self.assertIn("Working Directory", instructions)
+
+    def test_prepare_instructions_allow_traversal_false(self) -> None:
+        settings = Settings()
+        settings.runtime.allow_traversal = False
+        with (
+            patch("ollama_agent.agent.agent.load_instructions", side_effect=_default_instructions),
+            patch("ollama_agent.agent.agent.ensure_memory_file"),
+        ):
+            instructions = _prepare_instructions(settings)
+        self.assertIn("operate on a virtual root", instructions)
+        self.assertNotIn("You have full access to the host filesystem", instructions)
+        self.assertIn("Working Directory", instructions)
+
+    def test_prepare_instructions_context_variables(self) -> None:
+        settings = Settings(
+            model=ModelSettings(name="test-model"),
+            runtime=RuntimeSettings(allow_traversal=True),
+        )
+        custom_template = (
+            "Model: {{ model.name }}\n"
+            "Traversal: {{ runtime.allow_traversal }}\n"
+            "RAG Top K: {{ rag.default_top_k }}\n"
+            "Settings Model: {{ settings.model.name }}\n"
+            "RAG Active: {{ rag_active }}\n"
+            "RAG DB: {{ rag_database }}"
+        )
+        with (
+            patch("ollama_agent.agent.agent.load_instructions", return_value=custom_template),
+            patch("ollama_agent.agent.agent.ensure_memory_file"),
+        ):
+            instructions = _prepare_instructions(settings)
+            self.assertIn("Model: test-model", instructions)
+            self.assertIn("Traversal: True", instructions)
+            self.assertIn("RAG Top K: 5", instructions)
+            self.assertIn("Settings Model: test-model", instructions)
+            self.assertIn("RAG Active: False", instructions)
+            self.assertIn("RAG DB: ", instructions)
+
+    def test_prepare_instructions_rag_inactive(self) -> None:
+        settings = Settings()
+        set_rag_manager(None)
+        with (
+            patch("ollama_agent.agent.agent.load_instructions", side_effect=_default_instructions),
+            patch("ollama_agent.agent.agent.ensure_memory_file"),
+        ):
+            instructions = _prepare_instructions(settings)
+        self.assertNotIn("# RAG POLICY", instructions)
+
+    def test_prepare_instructions_rag_active(self) -> None:
+        settings = Settings()
+        mock_mgr = MagicMock()
+        mock_mgr.current_database = "knowledge_base"
+        set_rag_manager(mock_mgr)
+        with (
+            patch("ollama_agent.agent.agent.load_instructions", side_effect=_default_instructions),
+            patch("ollama_agent.agent.agent.ensure_memory_file"),
+        ):
+            instructions = _prepare_instructions(settings)
+        self.assertIn("# RAG POLICY", instructions)
+        self.assertIn("('knowledge_base')", instructions)
 
     async def test_agent_runtime_run_streamed(self) -> None:
         settings = Settings()
@@ -409,7 +514,10 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         mock_graph = MagicMock()
         runtime.graph = mock_graph
 
-        with patch("ollama_agent.agent.agent.process_prompt_mentions", side_effect=PromptProcessingError("Invalid file mention")):
+        with patch(
+            "ollama_agent.agent.agent.process_prompt_mentions",
+            side_effect=PromptProcessingError("Invalid file mention"),
+        ):
             events = []
             async for event in runtime.run_streamed("@nonexistent_mention"):
                 events.append(event)
@@ -471,8 +579,10 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(messages, [msg1, msg2])
             return "/conversation_history/session-abc.md"
 
-        with patch("ollama_agent.agent.agent.generate_summary", side_effect=fake_summary), \
-             patch("ollama_agent.agent.agent.offload_history", side_effect=fake_offload):
+        with (
+            patch("ollama_agent.agent.agent.generate_summary", side_effect=fake_summary),
+            patch("ollama_agent.agent.agent.offload_history", side_effect=fake_offload),
+        ):
             res = await runtime.compact_context("thread-1")
 
         self.assertTrue(res["success"])
@@ -498,9 +608,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         runtime._model = MagicMock()
         runtime._summarization_engine = make_summarization_engine()
 
-        prior_summary = HumanMessage(
-            content="prior summary", additional_kwargs={"lc_source": "summarization"}
-        )
+        prior_summary = HumanMessage(content="prior summary", additional_kwargs={"lc_source": "summarization"})
         msg3 = HumanMessage(content="Third prompt")
         msg4 = AIMessage(content="Third answer")
         msg5 = HumanMessage(content="Fourth prompt")
@@ -524,11 +632,13 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         mock_graph.aupdate_state = AsyncMock()
         runtime.graph = mock_graph
 
-        with patch("ollama_agent.agent.agent.generate_summary", AsyncMock(return_value="new summary")), \
-             patch(
-                 "ollama_agent.agent.agent.offload_history",
-                 AsyncMock(return_value="/conversation_history/session_fixed.md"),
-             ):
+        with (
+            patch("ollama_agent.agent.agent.generate_summary", AsyncMock(return_value="new summary")),
+            patch(
+                "ollama_agent.agent.agent.offload_history",
+                AsyncMock(return_value="/conversation_history/session_fixed.md"),
+            ),
+        ):
             res = await runtime.compact_context("t")
 
         self.assertTrue(res["success"])
@@ -562,8 +672,10 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "history.db"
             runtime = AgentRuntime(settings=Settings())
-            with patch("ollama_agent.agent.agent.HISTORY_DB_PATH", db_path), \
-                 patch.object(AgentRuntime, "_build_graph", AsyncMock(return_value=MagicMock())):
+            with (
+                patch("ollama_agent.agent.agent.HISTORY_DB_PATH", db_path),
+                patch.object(AgentRuntime, "_build_graph", AsyncMock(return_value=MagicMock())),
+            ):
                 cp1 = await runtime._sqlite_checkpointer()
                 self.assertIsNotNone(cp1)
                 await runtime.reload()
@@ -577,8 +689,10 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         settings = Settings()
         runtime = AgentRuntime(settings=settings)
 
-        with patch.object(AgentRuntime, "reload", AsyncMock()) as mock_reload, \
-             patch("ollama_agent.agent.agent.save_settings") as mock_save:
+        with (
+            patch.object(AgentRuntime, "reload", AsyncMock()) as mock_reload,
+            patch("ollama_agent.agent.agent.save_settings") as mock_save,
+        ):
             res = await runtime.set_context_window(16384)
             self.assertEqual(runtime.settings.model.context_window, 16384)
             mock_save.assert_called_once_with(runtime.settings)
@@ -588,4 +702,3 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             res2 = await runtime.set_context_window("max")
             self.assertEqual(runtime.settings.model.context_window, "max")
             self.assertIn("max", res2)
-

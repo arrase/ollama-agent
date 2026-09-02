@@ -290,9 +290,6 @@
   "Subagent '{name}' configuration error: description cannot be empty": "Erro de configuração de subagente '{name}': a descrição não pode estar vazia",
   "Reset: Restored default configuration at {path}": "Redefinição: Configuração padrão restaurada em {path}",
   "Reset: Restored default system prompt at {path}": "Redefinição: Prompt do sistema padrão restaurado em {path}",
-  "Reset: Restored default traversal policy at {path}": "Redefinição: Política de navegação padrão restaurada em {path}",
-  "Reset: Restored default sandboxed policy at {path}": "Redefinição: Política de sandbox padrão restaurada em {path}",
-  "Reset: Restored default RAG policy at {path}": "Redefinição: Política RAG padrão restaurada em {path}",
   "Invalid reset option '{option}'. Expected one of: {valid}": "Opção de redefinição inválida '{option}'. Esperada uma de: {valid}",
   "Arguments:": "Argumentos:",
   "Copy": "Copiar",
@@ -465,5 +462,11 @@
   "chat history will be saved to SQLite": "o histórico de chat será salvo no SQLite",
   "Stealth mode is now {status} ({desc})": "O modo stealth agora está {status} ({desc})",
   "Subagent '{subagent_name}': MCP server name cannot be empty": "Subagente '{subagent_name}': o nome do servidor MCP não pode estar vazio",
-  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "Subagente '{subagent_name}': nome de servidor MCP duplicado '{name}'"
+  "Subagent '{subagent_name}': duplicate MCP server name '{name}'": "Subagente '{subagent_name}': nome de servidor MCP duplicado '{name}'",
+  "Missing required input: {name}": "Entrada obrigatória ausente: {name}",
+  "Invalid boolean value for input '{name}': {val}": "Valor booleano inválido para a entrada '{name}': {val}",
+  "Invalid number value for input '{name}': {val}": "Valor numérico inválido para a entrada '{name}': {val}",
+  "Invalid variable assignment '{item}'. Expected 'key=value'.": "Atribuição de variável inválida '{item}'. Esperado 'chave=valor'.",
+  "Variable assignments in key=value format (e.g. file=src/app.py strict=true)": "Atribuições de variáveis no formato chave=valor (ex. file=src/app.py strict=true)",
+  "Variable assignment in key=value format": "Atribuição de variável no formato chave=valor"
 }
