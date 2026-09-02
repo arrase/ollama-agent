@@ -349,7 +349,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             self.assertIn(rag_search, kwargs["tools"])
             self.assertEqual(kwargs["skills"], (("/system_skills/", "Built-in"), ("/skills/", "User")))
 
-        # When RAG is inactive, rag_search is still always present
+        # When RAG is inactive, rag_search is not present
         mock_mgr.current_database = None
         with (
             patch("ollama_agent.agent.agent.ensure_model_supports_tools", AsyncMock()),
@@ -361,7 +361,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         ):
             await runtime._build_graph()
             kwargs = mock_cda.call_args.kwargs
-            self.assertIn(rag_search, kwargs["tools"])
+            self.assertNotIn(rag_search, kwargs["tools"])
 
         set_rag_manager(None)
         await runtime.aclose()

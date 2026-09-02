@@ -499,13 +499,23 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             handlers["/rag"].handler(["create", "my-db"])
             mock_create_db.assert_called_once_with(rag_ctx, "my-db")
 
+        with patch("ollama_agent.interfaces.dispatch.delete_rag_database") as mock_del_db:
+            runtime.reload.reset_mock()
+            handlers["/rag"].handler(["delete", "my-db"])
+            mock_del_db.assert_called_once_with(rag_ctx, "my-db")
+            runtime.reload.assert_called_once()
+
         with patch("ollama_agent.interfaces.dispatch.load_rag_database") as mock_load_db:
+            runtime.reload.reset_mock()
             handlers["/rag"].handler(["load", "my-db"])
             mock_load_db.assert_called_once_with(rag_ctx, "my-db")
+            runtime.reload.assert_called_once()
 
         with patch("ollama_agent.interfaces.dispatch.unload_rag_database") as mock_unload_db:
+            runtime.reload.reset_mock()
             handlers["/rag"].handler(["unload"])
             mock_unload_db.assert_called_once_with(rag_ctx)
+            runtime.reload.assert_called_once()
 
         # 5. /session handler (new/resume/switch/export are intercepted inline)
         with patch("ollama_agent.interfaces.dispatch.list_sessions") as mock_list_sess:
