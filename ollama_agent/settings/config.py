@@ -7,10 +7,10 @@ import tempfile
 from dataclasses import asdict, dataclass, field, fields
 from importlib import resources
 from pathlib import Path
-from typing import Any, Callable, Self, TypeVar
+from typing import Any, Self, TypeVar
 
-from jinja2 import Environment, StrictUndefined
 import yaml  # type: ignore[import-untyped]
+from jinja2 import Environment, StrictUndefined
 
 from ..i18n import _
 from .paths import (
@@ -19,25 +19,6 @@ from .paths import (
     RAG_DIR,
     SETTINGS_PATH,
 )
-
-
-# ---------------------------------------------------------------------------
-# Default instructions loader
-# ---------------------------------------------------------------------------
-
-
-def _read_bundled_prompt(filename: str) -> str:
-    return (
-        resources.files(__package__)
-        .joinpath(f"prompts/{filename}")
-        .read_text(encoding="utf-8")
-        .strip()
-    )
-
-
-def _default_instructions() -> str:
-    return _read_bundled_prompt("default_instructions.md")
-
 
 # ---------------------------------------------------------------------------
 # Settings dataclasses (CUD-inspired)
@@ -112,9 +93,9 @@ class LangSmithSettings:
 class MentionSettings:
     """Configuration for @-mention file/directory context injection."""
 
-    max_file_size: int = 1_048_576       # 1 MB
+    max_file_size: int = 1_048_576  # 1 MB
     max_files: int = 100
-    max_total_size: int = 10_485_760     # 10 MB
+    max_total_size: int = 10_485_760  # 10 MB
     max_completions: int = 200
 
 
@@ -130,9 +111,7 @@ class Settings:
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> Self:
         if not isinstance(raw, dict):
-            raise ValueError(
-                _("Expected mapping for Settings, got {type_name}", type_name=type(raw).__name__)
-            )
+            raise ValueError(_("Expected mapping for Settings, got {type_name}", type_name=type(raw).__name__))
         valid = {f.name for f in fields(cls)}
         unknown = set(raw) - valid
         if unknown:
@@ -198,15 +177,11 @@ def _subagents_from_list(
     if raw is None:
         return []
     if not isinstance(raw, list):
-        raise ValueError(
-            _("Expected list for subagents, got {type_name}", type_name=type(raw).__name__)
-        )
+        raise ValueError(_("Expected list for subagents, got {type_name}", type_name=type(raw).__name__))
     subagents: list[SubAgentSettings] = []
     for item in raw:
         if not isinstance(item, dict):
-            raise ValueError(
-                _("Expected mapping for subagent, got {type_name}", type_name=type(item).__name__)
-            )
+            raise ValueError(_("Expected mapping for subagent, got {type_name}", type_name=type(item).__name__))
         data = dict(item)
         if "mcp_servers" in item:
             mcp_servers_raw = item["mcp_servers"]
@@ -214,10 +189,7 @@ def _subagents_from_list(
                 raise ValueError(
                     _("Expected list for mcp_servers, got {type_name}", type_name=type(mcp_servers_raw).__name__)
                 )
-            data["mcp_servers"] = [
-                _dataclass_from_dict(SubAgentMCPServer, m)
-                for m in mcp_servers_raw
-            ]
+            data["mcp_servers"] = [_dataclass_from_dict(SubAgentMCPServer, m) for m in mcp_servers_raw]
         subagents.append(_dataclass_from_dict(SubAgentSettings, data))
     return subagents
 
@@ -238,9 +210,7 @@ def load_settings(settings_path: Path = SETTINGS_PATH) -> Settings:
     if raw is None:
         raw = {}
     if not isinstance(raw, dict):
-        raise ValueError(
-            _("Settings file must contain a YAML mapping: {path}", path=settings_path)
-        )
+        raise ValueError(_("Settings file must contain a YAML mapping: {path}", path=settings_path))
     return Settings.from_dict(raw)
 
 
@@ -269,16 +239,6 @@ def save_settings(settings: Settings, settings_path: Path = SETTINGS_PATH) -> No
 # ---------------------------------------------------------------------------
 
 
-def _load_prompt_file(file_path: Path, default_factory: Callable[[], str]) -> str:
-    """Helper to load a prompt file with initial creation from default factory."""
-    if not file_path.exists():
-        default_text = default_factory()
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        file_path.write_text(default_text + "\n", encoding="utf-8")
-        return default_text
-    return file_path.read_text(encoding="utf-8").strip()
-
-
 def render_prompt_template(template_str: str, context: dict[str, Any]) -> str:
     """Render a Jinja2 template string with the provided context dictionary."""
     env = Environment(undefined=StrictUndefined, trim_blocks=True, lstrip_blocks=True)
@@ -287,8 +247,15 @@ def render_prompt_template(template_str: str, context: dict[str, Any]) -> str:
 
 
 def load_instructions(instructions_path: Path = INSTRUCTIONS_PATH) -> str:
-    """Load agent instructions from file or return defaults."""
-    return _load_prompt_file(instructions_path, _default_instructions)
+    """Load agent instructions from file or create it from bundled defaults."""
+    if not instructions_path.exists():
+        default_text = (
+            resources.files(__package__).joinpath("prompts/default_instructions.md").read_text(encoding="utf-8").strip()
+        )
+        instructions_path.parent.mkdir(parents=True, exist_ok=True)
+        instructions_path.write_text(default_text + "\n", encoding="utf-8")
+        return default_text
+    return instructions_path.read_text(encoding="utf-8").strip()
 
 
 def ensure_prompt_files(instructions_path: Path = INSTRUCTIONS_PATH) -> None:
@@ -341,7 +308,11 @@ def reset_config(
     """Reset configuration or system prompt to defaults."""
     if option not in VALID_RESET_OPTIONS:
         raise ValueError(
-            _("Invalid reset option '{option}'. Expected one of: {valid}", option=option, valid=sorted(VALID_RESET_OPTIONS))
+            _(
+                "Invalid reset option '{option}'. Expected one of: {valid}",
+                option=option,
+                valid=sorted(VALID_RESET_OPTIONS),
+            )
         )
 
     messages: list[str] = []
@@ -356,4 +327,3 @@ def reset_config(
         messages.append(_("Reset: Restored default system prompt at {path}", path=instructions_path))
 
     return messages
-

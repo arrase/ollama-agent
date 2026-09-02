@@ -6,20 +6,16 @@ Renderers consume those payloads.
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any, Iterable
 
 from langgraph.types import Command
 from rich.console import Console
 
-from ..i18n import _
 from .console_renderer import ConsoleStreamingRenderer
 
 if TYPE_CHECKING:
     from ..agent import AgentRuntime
     from .base import StreamingRenderer
-
-_log = logging.getLogger(__name__)
 
 
 async def stream_agent_events(
@@ -57,19 +53,13 @@ async def stream_agent_events(
                 completed = False
 
             break
-    except KeyboardInterrupt:
-        completed = False
-        _log.info("Agent run interrupted by user")
-        renderer.on_warning({"type": "warning", "content": _("Execution interrupted by user.")})
     finally:
         if auto_close:
             renderer.close()
     return completed
 
 
-async def run_non_interactive(
-    runtime: AgentRuntime, prompt: str | Command[Any], *, thread_id: str = ""
-) -> bool:
+async def run_non_interactive(runtime: AgentRuntime, prompt: str | Command[Any], *, thread_id: str = "") -> bool:
     """Stream agent output to the console (non-interactive mode).
 
     Returns whether the run finished completely (no abort, cancellation or error).

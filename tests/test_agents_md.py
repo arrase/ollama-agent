@@ -20,7 +20,6 @@ from ollama_agent.settings import (
 )
 
 
-
 class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
     """Unit tests for AGENTS.md specification support and integration."""
 
@@ -157,11 +156,12 @@ class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
         mock_model.num_ctx = 8192
         mock_model.effective_params = {}
 
-        with patch("pathlib.Path.cwd", return_value=sub_dir), \
-             patch("ollama_agent.agent.agent.ensure_model_supports_tools", AsyncMock()), \
-             patch("ollama_agent.agent.agent.create_ollama_chat_model", AsyncMock(return_value=mock_model)), \
-             patch("ollama_agent.agent.agent.create_deep_agent", return_value=mock_deep_agent) as mock_create_agent:
-
+        with (
+            patch("pathlib.Path.cwd", return_value=sub_dir),
+            patch("ollama_agent.agent.agent.ensure_model_supports_tools", AsyncMock()),
+            patch("ollama_agent.agent.agent.create_ollama_chat_model", AsyncMock(return_value=mock_model)),
+            patch("ollama_agent.agent.agent.create_deep_agent", return_value=mock_deep_agent) as mock_create_agent,
+        ):
             await runtime._build_graph()
 
             mock_create_agent.assert_called_once()

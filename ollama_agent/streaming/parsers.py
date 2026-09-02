@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from langchain_core.messages import AIMessageChunk
+
 
 def streaming_text(content: Any) -> str:
     """Extract text from a streaming chunk without altering whitespace."""
@@ -18,11 +20,7 @@ def streaming_text(content: Any) -> str:
     if isinstance(content, dict):
         return content["text"] if content.get("type") == "text" else ""
     if isinstance(content, list):
-        return "".join(
-            b["text"]
-            for b in content
-            if isinstance(b, dict) and b.get("type") == "text"
-        )
+        return "".join(b["text"] for b in content if isinstance(b, dict) and b.get("type") == "text")
     return ""
 
 
@@ -68,38 +66,24 @@ class ThinkTagParser:
         n = len(combined)
 
         while i < n:
-            if not self.in_think:
-                if combined.startswith("<think>", i):
-                    if accumulated:
-                        deltas.append(("text", "".join(accumulated)))
-                        accumulated = []
-                    self.in_think = True
-                    i += len("<think>")
-                    continue
+            tag = "</think>" if self.in_think else "<think>"
+            kind = "reasoning" if self.in_think else "text"
 
-                rem = combined[i:]
-                if "<think>".startswith(rem):
-                    self._buffer = rem
-                    break
+            if combined.startswith(tag, i):
+                if accumulated:
+                    deltas.append((kind, "".join(accumulated)))
+                    accumulated = []
+                self.in_think = not self.in_think
+                i += len(tag)
+                continue
 
-                accumulated.append(combined[i])
-                i += 1
-            else:
-                if combined.startswith("</think>", i):
-                    if accumulated:
-                        deltas.append(("reasoning", "".join(accumulated)))
-                        accumulated = []
-                    self.in_think = False
-                    i += len("</think>")
-                    continue
+            rem = combined[i:]
+            if tag.startswith(rem):
+                self._buffer = rem
+                break
 
-                rem = combined[i:]
-                if "</think>".startswith(rem):
-                    self._buffer = rem
-                    break
-
-                accumulated.append(combined[i])
-                i += 1
+            accumulated.append(combined[i])
+            i += 1
 
         if accumulated:
             kind = "reasoning" if self.in_think else "text"
@@ -121,14 +105,14 @@ class ThinkTagParser:
 
     def process_chunk(
         self,
-        chunk: Any,
+        chunk: AIMessageChunk,
         hide_reasoning: bool = False,
     ) -> list[dict[str, Any]]:
         """Process a chunk and return reasoning or text delta events."""
-        if getattr(chunk, "type", "") in ("tool", "ToolMessageChunk"):
+        if chunk.type in ("tool", "ToolMessageChunk"):
             return []
 
-        content = getattr(chunk, "content", None)
+        content = chunk.content
         reasoning = streaming_reasoning(content, getattr(chunk, "additional_kwargs", None))
         if reasoning:
             return [] if hide_reasoning else [{"type": "reasoning_delta", "content": reasoning}]

@@ -13,10 +13,10 @@ from typing import Any
 
 import ollama
 from jinja2.exceptions import TemplateError
+from langgraph.types import Command
 from rich.console import Console
 from rich.markup import escape
 from rich.text import Text
-
 from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, ScrollableContainer
@@ -24,19 +24,6 @@ from textual.screen import Screen
 from textual.widgets import OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 from textual.worker import Worker
-from langgraph.types import Command
-
-from .clipboard import ClipboardError, copy_to_system_clipboard, get_system_clipboard
-from .tui_components import (
-    AgentFooter,
-    AgentHeader,
-    AgentResponse,
-    PromptQueueWidget,
-    ReplInput,
-    SystemOutputWidget,
-    ToolApprovalWidget,
-    UserMessage,
-)
 
 from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager, set_tool_timeout
@@ -45,12 +32,14 @@ from ..core.common import extract_text
 from ..i18n import _
 from ..rag import RAGContext, RAGManager, load_rag_database
 from ..skills import SkillsContext
-from ..tasks.commands import (
+from ..streaming import StreamingRenderer, extract_action_requests, stream_agent_events
+from ..tasks import (
     TaskError,
     TasksContext,
     apply_task_settings,
     parse_var_assignments,
 )
+from .clipboard import ClipboardError, copy_to_system_clipboard, get_system_clipboard
 from .dispatch import REPLCommand, build_repl_handlers, safe_call
 from .model_commands import (
     _list_models_sync,
@@ -64,12 +53,19 @@ from .session_commands import (
     new_session,
     resume_session,
 )
-from ..streaming import StreamingRenderer, extract_action_requests, stream_agent_events
+from .tui_components import (
+    AgentFooter,
+    AgentHeader,
+    AgentResponse,
+    PromptQueueWidget,
+    ReplInput,
+    SystemOutputWidget,
+    ToolApprovalWidget,
+    UserMessage,
+)
 
 # @-mention regex: matches @"quoted", @'quoted', or @bare at word boundaries.
-_AT_MENTION_RE = re.compile(
-    r"""(?:^|[\s\(\[\{<])@(?:"([^"]*)|'([^']*)|([^\s"'\(\[\{<>,;]*))$"""
-)
+_AT_MENTION_RE = re.compile(r"""(?:^|[\s\(\[\{<])@(?:"([^"]*)|'([^']*)|([^\s"'\(\[\{<>,;]*))$""")
 
 
 @dataclass(frozen=True)
@@ -212,9 +208,7 @@ def _is_immediate_command(val: str) -> bool:
         return True
     if cmd == "/mcp" and (not sub or sub in ("list", "status")):
         return True
-    if cmd == "/agents" and (not sub or sub == "list"):
-        return True
-    return False
+    return bool(cmd == "/agents" and (not sub or sub == "list"))
 
 
 class _TUIStreamingRenderer(StreamingRenderer):
@@ -361,10 +355,9 @@ class OllamaAgentApp(App):
         yield OptionList(id="autocomplete-list")
         yield PromptQueueWidget(id="prompt-queue")
         yield SystemOutputWidget(id="system-output")
-        with Container(id="input-container"):
-            with Horizontal(id="input-bar"):
-                yield Static("❯ ", id="prompt-char")
-                yield ReplInput(id="repl-input")
+        with Container(id="input-container"), Horizontal(id="input-bar"):
+            yield Static("❯ ", id="prompt-char")
+            yield ReplInput(id="repl-input")
         yield AgentFooter()
 
     def show_system_output(self, content: str | Text, title: str | None = None) -> None:
@@ -410,8 +403,6 @@ class OllamaAgentApp(App):
 
         header = self.query_one(AgentHeader)
         header.update_header()
-
-    update_yolo_ui = update_mode_ui
 
     def _update_queue_ui(self) -> None:
         footer = self.query_one(AgentFooter)
@@ -522,23 +513,24 @@ class OllamaAgentApp(App):
                     models = _list_models_sync(self.repl.runtime.settings.model.base_url)
                 except (ollama.ResponseError, OSError):
                     return []
-                return [
-                    (
-                        f"{root_cmd} {sub_cmd} {m.model}",
-                        Text.from_markup(
-                            f"[bold #e6edf3]{m.model:<30}[/bold #e6edf3] [dim #8b949e]{f'{(m.size / (1024**3)):.1f}GB' if m.size else ''}[/dim #8b949e]"
-                        ),
-                    )
-                    for m in models
-                    if m.model and m.model.startswith(arg_token)
-                ]
+                results = []
+                for m in models:
+                    if not (m.model and m.model.startswith(arg_token)):
+                        continue
+                    size_str = f"{(m.size / (1024**3)):.1f}GB" if m.size else ""
+                    markup = f"[bold #e6edf3]{m.model:<30}[/bold #e6edf3] [dim #8b949e]{size_str}[/dim #8b949e]"
+                    results.append((f"{root_cmd} {sub_cmd} {m.model}", Text.from_markup(markup)))
+                return results
 
             if root_cmd == "/context" and sub_cmd == "set":
                 presets = ["4096", "8192", "16384", "32768", "65536", "131072", "max"]
+                tok_label = _("tokens")
                 return [
                     (
                         f"{root_cmd} {sub_cmd} {p}",
-                        Text.from_markup(f"[bold #e6edf3]{p:<10}[/bold #e6edf3] [dim #8b949e]{_('tokens')}[/dim #8b949e]"),
+                        Text.from_markup(
+                            f"[bold #e6edf3]{p:<10}[/bold #e6edf3] [dim #8b949e]{tok_label}[/dim #8b949e]"
+                        ),
                     )
                     for p in presets
                     if p.startswith(arg_token)
@@ -549,7 +541,9 @@ class OllamaAgentApp(App):
                 return [
                     (
                         f"{root_cmd} {sub_cmd} {tid}",
-                        Text.from_markup(f"[bold #e6edf3]{tid:<20}[/bold #e6edf3] [dim #8b949e]{t.title}[/dim #8b949e]"),
+                        Text.from_markup(
+                            f"[bold #e6edf3]{tid:<20}[/bold #e6edf3] [dim #8b949e]{t.title}[/dim #8b949e]"
+                        ),
                     )
                     for tid, t in tasks
                     if tid.startswith(arg_token)
@@ -572,10 +566,14 @@ class OllamaAgentApp(App):
                 except HistoryError as exc:
                     logging.warning("Session autocomplete unavailable: %s", exc)
                     return []
+                steps_label = _("steps")
                 return [
                     (
                         f"{root_cmd} {sub_cmd} {s['thread_id']}",
-                        Text.from_markup(f"[bold #e6edf3]{s['thread_id'][:8]:<10}[/bold #e6edf3] [dim #8b949e]{s['steps']} {_('steps')}[/dim #8b949e]"),
+                        Text.from_markup(
+                            f"[bold #e6edf3]{s['thread_id'][:8]:<10}[/bold #e6edf3] "
+                            f"[dim #8b949e]{s['steps']} {steps_label}[/dim #8b949e]"
+                        ),
                     )
                     for s in sessions
                     if s["thread_id"].startswith(arg_token)
@@ -583,10 +581,14 @@ class OllamaAgentApp(App):
 
             if root_cmd == "/rag" and sub_cmd in ("load", "delete"):
                 dbs = self.repl._get_rag_ctx().rag_manager.list_databases()
+                chunks_label = _("chunks")
                 return [
                     (
                         f"{root_cmd} {sub_cmd} {d['name']}",
-                        Text.from_markup(f"[bold #e6edf3]{d['name']:<20}[/bold #e6edf3] [dim #8b949e]{d['chunks'] if d['chunks'] is not None else 0} {_('chunks')}[/dim #8b949e]"),
+                        Text.from_markup(
+                            f"[bold #e6edf3]{d['name']:<20}[/bold #e6edf3] "
+                            f"[dim #8b949e]{d['chunks'] if d['chunks'] is not None else 0} {chunks_label}[/dim #8b949e]"
+                        ),
                     )
                     for d in dbs
                     if d["name"].startswith(arg_token)
@@ -603,7 +605,9 @@ class OllamaAgentApp(App):
                     items.append(
                         (
                             f"{root_cmd} {sub_cmd} {idx}",
-                            Text.from_markup(f"[bold #e6edf3]#{idx}[/bold #e6edf3] [dim #8b949e]{preview}[/dim #8b949e]"),
+                            Text.from_markup(
+                                f"[bold #e6edf3]#{idx}[/bold #e6edf3] [dim #8b949e]{preview}[/dim #8b949e]"
+                            ),
                         )
                     )
                 return items
@@ -621,9 +625,10 @@ class OllamaAgentApp(App):
             if completions:
                 autolist.clear_options()
                 for rel_path, meta in completions[:20]:
+                    markup = f"[bold #e6edf3]{rel_path:<40}[/bold #e6edf3] [dim #8b949e]{meta}[/dim #8b949e]"
                     autolist.add_option(
                         Option(
-                            prompt=Text.from_markup(f"[bold #e6edf3]{rel_path:<40}[/bold #e6edf3] [dim #8b949e]{meta}[/dim #8b949e]"),
+                            prompt=Text.from_markup(markup),
                             id=rel_path,
                         )
                     )
@@ -760,14 +765,15 @@ class OllamaAgentApp(App):
             if cmd in ("/clear", "/new") or (cmd == "/session" and args and args[0] == "new"):
                 await self.repl._handle_new_session([])
                 await scroll.remove_children()
-                self.show_system_notice(f"[bold #38bdf8]✓ {_('New session started: {session_id}', session_id=self.repl.runtime.thread_id[:8])}[/bold #38bdf8]")
+                notice = _("New session started: {session_id}", session_id=self.repl.runtime.thread_id[:8])
+                self.show_system_notice(f"[bold #38bdf8]✓ {notice}[/bold #38bdf8]")
                 self.query_one(AgentHeader).update_header()
                 return
 
-
             if cmd == "/session" and args and args[0] in ("resume", "switch"):
                 if len(args) < 2:
-                    self.show_system_notice(f"[bold #f87171]✕ {_('Usage: /session resume <session_id>')}[/bold #f87171]")
+                    usage_msg = _("Usage: /session resume <session_id>")
+                    self.show_system_notice(f"[bold #f87171]✕ {usage_msg}[/bold #f87171]")
                     return
                 try:
                     resolved = resume_session(self.repl.console, args[1])
@@ -778,9 +784,7 @@ class OllamaAgentApp(App):
                     self.repl.runtime.thread_id = resolved
                     await scroll.remove_children()
                     messages = await self.repl.runtime.get_thread_messages(resolved)
-                    self.repl.runtime.last_context_tokens = (
-                        await self.repl.runtime.count_effective_tokens(resolved)
-                    )
+                    self.repl.runtime.last_context_tokens = await self.repl.runtime.count_effective_tokens(resolved)
                     for msg in messages:
                         role = getattr(msg, "type", "unknown")
                         content = extract_text(getattr(msg, "content", ""))
@@ -790,11 +794,14 @@ class OllamaAgentApp(App):
                             scroll.mount(UserMessage(content))
                         elif role in ("ai", "assistant"):
                             scroll.mount(AgentResponse(initial_text=content))
-                    self.show_system_notice(f"[bold #38bdf8]✓ {_('Resumed session: {session_id}', session_id=f'{resolved[:8]} ({resolved})')}[/bold #38bdf8]")
+                    resumed_label = f"{resolved[:8]} ({resolved})"
+                    notice = _("Resumed session: {session_id}", session_id=resumed_label)
+                    self.show_system_notice(f"[bold #38bdf8]✓ {notice}[/bold #38bdf8]")
                     self.query_one(AgentHeader).update_header()
                     self._deferred_scroll()
                 else:
-                    self.show_system_notice(f"[bold #f87171]✕ {_('Session not found: {session_id}', session_id=args[1])}[/bold #f87171]")
+                    not_found = _("Session not found: {session_id}", session_id=args[1])
+                    self.show_system_notice(f"[bold #f87171]✕ {not_found}[/bold #f87171]")
                 return
 
             if cmd == "/session" and args and args[0] == "export":
@@ -809,7 +816,8 @@ class OllamaAgentApp(App):
                     self.show_system_notice(f"[red]{exc}[/red]")
                     return
                 if out_file:
-                    self.show_system_notice(f"[bold #38bdf8]✓ {_('Session exported to: {path}', path=out_file)}[/bold #38bdf8]")
+                    export_msg = _("Session exported to: {path}", path=out_file)
+                    self.show_system_notice(f"[bold #38bdf8]✓ {export_msg}[/bold #38bdf8]")
                 else:
                     self.show_system_notice(f"[bold #f87171]✕ {_('Failed to export session.')}[/bold #f87171]")
                 return
@@ -925,7 +933,9 @@ class OllamaAgentApp(App):
 
     # ── Streaming chat ────────────────────────────────────────────────────
 
-    async def _handle_approval_decision(self, decisions: list[dict[str, Any]], scroll: Any, agent_msg: AgentResponse) -> None:
+    async def _handle_approval_decision(
+        self, decisions: list[dict[str, Any]], scroll: Any, agent_msg: AgentResponse
+    ) -> None:
         self._is_approval_pending = False
         command: Command[Any] = Command(resume={"decisions": decisions})
         await self._run_stream(command, scroll, agent_msg)
@@ -937,7 +947,12 @@ class OllamaAgentApp(App):
 
         try:
             try:
-                await stream_agent_events(self.repl.runtime, prompt, _TUIStreamingRenderer(self, scroll, agent_msg), auto_close=True)
+                await stream_agent_events(
+                    self.repl.runtime,
+                    prompt,
+                    _TUIStreamingRenderer(self, scroll, agent_msg),
+                    auto_close=True,
+                )
             except asyncio.CancelledError:
                 self.show_system_notice(f"[bold #f87171]🛑 {_('Execution interrupted by user.')}[/bold #f87171]")
                 if self._prompt_queue:
@@ -968,7 +983,6 @@ class OllamaAgentApp(App):
             self._is_generating = False
             footer.set_generating(False)
             self._process_next_in_queue()
-
 
 
 # ─── OllamaREPL entry-point (unchanged public API) ───────────────────────────
@@ -1111,7 +1125,8 @@ class OllamaREPL:
                 queue.clear()
             if self.app is not None:
                 self.app._update_queue_ui()
-            self.console.print(f"[bold #34d399]✓ {_('Prompt queue cleared ({count} removed).', count=count)}[/bold #34d399]")
+            msg = _("Prompt queue cleared ({count} removed).", count=count)
+            self.console.print(f"[bold #34d399]✓ {msg}[/bold #34d399]")
             return
         if args[0] in ("rm", "remove", "delete"):
             if len(args) < 2:
@@ -1127,7 +1142,12 @@ class OllamaREPL:
                 return
             pos = int(raw_pos)
             if pos < 1 or pos > len(queue):
-                self.console.print(f"[red]{_('Queue position {pos} out of range (queue has {count} items).', pos=pos, count=len(queue))}[/red]")
+                err = _(
+                    "Queue position {pos} out of range (queue has {count} items).",
+                    pos=pos,
+                    count=len(queue),
+                )
+                self.console.print(f"[red]{err}[/red]")
                 return
             item = queue[pos - 1]
             del queue[pos - 1]
@@ -1136,7 +1156,8 @@ class OllamaREPL:
             truncated_text = item.text.replace("\n", " ")
             if len(truncated_text) > 60:
                 truncated_text = truncated_text[:57] + "..."
-            self.console.print(f"[bold #34d399]✓ {_('Removed #{pos} from prompt queue: {text}', pos=pos, text=truncated_text)}[/bold #34d399]")
+            msg = _("Removed #{pos} from prompt queue: {text}", pos=pos, text=truncated_text)
+            self.console.print(f"[bold #34d399]✓ {msg}[/bold #34d399]")
             return
         err_msg = _("Unknown queue subcommand '{sub}'. Usage: /queue [clear | rm <position>]", sub=args[0])
         self.console.print(f"[red]{err_msg}[/red]")

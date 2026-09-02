@@ -25,13 +25,42 @@ from ..settings import RAGSettings
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_RAG_EXTENSIONS: frozenset[str] = frozenset({
-    ".py", ".js", ".ts", ".tsx", ".jsx", ".sh", ".yaml", ".yml",
-    ".json", ".xml", ".md", ".txt", ".toml", ".c", ".cpp", ".h",
-    ".hpp", ".go", ".rs", ".css", ".html", ".sql", ".ini", ".cfg",
-    ".properties", ".java", ".kt", ".gradle", ".bat", ".ps1",
-    ".csv", ".rst",
-})
+SUPPORTED_RAG_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".py",
+        ".js",
+        ".ts",
+        ".tsx",
+        ".jsx",
+        ".sh",
+        ".yaml",
+        ".yml",
+        ".json",
+        ".xml",
+        ".md",
+        ".txt",
+        ".toml",
+        ".c",
+        ".cpp",
+        ".h",
+        ".hpp",
+        ".go",
+        ".rs",
+        ".css",
+        ".html",
+        ".sql",
+        ".ini",
+        ".cfg",
+        ".properties",
+        ".java",
+        ".kt",
+        ".gradle",
+        ".bat",
+        ".ps1",
+        ".csv",
+        ".rst",
+    }
+)
 
 
 class RAGError(RuntimeError):
@@ -59,9 +88,7 @@ class RAGManager:
         self._rag_dir.mkdir(parents=True, exist_ok=True)
         self._client: QdrantClient | None = None
         self._current_db: str | None = None
-        self._ollama_client = ollama.AsyncClient(
-            host=self.settings.embedder_base_url.rstrip("/")
-        )
+        self._ollama_client = ollama.AsyncClient(host=self.settings.embedder_base_url.rstrip("/"))
 
     @property
     def current_database(self) -> str | None:
@@ -74,11 +101,18 @@ class RAGManager:
 
     def _ensure_loaded(self) -> QdrantClient:
         """Ensure a database is loaded and return the client."""
-        if self._client is None or self._current_db is None:
-            raise RAGNotLoadedError(
-                _("No RAG database loaded. Use /rag load <name> first.")
-            )
+        if self._client is None:
+            raise RAGNotLoadedError(_("No RAG database loaded. Use /rag load <name> first."))
         return self._client
+
+    @property
+    def base_dir(self) -> Path:
+        """Return the base directory for RAG databases."""
+        return self._rag_dir
+
+    def list_database_names(self) -> list[str]:
+        """List the names of all available RAG database directories."""
+        return sorted(path.name for path in self._rag_dir.iterdir() if path.is_dir())
 
     def list_databases(self) -> list[dict[str, Any]]:
         """List all available RAG databases."""
@@ -267,37 +301,29 @@ class RAGManager:
 
         for file_path, chunks in all_file_chunks:
             source = str(file_path)
-            try:
-                embeddings = await self._get_embeddings(chunks)
-                self._delete_source_points(client, source)
-                points = [
-                    PointStruct(
-                        id=self._generate_point_id(source, i),
-                        vector=embedding,
-                        payload={
-                            "content": chunk,
-                            "source": source,
-                            "filename": file_path.name,
-                            "chunk_index": i,
-                            "total_chunks": len(chunks),
-                        },
-                    )
-                    for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=True))
-                ]
-                client.upsert(collection_name=self.COLLECTION_NAME, points=points)
-                results["added"] += 1
-                logger.info(
-                    "Added file to RAG from batch: %s (%d chunks)", file_path.name, len(chunks)
+            embeddings = await self._get_embeddings(chunks)
+            self._delete_source_points(client, source)
+            points = [
+                PointStruct(
+                    id=self._generate_point_id(source, i),
+                    vector=embedding,
+                    payload={
+                        "content": chunk,
+                        "source": source,
+                        "filename": file_path.name,
+                        "chunk_index": i,
+                        "total_chunks": len(chunks),
+                    },
                 )
-            except Exception as e:
-                logger.warning("Failed to process %s: %s", file_path, e)
-                results["failed"] += 1
+                for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=True))
+            ]
+            client.upsert(collection_name=self.COLLECTION_NAME, points=points)
+            results["added"] += 1
+            logger.info("Added file to RAG from batch: %s (%d chunks)", file_path.name, len(chunks))
 
         return results
 
-    async def search(
-        self, query: str, top_k: int | None = None
-    ) -> list[dict[str, Any]]:
+    async def search(self, query: str, top_k: int | None = None) -> list[dict[str, Any]]:
         """Search the RAG database for relevant documents."""
         if not query.strip():
             return []
@@ -337,62 +363,52 @@ class RAGManager:
         embeddings = await self._get_embeddings([text])
         return embeddings[0]
 
-    async def _get_embeddings(
-        self, texts: list[str], batch_size: int = 100
-    ) -> list[list[float]]:
+    async def _get_embeddings(self, texts: list[str], batch_size: int = 100) -> list[list[float]]:
         """Generate embeddings for a batch of texts using Ollama."""
         if not texts:
             return []
-        try:
-            all_embeddings: list[list[float]] = []
-            expected_dim = self.settings.embedding_dims
-            for i in range(0, len(texts), batch_size):
-                batch_texts = texts[i : i + batch_size]
+        all_embeddings: list[list[float]] = []
+        expected_dim = self.settings.embedding_dims
+        for i in range(0, len(texts), batch_size):
+            batch_texts = texts[i : i + batch_size]
+            try:
                 response = await self._ollama_client.embed(
                     model=self.settings.embedder_model,
                     input=batch_texts,
                 )
-                embeddings: list[list[float]] = [list(vec) for vec in response.embeddings]
+            except Exception as e:
+                raise RAGError(_("Failed to generate embeddings: {e}", e=e)) from e
+            embeddings: list[list[float]] = [list(vec) for vec in response.embeddings]
 
-                if len(embeddings) != len(batch_texts):
+            if len(embeddings) != len(batch_texts):
+                raise RAGError(
+                    _(
+                        "Embedding generation returned {actual} vectors for {expected} inputs",
+                        actual=len(embeddings),
+                        expected=len(batch_texts),
+                    )
+                )
+
+            for idx, vec in enumerate(embeddings):
+                if len(vec) != expected_dim:
                     raise RAGError(
                         _(
-                            "Embedding generation returned {actual} vectors for {expected} inputs",
-                            actual=len(embeddings),
-                            expected=len(batch_texts),
+                            "Embedding dimension mismatch for text {idx}: got {actual}, expected {expected}",
+                            idx=i + idx,
+                            actual=len(vec),
+                            expected=expected_dim,
                         )
                     )
-
-                for idx, vec in enumerate(embeddings):
-                    if len(vec) != expected_dim:
-                        raise RAGError(
-                            _(
-                                "Embedding dimension mismatch for text {idx}: got {actual}, expected {expected}",
-                                idx=i + idx,
-                                actual=len(vec),
-                                expected=expected_dim,
-                            )
-                        )
-                all_embeddings.extend(embeddings)
-            return all_embeddings
-        except RAGError:
-            raise
-        except Exception as e:
-            raise RAGError(_("Failed to generate embeddings: {e}", e=e)) from e
+            all_embeddings.extend(embeddings)
+        return all_embeddings
 
     def _delete_source_points(self, client: QdrantClient, source: str) -> None:
         """Delete all points previously indexed for a given source path."""
-        filt = Filter(
-            must=[FieldCondition(key="source", match=MatchAny(any=[source]))]
-        )
+        filt = Filter(must=[FieldCondition(key="source", match=MatchAny(any=[source]))])
         try:
-            client.delete(
-                collection_name=self.COLLECTION_NAME, points_selector=filt, wait=True
-            )
+            client.delete(collection_name=self.COLLECTION_NAME, points_selector=filt, wait=True)
         except Exception as e:
-            raise RAGError(
-                _("Failed to delete existing points for source '{source}': {e}", source=source, e=e)
-            ) from e
+            raise RAGError(_("Failed to delete existing points for source '{source}': {e}", source=source, e=e)) from e
 
     def _chunk_text(self, text: str) -> list[str]:
         """Split text into chunks with overlap."""
@@ -405,7 +421,11 @@ class RAGManager:
 
         if chunk_size <= 0 or overlap < 0 or overlap >= chunk_size:
             raise RAGError(
-                _("Invalid chunk configuration: chunk_size={chunk_size}, chunk_overlap={chunk_overlap}", chunk_size=chunk_size, chunk_overlap=overlap)
+                _(
+                    "Invalid chunk configuration: chunk_size={chunk_size}, chunk_overlap={chunk_overlap}",
+                    chunk_size=chunk_size,
+                    chunk_overlap=overlap,
+                )
             )
 
         if len(text) <= chunk_size:

@@ -27,7 +27,10 @@ class HistoryError(RuntimeError):
 def connect_history(db_path: Path, read_only: bool = True) -> Iterator[sqlite3.Connection]:
     """Open the history database as a context manager that closes on exit."""
     try:
-        conn = sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True) if read_only else sqlite3.connect(str(db_path))
+        if read_only:
+            conn = sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True)
+        else:
+            conn = sqlite3.connect(str(db_path))
     except sqlite3.Error as e:
         raise HistoryError(_("Failed to open history database {db_path}: {e}", db_path=db_path, e=e)) from e
     try:
@@ -38,8 +41,6 @@ def connect_history(db_path: Path, read_only: bool = True) -> Iterator[sqlite3.C
 
 def format_iso_timestamp(ts: str) -> str:
     """Format ISO timestamp into a human-readable UTC string (YYYY-MM-DD HH:MM UTC)."""
-    if not ts:
-        return _("unknown")
     dt = datetime.fromisoformat(ts)
     if dt.tzinfo is not None:
         dt = dt.astimezone(timezone.utc)
@@ -56,15 +57,13 @@ def load_past_user_prompts(db_path: Path = HISTORY_DB_PATH) -> list[str]:
     try:
         with connect_history(db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT type, value FROM writes WHERE channel = 'messages' ORDER BY rowid ASC"
-            )
+            cursor.execute("SELECT type, value FROM writes WHERE channel = 'messages' ORDER BY rowid ASC")
             for typ, val in cursor.fetchall():
                 msgs = _serializer.loads_typed((typ, val))
                 if not isinstance(msgs, list):
                     msgs = [msgs]
                 for msg in msgs:
-                    if getattr(msg, "type", None) in ("human", "user"):
+                    if msg.type in ("human", "user"):
                         text = extract_text(msg.content).strip()
                         if text and text not in seen:
                             seen.add(text)
@@ -91,9 +90,7 @@ def load_past_conversations(
     try:
         with connect_history(db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT thread_id, type, checkpoint FROM checkpoints ORDER BY rowid ASC"
-            )
+            cursor.execute("SELECT thread_id, type, checkpoint FROM checkpoints ORDER BY rowid ASC")
             for tid, typ, chk in cursor.fetchall():
                 if exclude_thread_id and tid.startswith(exclude_thread_id):
                     continue
@@ -101,9 +98,7 @@ def load_past_conversations(
                 if isinstance(c, dict) and "ts" in c:
                     thread_timestamps[tid] = str(c["ts"])
 
-            cursor.execute(
-                "SELECT thread_id, type, value FROM writes WHERE channel = 'messages' ORDER BY rowid ASC"
-            )
+            cursor.execute("SELECT thread_id, type, value FROM writes WHERE channel = 'messages' ORDER BY rowid ASC")
             for tid, typ, val in cursor.fetchall():
                 if exclude_thread_id and tid.startswith(exclude_thread_id):
                     continue
@@ -117,7 +112,7 @@ def load_past_conversations(
 
     conversations: dict[str, dict[str, Any]] = {}
     for tid, msgs in thread_messages.items():
-        raw_ts = thread_timestamps.get(tid, "")
+        raw_ts = thread_timestamps[tid]
         conversations[tid] = {
             "timestamp": raw_ts,
             "formatted_date": format_iso_timestamp(raw_ts),
@@ -166,7 +161,7 @@ def search_past_conversations_in_db(
         match_count += sum(formatted_date.lower().count(t) for t in terms)
 
         for msg in msgs:
-            role = getattr(msg, "type", None)
+            role = msg.type
             if role not in ("human", "ai", "user", "assistant"):
                 continue
 
@@ -187,7 +182,7 @@ def search_past_conversations_in_db(
         if match_count > 0:
             if not snippets:
                 for msg in msgs:
-                    role = getattr(msg, "type", None)
+                    role = msg.type
                     if role in ("human", "ai", "user", "assistant"):
                         text = extract_text(msg.content).strip()
                         if text:
@@ -195,14 +190,16 @@ def search_past_conversations_in_db(
                             if len(snippets) >= 2:
                                 break
 
-            scored_results.append({
-                "thread_id": tid,
-                "score": match_count,
-                "timestamp": raw_ts,
-                "formatted_date": formatted_date,
-                "snippets": snippets,
-                "total_messages": len(msgs),
-            })
+            scored_results.append(
+                {
+                    "thread_id": tid,
+                    "score": match_count,
+                    "timestamp": raw_ts,
+                    "formatted_date": formatted_date,
+                    "snippets": snippets,
+                    "total_messages": len(msgs),
+                }
+            )
 
     scored_results.sort(key=lambda item: (item["score"], item["timestamp"]), reverse=True)
     return scored_results[:limit]
@@ -213,9 +210,7 @@ def format_past_conversations_context(results: list[dict[str, Any]]) -> str:
     if not results:
         return _("No relevant past conversations found in episodic memory.")
 
-    lines: list[str] = [
-        _("Found {count} relevant past conversation(s) in episodic memory:", count=len(results)) + "\n"
-    ]
+    lines: list[str] = [_("Found {count} relevant past conversation(s) in episodic memory:", count=len(results)) + "\n"]
     for idx, item in enumerate(results, start=1):
         tid = item["thread_id"]
         short_id = tid[:8]

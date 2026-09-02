@@ -234,13 +234,7 @@ class TestConfigManagement(unittest.TestCase):
         self.assertEqual(render_prompt_template(simple_tpl, {"name": "Assistant"}), "Hello, Assistant!")
 
         # Conditionals: traversal enabled vs disabled
-        template_str = (
-            "{% if runtime.allow_traversal %}\n"
-            "TRAVERSAL MODE\n"
-            "{% else %}\n"
-            "SANDBOXED MODE\n"
-            "{% endif %}"
-        )
+        template_str = "{% if runtime.allow_traversal %}\nTRAVERSAL MODE\n{% else %}\nSANDBOXED MODE\n{% endif %}"
         rendered_traversal = render_prompt_template(template_str, {"runtime": {"allow_traversal": True}})
         self.assertEqual(rendered_traversal.strip(), "TRAVERSAL MODE")
 
@@ -345,9 +339,7 @@ class TestConfigManagement(unittest.TestCase):
             },
             {
                 "name": "tester",
-                "mcp_servers": [
-                    {"name": "fetch", "command": "uvx", "args": ["mcp-server-fetch"]}
-                ],
+                "mcp_servers": [{"name": "fetch", "command": "uvx", "args": ["mcp-server-fetch"]}],
             },
         ]
         subagents = _subagents_from_list(raw)
@@ -375,4 +367,3 @@ class TestConfigManagement(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

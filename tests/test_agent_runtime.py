@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import io
 import sqlite3
 import tempfile
 import unittest
+from importlib import resources
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -13,22 +13,26 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessageChunk
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
 
-from rich.console import Console
-
 from ollama_agent.agent.agent import AgentRuntime, _prepare_instructions
 from ollama_agent.agent.builtin_tools import rag_search, set_rag_manager
 from ollama_agent.agent.middleware import _stream_tool_events
-from ollama_agent.agent.subagents import build_subagents, list_subagents
+from ollama_agent.agent.subagents import build_subagents
 from ollama_agent.core.prompt_processor import PromptProcessingError
+from ollama_agent.rag.manager import RAGNotLoadedError
 from ollama_agent.settings.config import (
     ModelSettings,
     RuntimeSettings,
     Settings,
-    SubAgentMCPServer,
     SubAgentSettings,
-    _default_instructions,
 )
 from ollama_agent.streaming.parsers import ThinkTagParser
+
+_DEFAULT_INSTRUCTIONS = (
+    resources.files("ollama_agent.settings")
+    .joinpath("prompts/default_instructions.md")
+    .read_text(encoding="utf-8")
+    .strip()
+)
 
 
 class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
@@ -189,71 +193,16 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await build_subagents(sa_list, model_settings=ms)
 
-    def test_list_subagents_empty(self) -> None:
-        console = Console(file=io.StringIO(), record=True, width=120)
-        settings = Settings()
-        list_subagents(console, settings)
-        output = console.export_text()
-        self.assertIn("No subagents configured.", output)
-        self.assertIn("Configure subagents in", output)
-
-    def test_list_subagents_populated(self) -> None:
-        console = Console(file=io.StringIO(), record=True, width=120)
-        settings = Settings()
-        settings.subagents = [
-            SubAgentSettings(
-                name="researcher",
-                description="Web research specialist",
-                system_prompt="You are a research analyst.",
-                model="gemma4:26b",
-                context_window=32768,
-                mcp_servers=[
-                    SubAgentMCPServer(name="brave-search", command="npx"),
-                    SubAgentMCPServer(name="fetch", command="uvx"),
-                ],
-            ),
-        ]
-        list_subagents(console, settings)
-        output = console.export_text()
-        self.assertIn("Configured Subagents", output)
-        self.assertIn("researcher", output)
-        self.assertIn("Web research", output)
-        self.assertIn("gemma4:26b", output)
-        self.assertIn("32768", output)
-        self.assertIn("brave-search, fetch", output)
-
-    def test_list_subagents_inherited_fields(self) -> None:
-        console = Console(file=io.StringIO(), record=True, width=120)
-        settings = Settings()
-        settings.model.name = "qwen3.8:27b"
-        settings.model.context_window = 10000
-        settings.subagents = [
-            SubAgentSettings(
-                name="coder",
-                description="Code writer",
-                system_prompt="You write code.",
-                model="",
-                context_window=0,
-                mcp_servers=[],
-            )
-        ]
-        list_subagents(console, settings)
-        output = console.export_text()
-        self.assertIn("Configured Subagents", output)
-        self.assertIn("coder", output)
-        self.assertIn("qwen3.8:27b (inherited)", output)
-        self.assertIn("10000 (inherited)", output)
-        self.assertIn("-", output)
-
     async def test_rag_search_uninitialized(self) -> None:
         set_rag_manager(None)
-        res = await rag_search.ainvoke({"query": "test"})
-        self.assertFalse(res["success"])
-        self.assertIn("not initialized", res["error"])
+        with self.assertRaises(AttributeError):
+            await rag_search.ainvoke({"query": "test"})
 
     async def test_rag_search_no_db_loaded(self) -> None:
         mock_mgr = MagicMock()
-        mock_mgr.current_database = None
+        mock_mgr.search = AsyncMock(
+            side_effect=RAGNotLoadedError("No RAG database loaded. Use /rag load <name> first.")
+        )
         set_rag_manager(mock_mgr)
 
         res = await rag_search.ainvoke({"query": "test"})
@@ -289,7 +238,9 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             patch.object(AgentRuntime, "_build_graph", AsyncMock(return_value=MagicMock())) as mock_bg,
             patch(
                 "ollama_agent.agent.agent.load_instructions",
-                return_value="instructions\n{% if runtime.allow_traversal %}fs_traversal{% else %}fs_sandboxed{% endif %}",
+                return_value=(
+                    "instructions\n{% if runtime.allow_traversal %}fs_traversal{% else %}fs_sandboxed{% endif %}"
+                ),
             ),
             patch("ollama_agent.agent.agent.ensure_memory_file"),
         ):
@@ -326,7 +277,10 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             patch.object(AgentRuntime, "_build_graph", AsyncMock(return_value=MagicMock())) as mock_bg,
             patch(
                 "ollama_agent.agent.agent.load_instructions",
-                return_value="base\n{% if runtime.allow_traversal %}fs_traversal{% else %}fs_sandbox{% endif %}\nrag_policy_content",
+                return_value=(
+                    "base\n{% if runtime.allow_traversal %}fs_traversal{% else %}fs_sandbox{% endif %}\n"
+                    "rag_policy_content"
+                ),
             ),
             patch("ollama_agent.agent.agent.ensure_memory_file"),
         ):
@@ -370,7 +324,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         settings = Settings()
         settings.runtime.allow_traversal = True
         with (
-            patch("ollama_agent.agent.agent.load_instructions", side_effect=_default_instructions),
+            patch("ollama_agent.agent.agent.load_instructions", return_value=_DEFAULT_INSTRUCTIONS),
             patch("ollama_agent.agent.agent.ensure_memory_file"),
         ):
             instructions = _prepare_instructions(settings)
@@ -382,7 +336,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         settings = Settings()
         settings.runtime.allow_traversal = False
         with (
-            patch("ollama_agent.agent.agent.load_instructions", side_effect=_default_instructions),
+            patch("ollama_agent.agent.agent.load_instructions", return_value=_DEFAULT_INSTRUCTIONS),
             patch("ollama_agent.agent.agent.ensure_memory_file"),
         ):
             instructions = _prepare_instructions(settings)
@@ -419,7 +373,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         settings = Settings()
         set_rag_manager(None)
         with (
-            patch("ollama_agent.agent.agent.load_instructions", side_effect=_default_instructions),
+            patch("ollama_agent.agent.agent.load_instructions", return_value=_DEFAULT_INSTRUCTIONS),
             patch("ollama_agent.agent.agent.ensure_memory_file"),
         ):
             instructions = _prepare_instructions(settings)
@@ -431,7 +385,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         mock_mgr.current_database = "knowledge_base"
         set_rag_manager(mock_mgr)
         with (
-            patch("ollama_agent.agent.agent.load_instructions", side_effect=_default_instructions),
+            patch("ollama_agent.agent.agent.load_instructions", return_value=_DEFAULT_INSTRUCTIONS),
             patch("ollama_agent.agent.agent.ensure_memory_file"),
         ):
             instructions = _prepare_instructions(settings)

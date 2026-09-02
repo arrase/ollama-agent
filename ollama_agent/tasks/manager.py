@@ -8,15 +8,15 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Environment, StrictUndefined
 import yaml  # type: ignore[import-untyped]
+from jinja2 import Environment, StrictUndefined
 
 from ..core import (
-    BaseFileStoreManager,
     DEFAULT_REASONING_EFFORT,
+    BaseFileStoreManager,
     ReasoningEffortValue,
-    validate_reasoning_effort,
     validate_identifier,
+    validate_reasoning_effort,
 )
 from ..i18n import _
 from ..settings.paths import TASKS_DIR
@@ -65,15 +65,13 @@ def _coerce_value(name: str, val: Any, expected_type: str) -> Any:
                 try:
                     return float(val_str)
                 except ValueError as exc:
-                    raise ValueError(
-                        _("Invalid number value for input '{name}': {val}", name=name, val=val)
-                    ) from exc
+                    raise ValueError(_("Invalid number value for input '{name}': {val}", name=name, val=val)) from exc
         raise ValueError(_("Invalid number value for input '{name}': {val}", name=name, val=val))
     if expected_type == "string":
         if isinstance(val, str):
             return val
         return str(val)
-    return val
+    raise ValueError(_("Unsupported input type '{type}' for input '{name}'", type=expected_type, name=name))
 
 
 @dataclass(slots=True)
@@ -92,21 +90,14 @@ class Task:
     @classmethod
     def from_dict(cls, d: Any) -> Task:
         if not isinstance(d, dict):
-            raise ValueError(
-                _("Expected mapping for Task, got {type_name}", type_name=type(d).__name__)
-            )
+            raise ValueError(_("Expected mapping for Task, got {type_name}", type_name=type(d).__name__))
         inputs: dict[str, TaskInput] = {}
         if "inputs" in d and isinstance(d["inputs"], dict):
             for name, input_data in d["inputs"].items():
                 if isinstance(input_data, TaskInput):
                     inputs[name] = input_data
                 elif isinstance(input_data, dict):
-                    inputs[name] = TaskInput(
-                        description=input_data.get("description", ""),
-                        default=input_data.get("default", None),
-                        required=input_data.get("required", False),
-                        type=input_data.get("type", "string"),
-                    )
+                    inputs[name] = TaskInput(**input_data)
         return cls(
             title=d["title"],
             prompt=d["prompt"],
@@ -120,11 +111,8 @@ class Task:
         merged_vars: dict[str, Any] = dict(variables) if variables else {}
 
         for name, inp in self.inputs.items():
-            if name not in merged_vars or merged_vars[name] is None:
-                if inp.default is not None:
-                    merged_vars[name] = inp.default
-
-        for name, inp in self.inputs.items():
+            if (name not in merged_vars or merged_vars[name] is None) and inp.default is not None:
+                merged_vars[name] = inp.default
             if inp.required and (name not in merged_vars or merged_vars[name] is None):
                 raise ValueError(_("Missing required input: {name}", name=name))
             if name in merged_vars:
@@ -173,10 +161,7 @@ class TaskManager(BaseFileStoreManager[Task]):
     def find_matches(self, prefix: str) -> list[tuple[str, Task]]:
         """Return all tasks whose id starts with prefix."""
         prefix = self.validate_task_id(prefix)
-        matches = [
-            (p.stem, self.get(p.stem))
-            for p in self.base_dir.glob(f"{prefix}*.yaml")
-        ]
+        matches = [(p.stem, self.get(p.stem)) for p in self.base_dir.glob(f"{prefix}*.yaml")]
         return sorted(matches, key=lambda x: x[0])
 
     def get(self, item_id: str) -> Task:

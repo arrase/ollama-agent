@@ -382,8 +382,6 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(decisions[0]["message"], "User cancelled the execution.")
 
 
-
-
 class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
     """Headless integration tests for OllamaAgentApp."""
 
@@ -406,14 +404,14 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
 
             # Toggle YOLO mode and update UI
             repl_mock.runtime.yolo_mode = True
-            app.update_yolo_ui()
+            app.update_mode_ui()
             prompt_char = app.query_one("#prompt-char")
             input_container = app.query_one("#input-container")
             self.assertEqual(prompt_char.styles.color.hex, "#F87171")
             self.assertTrue(input_container.has_class("yolo-mode"))
 
             repl_mock.runtime.yolo_mode = False
-            app.update_yolo_ui()
+            app.update_mode_ui()
             self.assertEqual(prompt_char.styles.color.hex, "#38BDF8")
             self.assertFalse(input_container.has_class("yolo-mode"))
 
@@ -554,7 +552,10 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(inp.text, "/rag load docs-db ")
 
             # 5. Level 2: Dynamic Session IDs for /session resume
-            with patch("ollama_agent.interfaces.repl.get_available_sessions", return_value=[{"thread_id": "session-12345678", "steps": 5}]):
+            with patch(
+                "ollama_agent.interfaces.repl.get_available_sessions",
+                return_value=[{"thread_id": "session-12345678", "steps": 5}],
+            ):
                 app.update_autocomplete("/session resume ")
                 self.assertTrue(autolist.display)
                 self.assertEqual(autolist.option_count, 1)
@@ -622,8 +623,8 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
                 repl_mock.runtime.settings.model.reasoning_effort = args[0]
 
         repl_mock._get_commands.return_value = {
-            "/yolo": REPLCommand(summary="toggle yolo", section="General", usage=None, handler=_toggle_yolo),
-            "/effort": REPLCommand(summary="manage effort", section="Model Management", usage=None, handler=_set_effort),
+            "/yolo": REPLCommand(handler=_toggle_yolo),
+            "/effort": REPLCommand(handler=_set_effort),
         }
 
         app = OllamaAgentApp(repl_mock)
@@ -633,8 +634,10 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             await chat_scroll.mount(UserMessage("clear me"))
             await pilot.pause()
             with patch("ollama_agent.interfaces.repl.new_session", return_value="newsess12345678"):
+
                 async def _handle_new(args: list[str], _tid: str = "newsess12345678") -> None:
                     repl_mock.runtime.thread_id = _tid
+
                 repl_mock._handle_new_session = _handle_new
                 await app._run_slash_command("/clear")
                 await pilot.pause()
@@ -645,8 +648,10 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             await chat_scroll.mount(UserMessage("new me"))
             await pilot.pause()
             with patch("ollama_agent.interfaces.repl.new_session", return_value="newsess87654321"):
+
                 async def _handle_new2(args: list[str], _tid: str = "newsess87654321") -> None:
                     repl_mock.runtime.thread_id = _tid
+
                 repl_mock._handle_new_session = _handle_new2
                 await app._run_slash_command("/new")
                 await pilot.pause()
@@ -716,8 +721,10 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
 
         app = OllamaAgentApp(repl_mock)
         async with app.run_test() as pilot:
-            with patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream, \
-                 patch("ollama_agent.interfaces.repl.apply_task_settings") as mock_apply:
+            with (
+                patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream,
+                patch("ollama_agent.interfaces.repl.apply_task_settings") as mock_apply,
+            ):
                 await app._run_slash_command("/task run my-task -y")
                 await pilot.pause()
 
@@ -771,8 +778,10 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
 
         app = OllamaAgentApp(repl_mock)
         async with app.run_test() as pilot:
-            with patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream, \
-                 patch.object(app, "show_system_notice") as mock_notice:
+            with (
+                patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream,
+                patch.object(app, "show_system_notice") as mock_notice,
+            ):
                 await app._run_slash_command("/task run param-task invalid_var")
                 await pilot.pause()
 
@@ -796,8 +805,10 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
 
         app = OllamaAgentApp(repl_mock)
         async with app.run_test() as pilot:
-            with patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream, \
-                 patch.object(app, "show_system_notice") as mock_notice:
+            with (
+                patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream,
+                patch.object(app, "show_system_notice") as mock_notice,
+            ):
                 await app._run_slash_command("/task run param-task")
                 await pilot.pause()
 
@@ -1095,8 +1106,10 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
             sys_out = app.query_one(SystemOutputWidget)
 
             mock_spec = MagicMock()
+
             async def fake_handler(args: list[str]) -> None:
                 repl.console.print("Models: llama3, mistral")
+
             mock_spec.handler = fake_handler
 
             with patch.dict(app.repl._get_commands(), {"/model": mock_spec}):
@@ -1199,5 +1212,3 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
             app._update_queue_ui()
             await pilot.pause()
             self.assertGreaterEqual(q.outer_size.height, 7)
-
-

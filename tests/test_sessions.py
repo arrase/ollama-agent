@@ -178,8 +178,6 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         runtime_mock.get_thread_messages.assert_not_called()
         self.assertIn("not found", console.export_text())
 
-
-
     def test_search_sessions(self) -> None:
         console = Console(file=io.StringIO(), record=True)
 
@@ -200,14 +198,20 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         chk_typ, chk_val = serializer.dumps_typed({"ts": "2026-08-20T10:00:00+00:00"})
         conn = sqlite3.connect(str(self.db_path))
         cur = conn.cursor()
-        cur.execute("CREATE TABLE IF NOT EXISTS checkpoints_new (thread_id TEXT, checkpoint_id TEXT, type TEXT, checkpoint BLOB);")
+        cur.execute(
+            "CREATE TABLE IF NOT EXISTS checkpoints_new (thread_id TEXT, checkpoint_id TEXT, type TEXT, checkpoint BLOB);"
+        )
         cur.execute("DROP TABLE checkpoints;")
         cur.execute("ALTER TABLE checkpoints_new RENAME TO checkpoints;")
         cur.execute("INSERT INTO checkpoints VALUES ('session-12345678', 'cp-1', ?, ?);", (chk_typ, chk_val))
-        cur.execute("CREATE TABLE IF NOT EXISTS writes_new (thread_id TEXT, checkpoint_id TEXT, task_id TEXT, idx INTEGER, channel TEXT, type TEXT, value BLOB);")
+        cur.execute(
+            "CREATE TABLE IF NOT EXISTS writes_new (thread_id TEXT, checkpoint_id TEXT, task_id TEXT, idx INTEGER, channel TEXT, type TEXT, value BLOB);"
+        )
         cur.execute("DROP TABLE writes;")
         cur.execute("ALTER TABLE writes_new RENAME TO writes;")
-        cur.execute("INSERT INTO writes VALUES ('session-12345678', 'cp-1', 'task-1', 0, 'messages', ?, ?);", (typ, val))
+        cur.execute(
+            "INSERT INTO writes VALUES ('session-12345678', 'cp-1', 'task-1', 0, 'messages', ?, ?);", (typ, val)
+        )
         conn.commit()
         conn.close()
 

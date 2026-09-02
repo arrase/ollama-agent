@@ -118,7 +118,12 @@ def _check_file_size(file_path: Path, max_file_size: int) -> int:
 
     if file_size > max_file_size:
         raise FileTooLargeError(
-            _("File too large: {file_path} ({file_size} bytes, limit is {max_file_size} bytes)", file_path=file_path, file_size=file_size, max_file_size=max_file_size)
+            _(
+                "File too large: {file_path} ({file_size} bytes, limit is {max_file_size} bytes)",
+                file_path=file_path,
+                file_size=file_size,
+                max_file_size=max_file_size,
+            )
         )
     return file_size
 
@@ -182,9 +187,7 @@ def resolve_context_files(
             raise PromptProcessingError(_("Cannot read binary file as text: {file_path}", file_path=file_path))
 
         if file_count >= max_files:
-            raise ContextLimitExceededError(
-                _("Mentions limit exceeded: max {max_files} files.", max_files=max_files)
-            )
+            raise ContextLimitExceededError(_("Mentions limit exceeded: max {max_files} files.", max_files=max_files))
 
         if total_size + size > max_total_size:
             raise ContextLimitExceededError(
@@ -193,11 +196,13 @@ def resolve_context_files(
 
         if attachment_type is not None:
             b64_data = read_binary_file_b64(file_path, max_file_size)
-            binary_attachments.append({
-                "type": attachment_type,
-                "base64": b64_data,
-                "mime_type": mime or f"{attachment_type}/*",
-            })
+            binary_attachments.append(
+                {
+                    "type": attachment_type,
+                    "base64": b64_data,
+                    "mime_type": mime or f"{attachment_type}/*",
+                }
+            )
         else:
             text_contents[file_path] = read_file_content(file_path, max_file_size)
         file_count += 1
@@ -208,19 +213,21 @@ def resolve_context_files(
         return ResolvedContext(text_contents, binary_attachments, classifications, warnings)
 
     if not target_path.is_dir():
-        raise PromptProcessingError(
-            _("Path is neither a file nor a directory: {file_path}", file_path=target_path)
-        )
+        raise PromptProcessingError(_("Path is neither a file nor a directory: {file_path}", file_path=target_path))
 
     for root, _dirs, files in os.walk(target_path):
+        stop = False
         for file_name in files:
             try:
                 add_file(Path(root) / file_name)
             except ContextLimitExceededError as exc:
                 warnings.append(str(exc))
-                return ResolvedContext(text_contents, binary_attachments, classifications, list(dict.fromkeys(warnings)))
+                stop = True
+                break
             except PromptProcessingError as exc:
                 warnings.append(str(exc))
+        if stop:
+            break
 
     return ResolvedContext(text_contents, binary_attachments, classifications, list(dict.fromkeys(warnings)))
 
@@ -241,9 +248,7 @@ def process_prompt_mentions(
         - A list of binary attachment dicts (suitable for HumanMessage content list).
         - A list of formatted warnings for files skipped during directory resolution.
     """
-    pattern = re.compile(
-        r'(?:^|(?<=[\s\(\[\{<]))@(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'\(\[\{<>,;]+))'
-    )
+    pattern = re.compile(r'(?:^|(?<=[\s\(\[\{<]))@(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'\(\[\{<>,;]+))')
 
     matches = list(pattern.finditer(prompt))
     resolved_paths: set[Path] = set()
@@ -322,9 +327,7 @@ def process_prompt_mentions(
             is_intended_file = is_quoted or has_separator or has_relative_prefix
 
             if is_intended_file:
-                raise PromptProcessingError(
-                    _("File or directory not found: '{path_str}'", path_str=path_str)
-                )
+                raise PromptProcessingError(_("File or directory not found: '{path_str}'", path_str=path_str))
 
     # Perform placeholder replacements in the original prompt (in reverse order to preserve offsets)
     processed_prompt = prompt
@@ -342,16 +345,9 @@ def process_prompt_mentions(
         except ValueError:
             rel_path = file_path.as_posix()
 
-        context_blocks.append(
-            f'<context_file path="{rel_path}">\n{content}\n</context_file>'
-        )
+        context_blocks.append(f'<context_file path="{rel_path}">\n{content}\n</context_file>')
 
     context_str = "\n\n".join(context_blocks)
 
-    processed_prompt = (
-        f"{processed_prompt}\n\n"
-        f"--- Attached Context ---\n"
-        f"{context_str}\n"
-        f"--- End of Attached Context ---"
-    )
+    processed_prompt = f"{processed_prompt}\n\n--- Attached Context ---\n{context_str}\n--- End of Attached Context ---"
     return processed_prompt, all_binary_attachments, all_warnings

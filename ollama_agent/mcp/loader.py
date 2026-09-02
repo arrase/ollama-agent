@@ -12,8 +12,8 @@ import sys
 from typing import Any
 
 import langchain_mcp_adapters.sessions
-from langchain_mcp_adapters.client import MultiServerMCPClient
 import mcp.client.stdio
+from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from ..i18n import _
 from ..settings import MCP_LOG_PATH, MCP_PATH, SubAgentMCPServer
@@ -75,14 +75,10 @@ def _build_mcp_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, An
     Raises MCPConfigError when the config entry is malformed or declares an
     unsupported transport.
     """
-    transport = cfg.get("transport") or cfg.get("type")
-
     if "command" in cfg:
         args = cfg.get("args", [])
         if not isinstance(args, list):
-            raise MCPConfigError(
-                _("MCP server '{name}': 'args' must be a list", name=server_name)
-            )
+            raise MCPConfigError(_("MCP server '{name}': 'args' must be a list", name=server_name))
         out: dict[str, Any] = {
             "transport": "stdio",
             "command": cfg["command"],
@@ -93,15 +89,14 @@ def _build_mcp_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, An
         if "env" in cfg:
             env = cfg["env"]
             if not isinstance(env, dict):
-                raise MCPConfigError(
-                    _("MCP server '{name}': 'env' must be an object", name=server_name)
-                )
+                raise MCPConfigError(_("MCP server '{name}': 'env' must be an object", name=server_name))
             resolved = _resolve_env(env, server_name)
             if resolved:
                 out["env"] = resolved
         return out
 
     if "url" in cfg:
+        transport = cfg.get("transport") or cfg.get("type")
         if transport is not None and transport not in _KNOWN_TRANSPORTS:
             raise MCPConfigError(
                 _(
@@ -116,9 +111,7 @@ def _build_mcp_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, An
                 out[k] = cfg[k]
         return out
 
-    raise MCPConfigError(
-        _("MCP server '{name}': requires either 'command' or 'url'", name=server_name)
-    )
+    raise MCPConfigError(_("MCP server '{name}': requires either 'command' or 'url'", name=server_name))
 
 
 async def _read_main_config() -> dict[str, dict[str, Any]]:
@@ -144,9 +137,7 @@ async def _read_main_config() -> dict[str, dict[str, Any]]:
         ) from exc
 
     if not isinstance(data, dict):
-        raise MCPConfigError(
-            _("Invalid MCP config {config_path}: expected a JSON object", config_path=MCP_PATH)
-        )
+        raise MCPConfigError(_("Invalid MCP config {config_path}: expected a JSON object", config_path=MCP_PATH))
 
     if "mcpServers" not in data:
         return {}
@@ -165,12 +156,11 @@ async def _connect_and_load(name: str, conn: dict[str, Any]) -> list[Any]:
     Raises MCPConfigError when the connection or tool loading fails.
     """
     try:
-        client = MultiServerMCPClient({name: conn})  # type: ignore[dict-item,arg-type]
-        tools = await client.get_tools()
+        async with asyncio.timeout(10.0):
+            client = MultiServerMCPClient({name: conn})  # type: ignore[dict-item,arg-type]
+            tools = await client.get_tools()
     except Exception as exc:
-        raise MCPConfigError(
-            _("Failed to load tools from MCP server '{name}': {exc}", name=name, exc=exc)
-        ) from exc
+        raise MCPConfigError(_("Failed to load tools from MCP server '{name}': {exc}", name=name, exc=exc)) from exc
     _log.info("Loaded %d MCP tools from server '%s'", len(tools), name)
     return tools
 
@@ -205,9 +195,7 @@ async def load_main_mcp_tools() -> list[Any]:
     connections: dict[str, dict[str, Any]] = {}
     for name, cfg in servers_cfg.items():
         if not isinstance(cfg, dict):
-            raise MCPConfigError(
-                _("MCP server '{name}': configuration must be an object", name=name)
-            )
+            raise MCPConfigError(_("MCP server '{name}': configuration must be an object", name=name))
         connections[name] = _build_mcp_connection(name, cfg)
 
     return await _load_tools_from_connections(connections)
@@ -234,7 +222,11 @@ async def load_subagent_mcp_tools(
             )
         if name in seen_names:
             raise MCPConfigError(
-                _("Subagent '{subagent_name}': duplicate MCP server name '{name}'", subagent_name=subagent_name, name=name)
+                _(
+                    "Subagent '{subagent_name}': duplicate MCP server name '{name}'",
+                    subagent_name=subagent_name,
+                    name=name,
+                )
             )
         seen_names.add(name)
         connections[name] = _build_mcp_connection(name, {"command": srv.command, "args": srv.args, "env": srv.env})

@@ -92,11 +92,11 @@ def main() -> None:
         )
         asyncio.run(repl.run())
     except KeyboardInterrupt:
-        raise SystemExit(130)
+        raise SystemExit(130) from None
     except (ModelCapabilityError, ModelContextWindowError) as exc:
         console = Console()
         console.print(f"[red]{_('Error: {exc}', exc=exc)}[/red]")
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
 
 if __name__ == "__main__":

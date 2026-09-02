@@ -144,13 +144,23 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
 
         # Thinking-capable models
         mock_caps.return_value = {"thinking"}
-        self.assertEqual(await resolve_ollama_reasoning("any-thinking-model", "low", "http://localhost:11434", warn), "low")
-        self.assertEqual(await resolve_ollama_reasoning("any-thinking-model", "medium", "http://localhost:11434", warn), "medium")
-        self.assertEqual(await resolve_ollama_reasoning("any-thinking-model", "high", "http://localhost:11434", warn), "high")
-        self.assertEqual(await resolve_ollama_reasoning("any-thinking-model", "xhigh", "http://localhost:11434", warn), "high")
+        self.assertEqual(
+            await resolve_ollama_reasoning("any-thinking-model", "low", "http://localhost:11434", warn), "low"
+        )
+        self.assertEqual(
+            await resolve_ollama_reasoning("any-thinking-model", "medium", "http://localhost:11434", warn), "medium"
+        )
+        self.assertEqual(
+            await resolve_ollama_reasoning("any-thinking-model", "high", "http://localhost:11434", warn), "high"
+        )
+        self.assertEqual(
+            await resolve_ollama_reasoning("any-thinking-model", "xhigh", "http://localhost:11434", warn), "high"
+        )
         self.assertTrue(await resolve_ollama_reasoning("any-thinking-model", "enabled", "http://localhost:11434", warn))
         self.assertTrue(await resolve_ollama_reasoning("any-thinking-model", "hide", "http://localhost:11434", warn))
-        self.assertFalse(await resolve_ollama_reasoning("any-thinking-model", "disabled", "http://localhost:11434", warn))
+        self.assertFalse(
+            await resolve_ollama_reasoning("any-thinking-model", "disabled", "http://localhost:11434", warn)
+        )
 
     @patch("ollama_agent.core.models.model_supports_tools")
     async def test_ensure_model_supports_tools_raises(self, mock_supports: AsyncMock) -> None:
@@ -257,7 +267,7 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(options["presence_penalty"], 0.5)
 
     def test_parse_modelfile_param(self) -> None:
-        text = 'PARAMETER temperature "0.65"\nPARAMETER top_p \'0.85\'\nPARAMETER top_k 30\nrepeat_penalty 1.15'
+        text = "PARAMETER temperature \"0.65\"\nPARAMETER top_p '0.85'\nPARAMETER top_k 30\nrepeat_penalty 1.15"
         self.assertEqual(_parse_modelfile_param(text, "temperature"), "0.65")
         self.assertEqual(_parse_modelfile_param(text, "top_p"), "0.85")
         self.assertEqual(_parse_modelfile_param(text, "top_k"), "30")
@@ -349,4 +359,3 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

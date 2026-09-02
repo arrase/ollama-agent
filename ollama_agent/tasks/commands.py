@@ -65,15 +65,11 @@ def parse_var_assignments(args: list[str]) -> dict[str, str]:
     result: dict[str, str] = {}
     for item in args:
         if "=" not in item:
-            raise ValidationError(
-                _("Invalid variable assignment '{item}'. Expected 'key=value'.", item=item)
-            )
+            raise ValidationError(_("Invalid variable assignment '{item}'. Expected 'key=value'.", item=item))
         key, value = item.split("=", 1)
         key = key.strip()
         if not key:
-            raise ValidationError(
-                _("Invalid variable assignment '{item}'. Expected 'key=value'.", item=item)
-            )
+            raise ValidationError(_("Invalid variable assignment '{item}'. Expected 'key=value'.", item=item))
         result[key] = value
     return result
 
@@ -114,7 +110,14 @@ async def run_task(
     except (ValueError, TemplateError) as exc:
         raise ValidationError(str(exc)) from exc
     ctx.console.print(
-        _("Executing: {title} ({tid})\nPrompt: {prompt}\nModel: {model} | Effort: {effort}", title=escape(t.title), tid=escape(tid), prompt=escape(rendered_prompt), model=escape(t.model), effort=escape(t.reasoning_effort))
+        _(
+            "Executing: {title} ({tid})\nPrompt: {prompt}\nModel: {model} | Effort: {effort}",
+            title=escape(t.title),
+            tid=escape(tid),
+            prompt=escape(rendered_prompt),
+            model=escape(t.model),
+            effort=escape(t.reasoning_effort),
+        )
     )
     apply_task_settings(ctx.settings, t)
     runtime = AgentRuntime(settings=ctx.settings, yolo_mode=yolo)
@@ -147,9 +150,7 @@ def create_task(
         task = Task(title, prompt_text, model_name, reasoning_effort=reasoning_effort)
         saved_id = ctx.task_manager.save(task_id, task, overwrite=force)
     except FileExistsError as exc:
-        raise TaskError(
-            _("Task already exists: {task_id} (use --force to overwrite)", task_id=task_id)
-        ) from exc
+        raise TaskError(_("Task already exists: {task_id} (use --force to overwrite)", task_id=task_id)) from exc
     except ValueError as e:
         raise ValidationError(str(e)) from e
     ctx.console.print(

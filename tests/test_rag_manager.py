@@ -107,6 +107,7 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
             dbs = self.manager.list_databases()
             self.assertEqual(len(dbs), 1)
             self.assertEqual(dbs[0]["name"], "knowledge")
+            self.assertEqual(self.manager.list_database_names(), ["knowledge"])
 
             # Load database
             self.manager.load_database("knowledge")
@@ -196,7 +197,9 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
         self.manager._client = mock_client
         self.manager._current_db = "dir_db"
 
-        with patch.object(RAGManager, "_get_embeddings", AsyncMock(side_effect=lambda chunks: [[0.1, 0.2, 0.3, 0.4]] * len(chunks))):
+        with patch.object(
+            RAGManager, "_get_embeddings", AsyncMock(side_effect=lambda chunks: [[0.1, 0.2, 0.3, 0.4]] * len(chunks))
+        ):
             res = await self.manager.add_directory(str(sub_dir))
             self.assertEqual(res["added"], 2)
             self.assertEqual(res["failed"], 0)
@@ -209,15 +212,10 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(RAGError):
             await self.manager.add_directory(str(f1))
 
-        # Batch failure during add_directory: embeddings raise before any
-        # deletion happens, so no indexed content is lost.
-        with (
-            patch.object(RAGManager, "_get_embeddings", AsyncMock(side_effect=RAGError("Ollama connection failed"))),
-            patch("logging.Logger.warning"),
-        ):
-            res = await self.manager.add_directory(str(sub_dir))
-            self.assertEqual(res["added"], 0)
-            self.assertEqual(res["failed"], 2)
+        # Batch failure during add_directory: embeddings raise immediately (Fail Fast)
+        with patch.object(RAGManager, "_get_embeddings", AsyncMock(side_effect=RAGError("Ollama connection failed"))):
+            with self.assertRaises(RAGError):
+                await self.manager.add_directory(str(sub_dir))
 
         # Unloaded database error
         self.manager.unload()
@@ -226,11 +224,7 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
 
     def test_rag_context_resolve_database(self) -> None:
         mock_mgr = MagicMock()
-        mock_mgr.list_databases.return_value = [
-            {"name": "docs", "active": False, "chunks": 10},
-            {"name": "docs_v2", "active": False, "chunks": 20},
-            {"name": "code", "active": False, "chunks": 5},
-        ]
+        mock_mgr.list_database_names.return_value = ["docs", "docs_v2", "code"]
         ctx = RAGContext(rag_manager=mock_mgr, console=Console(file=io.StringIO(), record=True))
 
         # Exact match should take priority even if a prefix match exists
@@ -243,10 +237,7 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
             ctx.resolve_database("nonexistent")
 
         # Ambiguous prefix
-        mock_mgr.list_databases.return_value = [
-            {"name": "alpha_1", "active": False, "chunks": 1},
-            {"name": "alpha_2", "active": False, "chunks": 2},
-        ]
+        mock_mgr.list_database_names.return_value = ["alpha_1", "alpha_2"]
         with self.assertRaises(AmbiguousRAGDatabaseError):
             ctx.resolve_database("alpha")
 
@@ -331,27 +322,19 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
         self.manager._client = mock_client
         self.manager._current_db = "partial_db"
 
-        # file1 fails embedding, file2 succeeds
+        # file1 fails embedding: fail fast and propagate exception immediately
         async def mock_embed(texts: list[str], batch_size: int = 100) -> list[list[float]]:
             if "Doc 1" in texts[0]:
                 raise RAGError("Embed failed for doc 1")
             return [[0.1, 0.2, 0.3, 0.4]] * len(texts)
 
-        with (
-            patch.object(RAGManager, "_get_embeddings", side_effect=mock_embed),
-            patch("logging.Logger.warning"),
-        ):
-            res = await self.manager.add_directory(str(sub_dir))
-            self.assertEqual(res["added"], 1)
-            self.assertEqual(res["failed"], 1)
-            mock_client.upsert.assert_called_once()
+        with patch.object(RAGManager, "_get_embeddings", side_effect=mock_embed):
+            with self.assertRaises(RAGError):
+                await self.manager.add_directory(str(sub_dir))
 
     def test_database_resolution_case_insensitive_exact_priority(self) -> None:
         mock_mgr = MagicMock()
-        mock_mgr.list_databases.return_value = [
-            {"name": "Alpha", "active": False, "chunks": 5},
-            {"name": "alphabet", "active": False, "chunks": 10},
-        ]
+        mock_mgr.list_database_names.return_value = ["Alpha", "alphabet"]
         ctx = RAGContext(rag_manager=mock_mgr, console=Console(file=io.StringIO(), record=True))
         # "alpha" matches "Alpha" exactly (case-insensitive) instead of matching "alphabet" as prefix
         self.assertEqual(ctx.resolve_database("alpha"), "Alpha")
@@ -390,4 +373,3 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
         mock_mgr.add_directory = AsyncMock(return_value={"added": 0, "skipped": 0, "failed": 2})
         await add_rag_directory(ctx, "dir")
         self.assertIn("✕", console.export_text())
-

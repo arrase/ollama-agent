@@ -47,25 +47,26 @@ def extract_text(content: Any, *, sep: str = " ") -> str:
     raise TypeError(f"Unsupported content shape for extract_text: {type(content).__name__}")
 
 
-_WINDOWS_RESERVED_NAMES: frozenset[str] = frozenset({
-    "CON",
-    "PRN",
-    "AUX",
-    "NUL",
-    *(f"COM{i}" for i in range(10)),
-    *(f"LPT{i}" for i in range(10)),
-})
+_WINDOWS_RESERVED_NAMES: frozenset[str] = frozenset(
+    {
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        *(f"COM{i}" for i in range(10)),
+        *(f"LPT{i}" for i in range(10)),
+    }
+)
 
 
 def validate_identifier(name: str, label: str = "identifier") -> str:
     """Validate that *name* contains only [A-Za-z0-9_-] and is not a reserved system name."""
     name = name.strip()
-    if (
-        not name
-        or not re.fullmatch(r"[A-Za-z0-9_-]+", name)
-        or name.upper() in _WINDOWS_RESERVED_NAMES
-    ):
+    if not name or not re.fullmatch(r"[A-Za-z0-9_-]+", name) or name.upper() in _WINDOWS_RESERVED_NAMES:
         raise ValueError(
-            _("Invalid {label}. Use only letters, numbers, '_' and '-' (reserved device names not allowed).", label=label)
+            _(
+                "Invalid {label}. Use only letters, numbers, '_' and '-' (reserved device names not allowed).",
+                label=label,
+            )
         )
     return name

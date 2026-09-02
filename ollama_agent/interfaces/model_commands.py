@@ -67,12 +67,10 @@ async def list_models(
             except ModelCapabilityError:
                 return "[yellow]?[/yellow]"
 
-        tool_icons = await asyncio.gather(
-            *(get_tool_icon(m.model) for m in valid_models)
-        )
+        tool_icons = await asyncio.gather(*(get_tool_icon(m.model) for m in valid_models))
 
         console.print(f"[bold]{_('Available Models:')}[/bold]\n[dim]─" + "─" * 59 + "[/dim]")
-        for item, tool_icon in zip(valid_models, tool_icons):
+        for item, tool_icon in zip(valid_models, tool_icons, strict=True):
             name = item.model
             marker = f" [green]◀ {_('current')}[/green]" if name == current_model else ""
             size_str = f"{(item.size / (1024**3)):.1f}GB" if item.size else ""
@@ -93,11 +91,12 @@ async def set_model(
     """Switch to model_name, returning the new model name."""
     try:
         base_url = runtime.settings.model.base_url
-        available = {
-            model.model for model in await _list_models(base_url)
-        }
+        available = {model.model for model in await _list_models(base_url)}
         if model_name not in available:
-            not_found_msg = _("Model '{model_name}' not found.\nUse /model to see available models.", model_name=model_name)
+            not_found_msg = _(
+                "Model '{model_name}' not found.\nUse /model to see available models.",
+                model_name=model_name,
+            )
             console.print(f"[red]{not_found_msg}[/red]")
             return runtime.settings.model.name
     except (ollama.ResponseError, OSError) as exc:
@@ -113,7 +112,10 @@ async def set_model(
 
     try:
         if not await model_supports_tools(model_name, base_url):
-            no_tools_msg = _("Model '{model_name}' does not support tools.\nThe agent requires tool support.", model_name=model_name)
+            no_tools_msg = _(
+                "Model '{model_name}' does not support tools.\nThe agent requires tool support.",
+                model_name=model_name,
+            )
             console.print(f"[red]{no_tools_msg}[/red]")
             return current
     except ModelCapabilityError as exc:
@@ -123,7 +125,11 @@ async def set_model(
 
     try:
         await runtime.set_model(model_name)
-        switched_msg = _("Switched from {current} to {model_name}\nConversation preserved. Continue chatting.", current=current, model_name=model_name)
+        switched_msg = _(
+            "Switched from {current} to {model_name}\nConversation preserved. Continue chatting.",
+            current=current,
+            model_name=model_name,
+        )
         console.print(f"[green]✓ {switched_msg}[/green]")
         return model_name
     except (ollama.ResponseError, OSError) as exc:
@@ -137,7 +143,12 @@ def show_effort(console: Console, runtime: AgentRuntime) -> None:
     effort = runtime.settings.model.reasoning_effort
     model = runtime.settings.model.name
     console.print(
-        _("Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)", effort=effort, model=model)
+        _(
+            "Current reasoning effort: {effort} (model: {model})\n"
+            "Usage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)",
+            effort=effort,
+            model=model,
+        )
     )
 
 
@@ -151,7 +162,11 @@ async def set_effort(
     norm_effort = effort.lower().strip()
     if norm_effort not in ALLOWED_REASONING_EFFORTS:
         valid_list = ", ".join(ALLOWED_REASONING_EFFORTS)
-        err_msg = _("Invalid reasoning effort '{effort}'. Allowed values: {valid_list}", effort=effort, valid_list=valid_list)
+        err_msg = _(
+            "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}",
+            effort=effort,
+            valid_list=valid_list,
+        )
         console.print(f"[red]{err_msg}[/red]")
         return runtime.settings.model.reasoning_effort
 
@@ -163,11 +178,19 @@ async def set_effort(
 
     try:
         await runtime.set_reasoning_effort(norm_effort)
-        switched_msg = _("Switched reasoning effort from {current} to {norm_effort}\nConversation preserved. Continue chatting.", current=current, norm_effort=norm_effort)
+        switched_msg = _(
+            "Switched reasoning effort from {current} to {norm_effort}\nConversation preserved. Continue chatting.",
+            current=current,
+            norm_effort=norm_effort,
+        )
         console.print(f"[green]✓ {switched_msg}[/green]")
         return norm_effort
     except (ollama.ResponseError, OSError, ValueError) as exc:
-        failed_msg = _("Failed to switch reasoning effort to '{norm_effort}': {exc}", norm_effort=norm_effort, exc=exc)
+        failed_msg = _(
+            "Failed to switch reasoning effort to '{norm_effort}': {exc}",
+            norm_effort=norm_effort,
+            exc=exc,
+        )
         console.print(f"[red]{failed_msg}[/red]")
         return current
 
@@ -180,7 +203,8 @@ def show_context_window(console: Console, runtime: AgentRuntime) -> None:
     if effective and str(effective) != str(ctx):
         console.print(
             _(
-                "Current context window: {ctx} (effective: {effective} tokens, model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)",
+                "Current context window: {ctx} (effective: {effective} tokens, model: {model})\n"
+                "Usage: /context <size|max> (e.g. 8192, 16384, 32768, max)",
                 ctx=ctx,
                 effective=effective,
                 model=model,
@@ -189,7 +213,8 @@ def show_context_window(console: Console, runtime: AgentRuntime) -> None:
     else:
         console.print(
             _(
-                "Current context window: {ctx} (model: {model})\nUsage: /context <size|max> (e.g. 8192, 16384, 32768, max)",
+                "Current context window: {ctx} (model: {model})\n"
+                "Usage: /context <size|max> (e.g. 8192, 16384, 32768, max)",
                 ctx=ctx,
                 model=model,
             )
@@ -287,10 +312,12 @@ async def set_model_param(
         norm_name = "repeat_penalty"
 
     if norm_name not in VALID_SAMPLING_PARAMS:
-        valid_list = ", ".join(
-            sorted(p for p in VALID_SAMPLING_PARAMS if p != "repetition_penalty")
+        valid_list = ", ".join(sorted(p for p in VALID_SAMPLING_PARAMS if p != "repetition_penalty"))
+        unknown_msg = _(
+            "Unknown parameter '{param_name}'. Valid parameters: {valid_list}",
+            param_name=param_name,
+            valid_list=valid_list,
         )
-        unknown_msg = _("Unknown parameter '{param_name}'. Valid parameters: {valid_list}", param_name=param_name, valid_list=valid_list)
         console.print(f"[red]{unknown_msg}[/red]")
         return
 
@@ -299,7 +326,12 @@ async def set_model_param(
         val = expected_type(value_str)
     except ValueError:
         type_name = "integer" if expected_type is int else "float"
-        invalid_msg = _("Invalid value '{value_str}' for '{norm_name}'. Expected {type_name}.", value_str=value_str, norm_name=norm_name, type_name=type_name)
+        invalid_msg = _(
+            "Invalid value '{value_str}' for '{norm_name}'. Expected {type_name}.",
+            value_str=value_str,
+            norm_name=norm_name,
+            type_name=type_name,
+        )
         console.print(f"[red]{invalid_msg}[/red]")
         return
 
@@ -327,7 +359,10 @@ def ensure_model_configured(
 
     if not available_models:
         raise ModelCapabilityError(
-            _("No models found in Ollama at '{base_url}'. Please pull a model first with 'ollama pull <model>'.", base_url=base_url)
+            _(
+                "No models found in Ollama at '{base_url}'. Please pull a model first with 'ollama pull <model>'.",
+                base_url=base_url,
+            )
         )
 
     model_names = [m.model for m in available_models]
@@ -354,11 +389,9 @@ def ensure_model_configured(
 
     while True:
         try:
-            choice = input_func(
-                _("Select a model [1-{count}]: ", count=len(available_models))
-            ).strip()
+            choice = input_func(_("Select a model [1-{count}]: ", count=len(available_models))).strip()
         except (KeyboardInterrupt, EOFError):
-            raise SystemExit(1)
+            raise SystemExit(1) from None
         if not choice:
             continue
         if choice.isdigit():
@@ -368,17 +401,17 @@ def ensure_model_configured(
                 break
         else:
             matched = next(
-                (
-                    m.model
-                    for m in available_models
-                    if m.model == choice or m.model == f"{choice}:latest"
-                ),
+                (m.model for m in available_models if m.model == choice or m.model == f"{choice}:latest"),
                 None,
             )
             if matched is not None:
                 selected = matched
                 break
-        invalid_sel = _("Invalid selection '{choice}'. Please enter a number between 1 and {count} or a model name.", choice=choice, count=len(available_models))
+        invalid_sel = _(
+            "Invalid selection '{choice}'. Please enter a number between 1 and {count} or a model name.",
+            choice=choice,
+            count=len(available_models),
+        )
         out.print(f"[red]{invalid_sel}[/red]")
 
     settings.model.name = selected

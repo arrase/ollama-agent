@@ -36,7 +36,6 @@ from ..settings import (
     TASKS_DIR,
     Settings,
     ensure_memory_file,
-    ensure_prompt_files,
     find_agents_file,
     load_instructions,
     render_prompt_template,
@@ -50,7 +49,6 @@ from .builtin_tools import (
     rag_search,
     set_active_thread_id,
 )
-
 from .environment import SKILL_ROOTS, environment_block
 from .middleware import stream_tool_events_mw
 from .subagents import build_subagents
@@ -59,7 +57,6 @@ _log = logging.getLogger(__name__)
 
 
 def _prepare_instructions(settings: Settings) -> str:
-    ensure_prompt_files()
     base_instructions = load_instructions()
     rag_mgr = get_rag_manager()
     rag_active = bool(rag_mgr and rag_mgr.current_database)
@@ -91,15 +88,12 @@ class AgentRuntime:
     effective_context_window: int = field(default=0, init=False)
     effective_model_params: dict[str, tuple[Any, str]] = field(default_factory=dict, init=False)
     graph: Any = field(default=None, init=False, repr=False)
-    _backend: Any = field(default=None, init=False, repr=False)
-    _model: Any = field(default=None, init=False, repr=False)
     _instructions: str = field(default="", init=False)
     _checkpointer: Any = field(default=None, init=False, repr=False)
     _memory_checkpointer: Any = field(default=None, init=False, repr=False)
     _checkpointer_stack: contextlib.AsyncExitStack = field(
         default_factory=contextlib.AsyncExitStack, init=False, repr=False
     )
-    _exit_stack: contextlib.AsyncExitStack = field(default_factory=contextlib.AsyncExitStack, init=False, repr=False)
     _init_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
 
     async def __aenter__(self) -> Self:
@@ -110,8 +104,6 @@ class AgentRuntime:
 
     async def reload(self) -> None:
         """Tear down existing resources and rebuild the agent graph."""
-        await self._exit_stack.aclose()
-        self._exit_stack = contextlib.AsyncExitStack()
         self._instructions = await asyncio.to_thread(_prepare_instructions, self.settings)
         self.graph = await self._build_graph()
 
@@ -231,8 +223,6 @@ class AgentRuntime:
         tools: list[Any] = [*BUILTIN_TOOLS, *rag_tools, *mcp_tools]
 
         summarization_tool_mw = create_summarization_tool_middleware(model, backend)
-        self._backend = backend
-        self._model = model
 
         kwargs: dict[str, Any] = {
             "model": model,
@@ -389,7 +379,6 @@ class AgentRuntime:
         return _("Context window set to {context_window}.", context_window=context_window)
 
     async def aclose(self) -> None:
-        await self._exit_stack.aclose()
         await self._checkpointer_stack.aclose()
         self._checkpointer = None
         self._memory_checkpointer = None

@@ -8,11 +8,10 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from rich import box
 from rich.console import Console
 from rich.table import Table
-
-from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 from ..agent.episodic_memory import (
     HistoryError,
@@ -60,9 +59,7 @@ def get_available_sessions(db_path: Path = HISTORY_DB_PATH) -> list[dict[str, An
     try:
         with connect_history(db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT thread_id, type, checkpoint FROM checkpoints ORDER BY rowid ASC"
-            )
+            cursor.execute("SELECT thread_id, type, checkpoint FROM checkpoints ORDER BY rowid ASC")
             timestamps: dict[str, str] = {}
             for tid, typ, chk in cursor.fetchall():
                 c = _serializer.loads_typed((typ, chk))
@@ -150,7 +147,11 @@ def resume_session(
         prefix_matches = [s["thread_id"] for s in sessions if s["thread_id"].startswith(target_id)]
         if len(prefix_matches) > 1:
             matches_str = ", ".join(prefix_matches[:5])
-            ambiguous_msg = _("Ambiguous session ID '{target_id}'. Matches: {matches}", target_id=target_id, matches=matches_str)
+            ambiguous_msg = _(
+                "Ambiguous session ID '{target_id}'. Matches: {matches}",
+                target_id=target_id,
+                matches=matches_str,
+            )
             console.print(f"[red]{ambiguous_msg}[/red]")
         else:
             not_found_msg = _("Session '{target_id}' not found.", target_id=target_id)
@@ -235,7 +236,9 @@ async def export_session(
                 tc_name = tc.get("name", "tool") if isinstance(tc, dict) else getattr(tc, "name", "tool")
                 tc_args = tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {})
                 tool_call_hdr = _("Tool: {name}", name=tc_name)
-                args_str = json.dumps(tc_args, indent=2, ensure_ascii=False) if isinstance(tc_args, dict) else str(tc_args)
+                args_str = (
+                    json.dumps(tc_args, indent=2, ensure_ascii=False) if isinstance(tc_args, dict) else str(tc_args)
+                )
                 lines.extend([f"### ⚙ {tool_call_hdr}", "```json", args_str, "```", ""])
         elif role == "tool":
             name = getattr(msg, "name", "tool")
@@ -253,8 +256,6 @@ async def export_session(
         failed_export = _("Failed to export session: {exc}", exc=exc)
         console.print(f"[red]{failed_export}[/red]")
         return None
-
-
 
 
 def search_sessions(

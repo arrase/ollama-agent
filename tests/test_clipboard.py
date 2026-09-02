@@ -259,8 +259,10 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
 
         app = OllamaAgentApp(repl_mock)
-        with patch("ollama_agent.interfaces.repl.copy_to_system_clipboard", side_effect=ClipboardError("no xclip")), \
-             patch.object(OllamaAgentApp, "notify") as mock_notify:
+        with (
+            patch("ollama_agent.interfaces.repl.copy_to_system_clipboard", side_effect=ClipboardError("no xclip")),
+            patch.object(OllamaAgentApp, "notify") as mock_notify,
+        ):
             async with app.run_test():
                 app.copy_to_clipboard("test copy content")
                 self.assertEqual(app._clipboard, "test copy content")
@@ -279,7 +281,10 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
         async with app.run_test():
             event = events.MouseDown(None, 5, 5, 0, 0, 1, False, False, False)
             with (
-                patch("textual.screen.Screen._forward_event", side_effect=AttributeError("'NoneType' object has no attribute 'region'")),
+                patch(
+                    "textual.screen.Screen._forward_event",
+                    side_effect=AttributeError("'NoneType' object has no attribute 'region'"),
+                ),
                 patch("logging.warning"),
             ):
                 app.screen._forward_event(event)
@@ -296,7 +301,9 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
         app = OllamaAgentApp(repl_mock)
         async with app.run_test():
             event = events.MouseDown(None, 5, 5, 0, 0, 1, False, False, False)
-            with patch("textual.screen.Screen._forward_event", side_effect=AttributeError("'CustomType' object has no attribute 'something_else'")):
+            with patch(
+                "textual.screen.Screen._forward_event",
+                side_effect=AttributeError("'CustomType' object has no attribute 'something_else'"),
+            ):
                 with self.assertRaises(AttributeError):
                     app.screen._forward_event(event)
-

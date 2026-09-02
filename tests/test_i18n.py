@@ -60,8 +60,10 @@ class TestI18nDetection(unittest.TestCase):
     def test_detect_unsupported_language_fallback_to_english(self) -> None:
         test_cases = ["sv_SE", "ca_ES", "da_DK", "fi_FI", "el_GR", "he_IL", "th_TH", "vi_VN", "unknown", "C", "POSIX"]
         for env_val in test_cases:
-            with patch.dict(os.environ, {"LANG": env_val}, clear=True), \
-                 patch("locale.getlocale", return_value=(None, None)):
+            with (
+                patch.dict(os.environ, {"LANG": env_val}, clear=True),
+                patch("locale.getlocale", return_value=(None, None)),
+            ):
                 self.assertEqual(detect_system_language(), "en", f"Failed for {env_val}")
 
     def test_detect_empty_environment_fallback_to_english(self) -> None:
@@ -306,7 +308,9 @@ class TestCatalogCompleteness(unittest.TestCase):
     def test_all_locale_catalogs_parity(self) -> None:
         locales_dir = Path(__file__).parent.parent / "ollama_agent" / "i18n" / "locales"
         non_en_locales = [loc for loc in SUPPORTED_LOCALES if loc != "en"]
-        self.assertFalse((locales_dir / "en.json").exists(), "en.json should not exist as English is the default in-code language")
+        self.assertFalse(
+            (locales_dir / "en.json").exists(), "en.json should not exist as English is the default in-code language"
+        )
 
         ref_file = locales_dir / f"{non_en_locales[0]}.json"
         self.assertTrue(ref_file.exists(), f"Reference file {ref_file} must exist")
@@ -358,7 +362,9 @@ class TestCatalogCompleteness(unittest.TestCase):
             for node in ast.walk(tree):
                 if isinstance(node, ast.Call):
                     func = node.func
-                    if (isinstance(func, ast.Name) and func.id == "_") or (isinstance(func, ast.Attribute) and func.attr == "_"):
+                    if (isinstance(func, ast.Name) and func.id == "_") or (
+                        isinstance(func, ast.Attribute) and func.attr == "_"
+                    ):
                         if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
                             extracted_strings.add(node.args[0].value)
 
