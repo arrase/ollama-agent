@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from rich.console import Console
 from rich.markdown import Markdown
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
@@ -59,11 +60,12 @@ def list_skills(ctx: SkillsContext) -> None:
     if not (skills := ctx.skill_manager.list_all()):
         ctx.console.print(f"[yellow]{_('No skills found.')}[/yellow]")
         return
-    table = Table(title=_("Skills"), show_header=True, header_style="bold magenta")
-    for col, style in [(_("ID"), "cyan"), (_("Name"), "green"), (_("Description"), "blue")]:
-        table.add_column(col, style=style)
+    table = Table(title=_("Skills"), show_header=True, header_style="bold magenta", expand=True)
+    table.add_column(_("ID"), style="cyan", no_wrap=True)
+    table.add_column(_("Name"), style="green", no_wrap=True)
+    table.add_column(_("Description"), style="blue", ratio=1)
     for sid, s in skills:
-        table.add_row(sid, s.name, s.description[:80])
+        table.add_row(escape(sid), escape(s.name), escape(s.description))
     ctx.console.print(table)
 
 

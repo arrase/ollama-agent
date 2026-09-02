@@ -72,6 +72,19 @@ class TestSkillsCommands(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             self.mgr.get("skill-a")
 
+    def test_list_skills_long_description_not_truncated(self) -> None:
+        long_desc = "Comprehensive guide and schema for configuring Model Context Protocol (MCP) servers and tools."
+        create_skill(
+            self.ctx,
+            "skill-long",
+            name="Skill Long",
+            description=long_desc,
+            instructions="Inst Long",
+        )
+        list_skills(self.ctx)
+        out = self.console.export_text()
+        self.assertIn("servers and tools", out)
+
     def test_resolve_skill_errors(self) -> None:
         with self.assertRaises(SkillNotFoundError):
             self.ctx._resolve_skill("nonexistent")
