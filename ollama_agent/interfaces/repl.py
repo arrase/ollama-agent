@@ -59,7 +59,6 @@ from .model_commands import (
     set_model,
 )
 from .session_commands import (
-    compact_session,
     export_session,
     get_available_sessions,
     new_session,
@@ -104,8 +103,6 @@ def _get_root_commands() -> list[tuple[str, str]]:
         ("/context", _("Show or set context window size (num_ctx)")),
         ("/params", _("Manage model sampling parameters")),
         ("/session", _("Manage chat sessions")),
-        ("/compact", _("Compact conversation history into a summary")),
-        ("/compress", _("Compact conversation history into a summary (alias for /compact)")),
         ("/task", _("Manage saved tasks")),
         ("/skill", _("Manage skills")),
         ("/rag", _("Manage RAG databases")),
@@ -767,16 +764,6 @@ class OllamaAgentApp(App):
                 self.query_one(AgentHeader).update_header()
                 return
 
-            if cmd in ("/compact", "/compress"):
-                self.show_system_notice(f"[dim]⚡ {_('Compacting conversation context...')}[/dim]")
-                with self.repl.console.capture() as capture:
-                    res = await compact_session(self.repl.console, self.repl.runtime)
-                output = capture.get()
-                if output:
-                    self.show_system_output(Text.from_ansi(output), title=_("Context Compacted"))
-                if res["success"]:
-                    self.query_one(AgentHeader).update_header()
-                return
 
             if cmd == "/session" and args and args[0] in ("resume", "switch"):
                 if len(args) < 2:

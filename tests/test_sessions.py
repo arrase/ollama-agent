@@ -12,7 +12,6 @@ from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from rich.console import Console
 
 from ollama_agent.interfaces.session_commands import (
-    compact_session,
     delete_session,
     export_session,
     get_available_sessions,
@@ -179,41 +178,7 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         runtime_mock.get_thread_messages.assert_not_called()
         self.assertIn("not found", console.export_text())
 
-    async def test_compact_session_success(self) -> None:
-        console = Console(file=io.StringIO(), record=True)
-        runtime_mock = MagicMock()
-        runtime_mock.compact_context = AsyncMock(
-            return_value={
-                "success": True,
-                "messages_summarized": 8,
-                "messages_preserved": 2,
-                "file_path": "/conversation_history/session-1234.md",
-                "summary": "Summary of conversation",
-            }
-        )
 
-        res = await compact_session(console, runtime_mock, "session-1234")
-        self.assertTrue(res["success"])
-        out = console.export_text()
-        self.assertIn("Context compacted successfully", out)
-        self.assertIn("Messages summarized: 8", out)
-        self.assertIn("Recent messages preserved: 2", out)
-        self.assertIn("/conversation_history/session-1234.md", out)
-
-    async def test_compact_session_failed(self) -> None:
-        console = Console(file=io.StringIO(), record=True)
-        runtime_mock = MagicMock()
-        runtime_mock.compact_context = AsyncMock(
-            return_value={
-                "success": False,
-                "message": "Not enough messages in session to compact (at least 2 messages required).",
-            }
-        )
-
-        res = await compact_session(console, runtime_mock, "session-1234")
-        self.assertFalse(res["success"])
-        out = console.export_text()
-        self.assertIn("Not enough messages in session to compact", out)
 
     def test_search_sessions(self) -> None:
         console = Console(file=io.StringIO(), record=True)

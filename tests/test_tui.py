@@ -441,7 +441,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             # Aliases are documented for autocomplete
             app.update_autocomplete("/")
             all_ids = {autolist.get_option_at_index(i).id for i in range(autolist.option_count)}
-            self.assertIn("/compress", all_ids)
+            self.assertIn("/clear", all_ids)
             self.assertIn("/quit", all_ids)
 
             # Hide autocomplete
@@ -928,8 +928,6 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(_is_immediate_command("/session resume 12345"))
         self.assertFalse(_is_immediate_command("/session switch 12345"))
         self.assertFalse(_is_immediate_command("/session new"))
-        self.assertFalse(_is_immediate_command("/compact"))
-        self.assertFalse(_is_immediate_command("/compress"))
         self.assertFalse(_is_immediate_command("/clear"))
         self.assertFalse(_is_immediate_command("/new"))
         self.assertFalse(_is_immediate_command("/task create my_task"))
@@ -1070,9 +1068,9 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
 
             # Queue stateful slash command while generating
             app._is_generating = True
-            app.on_repl_input_submitted(ReplInput.Submitted(inp, "/compact"))
+            app.on_repl_input_submitted(ReplInput.Submitted(inp, "/task run my_task"))
             self.assertEqual(len(app._prompt_queue), 1)
-            self.assertEqual(app._prompt_queue[0].text, "/compact")
+            self.assertEqual(app._prompt_queue[0].text, "/task run my_task")
             self.assertEqual(footer._queued_count, 1)
 
             # Drain queue
@@ -1081,7 +1079,7 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
                 app._process_next_in_queue()
                 self.assertEqual(len(app._prompt_queue), 0)
                 self.assertEqual(footer._queued_count, 0)
-                mock_slash.assert_called_once_with("/compact")
+                mock_slash.assert_called_once_with("/task run my_task")
 
     async def test_slash_command_output_renders_in_system_output_not_in_chat(self) -> None:
         runtime_mock = MagicMock()

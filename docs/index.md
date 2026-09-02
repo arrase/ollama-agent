@@ -46,7 +46,7 @@
   <div class="feature-card">
     <i class="fa-solid fa-compress feature-icon"></i>
     <h3>Context Compaction</h3>
-    <p>Automatic background summarization at 85% capacity and on-demand compaction (<code>/compact</code>) with durable history preservation.</p>
+    <p>Automatic background summarization at 85% capacity and proactive tool-driven compaction with durable history preservation.</p>
   </div>
   <div class="feature-card">
     <i class="fa-solid fa-brain feature-icon"></i>

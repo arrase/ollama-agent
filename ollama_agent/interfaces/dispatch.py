@@ -186,7 +186,7 @@ def build_repl_handlers(
     """Build the REPL command registry for unified slash commands.
 
     Only commands not intercepted inline by the TUI app are registered
-    (/exit, /quit, /clear, /new, /compact, /session new|resume|switch|export,
+    (/exit, /quit, /clear, /new, /session new|resume|switch|export,
     /task create|run and /skill create are handled by OllamaAgentApp).
     """
 

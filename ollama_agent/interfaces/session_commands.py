@@ -255,22 +255,6 @@ async def export_session(
         return None
 
 
-async def compact_session(
-    console: Console,
-    runtime: AgentRuntime,
-    target_id: str = "",
-) -> dict[str, Any]:
-    """Compact conversation context for a session into a structured summary."""
-    res = await runtime.compact_context(target_id)
-    if res["success"]:
-        console.print(f"[green]✓ {_('Context compacted successfully:')}[/green]")
-        console.print(f"  [dim]• {_('Messages summarized:')}[/dim] {res['messages_summarized']}")
-        console.print(f"  [dim]• {_('Recent messages preserved:')}[/dim] {res['messages_preserved']}")
-        if res.get("file_path"):
-            console.print(f"  [dim]• {_('History offloaded to:')}[/dim] [cyan]{res['file_path']}[/cyan]")
-    else:
-        console.print(f"[yellow]{res['message']}[/yellow]")
-    return res
 
 
 def search_sessions(

@@ -12,10 +12,7 @@ from typing import Any, AsyncGenerator, Self, cast
 
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
-from deepagents.middleware.summarization import (
-    SummarizationMiddleware,
-    create_summarization_tool_middleware,
-)
+from deepagents.middleware.summarization import create_summarization_tool_middleware
 from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
@@ -52,19 +49,7 @@ from .builtin_tools import (
     get_tool_timeout,
     set_active_thread_id,
 )
-from .compaction import (
-    HISTORY_PATH_PREFIX,
-    KEEP_RECENT_MESSAGES,
-    SUMMARIZATION_SESSION_ID_KEY,
-    SUMMARIZATION_STATE_KEY,
-    apply_summarization_event,
-    build_summary_message,
-    compute_state_cutoff,
-    find_safe_cutoff,
-    generate_summary,
-    new_session_id,
-    offload_history,
-)
+
 from .environment import SKILL_ROOTS, environment_block
 from .middleware import stream_tool_events_mw
 from .subagents import build_subagents
@@ -107,7 +92,6 @@ class AgentRuntime:
     graph: Any = field(default=None, init=False, repr=False)
     _backend: Any = field(default=None, init=False, repr=False)
     _model: Any = field(default=None, init=False, repr=False)
-    _summarization_engine: SummarizationMiddleware | None = field(default=None, init=False, repr=False)
     _instructions: str = field(default="", init=False)
     _checkpointer: Any = field(default=None, init=False, repr=False)
     _memory_checkpointer: Any = field(default=None, init=False, repr=False)
@@ -246,8 +230,6 @@ class AgentRuntime:
         summarization_tool_mw = create_summarization_tool_middleware(model, backend)
         self._backend = backend
         self._model = model
-        # Live deepagents engine used by manual compaction (see compaction.py).
-        self._summarization_engine = summarization_tool_mw._summarization
 
         kwargs: dict[str, Any] = {
             "model": model,
@@ -364,56 +346,6 @@ class AgentRuntime:
         if state.interrupts:
             yield {"type": "interrupt", "interrupts": state.interrupts, "config": config}
 
-    async def compact_context(self, thread_id: str = "") -> dict[str, Any]:
-        """Compact conversation history for the specified thread into a summary."""
-        graph, _thread, config = await self._ensure_graph(thread_id)
-
-        state = await graph.aget_state(config)
-        values: dict[str, Any] = state.values
-        raw_messages = list(values.get("messages", []))
-        if not raw_messages:
-            return {"success": False, "message": _("No messages in session to compact.")}
-
-        prior_event = values.get(SUMMARIZATION_STATE_KEY)
-        effective = apply_summarization_event(self._summarization_engine, raw_messages, prior_event)
-
-        cutoff = find_safe_cutoff(effective, KEEP_RECENT_MESSAGES)
-        if cutoff <= 0:
-            return {
-                "success": False,
-                "message": _("Not enough messages in session to compact (at least 2 messages required)."),
-            }
-        to_summarize, preserved = effective[:cutoff], effective[cutoff:]
-
-        session_id = new_session_id(values)
-        history_path = f"{HISTORY_PATH_PREFIX}/{session_id}.md"
-        summary = await generate_summary(self._model, to_summarize)
-        file_path = await offload_history(self._backend, to_summarize, history_path)
-
-        new_event: dict[str, Any] = {
-            "cutoff_index": compute_state_cutoff(self._summarization_engine, prior_event, cutoff),
-            "summary_message": build_summary_message(self._summarization_engine, summary, file_path),
-            "file_path": file_path,
-        }
-
-        await graph.aupdate_state(
-            config,
-            {
-                SUMMARIZATION_STATE_KEY: new_event,
-                SUMMARIZATION_SESSION_ID_KEY: session_id,
-            },
-        )
-
-        self.last_context_tokens = count_tokens_approximately([new_event["summary_message"], *preserved])
-
-        return {
-            "success": True,
-            "messages_summarized": len(to_summarize),
-            "messages_preserved": len(preserved),
-            "file_path": file_path,
-            "summary": summary,
-        }
-
     async def get_thread_messages(self, thread_id: str = "") -> list[Any]:
         """Return the raw stored messages for a thread (empty when unknown)."""
         graph, _thread, config = await self._ensure_graph(thread_id)
@@ -422,16 +354,17 @@ class AgentRuntime:
         return list(values.get("messages", []))
 
     async def count_effective_tokens(self, thread_id: str = "") -> int:
-        """Count tokens of the effective context for a thread (after compaction)."""
+        """Count tokens of the effective context for a thread."""
         graph, _thread, config = await self._ensure_graph(thread_id)
         state = await graph.aget_state(config)
         values: dict[str, Any] = state.values
-        effective = apply_summarization_event(
-            self._summarization_engine,
-            list(values.get("messages", [])),
-            values.get(SUMMARIZATION_STATE_KEY),
-        )
-        return count_tokens_approximately(effective)
+        messages = list(values.get("messages", []))
+        event = values.get("_summarization_event")
+        if event and isinstance(event, dict) and "summary_message" in event and "cutoff_index" in event:
+            cutoff = event["cutoff_index"]
+            if isinstance(cutoff, int) and 0 <= cutoff <= len(messages):
+                messages = [event["summary_message"]] + messages[cutoff:]
+        return count_tokens_approximately(messages)
 
     async def set_model(self, model_name: str) -> str:
         self.settings.model.name = model_name

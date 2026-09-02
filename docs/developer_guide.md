@@ -59,8 +59,6 @@ tests/
 ├── test_agents_md.py              # Hierarchical AGENTS.md discovery up to .git root
 ├── test_clipboard.py              # Cross-platform clipboard backend integration
 ├── test_common.py                 # Payload text extraction & identifier validation
-├── test_compaction.py              # SummarizationMiddleware delegation, history offloading & cutoffs
-├── test_compaction_interop.py     # Interop contract with deepagents SummarizationMiddleware internals
 ├── test_config.py                 # Settings loading, dataclass conversions & env injection
 ├── test_dispatch_cli.py           # CLI command handlers and argument parsing
 ├── test_episodic_memory.py        # Episodic memory search over stored conversations
@@ -118,7 +116,6 @@ ollama-agent/
 │   ├── agent/               # DeepAgents graph orchestration, middleware, tools & subagents
 │   │   ├── agent.py         # AgentRuntime lifecycle, backend mounting, graph construction
 │   │   ├── builtin_tools.py # Built-in tools (rag_search, search_past_conversations) and runtime context variables
-│   │   ├── compaction.py    # Manual compaction delegating to deepagents SummarizationMiddleware
 │   │   ├── environment.py   # Shared prompt-environment helpers (OS, CWD, datetime)
 │   │   ├── episodic_memory.py # Episodic memory search engine over past conversations
 │   │   ├── middleware.py    # Tool call event streaming & execution timeout protection
@@ -136,7 +133,7 @@ ollama-agent/
 │   │   ├── clipboard.py     # OS clipboard integration (macOS, Wayland, X11, Windows)
 │   │   ├── dispatch.py      # Unified CLI/REPL command handler registry
 │   │   ├── model_commands.py# Model listing with tool capabilities, model switching
-│   │   ├── session_commands.py # SQLite session management, markdown export, compaction
+│   │   ├── session_commands.py # SQLite session management, markdown export
 │   │   ├── tui_components.py# Textual TUI widgets (header, footer, input, messages, approvals, prompt queue, system notices)
 │   │   ├── repl.py          # Interactive Textual REPL application & autocomplete
 │   │   └── repl.css         # Styling for Textual REPL interface
