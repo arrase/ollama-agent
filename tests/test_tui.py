@@ -22,6 +22,7 @@ from ollama_agent.interfaces.tui_components import (
     AgentFooter,
     AgentHeader,
     AgentResponse,
+    PromptQueueWidget,
     ReplInput,
     SystemMessage,
     SystemOutputWidget,
@@ -1176,4 +1177,27 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
             # Second Escape: now that SystemOutputWidget is closed, cancels worker
             app.action_cancel_generation()
             mock_worker.cancel.assert_called_once()
+
+    async def test_widgets_adapt_height_without_limits(self) -> None:
+        runtime_mock = MagicMock()
+        runtime_mock.settings.model.name = "qwen2.5-coder:32b"
+        runtime_mock.settings.model.reasoning_effort = "high"
+        runtime_mock.yolo_mode = False
+        repl = OllamaREPL(runtime=runtime_mock)
+        app = OllamaAgentApp(repl)
+
+        async with app.run_test(size=(120, 50)) as pilot:
+            sys_out = app.query_one(SystemOutputWidget)
+            content = "\n".join([f"line {i}" for i in range(20)])
+            app.show_system_output(content, title="/mcp list")
+            await pilot.pause()
+            self.assertGreaterEqual(sys_out.outer_size.height, 22)
+
+            q = app.query_one(PromptQueueWidget)
+            for i in range(4):
+                app._prompt_queue.append(QueuedItem(f"Item {i}"))
+            app._update_queue_ui()
+            await pilot.pause()
+            self.assertGreaterEqual(q.outer_size.height, 7)
+
 

@@ -9,9 +9,10 @@ Screen {
 AgentHeader {
     background: #161b22;
     color: #e6edf3;
-    height: 3;
+    height: auto;
+    min-height: 2;
     content-align: left middle;
-    padding: 1 2 0 2;
+    padding: 0 2;
     border-bottom: solid #21262d;
 }
 
@@ -30,6 +31,7 @@ AgentHeader {
 #autocomplete-list {
     background: #161b22;
     border: round #30363d;
+    height: auto;
     max-height: 8;
     display: none;
     color: #e6edf3;
@@ -58,7 +60,6 @@ AgentHeader {
 PromptQueueWidget, #prompt-queue {
     display: none;
     height: auto;
-    max-height: 5;
     background: #161b22;
     border: round #30363d;
     margin: 0 2 1 2;
@@ -70,7 +71,6 @@ PromptQueueWidget, #prompt-queue {
 SystemOutputWidget, #system-output {
     display: none;
     height: auto;
-    max-height: 12;
     background: #161b22;
     border: round #30363d;
     margin: 0 2 1 2;
