@@ -53,7 +53,7 @@ ollama-agent --rag project-docs -p "How is authentication configured in this rep
 | `--prompt` | `-p` | `str` | `None` | Run in non-interactive mode with the provided prompt. |
 | `--effort` | `-e` | `str` | `medium` | Set reasoning effort level (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
 | `--num-ctx` | `-c` | `int \| str` | `10000` | Set context window size in tokens (`num_ctx`) or `'max'`. |
-| `--lang`, `--language` | `-l` | `str` | `auto` | Set UI language code (`en`, `es`, `fr`, `de`, `it`, `pt`, `zh`, `ja`, `ko`, `ru`, `hi`, `ar`, `tr`, `pl`, `nl`, `uk`). |
+| `--lang`, `--language` | `-l` | `str` | `None` (auto-detect) | Set UI language code (`en`, `es`, `fr`, `de`, `it`, `pt`, `zh`, `ja`, `ru`, `hi`, `ko`, `ar`, `tr`, `pl`, `nl`, `uk`). Default auto-detects from system locale (or `settings.yaml`, fallback `en`). Note: `auto` is not a valid flag argument. |
 | `--builtin-tool-timeout` | `-t` | `int` | `30` | Timeout in seconds for tool executions (including shell commands). |
 | `--yolo` | `-y` | `flag` | `False` | Enable YOLO mode (bypasses all tool approval prompts). |
 | `--stealth` | `-s` | `flag` | `False` | Enable stealth mode (do not save conversation to SQLite history). |
@@ -171,8 +171,8 @@ Slash commands provide full application control directly within the REPL:
 | Command | Subcommands / Syntax | Description |
 | :--- | :--- | :--- |
 | `/model` | `/model [list \| set <model>]` | List available Ollama models (with tool support indicators) or switch active model for current session. |
-| `/effort` | `/effort [<level>]` | Show current reasoning effort or change thinking/reasoning effort mid-session (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
-| `/context` | `/context [<size\|max>]` | Show current context window or switch context window token size (`num_ctx`) or `'max'` for the active session. |
+| `/effort` | `/effort [[set] <level>]` | Show current reasoning effort or change thinking/reasoning effort mid-session (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
+| `/context` | `/context [[set] <size\|max>]` | Show current context window or switch context window token size (`num_ctx`) or `'max'` for the active session. |
 | `/params` | `/params [list \| set <parameter> <value>]` | Inspect active sampling parameters and resolution sources, or dynamically update parameter values for the active session. |
 | `/queue` | `/queue [list \| clear \| rm <position>]` | Inspect pending prompts in the queue, remove an item by index (`/queue rm <id>`, aliases: `remove`, `delete`), or clear all queued prompts. |
 | `/session` | `/session [list \| search <query> \| resume <id> (alias: switch) \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume threads, export to Markdown, or delete history. |
@@ -202,6 +202,7 @@ The prompt input box (`ReplInput`) provides intuitive editing, history navigatio
   2. *Level 1*: Subcommands (`/task ` -> `list`, `create`, `run`, `delete`, `/queue ` -> `clear`, `rm`, `remove`, `delete`).
   3. *Level 2*: Dynamic entities:
      - `/model set ` -> Dynamic list of available Ollama models + disk size.
+     - `/context set ` -> Token presets (`4096`, `8192`, `16384`, `32768`, `65536`, `131072`, `max`).
      - `/queue rm `, `/queue remove `, `/queue delete ` -> Dynamic list of active queued prompt IDs (`#1`, `#2`, ...) + preview text.
      - `/task run `, `/task delete ` -> Dynamic list of saved task IDs + titles.
      - `/skill show `, `/skill delete ` -> Dynamic list of discovered skill IDs + names.
@@ -220,13 +221,20 @@ The prompt input box (`ReplInput`) provides intuitive editing, history navigatio
 The REPL is designed with an asynchronous non-blocking event loop. The user input field remains accessible and interactive at all times, allowing you to submit commands and prompts while inference is actively streaming or while a tool approval prompt is waiting for user confirmation.
 
 #### Immediate (Non-Blocking) Commands
-Slash commands that perform read-only queries or instant state toggles execute immediately in the chat viewport without waiting for the active stream to complete:
+Slash commands that perform fast metadata queries, instant state toggles, or synchronous deletions execute immediately in the chat viewport without waiting for the active stream to complete:
 
-* **Inspection & Queue Removal**: `/queue`, `/queue rm <position>`, `/model list`, `/effort`, `/context`, `/params list`, `/session list`, `/session search`, `/session export`, `/task list`, `/skill list`, `/skill show`, `/rag status`, `/rag list`, `/mcp list`, `/agents list`.
-* **Toggles & Exit**: `/yolo`, `/stealth`, `/exit`, `/quit`.
+* **Inspection & Fast Operations**: `/queue` (all subcommands: `list`, `clear`, `rm`), `/model list`, `/effort` (view), `/context` (view), `/params list`, `/session list`, `/session search`, `/session export`, `/session delete`, `/task list`, `/task delete`, `/skill list`, `/skill show`, `/skill delete`, `/rag status`, `/rag list`, `/rag create`, `/rag delete`, `/rag load`, `/rag unload`, `/mcp list`, `/agents list`.
+* **Toggles & Exit**: `/yolo` (toggle or `on`/`off`), `/stealth` (toggle or `on`/`off`), `/exit`, `/quit`.
 
-#### Enqueued Prompts & Stateful Commands
-Normal chat prompts and commands that mutate graph state (e.g., `/model set`, `/session resume`, `/session new`, `/task run`, `/skill create`) are placed in a FIFO queue:
+#### Enqueued Prompts & Stateful Operations
+Chat prompts and long-running or graph-mutating operations that require active agent execution are placed in a FIFO queue:
+* Normal user chat prompts.
+* Model and parameter reconfiguration: `/model set`, `/effort set` (or `/effort <level>`), `/context set` (or `/context <size>`), `/params set`.
+* Session workflows: `/session resume` (alias: `switch`), `/session new` (alias: `/new`, `/clear`).
+* Agent-guided interactive creation flows: `/task create`, `/skill create`.
+* Saved task execution: `/task run`.
+* Knowledge ingestion: `/rag add`.
+* Graph rebuilding: `/mcp reload`.
 
 * **Queue Feedback**: Submitting an item while busy renders a subtle notification (`⏳ Prompt added to queue (position #N)`) and updates the footer counter (`⏳ N queued`).
 * **Persistent TUI Queue Panel**: A dedicated `PromptQueueWidget` card renders above the input container whenever items are queued, showing prompt previews and position numbers in real time.
@@ -294,7 +302,7 @@ mentions:
 ```
 
 #### Decorator & Syntax Safety
-Common programming decorators (e.g. `@staticmethod`, `@property`, `@decorator`) that do not exist as files on disk are recognized and treated as literal text. If a missing path contains directory separators (e.g. `@src/missing.py`) or a file extension (e.g. `@app.py`), the agent immediately halts and reports a clear `File or directory not found` error.
+Common programming decorators (e.g. `@staticmethod`, `@property`, `@decorator`) or bare identifiers that do not exist as files on disk are recognized and treated as literal text. If a missing reference is quoted (e.g. `@"notes.txt"`), contains directory separators (e.g. `@src/missing.py`), or uses relative path prefixes (e.g. `@./app.py`), the agent immediately halts and reports a clear `File or directory not found` error.
 
 ---
 
@@ -316,7 +324,7 @@ The approval dialog provides full keyboard-first navigation without requiring a 
   - **Approve (`y`)**: Authorize this single tool execution.
   - **Reject (`n`)**: Block execution and provide feedback to the agent so it can select an alternative approach.
   - **Allow Session (`a`)**: Approve this call and automatically authorize all subsequent calls for this specific tool for the remainder of the active session.
-  - **Cancel (`c`)**: Abort the execution and return focus to the prompt input.
+  - **Cancel (`c` / `Esc`)**: Abort the execution and return focus to the prompt input.
 * **Arrow & Tab Navigation**: Use `←` / `→` / `↑` / `↓` arrow keys or `Tab` / `Shift+Tab` to cycle focus between buttons with high-contrast visual indicators.
 * **Default Action (`Enter` / `Space`)**: The `Approve (y)` button is focused automatically upon appearance; pressing `Enter` or `Space` immediately executes the focused button.
 * **Live Footer Status**: The bottom status bar automatically switches to display the confirmation key guide whenever an approval is pending.

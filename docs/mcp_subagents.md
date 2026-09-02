@@ -45,7 +45,7 @@ Global MCP servers for the main agent are declared in JSON format at `~/.ollama-
     "remote_api": {
       "url": "http://localhost:8000/mcp",
       "headers": {
-        "Authorization": "Bearer ${AUTH_TOKEN}"
+        "Authorization": "Bearer remote-secret-token"
       },
       "timeout": 30,
       "sse_read_timeout": 300
@@ -56,11 +56,12 @@ Global MCP servers for the main agent are declared in JSON format at `~/.ollama-
 
 ### Inspecting & Reloading Servers (`/mcp` Slash Command & CLI)
 
-You can check configured MCP servers, test connectivity, and inspect available tools directly from the REPL with `/mcp` or `/mcp list`:
+You can check configured MCP servers, test connectivity, and inspect available tools directly from the REPL with `/mcp` (or `/mcp list` / `/mcp status`):
 
 ```text
 /mcp
 /mcp list
+/mcp status
 ```
 
 If you add or update an MCP server configuration during an active chat session, reload the servers and rebuild the agent tool graph instantly with:
@@ -86,41 +87,46 @@ This displays a color-coded status table checking both main orchestrator servers
 Executes an external command as a child process and communicates via standard input/output streams.
 
 - **`command`** (*string*, required): Executable command (e.g., `npx`, `uvx`, `python`, `docker`).
-- **`args`** (*array of strings*, optional): Command-line arguments passed to the process.
+- **`args`** (*array of strings*, optional): Command-line arguments passed to the process (defaults to `[]`).
 - **`cwd`** (*string*, optional): Working directory for the spawned subprocess.
-- **`env`** (*object*, optional): Environment variables passed to the subprocess.
+- **`env`** (*object*, optional): Environment variables passed to the subprocess (supports `${VAR}` and `%VAR%` expansion).
+
+> [!NOTE]
+> To keep the interactive REPL clean, subprocess `stderr` from stdio servers is automatically redirected to `~/.ollama-agent/mcp.log`. Check this log file if a server fails to initialize or outputs diagnostic warnings.
 
 #### 2. Remote Transports (`http`, `sse`, `websocket`, `streamable_http`)
 Connects to a remote HTTP, Server-Sent Events (SSE), or WebSocket MCP endpoint.
 
-- **`url`** or **`httpUrl`** (*string*, required): URL endpoint of the remote server.
-- **`headers`** (*object*, optional): HTTP headers to include with requests (e.g. `Authorization`).
-- **`timeout`** (*integer*, optional): Request timeout in seconds.
-- **`sse_read_timeout`** (*integer*, optional): SSE stream read timeout in seconds.
+- **`url`** (*string*, required): URL endpoint of the remote server.
+- **`transport`** or **`type`** (*string*, optional): Transport protocol (`http`, `sse`, `websocket`, `streamable_http`, `streamable-http`). Defaults to `http` if omitted.
+- **`headers`** (*object*, optional): HTTP headers to include with requests (e.g. `{"Authorization": "Bearer token"}`).
+- **`timeout`** (*number*, optional): Request timeout in seconds.
+- **`sse_read_timeout`** (*number*, optional): SSE stream read timeout in seconds.
 - **`session_kwargs`** (*object*, optional): Additional low-level session parameters passed to the client.
 
 ---
 
 ### Environment Variable Expansion
 
-Environment variables defined within `"env"` blocks and headers can reference host system variables using Unix `${VAR_NAME}` or Windows `%VAR_NAME%` syntax:
+Subprocess environment variables defined within `"env"` mappings (in `mcp.json` or subagent configurations) can reference host system variables using Unix `${VAR_NAME}` or Windows `%VAR_NAME%` syntax:
 
-- Before launching the MCP subprocess or initiating remote connections, `ollama-agent` resolves all `${VAR_NAME}` and `%VAR_NAME%` placeholders against `os.environ`.
-- **Fail-Fast Safety**: If a referenced environment variable is missing or unset in the host environment, `ollama-agent` halts immediately with an `MCPConfigError` (following the KISS and Fail-Fast principles) rather than masking the missing credential.
+- Before launching the MCP subprocess, `ollama-agent` resolves all `${VAR_NAME}` and `%VAR_NAME%` placeholders against `os.environ`.
+- **Fail-Fast Safety**: If a referenced environment variable is missing or unset in the host environment, `ollama-agent` halts immediately with an `MCPConfigError` (following the KISS and Fail-Fast principles) rather than silently ignoring the missing credential.
 
 ---
 
 ### Tool Registration via `langchain-mcp-adapters`
 
-During graph construction (`AgentRuntime._build_graph`), the loader reads `mcp.json` and instantiates a `MultiServerMCPClient`:
+During graph construction (`AgentRuntime._build_graph`), `load_main_mcp_tools()` reads `~/.ollama-agent/mcp.json` and concurrently initializes connections using `MultiServerMCPClient`:
 
 ```python
-client = MultiServerMCPClient(connections)
+client = MultiServerMCPClient({name: conn})
 tools = await client.get_tools()
 ```
 
-1. **Async Cleanup & Lifecycle**: The client connection is bound to the runtime's internal `AsyncExitStack`. When the runtime closes or reloads (`runtime.reload()`), all active subprocesses and streams are safely terminated.
-2. **Tool Injection**: Retrieved MCP tools are merged into the main agent's tool set alongside `BUILTIN_TOOLS` and `rag_search`.
+1. **Tool Injection**: Retrieved MCP tools are merged into the main agent's tool set alongside `BUILTIN_TOOLS` and `rag_search`.
+2. **Per-Tool-Call Sessions**: Under `langchain-mcp-adapters`, sessions are opened and managed per tool call.
+3. **Dynamic Graph Rebuild**: Running `/mcp reload` or `runtime.reload()` tears down the previous graph state and re-executes `_build_graph()`, discovering updated tools and server connections.
 
 ---
 
@@ -210,11 +216,13 @@ Each subagent's `system_prompt` is rendered as a Jinja2 template with strict und
 | `model_settings` | `ModelSettings` | Orchestrator model configuration object | `model_settings.name`, `model_settings.base_url`, `model_settings.context_window`, `model_settings.reasoning_effort`, `model_settings.temperature` |
 
 #### Subagent MCP Server Fields (`mcp_servers`)
-- **`name`**: Identifier for the MCP server.
-- **`command`**: Subprocess executable.
-- **`args`**: List of arguments.
-- **`cwd`**: Optional working directory.
-- **`env`**: Environment variables (supports `${VAR_NAME}` and `%VAR_NAME%` expansion).
+
+Subagent MCP servers define dedicated `stdio` subprocess servers attached exclusively to that subagent:
+
+- **`name`** (*string*, required): Unique identifier for the MCP server within the subagent.
+- **`command`** (*string*, required): Subprocess executable (e.g., `uvx`, `npx`).
+- **`args`** (*array of strings*, optional): Command-line arguments passed to the process (defaults to `[]`).
+- **`env`** (*object*, optional): Environment variables passed to the subprocess (supports `${VAR_NAME}` and `%VAR_NAME%` expansion).
 
 ### Context Isolation Mechanism
 

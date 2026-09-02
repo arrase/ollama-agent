@@ -63,8 +63,8 @@ subagents:
   - name: "code-reviewer"
     description: "Specialized subagent for code review and security auditing"
     system_prompt: "You are an expert code reviewer focused on security and clean architecture."
-    model: "gemma4:26b"
-    context_window: 16384
+    model: "gemma4:26b"                   # Optional: inherits model.name if omitted or empty
+    context_window: 16384                 # Optional: inherits model.context_window if omitted or 0
     mcp_servers:
       - name: "git"
         command: "uvx"
@@ -109,7 +109,7 @@ subagents:
 | `langsmith.tracing` | `str` | `""` | Enable tracing (`"true"` / `"false"`). |
 | `langsmith.project` | `str` | `""` | LangSmith project name for traces. |
 | `langsmith.endpoint` | `str` | `""` | API endpoint for LangSmith telemetry. |
-| `subagents` | `list` | `[]` | List of specialized subagent definitions (`name`, `description`, `system_prompt`, `model`, `context_window`, `mcp_servers`). |
+| `subagents` | `list` | `[]` | List of specialized subagent definitions (`name`, `description`, `system_prompt`, optional `model`, optional `context_window`, `mcp_servers`). Unspecified `model` and `context_window` inherit from `model.name` and `model.context_window`. |
 
 ---
 
@@ -126,7 +126,7 @@ flowchart TD
     D -- No --> F[Use Ollama Engine Default]
 ```
 
-1. **User Settings (`settings.yaml` / CLI / `/params set`)**: If explicitly specified in configuration or session commands, the user's value takes precedence.
+1. **User Settings (`settings.yaml` / `/params set`)**: If explicitly specified in configuration or dynamically modified via `/params set` (which updates runtime memory and persists to `settings.yaml`), the user's value takes precedence. (Sampling parameters do not have CLI flag overrides).
 2. **Modelfile / Model Metadata**: If omitted in configuration, the agent inspects the model's metadata (`PARAMETER <name> <value>`) for model-specific recommendations.
 3. **Ollama Engine Defaults**: If not specified in `settings.yaml` or the Modelfile, parameters are not artificially overridden, allowing Ollama's native model engine defaults to apply directly.
 
@@ -181,17 +181,22 @@ The `--effort` CLI flag and `model.reasoning_effort` setting control model reaso
 | **Qwen3.8 Series** | `xhigh` / `high` / `enabled` | `"high"` | Thorough reasoning (translated to Ollama API `"high"`). |
 | **Qwen3.8 Series** | `medium` | `"medium"` | Balanced reasoning optimizing accuracy and speed. |
 | **Qwen3.8 Series** | `low` | `"low"` | Efficient reasoning optimizing for speed and cost. |
-| **Qwen3.8 Series** | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
+| **Qwen3.8 Series** | `hide` | `true` | Generates reasoning trace in Ollama, but stream parser suppresses reasoning deltas so no thinking text is emitted to the UI. |
 | **Qwen3.8 Series** | `disabled` | `false` | Disables reasoning trace generation at the model level. |
 | **GPT-OSS** | `low` / `medium` / `high` | `"low"` / `"medium"` / `"high"` | Sets thinking trace depth string. |
 | **GPT-OSS** | `xhigh` | `"high"` | Translates to maximum supported depth (`"high"`). |
-| **GPT-OSS** | `enabled` / `hide` | `true` | Enables thinking; collapses trace in UI if `hide`. |
+| **GPT-OSS** | `enabled` / `hide` | `true` | Enables thinking; collapses/suppresses trace in UI if `hide`. |
 | **GPT-OSS** | `disabled` | `true` | GPT-OSS cannot disable thinking; emits warning and keeps thinking enabled. |
 | **General Thinking Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `low` / `medium` / `high` | `"low"` / `"medium"` / `"high"` | Passes reasoning effort level string to Ollama. |
 | **General Thinking Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `xhigh` | `"high"` | Translates to `"high"` reasoning effort level. |
-| **General Thinking Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `enabled` / `hide` | `true` | Enables native reasoning generation (collapses trace in UI if `hide`). |
+| **General Thinking Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `enabled` / `hide` | `true` | Enables native reasoning generation; stream parser suppresses reasoning deltas if `hide`. |
 | **General Thinking Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `disabled` | `false` | Disables reasoning trace generation at the model level. |
 | **Non-Thinking Models** | *(any)* | *(omitted)* | Reasoning option is omitted; setting is ignored gracefully. |
+
+> [!NOTE]
+> **Difference between `reasoning_effort: hide` and `runtime.collapse_thinking: true`**:
+> - `model.reasoning_effort: hide`: Ollama generates thinking tokens internally, but the agent's streaming parser discards all reasoning deltas so thinking output is completely omitted from the interface.
+> - `runtime.collapse_thinking: true`: Reasoning deltas are delivered and parsed normally, but the collapsible container in the REPL TUI defaults to a collapsed/folded state, which the user can expand on demand.
 
 ---
 
@@ -212,11 +217,27 @@ The `--effort` CLI flag and `model.reasoning_effort` setting control model reaso
 
 ### Locale Resolution Precedence
 
-1. **CLI Flag (`-l` / `--lang` / `--language`)**: Direct runtime override (e.g. `ollama-agent -l es`).
+1. **CLI Flag (`-l` / `--lang` / `--language`)**: Direct runtime override (e.g. `ollama-agent -l es`). Overrides configured settings and system environment variables for the active session and sets `runtime.language`. Valid choices: `en`, `es`, `fr`, `de`, `it`, `pt`, `zh`, `ja`, `ru`, `hi`, `ko`, `ar`, `tr`, `pl`, `nl`, `uk`.
 2. **Configuration File (`runtime.language`)**: Configured code in `~/.ollama-agent/settings.yaml`.
-3. **System Environment Variables**: Inspects `LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, and `LANG` in order.
+3. **System Environment Variables**: Inspects `LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, and `LANG` in priority order.
 4. **System Python Locale**: Reads `locale.getlocale()`.
 5. **Default Fallback**: Defaults to `en` (English).
+
+---
+
+## Environment Variables Reference
+
+`ollama-agent` interacts with the following environment variables across telemetry, localization, tool execution, and MCP configuration:
+
+| Variable | Scope | Description |
+| :--- | :--- | :--- |
+| `LANGSMITH_API_KEY` | Telemetry | LangSmith API key for exporting traces. Injected from `langsmith.api_key` if defined in `settings.yaml`, otherwise read from host environment. |
+| `LANGSMITH_TRACING` | Telemetry | Enables trace capture (`"true"` / `"false"`). Injected from `langsmith.tracing` if defined, otherwise read from host environment. |
+| `LANGSMITH_PROJECT` | Telemetry | Target LangSmith project name. Injected from `langsmith.project` if defined, otherwise read from host environment. |
+| `LANGSMITH_ENDPOINT` | Telemetry | LangSmith API endpoint URL (defaults to `https://api.smith.langchain.com`). Injected from `langsmith.endpoint` if defined. |
+| `LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG` | Localization | Inspected in priority order at startup to detect the active system language when `runtime.language` is unset and `--lang` is not passed. |
+| `${VAR}` / `%VAR%` | MCP Servers | Environment variable substitution pattern automatically resolved against `os.environ` inside `mcp.json` and subagents' `mcp_servers[*].env`. |
+| Host Environment | Tool Execution | When `runtime.inherit_env: true` (default), all host environment variables are passed through to executed commands and tools. |
 
 ---
 
@@ -334,4 +355,7 @@ ollama-agent --config-reset <option>
 | `config-file` | Re-initializes `~/.ollama-agent/settings.yaml` with default application settings. |
 | `system-prompt` | Unlinks `~/.ollama-agent/prompts/instructions.md` and restores the bundled default Jinja2 system prompt template. |
 | `all` | Performs a complete factory reset of both `settings.yaml` and the `instructions.md` system prompt template. |
+
+> [!NOTE]
+> Executing `ollama-agent --config-reset <option>` performs the reset, prints confirmation messages to the console, and exits immediately without starting an interactive session or executing prompts.
 

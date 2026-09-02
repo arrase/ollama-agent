@@ -190,20 +190,20 @@ In Ollama Agent, the user input is **never locked**. You can freely type and sub
 ╭── Prompt Queue Flow ────────────────────────────────────────────────────────╮
 │ User inputs message while agent is busy (generating or waiting for approval)│
 │                                                                             │
-│  ├─ Immediate / Read-Only Slash Commands (/queue, /yolo, /stealth, etc.)    │
+│  ├─ Immediate / Non-Blocking Slash Commands (/queue, /yolo, /stealth, etc.) │
 │  │  └─► Executed INSTANTLY without interrupting the active stream           │
 │  │                                                                          │
 │  └─ Stateful Slash Commands & Normal Prompts                                │
-│     └─► Enqueued in FIFO Queue (⏳ Prompt added to queue (position #N))      │
+│     └─► Enqueued in FIFO Queue (PromptQueueWidget card & ⏳ N queued)        │
 │         └─► Automatically processed in sequence when current turn finishes  │
 ╰─────────────────────────────────────────────────────────────────────────────╯
 ```
 
 - **Immediate / Non-Blocking Commands**: Commands that do not modify active stream graph state execute immediately in the chat scroll without pausing or queuing:
-  - Inspection & List commands: `/queue`, `/model list`, `/effort`, `/context`, `/params list`, `/session list`, `/session search`, `/session export`, `/task list`, `/skill list`, `/skill show`, `/rag status`, `/rag list`, `/mcp list`, `/agents list`.
+  - Inspection & List commands: `/queue`, `/model list`, `/effort`, `/context`, `/params list`, `/session list`, `/session search`, `/session export`, `/session delete`, `/task list`, `/task delete`, `/skill list`, `/skill show`, `/skill delete`, `/rag status`, `/rag list`, `/rag create`, `/rag load`, `/rag unload`, `/rag delete`, `/mcp list`, `/agents list`.
   - Mode toggles: `/yolo`, `/stealth` (toggle or on/off).
   - Lifecycle: `/exit`, `/quit`.
-- **Enqueued Prompts & Stateful Commands**: Normal conversation prompts and state-mutating commands (e.g. `/model set`, `/session resume`, `/session new`, `/clear`, `/task run`, `/skill create`) are placed in a FIFO queue. A system message (`⏳ Prompt added to queue (position #N)`) notifies you of your queue position, and the bottom status bar displays a live indicator (`⏳ N queued`).
+- **Enqueued Prompts & Stateful Commands**: Normal conversation prompts and state-mutating commands (e.g. `/model set`, `/session resume`, `/session new`, `/clear`, `/task run`, `/skill create`, `/rag add`, `/mcp reload`) are placed in a FIFO queue. The persistent `PromptQueueWidget` card displays the queued prompts in real time, and the bottom status bar shows a live counter (`⏳ N queued`).
 - **Persistent TUI Queue Panel**: When prompts are in the queue, a dedicated `PromptQueueWidget` card automatically appears above the input container, displaying the active item count, prompt previews, and position numbers in real time. It automatically collapses when the queue is drained.
 - **Unblocked Tool Approvals**: The prompt input box remains active while a tool confirmation modal (`ToolApprovalWidget`) is shown, allowing you to queue follow-up prompts while reviewing pending tool actions.
 - **Queue Management (`/queue`)**:
@@ -305,7 +305,7 @@ mentions:
 ```
 
 #### Decorator & Syntax Safety
-Common programming decorators (e.g. `@staticmethod`, `@property`, `@decorator`) that do not exist as files on disk are recognized and treated as literal text. If a missing path contains directory separators (e.g. `@src/missing.py`) or a file extension (e.g. `@app.py`), the agent immediately halts and reports a clear `File or directory not found` error.
+Common programming decorators (e.g. `@staticmethod`, `@property`, `@app.route`) that do not exist as files on disk are recognized and treated as literal text. A missing path halts and reports a clear `File or directory not found` error only when it is explicitly intended as a file reference: namely, if it is quoted (e.g. `@"notes.txt"`), prefixed with relative indicators (e.g. `@./missing.py`, `@../config.yaml`), or contains directory separators (e.g. `@src/missing.py`).
 
 ---
 
@@ -350,7 +350,7 @@ flowchart LR
 | `--rag` | — | `str` | `None` | Preload a RAG database collection at startup. |
 | `--allow-traversal` | — | `flag` | `False` | Allow filesystem traversal outside current working directory. |
 | `--no-allow-traversal` | — | `flag` | `True` | Sandbox filesystem operations to current working directory (default). |
-| `--lang`, `--language` | `-l` | `str` | `auto` | Set interface language (`en`, `es`, `fr`, `de`, `it`, `pt`, `zh`, `ja`, `ko`, `ru`, `hi`, `ar`, `tr`, `pl`, `nl`, `uk`). |
+| `--lang`, `--language` | `-l` | `str` | `None` *(auto)* | Set interface language (`en`, `es`, `fr`, `de`, `it`, `pt`, `zh`, `ja`, `ko`, `ru`, `hi`, `ar`, `tr`, `pl`, `nl`, `uk`). Auto-detects system locale when omitted. |
 | `--config-reset` | — | `str` | `None` | Reset configuration files: `all`, `system-prompt`, or `config-file`. |
 
 ---
@@ -403,7 +403,7 @@ In addition to top-level flags, Ollama Agent provides dedicated CLI subcommands 
 The `--effort` flag, `/effort` slash command, and `model.reasoning_effort` in `settings.yaml` control model reasoning traces via Ollama's native thinking capabilities:
 
 > [!WARNING]
-> Not all models support all reasoning effort levels (or reasoning traces at all). Support for reasoning effort levels depends on the model manufacturer and architecture. For example, **Qwen3.8** officially supports granular reasoning effort levels (`xhigh` as default for thorough analysis, `medium` for balanced accuracy/speed, and `low` for fast/cost-effective reasoning), **GPT-OSS** accepts string levels without allowing thinking to be disabled, whereas other models (e.g. **Qwen 2.5 / 3**, **Gemma 4**, **DeepSeek R1 / DeepSeek-v3.1**) support binary toggling (`true`/`false`), and standard models ignore reasoning settings entirely. It is the user's responsibility to know and verify which levels are supported by the model being used.
+> Not all models support all reasoning effort levels (or reasoning traces at all). Support for reasoning effort levels depends on the model manufacturer and architecture. For example, **Qwen3.8** officially supports granular reasoning effort levels (`xhigh` as default for thorough analysis, `medium` for balanced accuracy/speed, and `low` for fast/cost-effective reasoning), **GPT-OSS** accepts string levels without allowing thinking to be disabled, whereas general thinking-capable models accept string effort levels or boolean toggles, and standard models ignore reasoning settings entirely. It is the user's responsibility to know and verify which levels are supported by the model being used.
 
 | Model Family | `--effort` Value | Ollama API Parameter | Behavior |
 | :--- | :--- | :--- | :--- |
@@ -413,13 +413,16 @@ The `--effort` flag, `/effort` slash command, and `model.reasoning_effort` in `s
 | **Qwen3.8 Series** | `enabled` | `"high"` | Enables reasoning with Qwen3.8 default `"high"` level. |
 | **Qwen3.8 Series** | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
 | **Qwen3.8 Series** | `disabled` | `false` | Disables reasoning trace generation at the model level. |
-| **GPT-OSS** | `low` / `medium` / `high` / `xhigh` | `"low"` / `"medium"` / `"high"` / `"xhigh"` | Sets thinking trace depth. GPT-OSS accepts string effort levels. |
-| **GPT-OSS** | `enabled` | `"medium"` | Enables thinking with default `medium` level. |
-| **GPT-OSS** | `hide` | *(omitted)* | Uses model default effort and hides reasoning trace in UI. |
-| **GPT-OSS** | `disabled` | *(omitted)* | GPT-OSS cannot disable thinking; emits warning, uses default effort, and hides reasoning trace in UI. |
-| **Binary Reasoning Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `low` / `medium` / `high` / `xhigh` / `enabled` | `true` | Enables native reasoning generation. |
-| **Binary Reasoning Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
-| **Binary Reasoning Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `disabled` | `false` | Disables reasoning trace generation at the model level. |
+| **GPT-OSS** | `low` / `medium` / `high` | `"low"` / `"medium"` / `"high"` | Sets thinking trace depth. |
+| **GPT-OSS** | `xhigh` | `"high"` | Translated to maximum supported level `"high"`. |
+| **GPT-OSS** | `enabled` | `true` | Enables thinking trace generation. |
+| **GPT-OSS** | `hide` | `true` | Generates reasoning trace but hides it from UI. |
+| **GPT-OSS** | `disabled` | `true` | GPT-OSS cannot disable thinking; emits warning and keeps thinking enabled. |
+| **Thinking Models (General)**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek, etc.)* | `low` / `medium` / `high` | `"low"` / `"medium"` / `"high"` | Passes configured effort level to Ollama API. |
+| **Thinking Models (General)**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek, etc.)* | `xhigh` | `"high"` | Translated to `"high"`. |
+| **Thinking Models (General)**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek, etc.)* | `enabled` | `true` | Enables native reasoning generation. |
+| **Thinking Models (General)**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek, etc.)* | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
+| **Thinking Models (General)**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek, etc.)* | `disabled` | `false` | Disables reasoning trace generation at the model level. |
 | **Non-Thinking Models** | *(any)* | *(omitted)* | Setting is ignored gracefully. |
 
 ---
@@ -430,7 +433,7 @@ Ollama Agent combines repository-specific guidelines, global user preferences, p
 
 ```mermaid
 flowchart TD
-    A[Agent Startup] --> B[1. Load Repository Guidelines\nAGENTS.md / agents.md up to .git root]
+    A[Agent Startup] --> B[1. Load Repository Guidelines\nAGENTS.md / agents.md / .agents.md up to .git root]
     A --> C[2. Load Global User Guidelines\n~/.ollama-agent/AGENTS.md]
     A --> D[3. Mount Cross-Session Memory\n~/.ollama-agent/MEMORY.md]
     B & C & D --> E[Unified Agent Memory Context]
@@ -542,7 +545,9 @@ Ollama Agent supports the open [Agent Skills specification](https://agentskills.
 
 #### Skill Directory Layout
 
-Skills reside in `~/.ollama-agent/skills/<skill_id>/SKILL.md` (and may include helper scripts in `scripts/`):
+Ollama Agent supports both built-in system skills and user-defined skills:
+- **Built-in System Skills** (`/system_skills/`): Core skills shipped with the package (`mcp-configurator`, `skill-creator`, `task-creator`) that cannot be deleted.
+- **User Skills** (`~/.ollama-agent/skills/`): User-created skills residing in `~/.ollama-agent/skills/<skill_id>/SKILL.md` (and may include helper scripts in `scripts/`):
 
 ```text
 ~/.ollama-agent/skills/
@@ -580,7 +585,7 @@ description: Guidelines and best practices for designing RESTful and OpenAPI com
 | **Delete Skill** | `/skill delete <id>` | `ollama-agent skill delete <id>` |
 
 > [!NOTE]
-> `SKILL.md` files must be under 10 MB. Descriptions longer than 1,024 characters are truncated automatically during skill indexing.
+> `SKILL.md` files must be under 10 MB. Descriptions longer than 1,024 characters are truncated automatically during skill indexing. Built-in system skills cannot be deleted.
 
 ---
 
@@ -628,7 +633,7 @@ Inside REPL:
 
 When a database is loaded, the agent automatically gains access to the `rag_search` tool:
 - The system prompt is dynamically updated with RAG search instructions.
-- The agent queries the database when relevant, returning source chunks and relevance scores.
+- The agent queries the database when relevant, returning retrieved source chunks formatted as `[Source: <filename>]\n<content>` delimited by `---`.
 
 ```bash
 # Start REPL with preloaded RAG database
@@ -683,7 +688,7 @@ Global MCP servers are defined in JSON format under the `"mcpServers"` object in
       "type": "http",
       "url": "https://mcp.example.com/api",
       "headers": {
-        "Authorization": "Bearer ${API_KEY}"
+        "Authorization": "Bearer my-secret-token"
       },
       "timeout": 30,
       "sse_read_timeout": 300
@@ -704,14 +709,14 @@ Global MCP servers are defined in JSON format under the `"mcpServers"` object in
   - `env` (*object*, optional): Environment variables with dynamic `${VAR}` and `%VAR%` expansion.
   - `transport` (*string*, optional): Defaults to `"stdio"` when `command` is present.
 - **Remote Network Transports (`http`, `sse`, `websocket`, `streamable_http`)**:
-  - `url` / `httpUrl` (*string*, required): Target server URL endpoint.
+  - `url` (*string*, required): Target server URL endpoint.
   - `transport` / `type` (*string*, optional): `"http"`, `"sse"`, `"websocket"`, `"streamable_http"`, or `"streamable-http"` (defaults to `"http"`).
   - `headers` (*object*, optional): Custom HTTP headers (e.g. authorization tokens).
   - `timeout` (*number*, optional): Request timeout in seconds.
   - `sse_read_timeout` (*number*, optional): SSE stream read timeout in seconds.
 
 #### Key Features:
-- **Environment Variable Expansion**: Values in `"env"` blocks and `"headers"` support `${VAR_NAME}` and `%VAR_NAME%` syntax, resolved dynamically from `os.environ`. Unset variables trigger immediate fail-fast errors to prevent silent configuration issues.
+- **Environment Variable Expansion**: Values in subprocess `"env"` blocks support `${VAR_NAME}` and `%VAR_NAME%` syntax, resolved dynamically from `os.environ`. Unset variables trigger immediate fail-fast errors to prevent silent configuration issues.
 - **Built-in `mcp-configurator` Skill**: The agent is equipped with a built-in system skill that guides you through adding, updating, and troubleshooting MCP servers interactively.
 - **Server Health & Dynamic Reloading**: Run `/mcp` (or `/mcp list`) in the REPL or `ollama-agent mcp list` in the CLI to inspect connection health. Run `/mcp reload` in the REPL to immediately re-read MCP configurations and rebuild the tool graph without restarting the session.
 
@@ -719,7 +724,7 @@ Global MCP servers are defined in JSON format under the `"mcpServers"` object in
 
 ### Custom Subagents
 
-Define domain-specific subagents in `~/.ollama-agent/settings.yaml` for task delegation. Each subagent operates with its own isolated context window, preventing orchestrator context bloat. Subagent `system_prompt` definitions support full **Jinja2 templating** evaluated with `subagent` (`SubAgentSettings`) and `model_settings` (`ModelSettings`) context variables.
+Define domain-specific subagents in `~/.ollama-agent/settings.yaml` for task delegation. Each subagent operates with its own isolated context window, preventing orchestrator context bloat. Subagents support dedicated `stdio` MCP tool servers (`name`, `command`, `args`, `env`). Subagent `system_prompt` definitions support full **Jinja2 templating** evaluated with `subagent` (`SubAgentSettings`) and `model_settings` (`ModelSettings`) context variables.
 
 ```yaml
 subagents:

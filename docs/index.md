@@ -150,7 +150,7 @@ ollama-agent -p "Summarize the git commits made in the last 7 days."
 
 ### 3. Run with Specific Model, Effort, YOLO, or Stealth Mode
 ```bash
-ollama-agent -m "gemma4:26b" -e "high" -y -s -p "Refactor src/utils.py to follow PEP 8."
+ollama-agent -m "qwen3.8:27b" -e "high" -y -s -p "Refactor src/utils.py to follow PEP 8."
 ```
 
 ---

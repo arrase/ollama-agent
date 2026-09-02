@@ -24,7 +24,7 @@ flowchart TD
 
     subgraph Middleware ["Execution & Control Layer"]
         ToolMW["Tool Middleware (stream_tool_events_mw)"]
-        SummarizerMW["Summarization Middleware (create_summarization_tool_middleware)"]
+        SummarizerMW["Summarization Middleware (Auto 85% & compact_conversation)"]
         HITL["Human-in-the-Loop Interrupt Controller"]
     end
 
@@ -97,6 +97,7 @@ sequenceDiagram
   - Global user memory: `["/agent/MEMORY.md"]`.
   - Global agent instructions: `["/agent/AGENTS.md"]` if present.
   - Project instructions: Discovered via `find_agents_file(Path.cwd())`. If in CWD root -> `/{filename}`; if in an ancestor directory -> `/project/` route is created and `memory_sources.append("/project/{filename}")`; if not found -> `["/AGENTS.md"]`.
+- **Tool Assembly & Dynamic Registration**: Base built-in tools (`search_past_conversations`) are combined with active MCP tools (`load_main_mcp_tools()`) and conditional RAG search (`rag_search`). The `rag_search` tool is conditionally included only when an active RAG database is loaded (`rag_mgr.current_database is not None`). Loading, unloading, or deleting a RAG database triggers `runtime.reload()`, dynamically updating the tool registry.
 - **Dynamic System Instructions**: The system prompt is constructed dynamically using unified Jinja2 template rendering (`render_prompt_template`), evaluating filesystem policy directives (traversal mode vs sandboxed mode), conditional RAG search policies (`{% if rag_active %}`), and local environment runtime metadata (`platform.system()`, `platform.release()`, `platform.machine()`, working directory, and current date/time).
 
 ---
@@ -127,6 +128,10 @@ flowchart LR
    - **Eligibility Gating**: Implements an eligibility gate requiring conversation tokens to reach at least ~50% of the threshold before compaction runs.
    - **In-Graph State Update**: Emits a `Command(update={"_summarization_event": ...})` within the LangGraph graph loop to cleanly update state without out-of-band mutations.
    - **Effective Token Accounting**: `AgentRuntime.count_effective_tokens()` inspects `_summarization_event` to calculate accurate token counts (`[summary_message] + messages[cutoff_index:]`).
+
+3. **Autonomous Compaction vs. Manual Commands**:
+   - Previous manual slash commands (`/compact`, `/compress`) were removed.
+   - Context compaction is executed entirely in-graph—either autonomously by the model calling `compact_conversation` or automatically at the 85% threshold—ensuring clean LangGraph state transitions without out-of-band state mutation.
 
 ---
 
@@ -310,7 +315,7 @@ flowchart TD
     end
 ```
 
-- **Isolated Execution**: Subagents run on separate graph nodes with independent context windows and custom system prompts with OS environment details (`environment_block(include_cwd=False)`).
+- **Isolated Execution**: Subagents run on separate graph nodes with independent context windows. Subagent system prompts support Jinja2 template rendering (`render_prompt_template`) with access to `{"subagent": sa, "model_settings": model_settings}` context, appended with OS environment metadata (`environment_block(include_cwd=False)`).
 - **Dedicated Tools**: Subagent MCP servers are loaded independently via `load_subagent_mcp_tools()` and isolated from the main agent's tool set.
 - **Attribution**: Tool execution middleware attaches `agent_name` metadata to `tool_call` and `tool_output` events for clear attribution in the UI.
 - **Parameter Inheritance**: If not specified in `settings.yaml`, subagents inherit model sampling parameters (`temperature`, `top_p`, `top_k`, `min_p`, `presence_penalty`, `repeat_penalty`), `model`, `context_window`, `base_url`, and `reasoning_effort` from the main configuration.
@@ -332,8 +337,7 @@ flowchart TD
 - **RAG Subsystem (`ollama_agent/rag/`)**:
   - Embedded vector database powered by Qdrant stored locally in `~/.ollama-agent/rag/<database_name>/`.
   - Asynchronous embeddings generated using Ollama's embeddings endpoint (`all-minilm` by default).
-  - Dynamic tool registration: `rag_search` is only exposed when an active RAG database is loaded (`/rag load <name>`).
-  - System prompt integration: Prompt templates dynamically announce RAG capabilities (`{% if rag_active %}`).
+  - Dynamic tool registration & prompt updates: `rag_search` is conditionally exposed only when a RAG database is loaded (`/rag load <name>`). Loading, unloading (`/rag unload`), or deleting (`/rag delete <name>`) a database triggers `runtime.reload()`, dynamically adding/removing `rag_search` from the active tools and updating the system prompt's `{% if rag_active %}` policy without restarting the session.
 - **Skills Subsystem (`ollama_agent/skills/`)**:
   - Follows the open Agent Skills specification with `SKILL.md` files declaring YAML frontmatter (`name`, `description`) and markdown instructions.
   - Built-in skills located in `ollama_agent/skills/builtin/` (`mcp-configurator`, `skill-creator`, `task-creator`) mounted at `/system_skills/`.
@@ -342,8 +346,10 @@ flowchart TD
 - **Tasks Subsystem (`ollama_agent/tasks/`)**:
   - Reusable parameterized prompt tasks stored as YAML files in `~/.ollama-agent/tasks/<task_id>.yaml`.
   - Declares `title`, `prompt` (Jinja2 template), `model`, `reasoning_effort`, and typed `inputs` (`string`, `boolean`, `number` with defaults and required flags).
+  - Jinja2 template rendering: Renders prompts via Jinja2 (`StrictUndefined`) with input type coercion (`_coerce_value`), validation, and required variable enforcement.
   - Mounted into the virtual backend at `/tasks/`.
-  - Interactive creation via `/task create` (guided by the `task-creator` subagent) and execution via `/task run <id> [var=val]`.
+  - Execution: Executed via `/task run <id> [var=val]` in REPL or `ollama-agent task run <id> [var=val]` in CLI, applying the task's configured model and reasoning effort.
+  - Interactive creation via `/task create` (guided by the `task-creator` subagent) or CLI `ollama-agent task create`.
 - **MCP Subsystem (`ollama_agent/mcp/`)**:
   - Connects to external Model Context Protocol (MCP) tool servers declared in `~/.ollama-agent/mcp.json`.
   - Uses `MultiServerMCPClient` from `langchain-mcp-adapters`.

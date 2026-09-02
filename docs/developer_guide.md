@@ -13,8 +13,10 @@ cd ollama-agent
 ```
 
 ### 2. Create and Activate a Virtual Environment
+`ollama-agent` requires Python 3.11 or higher:
+
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 ```
 
@@ -44,13 +46,17 @@ Run Ruff to verify code formatting and compliance with project standards:
 
 ## Testing & Quality Assurance
 
-`ollama-agent` maintains an automated test suite covering runtime mechanics, prompt processing, session management, RAG vector stores, skills, and TUI components.
+`ollama-agent` maintains an automated test suite covering runtime mechanics, prompt processing, session management, RAG vector stores, skills, and TUI components (26 test modules, 517 tests).
 
 ### Run Unit Tests
 Always execute tests using the virtual environment interpreter:
 
 ```bash
+# Run all unit tests
 .venv/bin/python -m unittest discover -s tests
+
+# Run a specific test module
+.venv/bin/python -m unittest tests/test_agent_runtime.py
 ```
 
 ### Test Suite Structure
@@ -96,15 +102,19 @@ All contributions must strictly follow the engineering guidelines:
 - **Do What Was Asked**: Implement the exact requirements. Do not anticipate hypothetical scenarios or speculative edge cases.
 - **Linear & Obvious Flow**: Code must read top-to-bottom with obvious control flow. Avoid convoluted branching, unnecessary indirection layers, or wrapper functions.
 - **No Premature Abstraction (YAGNI)**: Do not create interfaces, abstract base classes, or factories unless there is an immediate, concrete need.
+- **Single Responsibility (SRP)**: Functions and modules should do one cohesive task and do it well. Keep them focused and concise.
+- **Self-Documenting Code**: Write code so clear that comments explaining "what" it does are redundant. Only use comments to explain non-obvious business rules or external quirks ("why").
 
 ### 2. Zero Defensive Bloat
 - **No Unsolicited Fallbacks & Safe Defaults**: Never mask errors or missing values with artificial defaults (e.g., returning `""`, `[]`, `{}`, `None`, `0`, or fallback objects) unless explicitly requested. Access properties and dictionary keys directly.
 - **No Defensive Catch-and-Swallow**: Never wrap code in `try/except` just to catch generic exceptions, log a warning, and return a fallback value. Let exceptions propagate naturally unless performing an explicit retry or converting low-level errors at a system boundary.
 - **No Internal Paranoid Null/Type Checking**: Do not check for `None` or validate types inside internal functions when data flow is guaranteed. Strict input validation belongs exclusively at public system boundaries (CLI inputs, raw user input, external APIs).
+- **No Unnecessary `Optional` Types**: Do not use `Optional` (`| None`) types or fallback checks for parameters/variables when their presence and values are fully controlled and guaranteed by internal flow.
 - **Fail Fast, Fail Loud**: If an invariant is violated or required input is missing, let the application fail immediately.
 
-### 3. Top-Level Imports Only
-- All `import` and `from ... import` statements must reside at the very top of each Python file (PEP 8 standard). Never use function-level or inline imports.
+### 3. Top-Level Imports & Clean Architecture
+- **Top-Level Imports Only**: All `import` and `from ... import` statements must reside at the very top of each Python file (PEP 8 standard). Never use function-level or inline imports.
+- **No Structural Shortcuts**: Do not use inline imports or hacky workarounds to bypass circular dependencies. Solve the underlying structural problem properly through refactoring.
 
 ### 4. Virtual Environment & Python Tooling
 - Always execute Python scripts, tools, and test suites using the project's virtual environment (`.venv/bin/python`).
@@ -119,6 +129,7 @@ All contributions must strictly follow the engineering guidelines:
 ```text
 ollama-agent/
 ├── ollama_agent/
+│   ├── __init__.py          # Package exports and version metadata
 │   ├── main.py              # CLI/REPL entry point, signal routing, config resets
 │   ├── agent/               # DeepAgents graph orchestration, middleware, tools & subagents
 │   │   ├── agent.py         # AgentRuntime lifecycle, backend mounting, graph construction
@@ -176,6 +187,29 @@ ollama-agent/
 ├── LICENSE                  # MIT license file
 └── README.md                # Project documentation overview
 ```
+
+---
+
+## Contributing Guidelines
+
+When contributing changes to `ollama-agent`:
+
+1. **Branch**: Create a focused feature or bugfix branch from `main`:
+   ```bash
+   git checkout -b feature/my-feature
+   ```
+2. **Implement**: Keep changes minimal, direct, and aligned with KISS and Zero Defensive Bloat principles.
+3. **Verify Locally**: Run linting and the test suite before submitting:
+   ```bash
+   .venv/bin/ruff check .
+   .venv/bin/python -m unittest discover -s tests
+   ```
+4. **Pre-Submission Checklist**:
+   - [ ] All unit tests pass (`.venv/bin/python -m unittest discover -s tests`).
+   - [ ] Ruff check reports no errors (`.venv/bin/ruff check .`).
+   - [ ] All imports are strictly placed at the top of files (PEP 8).
+   - [ ] No unsolicited fallback defaults, defensive try/except blocks, or unnecessary `Optional` types.
+   - [ ] Any new dependencies are declared in `pyproject.toml`.
 
 ---
 

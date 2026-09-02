@@ -57,13 +57,14 @@ description: Guidelines and best practices for designing RESTful and OpenAPI com
 
 #### Specification Constraints:
 - **Maximum File Size**: `SKILL.md` files must not exceed 10 MB.
+- **Skill ID Format**: Must contain only letters, numbers, underscores, and hyphens (`[A-Za-z0-9_-]+`), without reserved device names.
 - **YAML Frontmatter**: Placed between `---` delimiters at the very top of `SKILL.md`.
   - **`name`** (*string*, required): Human-readable name of the skill.
   - **`description`** (*string*, required): Detailed description explaining what the skill does AND when to trigger it.
   - **`metadata`** (*object*, optional): Custom key-value pairs.
 
 ### Virtual Skill Roots
-The runtime mounts two virtual skill routes in `CompositeBackend`:
+The runtime mounts two virtual skill routes (`SKILL_ROOTS`) available to both the primary agent and subagents:
 1. `/system_skills/`: Built-in application skills bundled with `ollama-agent` (`skill-creator`, `task-creator`, `mcp-configurator`).
 2. `/skills/`: User skills stored in `~/.ollama-agent/skills/`.
 
@@ -119,13 +120,15 @@ inputs:
 #### Task Schema Fields:
 - **`title`** (*string*, required): Descriptive title of the task.
 - **`prompt`** (*string*, required): Instruction prompt template to execute (supports full Jinja2 templating).
-- **`model`** (*string*, optional): Specific Ollama model designated for this task (inherits active session model if omitted or `""`).
-- **`reasoning_effort`** (*string*, optional): Reasoning effort setting (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). Default is `medium`.
+- **`model`** (*string*, required): Specific Ollama model designated for this task (e.g., `"gemma4:26b"`).
+- **`reasoning_effort`** (*string*, required): Reasoning effort setting (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). On CLI creation, defaults to `medium` if omitted.
 - **`inputs`** (*mapping*, optional): Parameter definitions expected by the template:
   - **`description`** (*string*, optional): Human-readable parameter explanation.
   - **`type`** (*string*, optional): Expected data type (`string`, `boolean`, `number`). Defaults to `string`.
   - **`required`** (*boolean*, optional): Whether the input must be supplied. Defaults to `false`.
   - **`default`** (*any*, optional): Fallback value used when the parameter is not provided.
+
+- **Task ID Format**: Must contain only letters, numbers, underscores, and hyphens (`[A-Za-z0-9_-]+`), without reserved device names.
 
 ### Jinja2 Templating Engine & Dynamic Context
 
@@ -157,9 +160,12 @@ Missing required inputs immediately fail fast with a clear error: `Missing requi
 | Action | CLI Command | REPL Slash Command | Description |
 | :--- | :--- | :--- | :--- |
 | **List Tasks** | `ollama-agent task list` | `/task list` (or `/task`) | List all saved tasks. |
-| **Create Task** | `ollama-agent task create <id> --title <t> --task-prompt <p> [--task-model <m>] [--task-effort <e>] [--force]` | `/task create [<id>]` | Save a new task template via CLI or interactive interview. |
+| **Create Task** | `ollama-agent task create <id> --title <t> --task-prompt <p> --task-model <m> [--task-effort <e>] [--force]` | `/task create [<id>]` | Save a new task template via CLI or interactive interview. |
 | **Run Task** | `ollama-agent task run <id> [key=value ...] [--var key=value] [-y]` | `/task run <id> [key=value ...] [-y]` | Execute a saved task non-interactively or in REPL. |
 | **Delete Task** | `ollama-agent task delete <id>` | `/task delete <id>` | Delete a saved task definition. |
+
+> [!TIP]
+> **Tab Autocompletion**: In the REPL, `/task run ` and `/task delete ` autocomplete saved task IDs and titles.
 
 ### Running Tasks with Dynamic Variables
 
@@ -221,8 +227,8 @@ flowchart TD
 When `AgentRuntime` starts or reloads:
 1. It searches the active directory (`Path.cwd()`) for `AGENTS.md` (or `agents.md`, `.agents.md`).
 2. If not found in `cwd`, it traverses upward through parent directories until the repository root (marked by `.git`) or filesystem boundary.
-3. If found in an ancestor directory, `AgentRuntime` mounts the repository root to `/project/` in the virtual composite backend and loads `/project/AGENTS.md`.
-4. If found in `cwd`, it is loaded directly as `/AGENTS.md`.
+3. If found in an ancestor directory, `AgentRuntime` mounts the repository root to `/project/` in the virtual composite backend and loads `/project/<filename>` (e.g. `/project/AGENTS.md`).
+4. If found in `cwd`, it is loaded directly as `/<filename>` (e.g. `/AGENTS.md`).
 5. If not found, `/AGENTS.md` is added to memory sources so the agent can create it if requested.
 
 ---
@@ -288,8 +294,15 @@ Session persistence is handled by `AsyncSqliteSaver` from `langgraph-checkpoint-
 | **List Sessions** | `ollama-agent session list` | `/session list` | List all saved chat sessions with step counts and timestamps. |
 | **Resume Session** | — | `/session resume <id>` (alias: `/session switch <id>`) | Resume a previous session by thread ID or prefix, restoring chat messages into the viewport. |
 | **New Session** | — | `/session new` (alias: `/new`, `/clear`) | Reset context to a fresh session ID and clear the viewport. |
-| **Export Session** | `ollama-agent session export <id> -o <path>` | `/session export [path]` | Export multi-turn conversation and tool calls to Markdown. |
+| **Export Session** | `ollama-agent session export <id> [-o <path>]` | `/session export [path]` | Export multi-turn conversation and tool calls to Markdown. |
+| **Search Sessions** | `ollama-agent session search <query>` | `/session search <query>` | Search all saved chat sessions by keyword, topic, or date. |
 | **Delete Session** | `ollama-agent session delete <id>` | `/session delete <id>` | Delete checkpoints and writes for a session from SQLite. |
+
+> [!TIP]
+> **Tab Autocompletion**: In the REPL, `/session resume `, `/session switch `, and `/session delete ` autocomplete saved session IDs with step counts.
+
+### Stealth Mode
+When started with `-s` / `--stealth`, the agent uses an in-memory checkpointer (`MemorySaver`) instead of `AsyncSqliteSaver`, bypassing `history.db` so the session remains strictly ephemeral.
 
 ### Prompt History Navigation
 User prompts stored in `history.db` are automatically loaded into the REPL input history at startup via `load_past_user_prompts()`, allowing seamless `↑` / `↓` recall across sessions.
@@ -304,9 +317,9 @@ Episodic memory captures records of past experiences, decisions, and troubleshoo
 
 The agent is equipped with the built-in tool `search_past_conversations(query: str, limit: int = 3)`.
 
-- **Mechanism**: Reads serialized message checkpoints directly from `~/.ollama-agent/history.db` (`writes` table) using `JsonPlusSerializer`.
-- **Active Thread Exclusion**: Automatically skips the current active session to avoid duplicating short-term memory.
-- **Keyword & Topic Matching**: Analyzes user prompts and assistant actions across past threads, ranking matches by relevance score.
+- **Mechanism**: Queries `checkpoints` (for session timestamps) and `writes` (channel `'messages'`) tables in `~/.ollama-agent/history.db` using `JsonPlusSerializer`.
+- **Active Thread Exclusion**: Automatically skips the current active session via `get_active_thread_id()` to avoid duplicating short-term memory.
+- **Keyword & Date Matching**: Analyzes user prompts, assistant actions, and date terms (e.g. `"yesterday"`, `"auth"`, `"database"`) across past threads, ranking matches by relevance score.
 - **Structured Context**: Formats the matched sessions into clean Markdown excerpts for the LLM.
 
 ### User Search Commands (CLI & REPL)
