@@ -158,7 +158,8 @@ class RAGManager:
                 ),
             )
         except Exception as e:
-            shutil.rmtree(db_path)
+            client.close()
+            shutil.rmtree(db_path, ignore_errors=True)
             raise RAGError(_("Failed to create database '{name}': {e}", name=name, e=e)) from e
         finally:
             client.close()
@@ -326,7 +327,7 @@ class RAGManager:
     async def search(self, query: str, top_k: int | None = None) -> list[dict[str, Any]]:
         """Search the RAG database for relevant documents."""
         if not query.strip():
-            return []
+            raise RAGError(_("Search query cannot be empty."))
         limit = self.settings.default_top_k if top_k is None else top_k
         if limit <= 0:
             raise RAGError(_("Limit must be greater than 0"))

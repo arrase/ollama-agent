@@ -267,8 +267,7 @@ class ReplInput(TextArea):
             db_entries = await asyncio.to_thread(load_past_user_prompts)
         except HistoryError as exc:
             _log.warning("Prompt history unavailable: %s", exc)
-            if hasattr(self.app, "show_system_notice"):
-                self.app.show_system_notice(f"[yellow]⚠ {_('Prompt history unavailable: {exc}', exc=exc)}[/yellow]")
+            self.app.show_system_notice(f"[yellow]⚠ {_('Prompt history unavailable: {exc}', exc=exc)}[/yellow]")
             db_entries = []
         self._history = list(db_entries)
         self._history_index = len(self._history)

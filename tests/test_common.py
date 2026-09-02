@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from ollama_agent.core.common import (
     ALLOWED_REASONING_EFFORTS,
     DEFAULT_REASONING_EFFORT,
+    atomic_write_text,
     extract_text,
     validate_identifier,
 )
@@ -71,6 +75,32 @@ class TestCommonUtilities(unittest.TestCase):
         self.assertIn("high", ALLOWED_REASONING_EFFORTS)
         self.assertIn("xhigh", ALLOWED_REASONING_EFFORTS)
         self.assertIn("low", ALLOWED_REASONING_EFFORTS)
+
+    def test_atomic_write_text_success(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "test.txt"
+            atomic_write_text(target, "hello atomic world")
+            self.assertTrue(target.is_file())
+            self.assertEqual(target.read_text(encoding="utf-8"), "hello atomic world")
+
+    def test_atomic_write_text_creates_parent_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "deep" / "nested" / "dir" / "test.txt"
+            atomic_write_text(target, "nested content")
+            self.assertTrue(target.is_file())
+            self.assertEqual(target.read_text(encoding="utf-8"), "nested content")
+
+    def test_atomic_write_text_cleans_up_temp_file_on_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "target.txt"
+            with patch("os.replace", side_effect=OSError("Disk write error")):
+                with self.assertRaises(OSError):
+                    atomic_write_text(target, "doomed content")
+            # Target should not exist
+            self.assertFalse(target.exists())
+            # Parent directory should not have any leftover .tmp files
+            tmp_files = list(Path(td).glob("*.tmp"))
+            self.assertEqual(tmp_files, [])
 
 
 if __name__ == "__main__":

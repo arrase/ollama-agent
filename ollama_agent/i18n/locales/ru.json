@@ -448,5 +448,6 @@
   "Variable assignment in key=value format": "Присваивание переменной в формате ключ=значение",
   "Unsupported input type '{type}' for input '{name}'": "Неподдерживаемый тип ввода '{type}' для ввода '{name}'",
   "Database": "База данных",
-  "Database name": "Имя базы данных"
+  "Database name": "Имя базы данных",
+  "Search query cannot be empty.": "Поисковый запрос не может быть пустым."
 }

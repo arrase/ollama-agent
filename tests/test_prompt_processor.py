@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from ollama_agent.core.prompt_processor import (
+    ContextLimitExceededError,
     PromptProcessingError,
     classify_multimodal_file,
     is_binary_file,
@@ -181,6 +182,33 @@ class TestPromptProcessor(unittest.TestCase):
         self.assertIn("--- Attached Context ---", processed)
         self.assertIn("class Service: pass", processed)
         self.assertEqual(len(attachments), 0)
+
+    def test_resolve_context_files_total_size_tracking(self) -> None:
+        folder = self.base_path / "mixed_folder"
+        folder.mkdir()
+        txt = folder / "doc.txt"
+        txt.write_text("12345", encoding="utf-8")
+        img = folder / "pic.png"
+        img.write_bytes(b"\x89PNG\r\n\x1a\n")
+
+        context = resolve_context_files(folder)
+        self.assertEqual(context.total_size, txt.stat().st_size + img.stat().st_size)
+
+    def test_process_prompt_mentions_tracks_multimodal_directory_cumulative_size(self) -> None:
+        folder = self.base_path / "media_folder"
+        folder.mkdir()
+        img = folder / "pic.png"
+        img.write_bytes(b"\x89PNG\r\n\x1a\n")
+
+        other_file = self.base_path / "extra.txt"
+        other_file.write_text("extra", encoding="utf-8")
+
+        prompt = f"Check @{folder} and @{other_file}"
+        img_size = img.stat().st_size
+        extra_size = other_file.stat().st_size
+
+        with self.assertRaises(ContextLimitExceededError):
+            process_prompt_mentions(prompt, max_total_size=img_size + extra_size - 1)
 
 
 if __name__ == "__main__":

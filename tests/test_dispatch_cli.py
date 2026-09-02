@@ -9,12 +9,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from rich.console import Console
 
 from ollama_agent.core import ModelCapabilityError
+from ollama_agent.i18n import set_locale
 from ollama_agent.interfaces.cli import create_argument_parser, handle_cli_commands
 from ollama_agent.interfaces.dispatch import (
     build_cli_handlers,
     build_repl_handlers,
 )
-from ollama_agent.main import main
+from ollama_agent.main import _extract_early_language, main
 from ollama_agent.rag.commands import RAGContext
 from ollama_agent.rag import RAGManager, RAGSettings
 from ollama_agent.settings.config import Settings
@@ -364,6 +365,27 @@ class TestDispatchAndCLI(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:
                 handle_cli_commands(args, Settings())
             self.assertEqual(cm.exception.code, 1)
+
+    def test_extract_early_language(self) -> None:
+        self.assertEqual(_extract_early_language(["-l", "es"]), "es")
+        self.assertEqual(_extract_early_language(["--lang", "fr"]), "fr")
+        self.assertEqual(_extract_early_language(["--language=de"]), "de")
+        self.assertEqual(_extract_early_language(["-l=it"]), "it")
+        self.assertIsNone(_extract_early_language(["--unknown", "val"]))
+        self.assertIsNone(_extract_early_language(["-l", "unsupported_lang"]))
+        self.assertIsNone(_extract_early_language([]))
+
+    def test_main_help_localization(self) -> None:
+        stdout = io.StringIO()
+        try:
+            with patch("sys.argv", ["ollama-agent", "-l", "es", "--help"]), patch("sys.stdout", stdout):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+                self.assertEqual(cm.exception.code, 0)
+            output = stdout.getvalue()
+            self.assertIn("Agente de IA", output)
+        finally:
+            set_locale("en")
 
 
 if __name__ == "__main__":

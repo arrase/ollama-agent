@@ -448,5 +448,6 @@
   "Variable assignment in key=value format": "key=value 格式的变量赋值",
   "Unsupported input type '{type}' for input '{name}'": "输入 '{name}' 的输入类型不受支持 '{type}'",
   "Database": "知识库",
-  "Database name": "知识库名称"
+  "Database name": "知识库名称",
+  "Search query cannot be empty.": "搜索查询不能为空。"
 }

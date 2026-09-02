@@ -448,5 +448,6 @@
   "Variable assignment in key=value format": "Variabeletoewijzing in sleutel=waarde-indeling",
   "Unsupported input type '{type}' for input '{name}'": "Niet-ondersteund invoertype '{type}' voor invoer '{name}'",
   "Database": "Database",
-  "Database name": "Databasenaam"
+  "Database name": "Databasenaam",
+  "Search query cannot be empty.": "Zoekopdracht mag niet leeg zijn."
 }

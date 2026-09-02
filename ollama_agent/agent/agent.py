@@ -143,7 +143,7 @@ class AgentRuntime:
         await ensure_model_supports_tools(
             ms.name,
             ms.base_url,
-            show_info=getattr(model, "show_info", None),
+            show_info=model.show_info,
         )
 
         self.effective_context_window = model.num_ctx
@@ -199,8 +199,6 @@ class AgentRuntime:
                     virtual_mode=True,
                 )
                 memory_sources.append(f"/project/{project_agents.name}")
-        else:
-            memory_sources.append("/AGENTS.md")
 
         backend = CompositeBackend(
             default=default_backend,
@@ -323,7 +321,7 @@ class AgentRuntime:
 
             if mode == "messages":
                 chunk = event[0] if isinstance(event, tuple) and event else event
-                meta = getattr(chunk, "response_metadata", None)
+                meta = chunk.response_metadata
                 # Usage metadata is the only trusted token source; when the
                 # host does not report it, last_context_tokens stays 0 (= unknown).
                 if isinstance(meta, dict) and "prompt_eval_count" in meta:
@@ -353,9 +351,9 @@ class AgentRuntime:
         values: dict[str, Any] = state.values
         messages = list(values.get("messages", []))
         event = values.get("_summarization_event")
-        if event and isinstance(event, dict) and "summary_message" in event and "cutoff_index" in event:
+        if event and "summary_message" in event and "cutoff_index" in event:
             cutoff = event["cutoff_index"]
-            if isinstance(cutoff, int) and 0 <= cutoff <= len(messages):
+            if 0 <= cutoff <= len(messages):
                 messages = [event["summary_message"]] + messages[cutoff:]
         return count_tokens_approximately(messages)
 
@@ -380,5 +378,6 @@ class AgentRuntime:
 
     async def aclose(self) -> None:
         await self._checkpointer_stack.aclose()
+        self._checkpointer_stack = contextlib.AsyncExitStack()
         self._checkpointer = None
         self._memory_checkpointer = None

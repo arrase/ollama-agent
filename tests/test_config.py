@@ -164,6 +164,16 @@ class TestConfigManagement(unittest.TestCase):
             self.assertEqual(os.environ.get("LANGSMITH_PROJECT"), "test_proj")
             self.assertEqual(os.environ.get("LANGSMITH_ENDPOINT"), "https://api.smith.langchain.com")
 
+    def test_setup_environment_injects_langsmith_boolean_tracing(self) -> None:
+        with patch.dict(os.environ, {}, clear=False):
+            s = Settings(
+                langsmith=LangSmithSettings(
+                    tracing=True,
+                )
+            )
+            s.setup_environment()
+            self.assertEqual(os.environ.get("LANGSMITH_TRACING"), "true")
+
     def test_ensure_memory_file_creates_file_with_scaffold(self) -> None:
         memory_file = Path(self.temp_dir.name) / "MEMORY.md"
         self.assertFalse(memory_file.exists())

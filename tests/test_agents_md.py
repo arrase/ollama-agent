@@ -9,10 +9,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
 from deepagents.middleware.memory import MemoryMiddleware
-from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import SystemMessage
 
 from ollama_agent.agent import AgentRuntime
+from ollama_agent.core import OllamaChatModel
 from ollama_agent.settings import (
     AGENTS_MD_NAME,
     Settings,
@@ -151,10 +151,11 @@ class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
         runtime = AgentRuntime(settings=settings)
 
         mock_deep_agent = MagicMock()
-        mock_model = MagicMock(spec=BaseChatModel)
+        mock_model = MagicMock(spec=OllamaChatModel)
         mock_model.profile = None
         mock_model.num_ctx = 8192
         mock_model.effective_params = {}
+        mock_model.show_info = None
 
         with (
             patch("pathlib.Path.cwd", return_value=sub_dir),
@@ -174,6 +175,35 @@ class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
             # Verify backend routes has /project/
             backend = call_kwargs["backend"]
             self.assertIn("/project/", backend.routes)
+
+    async def test_agent_runtime_no_agents_md_when_missing(self) -> None:
+        empty_dir = self.base_path / "no_agents"
+        empty_dir.mkdir()
+
+        settings = Settings()
+        runtime = AgentRuntime(settings=settings)
+
+        mock_deep_agent = MagicMock()
+        mock_model = MagicMock(spec=OllamaChatModel)
+        mock_model.profile = None
+        mock_model.num_ctx = 8192
+        mock_model.effective_params = {}
+        mock_model.show_info = None
+
+        with (
+            patch("pathlib.Path.cwd", return_value=empty_dir),
+            patch("ollama_agent.agent.agent.ensure_model_supports_tools", AsyncMock()),
+            patch("ollama_agent.agent.agent.create_ollama_chat_model", AsyncMock(return_value=mock_model)),
+            patch("ollama_agent.agent.agent.create_deep_agent", return_value=mock_deep_agent) as mock_create_agent,
+        ):
+            await runtime._build_graph()
+
+            mock_create_agent.assert_called_once()
+            call_kwargs = mock_create_agent.call_args.kwargs
+
+            # Verify /AGENTS.md is NOT in memory sources when not found
+            self.assertNotIn("/AGENTS.md", call_kwargs["memory"])
+            self.assertNotIn("/project/AGENTS.md", call_kwargs["memory"])
 
 
 if __name__ == "__main__":

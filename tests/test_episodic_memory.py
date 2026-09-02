@@ -21,12 +21,14 @@ from ollama_agent.agent.episodic_memory import (
     load_past_user_prompts,
     search_past_conversations_in_db,
 )
+from ollama_agent.i18n import set_locale
 
 
 class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
     """Unit tests for episodic memory loading, keyword search, and formatting."""
 
     def setUp(self) -> None:
+        set_locale("en")
         self.tmpdir = tempfile.TemporaryDirectory()
         self.db_path = Path(self.tmpdir.name) / "history.db"
         self.serializer = JsonPlusSerializer()
@@ -35,6 +37,7 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
     def tearDown(self) -> None:
         set_active_thread_id("")
         self.tmpdir.cleanup()
+        set_locale("en")
 
     def _seed_db(self) -> None:
         conn = sqlite3.connect(str(self.db_path))
@@ -180,6 +183,23 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
 
         # Search with empty query returns empty list
         self.assertEqual(search_past_conversations_in_db("", db_path=self.db_path), [])
+
+    def test_load_past_conversations_thread_without_checkpoint(self) -> None:
+        self._seed_db()
+        conn = sqlite3.connect(str(self.db_path))
+        cur = conn.cursor()
+        t_msgs = [HumanMessage(content="Orphan message")]
+        typ, val = self.serializer.dumps_typed(t_msgs)
+        cur.execute(
+            "INSERT INTO writes (thread_id, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("orphan-thread", "cp-orphan", "task-orphan", 0, "messages", typ, val),
+        )
+        conn.commit()
+        conn.close()
+
+        conversations = load_past_conversations(self.db_path)
+        self.assertNotIn("orphan-thread", conversations)
+        self.assertIn("thread-100", conversations)
 
     def test_search_past_conversations_limit(self) -> None:
         self._seed_db()

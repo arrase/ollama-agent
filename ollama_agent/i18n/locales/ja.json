@@ -448,5 +448,6 @@
   "Variable assignment in key=value format": "key=value 形式の変数代入",
   "Unsupported input type '{type}' for input '{name}'": "入力 '{name}' に対してサポートされていない入力タイプです '{type}'",
   "Database": "データベース",
-  "Database name": "データベース名"
+  "Database name": "データベース名",
+  "Search query cannot be empty.": "検索クエリを空にすることはできません。"
 }

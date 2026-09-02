@@ -448,5 +448,6 @@
   "Variable assignment in key=value format": "key=value प्रारूप में चर असाइनमेंट",
   "Unsupported input type '{type}' for input '{name}'": "इनपुट '{name}' के लिए असमर्थित इनपुट प्रकार '{type}'",
   "Database": "डेटाबेस",
-  "Database name": "डेटाबेस का नाम"
+  "Database name": "डेटाबेस का नाम",
+  "Search query cannot be empty.": "खोज क्वेरी खाली नहीं हो सकती।"
 }

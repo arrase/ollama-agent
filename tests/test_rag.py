@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from ollama_agent.rag import (
     RAGContext,
@@ -69,6 +70,26 @@ class TestRAGComponents(unittest.TestCase):
         # Find it using lowercase
         found = ctx.resolve_database("mydatabase")
         self.assertEqual(found, "MyDatabase")
+
+    def test_create_database_error_cleans_up_client_before_rmtree(self) -> None:
+        calls: list[str] = []
+        mock_client = MagicMock()
+        mock_client.create_collection.side_effect = RuntimeError("collection creation failed")
+        mock_client.close.side_effect = lambda: calls.append("close")
+
+        def fake_rmtree(*args: object, **kwargs: object) -> None:
+            calls.append("rmtree")
+
+        with (
+            patch("ollama_agent.rag.manager.QdrantClient", return_value=mock_client),
+            patch("ollama_agent.rag.manager.shutil.rmtree", side_effect=fake_rmtree),
+        ):
+            with self.assertRaises(RAGError):
+                self.mgr.create_database("fail_db")
+
+        self.assertIn("close", calls)
+        self.assertIn("rmtree", calls)
+        self.assertLess(calls.index("close"), calls.index("rmtree"))
 
 
 if __name__ == "__main__":

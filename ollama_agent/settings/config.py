@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import tempfile
 from dataclasses import asdict, dataclass, field, fields
 from importlib import resources
 from pathlib import Path
@@ -12,6 +11,7 @@ from typing import Any, Self, TypeVar
 import yaml  # type: ignore[import-untyped]
 from jinja2 import Environment, StrictUndefined
 
+from ..core import atomic_write_text
 from ..i18n import _
 from .paths import (
     INSTRUCTIONS_PATH,
@@ -84,7 +84,7 @@ class SubAgentSettings:
 @dataclass(slots=True)
 class LangSmithSettings:
     api_key: str = ""
-    tracing: str = ""
+    tracing: str | bool = ""
     project: str = ""
     endpoint: str = ""
 
@@ -141,7 +141,7 @@ class Settings:
         if self.langsmith.api_key:
             os.environ["LANGSMITH_API_KEY"] = self.langsmith.api_key
         if self.langsmith.tracing:
-            os.environ["LANGSMITH_TRACING"] = self.langsmith.tracing
+            os.environ["LANGSMITH_TRACING"] = str(self.langsmith.tracing).lower()
         if self.langsmith.project:
             os.environ["LANGSMITH_PROJECT"] = self.langsmith.project
         if self.langsmith.endpoint:
@@ -216,22 +216,8 @@ def load_settings(settings_path: Path = SETTINGS_PATH) -> Settings:
 
 def save_settings(settings: Settings, settings_path: Path = SETTINGS_PATH) -> None:
     """Save settings to YAML file atomically."""
-    parent = settings_path.parent
-    parent.mkdir(parents=True, exist_ok=True)
     text = yaml.safe_dump(settings.to_dict(), sort_keys=False, allow_unicode=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        encoding="utf-8",
-        dir=parent,
-        prefix=f".{settings_path.stem}_",
-        suffix=".tmp",
-        delete=False,
-    ) as tf:
-        tmp_path = Path(tf.name)
-        tf.write(text)
-        tf.flush()
-        os.fsync(tf.fileno())
-    os.replace(tmp_path, settings_path)
+    atomic_write_text(settings_path, text)
 
 
 # ---------------------------------------------------------------------------

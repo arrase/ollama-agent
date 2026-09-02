@@ -68,6 +68,28 @@ class BaseFileStoreManager(ABC, Generic[T]):
     def delete(self, item_id: str) -> None:
         """Delete item by id. Raise FileNotFoundError if it doesn't exist."""
 
+    def resolve(
+        self,
+        prefix: str,
+        *,
+        label: str,
+        not_found_error: type[Exception],
+        ambiguous_error: type[Exception],
+        validation_error: type[Exception],
+    ) -> tuple[str, T]:
+        """Find a unique match for *prefix* or raise a domain-specific error."""
+        try:
+            matches = self.find_matches(prefix)
+        except ValueError as exc:
+            raise validation_error(str(exc)) from exc
+        return resolve_unique_match(
+            matches,
+            prefix,
+            label=label,
+            not_found_error=not_found_error,
+            ambiguous_error=ambiguous_error,
+        )
+
 
 def require_text(value: str, name: str, error: type[E]) -> str:
     """Return *value* stripped, raising *error* if it is empty."""

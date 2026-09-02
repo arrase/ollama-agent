@@ -448,5 +448,6 @@
   "Variable assignment in key=value format": "anahtar=değer biçiminde değişken ataması",
   "Unsupported input type '{type}' for input '{name}'": "'{name}' girdisi için desteklenmeyen girdi türü '{type}'",
   "Database": "Veritabanı",
-  "Database name": "Veritabanı adı"
+  "Database name": "Veritabanı adı",
+  "Search query cannot be empty.": "Arama sorgusu boş olamaz."
 }

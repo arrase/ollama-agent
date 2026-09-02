@@ -10,7 +10,7 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
-from ..core.resource_manager import require_text, resolve_unique_match
+from ..core.resource_manager import require_text
 from ..i18n import _
 from .manager import SkillInfo, SkillManager
 
@@ -38,21 +38,14 @@ class SkillsContext:
     console: Console = field(default_factory=Console)
     skill_manager: SkillManager = field(default_factory=SkillManager)
 
-    def _resolve_skill(self, skill_id: str) -> tuple[str, SkillInfo]:
-        try:
-            matches = self.skill_manager.find_matches(skill_id)
-        except ValueError as exc:
-            raise ValidationError(str(exc)) from exc
-        return resolve_unique_match(
-            matches,
+    def resolve_skill(self, skill_id: str) -> tuple[str, SkillInfo]:
+        return self.skill_manager.resolve(
             skill_id,
             label=_("Skill"),
             not_found_error=SkillNotFoundError,
             ambiguous_error=AmbiguousSkillError,
+            validation_error=ValidationError,
         )
-
-    def _require(self, value: str, name: str) -> str:
-        return require_text(value, name, ValidationError)
 
 
 def list_skills(ctx: SkillsContext) -> None:

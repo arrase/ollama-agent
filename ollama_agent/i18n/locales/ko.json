@@ -448,5 +448,6 @@
   "Variable assignment in key=value format": "key=value 형식의 변수 할당",
   "Unsupported input type '{type}' for input '{name}'": "입력 '{name}'에 대해 지원되지 않는 입력 유형 '{type}'",
   "Database": "데이터베이스",
-  "Database name": "데이터베이스 이름"
+  "Database name": "데이터베이스 이름",
+  "Search query cannot be empty.": "검색 쿼리는 비워 둘 수 없습니다."
 }

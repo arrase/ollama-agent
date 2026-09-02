@@ -5,6 +5,7 @@ from .common import (
     DEFAULT_REASONING_EFFORT,
     RAGToolResult,
     ReasoningEffortValue,
+    atomic_write_text,
     extract_text,
     validate_identifier,
 )
@@ -55,6 +56,7 @@ __all__ = [
     "resolve_ollama_reasoning",
     "validate_reasoning_effort",
     # Utils
+    "atomic_write_text",
     "extract_text",
     "require_text",
     "resolve_unique_match",

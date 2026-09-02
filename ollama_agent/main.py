@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 import warnings
 
 from langchain_core._api.deprecation import LangChainPendingDeprecationWarning
@@ -9,7 +10,7 @@ from rich.console import Console
 from .agent import AgentRuntime
 from .agent.builtin_tools import set_tool_timeout
 from .core import ModelCapabilityError, ModelContextWindowError
-from .i18n import _, set_locale
+from .i18n import SUPPORTED_LOCALES, _, set_locale
 from .interfaces.cli import create_argument_parser, handle_cli_commands
 from .interfaces.model_commands import ensure_model_configured
 from .interfaces.repl import OllamaREPL
@@ -23,15 +24,27 @@ warnings.filterwarnings(
 )
 
 
+def _extract_early_language(argv: list[str]) -> str | None:
+    """Extract language code from CLI arguments if present and supported."""
+    for i, arg in enumerate(argv):
+        if arg in ("-l", "--lang", "--language"):
+            if i + 1 < len(argv) and argv[i + 1] in SUPPORTED_LOCALES:
+                return argv[i + 1]
+        for prefix in ("-l=", "--lang=", "--language="):
+            if arg.startswith(prefix):
+                val = arg[len(prefix) :]
+                if val in SUPPORTED_LOCALES:
+                    return val
+    return None
+
+
 def main() -> None:
     """Main entry point."""
+    early_lang = _extract_early_language(sys.argv[1:])
+    set_locale(early_lang)
+
     parser = create_argument_parser()
     args = parser.parse_args()
-
-    if args.language:
-        set_locale(args.language)
-    else:
-        set_locale()
 
     if args.command and args.prompt:
         parser.error(_("--prompt cannot be used together with a subcommand."))

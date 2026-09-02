@@ -155,9 +155,9 @@ class TestRAGManagerAndCommands(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(hits[0]["filename"], "doc.txt")
                 self.assertEqual(hits[0]["score"], 0.92)
 
-                # empty query returns [] immediately
-                empty_hits = await self.manager.search("   ")
-                self.assertEqual(empty_hits, [])
+                # empty query raises RAGError
+                with self.assertRaises(RAGError):
+                    await self.manager.search("   ")
 
                 # top_k <= 0 raises RAGError
                 with self.assertRaises(RAGError):

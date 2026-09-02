@@ -377,6 +377,31 @@ class TestTaskManager(unittest.TestCase):
         expected = "Model: qwen2.5:32b\nIterations: 3\nVerbose mode enabled.\nTags:\n- prod\n- gpu\n"
         self.assertEqual(rendered, expected)
 
+    def test_task_from_dict_non_dict_inputs_raises(self) -> None:
+        raw = {
+            "title": "InvalidInputs",
+            "prompt": "prompt",
+            "model": "m",
+            "reasoning_effort": "low",
+            "inputs": "not-a-dict",
+        }
+        with self.assertRaises(ValueError):
+            Task.from_dict(raw)
+
+    def test_task_from_dict_invalid_input_value_raises(self) -> None:
+        raw = {
+            "title": "InvalidInputVal",
+            "prompt": "prompt",
+            "model": "m",
+            "reasoning_effort": "low",
+            "inputs": {
+                "bad_param": "not-a-taskinput-or-dict",
+            },
+        }
+        with self.assertRaises(ValueError) as ctx:
+            Task.from_dict(raw)
+        self.assertIn("bad_param", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

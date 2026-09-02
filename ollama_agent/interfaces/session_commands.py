@@ -78,8 +78,8 @@ def get_available_sessions(db_path: Path = HISTORY_DB_PATH) -> list[dict[str, An
                 }
                 for row in rows
             ]
-    except (sqlite3.Error, OSError, HistoryError):
-        return []
+    except (sqlite3.Error, OSError) as exc:
+        raise HistoryError(_("Failed to read history database {db_path}: {e}", db_path=db_path, e=exc)) from exc
 
 
 def list_sessions(
@@ -88,7 +88,11 @@ def list_sessions(
     current_thread_id: str = "",
 ) -> list[dict[str, Any]]:
     """List available chat sessions with step counts, timestamps, and current session indicator."""
-    sessions = get_available_sessions(db_path)
+    try:
+        sessions = get_available_sessions(db_path)
+    except HistoryError as exc:
+        console.print(f"[red]{exc}[/red]")
+        return []
     if not sessions:
         console.print(f"[yellow]{_('No saved sessions found in history.')}[/yellow]")
         return []
@@ -137,7 +141,11 @@ def resume_session(
     db_path: Path = HISTORY_DB_PATH,
 ) -> str | None:
     """Resume a previous session by thread ID or prefix."""
-    sessions = available_sessions if available_sessions is not None else get_available_sessions(db_path)
+    try:
+        sessions = available_sessions if available_sessions is not None else get_available_sessions(db_path)
+    except HistoryError as exc:
+        console.print(f"[red]{exc}[/red]")
+        return None
     if not sessions:
         console.print(f"[red]{_('No sessions available to resume.')}[/red]")
         return None
@@ -169,7 +177,11 @@ def delete_session(
     db_path: Path = HISTORY_DB_PATH,
 ) -> bool:
     """Delete a session from the SQLite checkpoint database."""
-    sessions = get_available_sessions(db_path)
+    try:
+        sessions = get_available_sessions(db_path)
+    except HistoryError as exc:
+        console.print(f"[red]{exc}[/red]")
+        return False
     resolved = resolve_session_id(target_id, sessions)
     if resolved is None:
         not_found_msg = _("Session '{target_id}' not found.", target_id=target_id)
@@ -199,7 +211,11 @@ async def export_session(
     db_path: Path = HISTORY_DB_PATH,
 ) -> Path | None:
     """Export conversation messages from a session to a Markdown file."""
-    sessions = get_available_sessions(db_path)
+    try:
+        sessions = get_available_sessions(db_path)
+    except HistoryError as exc:
+        console.print(f"[red]{exc}[/red]")
+        return None
     resolved = resolve_session_id(target_id, sessions)
     if resolved is None:
         not_found_msg = _("Session '{target_id}' not found.", target_id=target_id)

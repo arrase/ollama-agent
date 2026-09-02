@@ -448,5 +448,6 @@
   "Variable assignment in key=value format": "Assegnazione variabile nel formato chiave=valore",
   "Unsupported input type '{type}' for input '{name}'": "Tipo di input non supportato '{type}' per l'input '{name}'",
   "Database": "Database",
-  "Database name": "Nome del database"
+  "Database name": "Nome del database",
+  "Search query cannot be empty.": "La query di ricerca non può essere vuota."
 }

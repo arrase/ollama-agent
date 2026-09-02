@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -15,6 +13,7 @@ from ..core import (
     DEFAULT_REASONING_EFFORT,
     BaseFileStoreManager,
     ReasoningEffortValue,
+    atomic_write_text,
     validate_identifier,
     validate_reasoning_effort,
 )
@@ -92,12 +91,16 @@ class Task:
         if not isinstance(d, dict):
             raise ValueError(_("Expected mapping for Task, got {type_name}", type_name=type(d).__name__))
         inputs: dict[str, TaskInput] = {}
-        if "inputs" in d and isinstance(d["inputs"], dict):
+        if "inputs" in d:
+            if not isinstance(d["inputs"], dict):
+                raise ValueError("Expected mapping for inputs in Task")
             for name, input_data in d["inputs"].items():
                 if isinstance(input_data, TaskInput):
                     inputs[name] = input_data
                 elif isinstance(input_data, dict):
                     inputs[name] = TaskInput(**input_data)
+                else:
+                    raise ValueError(f"Invalid input definition for '{name}'")
         return cls(
             title=d["title"],
             prompt=d["prompt"],
@@ -143,19 +146,7 @@ class TaskManager(BaseFileStoreManager[Task]):
         if path.exists() and not overwrite:
             raise FileExistsError(_("Task already exists: {task_id}", task_id=task_id))
         text = yaml.safe_dump(asdict(task), allow_unicode=True)
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=f".{path.stem}_",
-            suffix=".tmp",
-            delete=False,
-        ) as tf:
-            tmp_path = Path(tf.name)
-            tf.write(text)
-            tf.flush()
-            os.fsync(tf.fileno())
-        os.replace(tmp_path, path)
+        atomic_write_text(path, text)
         return task_id
 
     def find_matches(self, prefix: str) -> list[tuple[str, Task]]:

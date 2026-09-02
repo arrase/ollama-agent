@@ -448,5 +448,6 @@
   "Variable assignment in key=value format": "Asignación de variable en formato clave=valor",
   "Unsupported input type '{type}' for input '{name}'": "Tipo de entrada no compatible '{type}' para la entrada '{name}'",
   "Database": "Base de datos",
-  "Database name": "Nombre de la base de datos"
+  "Database name": "Nombre de la base de datos",
+  "Search query cannot be empty.": "La consulta de búsqueda no puede estar vacía."
 }

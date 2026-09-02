@@ -448,5 +448,6 @@
   "Variable assignment in key=value format": "تعيين المتغير بتنسيق مفتاح=قيمة",
   "Unsupported input type '{type}' for input '{name}'": "نوع إدخال غير مدعوم '{type}' للإدخال '{name}'",
   "Database": "قاعدة البيانات",
-  "Database name": "اسم قاعدة البيانات"
+  "Database name": "اسم قاعدة البيانات",
+  "Search query cannot be empty.": "لا يمكن أن يكون استعلام البحث فارغًا."
 }

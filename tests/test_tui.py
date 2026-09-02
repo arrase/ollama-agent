@@ -10,6 +10,7 @@ from textual.widgets import OptionList
 
 from rich.console import Console
 
+from ollama_agent.agent.episodic_memory import HistoryError
 from ollama_agent.interfaces.dispatch import REPLCommand
 from ollama_agent.interfaces.repl import (
     OllamaAgentApp,
@@ -1212,3 +1213,20 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
             app._update_queue_ui()
             await pilot.pause()
             self.assertGreaterEqual(q.outer_size.height, 7)
+
+    async def test_repl_input_load_history_handles_history_error(self) -> None:
+        runtime_mock = MagicMock()
+        repl = OllamaREPL(runtime=runtime_mock)
+        app = OllamaAgentApp(repl)
+
+        with (
+            patch("ollama_agent.interfaces.tui_components.load_past_user_prompts", side_effect=HistoryError("Corrupt DB")),
+            patch.object(app, "show_system_notice") as mock_notice,
+        ):
+            async with app.run_test() as pilot:
+                await pilot.pause()
+                input_widget = app.query_one(ReplInput)
+                mock_notice.assert_called_once()
+                notice_text = mock_notice.call_args[0][0]
+                self.assertIn("Prompt history unavailable", notice_text)
+                self.assertEqual(input_widget._history, [])

@@ -112,6 +112,8 @@ def load_past_conversations(
 
     conversations: dict[str, dict[str, Any]] = {}
     for tid, msgs in thread_messages.items():
+        if tid not in thread_timestamps:
+            continue
         raw_ts = thread_timestamps[tid]
         conversations[tid] = {
             "timestamp": raw_ts,

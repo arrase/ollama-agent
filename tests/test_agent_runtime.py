@@ -545,6 +545,21 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             await runtime.aclose()
             self.assertIsNone(runtime._checkpointer)
 
+    async def test_checkpointer_reusable_after_aclose(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "history.db"
+            runtime = AgentRuntime(settings=Settings())
+            with patch("ollama_agent.agent.agent.HISTORY_DB_PATH", db_path):
+                cp1 = await runtime._sqlite_checkpointer()
+                self.assertIsNotNone(cp1)
+                await runtime.aclose()
+                self.assertIsNone(runtime._checkpointer)
+                # Ensure runtime can be re-used with a newly opened checkpointer stack
+                cp2 = await runtime._sqlite_checkpointer()
+                self.assertIsNotNone(cp2)
+                self.assertIsNot(cp1, cp2)
+                await runtime.aclose()
+
     async def test_agent_runtime_set_context_window(self) -> None:
         settings = Settings()
         runtime = AgentRuntime(settings=settings)
