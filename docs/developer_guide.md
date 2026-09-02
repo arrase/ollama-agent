@@ -19,17 +19,19 @@ source .venv/bin/activate
 ```
 
 ### 3. Install in Editable Mode
+Always manage dependencies and installations through `pyproject.toml`:
+
 ```bash
 # Basic installation
-pip install -e .
+.venv/bin/pip install -e .
 
 # Development installation (includes ruff linter)
-pip install -e ".[dev]"
+.venv/bin/pip install -e ".[dev]"
 ```
 
 ### 4. Optional: Install Documentation Dependencies
 ```bash
-pip install mkdocs-material
+.venv/bin/pip install mkdocs-material
 ```
 
 ### 5. Code Quality & Linting
@@ -91,18 +93,23 @@ All contributions must strictly follow the engineering guidelines:
 
 ### 1. KISS (Keep It Simple, Stupid)
 - **Radical Simplicity**: Write the least amount of straightforward, readable code that directly solves the problem. Never overengineer.
-- **Linear & Obvious Flow**: Code must read top-to-bottom with obvious control flow. Avoid convoluted branching or unnecessary wrapper layers.
+- **Do What Was Asked**: Implement the exact requirements. Do not anticipate hypothetical scenarios or speculative edge cases.
+- **Linear & Obvious Flow**: Code must read top-to-bottom with obvious control flow. Avoid convoluted branching, unnecessary indirection layers, or wrapper functions.
 - **No Premature Abstraction (YAGNI)**: Do not create interfaces, abstract base classes, or factories unless there is an immediate, concrete need.
 
 ### 2. Zero Defensive Bloat
-- **No Unsolicited Fallbacks**: Never mask errors or missing values with artificial defaults (e.g. returning `""`, `[]`, `{}`, `None`, `0`, or a fallback object) unless explicitly requested.
-- **No Defensive Catch-and-Swallow**: Never wrap code in `try/except` just to catch generic exceptions, log a warning, and return a fallback value. Let exceptions propagate naturally.
+- **No Unsolicited Fallbacks & Safe Defaults**: Never mask errors or missing values with artificial defaults (e.g., returning `""`, `[]`, `{}`, `None`, `0`, or fallback objects) unless explicitly requested. Access properties and dictionary keys directly.
+- **No Defensive Catch-and-Swallow**: Never wrap code in `try/except` just to catch generic exceptions, log a warning, and return a fallback value. Let exceptions propagate naturally unless performing an explicit retry or converting low-level errors at a system boundary.
+- **No Internal Paranoid Null/Type Checking**: Do not check for `None` or validate types inside internal functions when data flow is guaranteed. Strict input validation belongs exclusively at public system boundaries (CLI inputs, raw user input, external APIs).
 - **Fail Fast, Fail Loud**: If an invariant is violated or required input is missing, let the application fail immediately.
 
 ### 3. Top-Level Imports Only
 - All `import` and `from ... import` statements must reside at the very top of each Python file (PEP 8 standard). Never use function-level or inline imports.
 
-### 4. Dependency Management
+### 4. Virtual Environment & Python Tooling
+- Always execute Python scripts, tools, and test suites using the project's virtual environment (`.venv/bin/python`).
+
+### 5. Dependency Management
 - Dependencies and packaging metadata are managed strictly in `pyproject.toml`.
 
 ---
@@ -149,7 +156,7 @@ ollama-agent/
 │   │   └── prompts/         # Bundled markdown prompt templates
 │   │       └── default_instructions.md
 │   ├── skills/              # Agent Skills implementation
-│   │   ├── builtin/         # Internal application skills (skill-creator, task-creator)
+│   │   ├── builtin/         # Internal application skills (mcp-configurator, skill-creator, task-creator)
 │   │   ├── commands.py      # Skill CLI and REPL handlers
 │   │   └── manager.py       # SkillManager and SKILL.md YAML frontmatter parser
 │   ├── streaming/           # Streaming event handling and rendering

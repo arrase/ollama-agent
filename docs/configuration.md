@@ -47,9 +47,9 @@ rag:
 # Context Injection Limits (@-mentions)
 mentions:
   max_file_size: 1048576                 # Maximum individual file size in bytes (1 MB)
-  max_files: 100                          # Maximum number of files attached per directory mention
-  max_total_size: 10485760                # Maximum total context payload size in bytes (10 MB)
-  max_completions: 200                    # Maximum autocompletion candidates displayed in REPL
+  max_files: 100                         # Maximum number of files attached per directory mention
+  max_total_size: 10485760               # Maximum total context payload size in bytes (10 MB)
+  max_completions: 200                   # Maximum autocompletion candidates displayed in REPL
 
 # Telemetry & Tracing via LangSmith (Optional, omitted by default if unset)
 # langsmith:
@@ -79,17 +79,17 @@ subagents:
 
 | Section & Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `model.name` | `str` | *(interactive)* | Configured Ollama model name (must support tool calling). Selected interactively if unconfigured or missing. |
+| `model.name` | `str` | `""` *(interactive)* | Configured Ollama model name (must support tool calling). Selected interactively if unconfigured or missing. |
 | `model.base_url` | `str` | `http://localhost:11434` | Ollama native API endpoint. |
-| `model.temperature` | `float` | *(dynamic)* | Optional temperature override (0.8 engine default if unset in Modelfile). |
-| `model.top_p` | `float` | *(dynamic)* | Optional nucleus sampling threshold override (0.9 engine default if unset). |
-| `model.top_k` | `int` | *(dynamic)* | Optional top-k candidates limit override (40 engine default if unset). |
-| `model.min_p` | `float` | *(dynamic)* | Optional minimum probability threshold override (0.0 default if unset). |
-| `model.presence_penalty` | `float` | *(dynamic)* | Optional presence penalty override (0.0 default if unset). |
-| `model.repeat_penalty` | `float` | *(dynamic)* | Optional repetition penalty override (1.1 default; `repetition_penalty` accepted as alias in Modelfile metadata and `/params set`). |
-| `model.context_window` | `int` \| `str` | `10000` | Context window token limit (`num_ctx`), or `'max'` to auto-detect model maximum. |
+| `model.temperature` | `float \| None` | `None` *(dynamic)* | Optional temperature override (engine default if unset in Modelfile). |
+| `model.top_p` | `float \| None` | `None` *(dynamic)* | Optional nucleus sampling threshold override (engine default if unset). |
+| `model.top_k` | `int \| None` | `None` *(dynamic)* | Optional top-k candidates limit override (engine default if unset). |
+| `model.min_p` | `float \| None` | `None` *(dynamic)* | Optional minimum probability threshold override (engine default if unset). |
+| `model.presence_penalty` | `float \| None` | `None` *(dynamic)* | Optional presence penalty override (engine default if unset). |
+| `model.repeat_penalty` | `float \| None` | `None` *(dynamic)* | Optional repetition penalty override (`repetition_penalty` accepted as alias in Modelfile metadata and `/params set`). |
+| `model.context_window` | `int \| str` | `10000` | Context window token limit (`num_ctx`), or `'max'` to auto-detect model maximum. |
 | `model.reasoning_effort` | `str` | `medium` | Default reasoning effort (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
-| `runtime.language` | `str` | `""` | Interface language code (e.g. `en`, `es`, `fr`, `de`; auto-detects system locale if unset). |
+| `runtime.language` | `str` | `""` | Interface language code (`en`, `es`, `fr`, `de`, `it`, `pt`, `zh`, `ja`, `ru`, `hi`, `ko`, `ar`, `tr`, `pl`, `nl`, `uk`; auto-detects system locale if unset). |
 | `runtime.allow_traversal` | `bool` | `false` | If true, permits filesystem operations outside project working directory. |
 | `runtime.builtin_tool_timeout` | `int` | `30` | Execution timeout in seconds for tool and shell commands. |
 | `runtime.collapse_thinking` | `bool` | `true` | If true, collapses reasoning blocks by default in REPL output. |
@@ -109,7 +109,7 @@ subagents:
 | `langsmith.tracing` | `str` | `""` | Enable tracing (`"true"` / `"false"`). |
 | `langsmith.project` | `str` | `""` | LangSmith project name for traces. |
 | `langsmith.endpoint` | `str` | `""` | API endpoint for LangSmith telemetry. |
-| `subagents` | `list` | `[]` | List of specialized subagent definitions (`name`, `description`, `system_prompt`, `model`, etc.). |
+| `subagents` | `list` | `[]` | List of specialized subagent definitions (`name`, `description`, `system_prompt`, `model`, `context_window`, `mcp_servers`). |
 
 ---
 
@@ -126,7 +126,7 @@ flowchart TD
     D -- No --> F[Use Ollama Engine Default]
 ```
 
-1. **User Settings (`settings.yaml`)**: If explicitly specified in configuration, the user's value takes precedence.
+1. **User Settings (`settings.yaml` / CLI / `/params set`)**: If explicitly specified in configuration or session commands, the user's value takes precedence.
 2. **Modelfile / Model Metadata**: If omitted in configuration, the agent inspects the model's metadata (`PARAMETER <name> <value>`) for model-specific recommendations.
 3. **Ollama Engine Defaults**: If not specified in `settings.yaml` or the Modelfile, parameters are not artificially overridden, allowing Ollama's native model engine defaults to apply directly.
 
@@ -151,10 +151,10 @@ flowchart TD
     G -- "Not Found" --> I["Raise ModelContextWindowError"]
 ```
 
-1. **Explicit Numeric Configuration Override**: If `model.context_window` in `settings.yaml` (or CLI argument) is explicitly defined (> 0), its value is used directly.
-2. **Dynamic Maximum Resolution (`'max'` or Unset)**: When configured as `'max'` (or omitted), `ollama-agent` fetches model metadata from Ollama (`ollama.show()`) to use the maximum context length supported by the model:
-   - **Structured Model Metadata (`model_info`)**: Queries modern model metadata keys ending in `.context_length` (e.g., `llama.context_length`, `qwen2.context_length`).
-   - **Modelfile Parameter Parsing**: Scans raw Modelfile `parameters` or string fields using regex matching (`^\s*(?:PARAMETER\s+)?num_ctx\s+(\d+)\s*$`) to extract declared `num_ctx` values.
+1. **Explicit Numeric Configuration Override**: If `model.context_window` in `settings.yaml` (or `-c` / `--num-ctx` CLI argument) is explicitly defined (> 0), its value is used directly.
+2. **Dynamic Maximum Resolution (`'max'` or Unset)**: When configured as `'max'` (or omitted), `ollama-agent` fetches model metadata from Ollama (`ollama.AsyncClient.show()`) to use the maximum context length supported by the model:
+   - **Structured Model Metadata (`model_info` / `modelinfo`)**: Queries modern model metadata keys ending in `context_length` (e.g., `llama.context_length`, `qwen2.context_length`) and selects the maximum.
+   - **Modelfile Parameter Parsing**: Scans raw Modelfile `parameters` or string fields using regex matching (`^\s*(?:PARAMETER\s+)?num_ctx\s+([^\s\n]+)`) to extract declared `num_ctx` values.
 3. **Error Handling**: If resolution fails across all stages, `ollama-agent` halts startup and raises a `ModelContextWindowError`, prompting the user to specify `context_window` in `settings.yaml`.
 
 ---
@@ -174,24 +174,49 @@ flowchart TD
 
 ## Reasoning Effort Controls & API Mapping
 
-The `--effort` flag and `model.reasoning_effort` setting control model reasoning traces:
+The `--effort` CLI flag and `model.reasoning_effort` setting control model reasoning traces and map to Ollama's runtime options:
 
 | Model Family | `--effort` Value | Ollama API Parameter | Behavior |
 | :--- | :--- | :--- | :--- |
-| **Qwen3.8 Series** | `xhigh` / `high` | `"high"` | Thorough reasoning for complex analysis (translated to Ollama API `"high"`). |
+| **Qwen3.8 Series** | `xhigh` / `high` / `enabled` | `"high"` | Thorough reasoning (translated to Ollama API `"high"`). |
 | **Qwen3.8 Series** | `medium` | `"medium"` | Balanced reasoning optimizing accuracy and speed. |
 | **Qwen3.8 Series** | `low` | `"low"` | Efficient reasoning optimizing for speed and cost. |
-| **Qwen3.8 Series** | `enabled` | `"high"` | Enables reasoning with Qwen3.8 default `"high"` level. |
 | **Qwen3.8 Series** | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
 | **Qwen3.8 Series** | `disabled` | `false` | Disables reasoning trace generation at the model level. |
-| **GPT-OSS** | `low` / `medium` / `high` / `xhigh` | `"low"` / `"medium"` / `"high"` / `"xhigh"` | Sets thinking trace depth string. |
-| **GPT-OSS** | `enabled` | `"medium"` | Enables thinking with default `medium` level. |
-| **GPT-OSS** | `hide` | *(omitted)* | Uses model default effort and hides reasoning trace in UI. |
-| **GPT-OSS** | `disabled` | *(omitted)* | GPT-OSS cannot disable thinking; emits warning, uses default effort, and hides reasoning trace in UI. |
-| **Binary Reasoning Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `low` / `medium` / `high` / `xhigh` / `enabled` | `true` | Enables native reasoning generation. |
-| **Binary Reasoning Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
-| **Binary Reasoning Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `disabled` | `false` | Disables reasoning trace generation at the model level. |
-| **Non-Thinking Models** | *(any)* | *(omitted)* | Setting is ignored gracefully. |
+| **GPT-OSS** | `low` / `medium` / `high` | `"low"` / `"medium"` / `"high"` | Sets thinking trace depth string. |
+| **GPT-OSS** | `xhigh` | `"high"` | Translates to maximum supported depth (`"high"`). |
+| **GPT-OSS** | `enabled` / `hide` | `true` | Enables thinking; collapses trace in UI if `hide`. |
+| **GPT-OSS** | `disabled` | `true` | GPT-OSS cannot disable thinking; emits warning and keeps thinking enabled. |
+| **General Thinking Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `low` / `medium` / `high` | `"low"` / `"medium"` / `"high"` | Passes reasoning effort level string to Ollama. |
+| **General Thinking Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `xhigh` | `"high"` | Translates to `"high"` reasoning effort level. |
+| **General Thinking Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `enabled` / `hide` | `true` | Enables native reasoning generation (collapses trace in UI if `hide`). |
+| **General Thinking Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `disabled` | `false` | Disables reasoning trace generation at the model level. |
+| **Non-Thinking Models** | *(any)* | *(omitted)* | Reasoning option is omitted; setting is ignored gracefully. |
+
+---
+
+## Internationalization & Locale Resolution (i18n)
+
+`ollama-agent` supports 16 interface languages:
+
+| Language Code | Language | Language Code | Language |
+| :--- | :--- | :--- | :--- |
+| `en` *(default)* | English | `ja` | Japanese (日本語) |
+| `es` | Spanish (Español) | `ru` | Russian (Русский) |
+| `fr` | French (Français) | `hi` | Hindi (हिन्दी) |
+| `de` | German (Deutsch) | `ko` | Korean (한국어) |
+| `it` | Italian (Italiano) | `ar` | Arabic (العربية) |
+| `pt` | Portuguese (Português) | `tr` | Turkish (Türkçe) |
+| `zh` | Chinese (中文) | `pl` | Polish (Polski) |
+| `nl` | Dutch (Nederlands) | `uk` | Ukrainian (Українська) |
+
+### Locale Resolution Precedence
+
+1. **CLI Flag (`-l` / `--lang` / `--language`)**: Direct runtime override (e.g. `ollama-agent -l es`).
+2. **Configuration File (`runtime.language`)**: Configured code in `~/.ollama-agent/settings.yaml`.
+3. **System Environment Variables**: Inspects `LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, and `LANG` in order.
+4. **System Python Locale**: Reads `locale.getlocale()`.
+5. **Default Fallback**: Defaults to `en` (English).
 
 ---
 
@@ -227,11 +252,11 @@ LangChain and LangGraph automatically pick up these environment variables to sen
 ### Unified Jinja2 System Prompt Template (`instructions.md`)
 Agent system prompt instructions are managed via a single, unified Jinja2 template located at `~/.ollama-agent/prompts/instructions.md`.
 
-When `ollama-agent` initializes, `instructions.md` is loaded and rendered dynamically using Jinja2 with strict undefined checking (`StrictUndefined`) before being supplied to the orchestrator model. If the file does not exist during startup, `ollama-agent` automatically creates it pre-populated with the bundled default Jinja2 template.
+When `ollama-agent` initializes, `instructions.md` is loaded and rendered dynamically using Jinja2 with strict undefined checking (`StrictUndefined`) before being supplied to the orchestrator model. If the file does not exist during startup, `ollama-agent` automatically creates it pre-populated with the bundled default Jinja2 template (`default_instructions.md`).
 
 #### Available Jinja2 Context Variables
 
-During template rendering, the following context variables and their attributes are available:
+During primary template rendering, the following context variables and their attributes are available:
 
 | Context Variable | Type | Description | Available Attributes |
 | :--- | :--- | :--- | :--- |
@@ -241,6 +266,13 @@ During template rendering, the following context variables and their attributes 
 | `model` | `ModelSettings` | LLM configuration and parameter overrides | `model.name` (`str`), `model.base_url` (`str`), `model.context_window` (`int \| str`), `model.reasoning_effort` (`str`), `model.temperature` (`float \| None`), `model.top_p` (`float \| None`), `model.top_k` (`int \| None`), `model.min_p` (`float \| None`), `model.presence_penalty` (`float \| None`), `model.repeat_penalty` (`float \| None`) |
 | `rag_active` | `bool` | Dynamic flag indicating whether a RAG database is loaded in the active session | *(boolean flag)* |
 | `rag_database` | `str` | Name of the active RAG database (or empty string when inactive) | *(string value)* |
+
+> [!NOTE]
+> Custom subagents defined in `subagents` also support Jinja2 templating in their `system_prompt`. Subagent prompt templates are rendered with `subagent` (`SubAgentSettings`) and `model_settings` (`ModelSettings`) in their template context.
+
+#### Environment Block Injection
+
+After template rendering, the runtime appends an immutable `# ENVIRONMENT` block containing host operating system information, current date/time, and working directory path (for shell operations).
 
 #### Conditional Filesystem & RAG Policy Logic
 
@@ -299,6 +331,7 @@ ollama-agent --config-reset <option>
 
 | Reset Option | Actions Performed |
 | :--- | :--- |
-| `config-file` | Unlinks `~/.ollama-agent/settings.yaml` and re-initializes it with default settings. |
-| `system-prompt` | Unlinks `~/.ollama-agent/prompts/instructions.md` and restores the default Jinja2 system prompt template. |
+| `config-file` | Re-initializes `~/.ollama-agent/settings.yaml` with default application settings. |
+| `system-prompt` | Unlinks `~/.ollama-agent/prompts/instructions.md` and restores the bundled default Jinja2 system prompt template. |
 | `all` | Performs a complete factory reset of both `settings.yaml` and the `instructions.md` system prompt template. |
+

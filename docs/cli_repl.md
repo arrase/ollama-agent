@@ -13,7 +13,7 @@ The REPL (Read-Eval-Print Loop) is the default mode when launching `ollama-agent
 * **Stateful Sessions**: Multi-turn conversation history stored and checkpointed in SQLite (`~/.ollama-agent/history.db`).
 * **Rich Markdown Formatting**: Real-time streaming output with syntax-highlighted code blocks, thinking containers, and status cards.
 * **Live Context & Token Gauge**: Dynamic header showing consumed tokens vs. model context limit (`num_ctx`) with color-coded alert thresholds.
-* **Context Compaction**: Reclaim tokens automatically or on-demand via the agent's built-in `compact_conversation` tool with persistent history offloading to `/conversation_history/session_<uuid>.md`.
+* **Context Management & Summarization**: Automatic background summarization via DeepAgents middleware keeps token usage within context window limits without manual intervention.
 * **Human-in-the-Loop (HITL) Approvals**: Inline approval widgets before executing shell commands or editing files, with YOLO mode bypass.
 * **3-Level Tab Autocompletion**: Autocompletion for slash commands, subcommands, entities (models, sessions, tasks, skills, RAG databases), and `@-mention` file paths.
 * **System Clipboard Integration**: Native copy and paste across macOS, Linux (Wayland / X11), and Windows.
@@ -148,6 +148,12 @@ ollama-agent session delete 4d7e2a1b
 ollama-agent mcp list
 ```
 
+#### 6. Agents (Subagents) Commands
+```bash
+# List all configured subagents and their properties
+ollama-agent agents list
+```
+
 ---
 
 ## Interactive REPL Reference
@@ -251,18 +257,14 @@ The dynamic header bar monitors token consumption and model parameters in real t
 
 ---
 
-### Context Compression & Compaction
+### Context Management & Automatic Summarization
 
-To prevent conversation degradation and context overflow errors:
+To prevent context window overflow and preserve coherent multi-turn reasoning:
 
-1. **Automatic Background Summarization**:
-   - Triggers automatically when conversation tokens reach **85%** of `max_input_tokens`.
-   - Compresses older turns into a structured summary while keeping the most recent **10%** of tokens (or 6 messages) intact.
-   - Large tool arguments are truncated to 2,000 characters.
-   - Evicted turns and inline media are appended to `/conversation_history/session_<uuid>.md`.
-2. **Agent-Driven Compaction Tool (`compact_conversation`)**:
-   - The agent can proactively call the `compact_conversation` tool when context gets long or when transitioning between major topics.
-   - You can also request compaction directly in natural language (e.g. *"compact conversation history"* or *"comprime el contexto"*).
+* **Automatic Summarization Middleware**: DeepAgents' `create_summarization_tool_middleware` actively monitors token consumption across conversation turns.
+* **Stateful Summaries**: When conversation history approaches the context limit, older turns are automatically condensed into a structured summary (`_summarization_event`) in LangGraph state.
+* **Preserved Recency**: The most recent conversation turns and system instructions are preserved intact to maintain immediate conversational context.
+* **Zero User Intervention**: Summarization operates transparently in the background without requiring manual compaction commands or tools.
 
 ---
 
@@ -358,17 +360,17 @@ The `--effort` flag (and `model.reasoning_effort` in `settings.yaml`) controls m
 
 | Model Family | `--effort` Value | Ollama API Parameter | Behavior |
 | :--- | :--- | :--- | :--- |
-| **Qwen3.8 Series** | `xhigh` / `high` | `"high"` | Thorough reasoning for complex analysis (translated to Ollama API `"high"`). |
+| **Qwen3.8 Series** | `xhigh` / `high` / `enabled` | `"high"` | Thorough reasoning for complex analysis (translated to Ollama API `"high"`). |
 | **Qwen3.8 Series** | `medium` | `"medium"` | Balanced reasoning optimizing accuracy and speed. |
 | **Qwen3.8 Series** | `low` | `"low"` | Efficient reasoning optimizing for speed and cost. |
-| **Qwen3.8 Series** | `enabled` | `"high"` | Enables reasoning with Qwen3.8 default `"high"` level. |
 | **Qwen3.8 Series** | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
 | **Qwen3.8 Series** | `disabled` | `false` | Disables reasoning trace generation at the model level. |
-| **GPT-OSS** | `low` / `medium` / `high` / `xhigh` | `"low"` / `"medium"` / `"high"` / `"xhigh"` | Sets thinking trace depth. GPT-OSS accepts string effort levels. |
-| **GPT-OSS** | `enabled` | `"medium"` | Enables thinking with default `medium` level. |
-| **GPT-OSS** | `hide` | *(omitted)* | Uses model default effort and hides reasoning trace in UI. |
-| **GPT-OSS** | `disabled` | *(omitted)* | GPT-OSS cannot disable thinking; emits warning, uses default effort, and hides reasoning trace in UI. |
-| **Binary Reasoning Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `low` / `medium` / `high` / `xhigh` / `enabled` | `true` | Enables native reasoning generation. |
-| **Binary Reasoning Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
-| **Binary Reasoning Models**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek R1, DeepSeek-v3.1)* | `disabled` | `false` | Disables reasoning trace generation at the model level. |
-| **Non-Thinking Models** | *(any)* | *(omitted)* | Setting is ignored gracefully. |
+| **GPT-OSS** | `low` / `medium` / `high` | `"low"` / `"medium"` / `"high"` | Sets thinking trace depth. GPT-OSS accepts string effort levels. |
+| **GPT-OSS** | `xhigh` | `"high"` | High reasoning depth (mapped to `"high"`). |
+| **GPT-OSS** | `enabled` / `hide` | `true` | Uses model default effort and collapses/hides reasoning trace in UI when `hide`. |
+| **GPT-OSS** | `disabled` | `true` | GPT-OSS cannot disable thinking; emits warning, keeps thinking enabled, and hides reasoning trace in UI. |
+| **Thinking-Capable Models**<br>*(e.g. Qwen 2.5 / 3, Gemma 4, DeepSeek R1)* | `low` / `medium` / `high` | `"low"` / `"medium"` / `"high"` | Passes configured reasoning effort string to Ollama API. |
+| **Thinking-Capable Models**<br>*(e.g. Qwen 2.5 / 3, Gemma 4, DeepSeek R1)* | `xhigh` | `"high"` | Maps `xhigh` to `"high"`. |
+| **Thinking-Capable Models**<br>*(e.g. Qwen 2.5 / 3, Gemma 4, DeepSeek R1)* | `enabled` / `hide` | `true` | Enables native reasoning generation (collapsed/hidden in UI when `hide`). |
+| **Thinking-Capable Models**<br>*(e.g. Qwen 2.5 / 3, Gemma 4, DeepSeek R1)* | `disabled` | `false` | Disables reasoning trace generation at the model level. |
+| **Non-Thinking Models** | *(any)* | *(omitted)* | Setting is omitted and ignored gracefully. |
