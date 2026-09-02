@@ -11,12 +11,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from rich.console import Console
 
+import ollama_agent.mcp as mcp_pkg
 from ollama_agent.mcp.commands import (
+    DEFAULT_MCP_TIMEOUT as CMD_DEFAULT_MCP_TIMEOUT,
     check_mcp_server,
     list_mcp_servers,
     reload_mcp_servers,
 )
 from ollama_agent.mcp.loader import (
+    DEFAULT_MCP_TIMEOUT,
     MCPConfigError,
     _build_mcp_connection,
     _load_tools_from_connections,
@@ -125,6 +128,34 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
     def test_build_mcp_connection_invalid_raises(self) -> None:
         with self.assertRaisesRegex(MCPConfigError, "requires either 'command' or 'url'"):
             _build_mcp_connection("srv", {"unknown": "value"})
+
+    def test_build_mcp_connection_empty_command_raises(self) -> None:
+        with self.assertRaisesRegex(MCPConfigError, "'command' must be a non-empty string"):
+            _build_mcp_connection("srv", {"command": ""})
+        with self.assertRaisesRegex(MCPConfigError, "'command' must be a non-empty string"):
+            _build_mcp_connection("srv", {"command": "   "})
+        with self.assertRaisesRegex(MCPConfigError, "'command' must be a non-empty string"):
+            _build_mcp_connection("srv", {"command": 123})
+
+    def test_build_mcp_connection_empty_url_raises(self) -> None:
+        with self.assertRaisesRegex(MCPConfigError, "'url' must be a non-empty string"):
+            _build_mcp_connection("srv", {"url": ""})
+        with self.assertRaisesRegex(MCPConfigError, "'url' must be a non-empty string"):
+            _build_mcp_connection("srv", {"url": "   "})
+        with self.assertRaisesRegex(MCPConfigError, "'url' must be a non-empty string"):
+            _build_mcp_connection("srv", {"url": None})
+
+    def test_subagent_mcp_server_to_dict(self) -> None:
+        srv = SubAgentMCPServer(name="git", command="npx", args=["-y", "git-mcp"], env={"GIT_AUTHOR": "test"})
+        self.assertEqual(srv.to_dict(), {"command": "npx", "args": ["-y", "git-mcp"], "env": {"GIT_AUTHOR": "test"}})
+
+    def test_default_mcp_timeout(self) -> None:
+        self.assertEqual(DEFAULT_MCP_TIMEOUT, 10.0)
+        self.assertEqual(CMD_DEFAULT_MCP_TIMEOUT, 10.0)
+
+    def test_mcp_package_exports(self) -> None:
+        self.assertIn("MCPConfigError", mcp_pkg.__all__)
+        self.assertIs(mcp_pkg.MCPConfigError, MCPConfigError)
 
     async def test_load_main_mcp_tools_missing_file_returns_empty(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

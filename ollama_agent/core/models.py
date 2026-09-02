@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, Callable, cast
 
@@ -14,6 +15,8 @@ from .common import (
     ALLOWED_REASONING_EFFORTS,
     ReasoningEffortValue,
 )
+
+_log = logging.getLogger(__name__)
 
 
 class ModelCapabilityError(RuntimeError):
@@ -60,7 +63,7 @@ async def get_model_capabilities(
     response = show_info if show_info is not None else await _show_model(model, base_url)
     caps = getattr(response, "capabilities", None)
     if isinstance(caps, dict):
-        caps = caps.get("capabilities", [])
+        caps = caps["capabilities"]
     if isinstance(caps, list):
         return {str(c).lower() for c in caps}
     raise ModelCapabilityError(
@@ -108,6 +111,15 @@ def _get_model_info(response: Any) -> dict[str, Any] | None:
     return None
 
 
+def _get_modelfile_sources(response: Any) -> list[str]:
+    """Extract non-empty modelfile/parameters text sources from an Ollama response."""
+    sources = [
+        getattr(response, "parameters", None),
+        getattr(response, "modelfile", None),
+    ]
+    return [s for s in sources if s]
+
+
 async def resolve_context_window(
     model: str,
     context_window: int | str | None,
@@ -138,11 +150,7 @@ async def resolve_context_window(
     if model_info is not None and (resolved := _model_context_length(model_info)):
         return resolved
 
-    meta_sources = [
-        getattr(response, "parameters", None),
-        getattr(response, "modelfile", None),
-    ]
-    for text in [t for t in meta_sources if t]:
+    for text in _get_modelfile_sources(response):
         if resolved := _parse_num_ctx(text):
             return resolved
 
@@ -166,15 +174,9 @@ async def resolve_ollama_reasoning(
     """Translate reasoning_effort to Ollama's native reasoning setting."""
     lower_name = model.lower()
     if "qwen3.8" in lower_name:
-        if effort == "disabled":
-            return False
-        if effort == "hide":
-            return True
-        if effort in ("xhigh", "high", "enabled"):
+        if effort in ("xhigh", "enabled"):
             return "high"
-        return effort
-
-    if "gpt-oss" in lower_name:
+    elif "gpt-oss" in lower_name:
         if effort == "disabled":
             warn_callback(
                 _(
@@ -184,13 +186,7 @@ async def resolve_ollama_reasoning(
                 )
             )
             return True
-        if effort in ("hide", "enabled"):
-            return True
-        if effort == "xhigh":
-            return "high"
-        return effort
-
-    if not await model_supports_thinking(model, base_url, show_info=show_info):
+    elif not await model_supports_thinking(model, base_url, show_info=show_info):
         return None
 
     if effort == "disabled":
@@ -226,10 +222,7 @@ async def resolve_model_parameters(
     }
 
     response = show_info if show_info is not None else await _show_model(model, base_url)
-    meta_sources = [
-        getattr(response, "parameters", None),
-        getattr(response, "modelfile", None),
-    ]
+    meta_sources = _get_modelfile_sources(response)
 
     resolved: dict[str, tuple[Any, str]] = {}
 
@@ -240,7 +233,7 @@ async def resolve_model_parameters(
             continue
 
         found_val: Any = None
-        for text in [t for t in meta_sources if t]:
+        for text in meta_sources:
             raw = _parse_modelfile_param(text, param)
             if raw is None and param == "repeat_penalty":
                 raw = _parse_modelfile_param(text, "repetition_penalty")
@@ -339,3 +332,26 @@ def validate_reasoning_effort(effort: str) -> ReasoningEffortValue:
             allowed=sorted(ALLOWED_REASONING_EFFORTS),
         )
     )
+
+
+def get_model_creation_kwargs(
+    model_settings: Any,
+    *,
+    model: str | None = None,
+    context_window: int | str | None = None,
+    warn_callback: Callable[[str], None] = _log.warning,
+) -> dict[str, Any]:
+    """Build kwargs dict for create_ollama_chat_model from ModelSettings."""
+    return {
+        "model": model or model_settings.name,
+        "base_url": model_settings.base_url,
+        "context_window": context_window or model_settings.context_window,
+        "reasoning_effort": validate_reasoning_effort(model_settings.reasoning_effort),
+        "temperature": model_settings.temperature,
+        "top_p": model_settings.top_p,
+        "top_k": model_settings.top_k,
+        "min_p": model_settings.min_p,
+        "presence_penalty": model_settings.presence_penalty,
+        "repeat_penalty": model_settings.repeat_penalty,
+        "warn_callback": warn_callback,
+    }

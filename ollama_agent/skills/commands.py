@@ -10,7 +10,7 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
-from ..core.resource_manager import require_text, resolve_unique_match
+from ..core.resource_manager import require_text
 from ..i18n import _
 from .manager import SkillInfo, SkillManager
 
@@ -38,18 +38,16 @@ class SkillsContext:
     console: Console = field(default_factory=Console)
     skill_manager: SkillManager = field(default_factory=SkillManager)
 
-    def _resolve_skill(self, skill_id: str) -> tuple[str, SkillInfo]:
-        try:
-            matches = self.skill_manager.find_matches(skill_id)
-        except ValueError as exc:
-            raise ValidationError(str(exc)) from exc
-        return resolve_unique_match(
-            matches,
+    def resolve_skill(self, skill_id: str) -> tuple[str, SkillInfo]:
+        return self.skill_manager.resolve(
             skill_id,
             label=_("Skill"),
             not_found_error=SkillNotFoundError,
             ambiguous_error=AmbiguousSkillError,
+            validation_error=ValidationError,
         )
+
+    _resolve_skill = resolve_skill
 
     def _require(self, value: str, name: str) -> str:
         return require_text(value, name, ValidationError)
@@ -71,7 +69,7 @@ def list_skills(ctx: SkillsContext) -> None:
 
 def show_skill(ctx: SkillsContext, skill_id: str) -> None:
     """Display the full contents of a skill's SKILL.md."""
-    sid, info = ctx._resolve_skill(skill_id)
+    sid, info = ctx.resolve_skill(skill_id)
     ctx.console.print(Panel(Markdown(info.content), title=_("Skill: {sid}", sid=sid), border_style="cyan"))
 
 
@@ -100,16 +98,18 @@ def create_skill(
         raise SkillError(_("Skill already exists: {skill_id} (use --force to overwrite)", skill_id=skill_id)) from exc
     except ValueError as exc:
         raise ValidationError(str(exc)) from exc
-    ctx.console.print(f"[green]✓ {_('Skill created: {name} ({created})', name=name, created=created)}[/green]")
+    ctx.console.print(
+        f"[green]✓ {_('Skill created: {name} ({created})', name=escape(name), created=escape(created))}[/green]"
+    )
 
 
 def delete_skill(ctx: SkillsContext, skill_id: str) -> None:
     """Delete an existing skill."""
-    sid, info = ctx._resolve_skill(skill_id)
+    sid, info = ctx.resolve_skill(skill_id)
     try:
         ctx.skill_manager.delete(sid)
     except FileNotFoundError as exc:
         raise SkillNotFoundError(str(exc)) from exc
     except ValueError as exc:
         raise SkillError(str(exc)) from exc
-    ctx.console.print(f"[green]✓ {_('Skill deleted: {name} ({sid})', name=info.name, sid=sid)}[/green]")
+    ctx.console.print(f"[green]✓ {_('Skill deleted: {name} ({sid})', name=escape(info.name), sid=escape(sid))}[/green]")

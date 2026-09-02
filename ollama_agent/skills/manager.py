@@ -96,12 +96,9 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
     def _collect_skills(self, prefix: str = "") -> dict[str, SkillInfo]:
         """Collect all skills matching *prefix*, allowing user skills to override built-ins."""
         skills: dict[str, SkillInfo] = {}
-        if self.builtin_dir is not None and self.builtin_dir.is_dir():
-            for d in self.builtin_dir.iterdir():
-                if d.is_dir() and d.name.startswith(prefix) and _find_skill_file(d) is not None:
-                    skills[d.name] = _read_skill(d)
-        if self.base_dir.is_dir():
-            for d in self.base_dir.iterdir():
+        search_dirs = [d for d in (self.builtin_dir, self.base_dir) if d is not None and d.is_dir()]
+        for directory in search_dirs:
+            for d in directory.iterdir():
                 if d.is_dir() and d.name.startswith(prefix) and _find_skill_file(d) is not None:
                     skills[d.name] = _read_skill(d)
         return skills

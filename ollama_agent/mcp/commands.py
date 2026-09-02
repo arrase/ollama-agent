@@ -14,7 +14,7 @@ from rich.table import Table
 
 from ..i18n import _
 from ..settings import MCP_PATH, Settings
-from .loader import MCPConfigError, _build_mcp_connection, _read_main_config
+from .loader import DEFAULT_MCP_TIMEOUT, MCPConfigError, _build_mcp_connection, _read_main_config
 
 if TYPE_CHECKING:
     from ..agent import AgentRuntime
@@ -36,7 +36,7 @@ async def check_mcp_server(
     name: str,
     cfg: dict[str, Any],
     *,
-    timeout: float = 10.0,
+    timeout: float = DEFAULT_MCP_TIMEOUT,
 ) -> MCPServerStatus:
     """Connect to an MCP server and probe available tools."""
     try:
@@ -83,11 +83,7 @@ async def list_mcp_servers(
     subagent_servers: dict[str, dict[str, Any]] = {}
     for sa in settings.subagents:
         for srv in sa.mcp_servers:
-            subagent_servers[f"{srv.name} ({sa.name})"] = {
-                "command": srv.command,
-                "args": srv.args,
-                "env": srv.env,
-            }
+            subagent_servers[f"{srv.name} ({sa.name})"] = srv.to_dict()
 
     all_servers = {**servers_cfg, **subagent_servers}
     if not all_servers:

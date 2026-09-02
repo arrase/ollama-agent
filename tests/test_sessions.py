@@ -11,6 +11,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from rich.console import Console
 
+from ollama_agent.agent.episodic_memory import HistoryError
 from ollama_agent.interfaces.session_commands import (
     delete_session,
     export_session,
@@ -88,6 +89,11 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
     def test_get_available_sessions_empty_when_no_db(self) -> None:
         sessions = get_available_sessions(self.db_path)
         self.assertEqual(sessions, [])
+
+    def test_get_available_sessions_corrupted_db_raises_history_error(self) -> None:
+        self.db_path.write_text("this is not a valid sqlite database", encoding="utf-8")
+        with self.assertRaises(HistoryError):
+            get_available_sessions(self.db_path)
 
     def test_get_available_sessions_and_list_sessions(self) -> None:
         self._init_sample_db()

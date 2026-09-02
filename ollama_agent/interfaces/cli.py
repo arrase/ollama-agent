@@ -9,9 +9,9 @@ import inspect
 from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager
 from ..agent.episodic_memory import HistoryError
-from ..core import ALLOWED_REASONING_EFFORTS
+from ..core import ALLOWED_REASONING_EFFORTS, DEFAULT_REASONING_EFFORT
 from ..i18n import SUPPORTED_LOCALES, _
-from ..mcp.loader import MCPConfigError
+from ..mcp import MCPConfigError
 from ..rag import RAGContext, RAGError, RAGManager, load_rag_database
 from ..settings import Settings
 from ..skills import SkillError, SkillManager, SkillsContext
@@ -128,6 +128,7 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         "--task-effort",
         type=str,
         choices=list(ALLOWED_REASONING_EFFORTS),
+        default=DEFAULT_REASONING_EFFORT,
         required=False,
         help=_("Reasoning effort to save with the task (low, medium, high, xhigh, disabled, hide, enabled)"),
     )
@@ -266,65 +267,76 @@ def create_argument_parser() -> argparse.ArgumentParser:
 
     _add_common_args(parser)
     _add_subcommands(parser)
+    parser.set_defaults(command=None, subcommand=None)
 
     return parser
 
 
-def handle_cli_commands(args: argparse.Namespace, settings: Settings) -> bool:
-    """Handle CLI commands and return True if a command was handled."""
+def handle_subcommand(args: argparse.Namespace, settings: Settings) -> None:
+    """Execute a CLI subcommand."""
     ctx = TasksContext(settings=settings)
     rag_ctx = RAGContext(rag_manager=RAGManager(settings.rag))
     skills_ctx = SkillsContext(skill_manager=SkillManager())
 
-    cmd = args.command
-    subcmd = getattr(args, "subcommand", None)
-    if cmd and subcmd:
-        handlers = build_cli_handlers(
-            args,
-            task_ctx=ctx,
-            rag_ctx=rag_ctx,
-            skills_ctx=skills_ctx,
-            settings=settings,
-        )
-        handler_key = (cmd, subcmd)
-        if handler_key in handlers:
-            try:
-                result = handlers[handler_key]()
-                if inspect.isawaitable(result):
-                    asyncio.run(result)  # type: ignore[arg-type]
-            except (SkillError, TaskError, RAGError, HistoryError, MCPConfigError) as exc:
-                ctx.console.print(f"[red]{exc}[/red]")
-                raise SystemExit(1) from exc
-            return True
+    handlers = build_cli_handlers(
+        args,
+        task_ctx=ctx,
+        rag_ctx=rag_ctx,
+        skills_ctx=skills_ctx,
+        settings=settings,
+    )
+    handler_key = (args.command, args.subcommand)
+    if handler_key in handlers:
+        try:
+            result = handlers[handler_key]()
+            if inspect.isawaitable(result):
+                asyncio.run(result)  # type: ignore[arg-type]
+        except (SkillError, TaskError, RAGError, HistoryError, MCPConfigError) as exc:
+            ctx.console.print(f"[red]{exc}[/red]")
+            raise SystemExit(1) from exc
+
+
+def run_prompt_session(args: argparse.Namespace, settings: Settings) -> None:
+    """Execute non-interactive prompt session."""
+    runtime = AgentRuntime(
+        settings=settings,
+        yolo_mode=args.yolo,
+        stealth_mode=args.stealth,
+    )
+    completed = True
+
+    async def _run() -> None:
+        nonlocal completed
+        async with runtime:
+            if args.rag:
+                rag_manager = RAGManager(settings.rag)
+                rag_ctx = RAGContext(rag_manager=rag_manager)
+                set_rag_manager(rag_manager)
+                try:
+                    load_rag_database(rag_ctx, args.rag)
+                except RAGError as exc:
+                    rag_ctx.console.print(f"[red]{exc}[/red]")
+                    raise SystemExit(1) from exc
+            await runtime.reload()
+            completed = await run_non_interactive(runtime, args.prompt)
+
+    try:
+        asyncio.run(_run())
+    except KeyboardInterrupt:
+        raise SystemExit(130) from None
+
+    if not completed:
+        raise SystemExit(1)
+
+
+def handle_cli_commands(args: argparse.Namespace, settings: Settings) -> bool:
+    """Handle CLI commands and return True if a command was handled."""
+    if args.command and args.subcommand:
+        handle_subcommand(args, settings)
+        return True
 
     if args.prompt:
-        runtime = AgentRuntime(
-            settings=settings,
-            yolo_mode=args.yolo,
-            stealth_mode=args.stealth,
-        )
-        completed = True
-
-        async def _run() -> None:
-            nonlocal completed
-            async with runtime:
-                if args.rag:
-                    set_rag_manager(rag_ctx.rag_manager)
-                    try:
-                        load_rag_database(rag_ctx, args.rag)
-                    except RAGError as exc:
-                        rag_ctx.console.print(f"[red]{exc}[/red]")
-                        raise SystemExit(1) from exc
-                await runtime.reload()
-                completed = await run_non_interactive(runtime, args.prompt)
-
-        try:
-            asyncio.run(_run())
-        except KeyboardInterrupt:
-            raise SystemExit(130) from None
-
-        if not completed:
-            raise SystemExit(1)
+        run_prompt_session(args, settings)
         return True
 
     return False

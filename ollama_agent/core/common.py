@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import re
+import tempfile
+from pathlib import Path
 from typing import Any, Literal, TypedDict
 
 from ..i18n import _
@@ -70,3 +73,27 @@ def validate_identifier(name: str, label: str = "identifier") -> str:
             )
         )
     return name
+
+
+def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None:
+    """Write text to *path* atomically using a temporary file in path.parent."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding=encoding,
+            dir=path.parent,
+            prefix=f".{path.stem}_",
+            suffix=".tmp",
+            delete=False,
+        ) as tf:
+            tmp_path = Path(tf.name)
+            tf.write(text)
+            tf.flush()
+            os.fsync(tf.fileno())
+        os.replace(tmp_path, path)
+        tmp_path = None
+    finally:
+        if tmp_path is not None and tmp_path.exists():
+            tmp_path.unlink()

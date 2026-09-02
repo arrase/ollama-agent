@@ -5,6 +5,7 @@ from .common import (
     DEFAULT_REASONING_EFFORT,
     RAGToolResult,
     ReasoningEffortValue,
+    atomic_write_text,
     extract_text,
     validate_identifier,
 )
@@ -15,6 +16,7 @@ from .models import (
     create_ollama_chat_model,
     ensure_model_supports_tools,
     get_model_capabilities,
+    get_model_creation_kwargs,
     model_supports_thinking,
     model_supports_tools,
     resolve_context_window,
@@ -48,6 +50,7 @@ __all__ = [
     "create_ollama_chat_model",
     "ensure_model_supports_tools",
     "get_model_capabilities",
+    "get_model_creation_kwargs",
     "model_supports_tools",
     "model_supports_thinking",
     "resolve_context_window",
@@ -55,6 +58,7 @@ __all__ = [
     "resolve_ollama_reasoning",
     "validate_reasoning_effort",
     # Utils
+    "atomic_write_text",
     "extract_text",
     "require_text",
     "resolve_unique_match",

@@ -2,23 +2,22 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml  # type: ignore[import-untyped]
-from jinja2 import Environment, StrictUndefined
 
 from ..core import (
     DEFAULT_REASONING_EFFORT,
     BaseFileStoreManager,
     ReasoningEffortValue,
+    atomic_write_text,
     validate_identifier,
     validate_reasoning_effort,
 )
 from ..i18n import _
+from ..settings.config import render_prompt_template
 from ..settings.paths import TASKS_DIR
 
 
@@ -44,19 +43,13 @@ def _coerce_value(name: str, val: Any, expected_type: str) -> Any:
                 return True
             if norm in ("false", "0", "no"):
                 return False
-            raise ValueError(_("Invalid boolean value for input '{name}': {val}", name=name, val=val))
-        if isinstance(val, (int, float)):
+        elif isinstance(val, (int, float)):
             if val in (1, 1.0):
                 return True
             if val in (0, 0.0):
                 return False
-            raise ValueError(_("Invalid boolean value for input '{name}': {val}", name=name, val=val))
         raise ValueError(_("Invalid boolean value for input '{name}': {val}", name=name, val=val))
     if expected_type == "number":
-        if isinstance(val, bool):
-            raise ValueError(_("Invalid number value for input '{name}': {val}", name=name, val=val))
-        if isinstance(val, (int, float)):
-            return val
         if isinstance(val, str):
             val_str = val.strip()
             try:
@@ -64,8 +57,10 @@ def _coerce_value(name: str, val: Any, expected_type: str) -> Any:
             except ValueError:
                 try:
                     return float(val_str)
-                except ValueError as exc:
-                    raise ValueError(_("Invalid number value for input '{name}': {val}", name=name, val=val)) from exc
+                except ValueError:
+                    pass
+        elif isinstance(val, (int, float)) and not isinstance(val, bool):
+            return val
         raise ValueError(_("Invalid number value for input '{name}': {val}", name=name, val=val))
     if expected_type == "string":
         if isinstance(val, str):
@@ -92,12 +87,16 @@ class Task:
         if not isinstance(d, dict):
             raise ValueError(_("Expected mapping for Task, got {type_name}", type_name=type(d).__name__))
         inputs: dict[str, TaskInput] = {}
-        if "inputs" in d and isinstance(d["inputs"], dict):
+        if "inputs" in d:
+            if not isinstance(d["inputs"], dict):
+                raise ValueError(_("Expected mapping for inputs in Task"))
             for name, input_data in d["inputs"].items():
                 if isinstance(input_data, TaskInput):
                     inputs[name] = input_data
                 elif isinstance(input_data, dict):
                     inputs[name] = TaskInput(**input_data)
+                else:
+                    raise ValueError(_("Invalid input definition for '{name}'", name=name))
         return cls(
             title=d["title"],
             prompt=d["prompt"],
@@ -111,16 +110,14 @@ class Task:
         merged_vars: dict[str, Any] = dict(variables) if variables else {}
 
         for name, inp in self.inputs.items():
-            if (name not in merged_vars or merged_vars[name] is None) and inp.default is not None:
+            if name not in merged_vars and inp.default is not None:
                 merged_vars[name] = inp.default
             if inp.required and (name not in merged_vars or merged_vars[name] is None):
                 raise ValueError(_("Missing required input: {name}", name=name))
             if name in merged_vars:
                 merged_vars[name] = _coerce_value(name, merged_vars[name], inp.type)
 
-        env = Environment(undefined=StrictUndefined, trim_blocks=True, lstrip_blocks=True)
-        template = env.from_string(self.prompt)
-        return template.render(**merged_vars)
+        return render_prompt_template(self.prompt, merged_vars)
 
 
 class TaskManager(BaseFileStoreManager[Task]):
@@ -143,19 +140,7 @@ class TaskManager(BaseFileStoreManager[Task]):
         if path.exists() and not overwrite:
             raise FileExistsError(_("Task already exists: {task_id}", task_id=task_id))
         text = yaml.safe_dump(asdict(task), allow_unicode=True)
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=f".{path.stem}_",
-            suffix=".tmp",
-            delete=False,
-        ) as tf:
-            tmp_path = Path(tf.name)
-            tf.write(text)
-            tf.flush()
-            os.fsync(tf.fileno())
-        os.replace(tmp_path, path)
+        atomic_write_text(path, text)
         return task_id
 
     def find_matches(self, prefix: str) -> list[tuple[str, Task]]:

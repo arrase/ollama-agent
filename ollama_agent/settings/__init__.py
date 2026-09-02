@@ -10,8 +10,6 @@ from .config import (
     SubAgentMCPServer,
     SubAgentSettings,
     ensure_memory_file,
-    ensure_prompt_files,
-    find_agents_file,
     load_instructions,
     load_settings,
     render_prompt_template,
@@ -32,6 +30,7 @@ from .paths import (
     SETTINGS_PATH,
     SKILLS_DIR,
     TASKS_DIR,
+    find_agents_file,
 )
 
 __all__ = [
@@ -59,7 +58,6 @@ __all__ = [
     "SubAgentMCPServer",
     "SubAgentSettings",
     "ensure_memory_file",
-    "ensure_prompt_files",
     "find_agents_file",
     "load_instructions",
     "load_settings",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 import warnings
 
 from langchain_core._api.deprecation import LangChainPendingDeprecationWarning
@@ -9,8 +10,8 @@ from rich.console import Console
 from .agent import AgentRuntime
 from .agent.builtin_tools import set_tool_timeout
 from .core import ModelCapabilityError, ModelContextWindowError
-from .i18n import _, set_locale
-from .interfaces.cli import create_argument_parser, handle_cli_commands
+from .i18n import SUPPORTED_LOCALES, _, set_locale
+from .interfaces.cli import create_argument_parser, handle_subcommand, run_prompt_session
 from .interfaces.model_commands import ensure_model_configured
 from .interfaces.repl import OllamaREPL
 from .settings import load_settings, reset_config
@@ -23,15 +24,27 @@ warnings.filterwarnings(
 )
 
 
+def _extract_early_language(argv: list[str]) -> str | None:
+    """Extract language code from CLI arguments if present and supported."""
+    for i, arg in enumerate(argv):
+        if arg in ("-l", "--lang", "--language"):
+            if i + 1 < len(argv) and argv[i + 1] in SUPPORTED_LOCALES:
+                return argv[i + 1]
+        for prefix in ("-l=", "--lang=", "--language="):
+            if arg.startswith(prefix):
+                val = arg[len(prefix) :]
+                if val in SUPPORTED_LOCALES:
+                    return val
+    return None
+
+
 def main() -> None:
     """Main entry point."""
+    early_lang = _extract_early_language(sys.argv[1:])
+    set_locale(early_lang)
+
     parser = create_argument_parser()
     args = parser.parse_args()
-
-    if args.language:
-        set_locale(args.language)
-    else:
-        set_locale()
 
     if args.command and args.prompt:
         parser.error(_("--prompt cannot be used together with a subcommand."))
@@ -47,6 +60,7 @@ def main() -> None:
 
     if args.language:
         settings.runtime.language = args.language
+        set_locale(args.language)
     elif settings.runtime.language:
         set_locale(settings.runtime.language)
 
@@ -56,13 +70,7 @@ def main() -> None:
     if args.effort:
         settings.model.reasoning_effort = args.effort
     if args.num_ctx:
-        cleaned_cw = args.num_ctx.strip().lower()
-        if cleaned_cw == "max":
-            settings.model.context_window = "max"
-        elif cleaned_cw.isdigit():
-            settings.model.context_window = int(cleaned_cw)
-        else:
-            settings.model.context_window = args.num_ctx
+        settings.model.context_window = int(args.num_ctx) if args.num_ctx.isdigit() else args.num_ctx
     if args.builtin_tool_timeout is not None:
         settings.runtime.builtin_tool_timeout = args.builtin_tool_timeout
     if args.allow_traversal is not None:
@@ -72,13 +80,13 @@ def main() -> None:
 
     try:
         if args.command:
-            handle_cli_commands(args, settings)
+            handle_subcommand(args, settings)
             return
 
         ensure_model_configured(settings)
 
         if args.prompt:
-            handle_cli_commands(args, settings)
+            run_prompt_session(args, settings)
             return
 
         runtime = AgentRuntime(

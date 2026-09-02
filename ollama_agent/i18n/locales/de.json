@@ -416,6 +416,7 @@
   "System Output": "Systemausgabe",
   "esc to dismiss": "Esc zum Schließen",
   "Limit must be greater than 0": "Das Limit muss größer als 0 sein",
+  "Limit must be greater than 0, got {limit}": "Das Limit muss größer als 0 sein, erhalten {limit}",
   "Failed to query vector database: {e}": "Fehler beim Abfragen der Vektordatenbank: {e}",
   "Failed to get collection info: {e}": "Fehler beim Abrufen der Sammlungsinfo: {e}",
   "Failed to create database '{name}': {e}": "Fehler beim Erstellen der Datenbank '{name}': {e}",
@@ -448,5 +449,10 @@
   "Variable assignment in key=value format": "Variablenzuweisung im Format Schlüssel=Wert",
   "Unsupported input type '{type}' for input '{name}'": "Nicht unterstützter Eingabetyp '{type}' für Eingabe '{name}'",
   "Database": "Datenbank",
-  "Database name": "Datenbankname"
+  "Database name": "Datenbankname",
+  "Search query cannot be empty.": "Suchanfrage darf nicht leer sein.",
+  "Expected mapping for inputs in Task": "Mapping für inputs in Task erwartet",
+  "Invalid input definition for '{name}'": "Ungültige Eingabedefinition für '{name}'",
+  "MCP server '{name}': 'command' must be a non-empty string": "MCP-Server '{name}': 'command' darf keine leere Zeichenkette sein",
+  "MCP server '{name}': 'url' must be a non-empty string": "MCP-Server '{name}': 'url' darf keine leere Zeichenkette sein"
 }

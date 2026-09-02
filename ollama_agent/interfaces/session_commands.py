@@ -31,7 +31,7 @@ _serializer = JsonPlusSerializer()
 
 def is_current(thread_id: str, current_thread_id: str) -> bool:
     """Return whether *thread_id* is the current session (exact match or bidirectional prefix match)."""
-    if not thread_id.strip() or not current_thread_id.strip():
+    if not thread_id or not current_thread_id:
         return False
     return (
         thread_id == current_thread_id
@@ -78,8 +78,8 @@ def get_available_sessions(db_path: Path = HISTORY_DB_PATH) -> list[dict[str, An
                 }
                 for row in rows
             ]
-    except (sqlite3.Error, OSError, HistoryError):
-        return []
+    except (sqlite3.Error, OSError) as exc:
+        raise HistoryError(_("Failed to read history database {db_path}: {e}", db_path=db_path, e=exc)) from exc
 
 
 def list_sessions(
@@ -223,8 +223,8 @@ async def export_session(
     ]
 
     for msg in messages:
-        role = getattr(msg, "type", "unknown")
-        content = extract_text(getattr(msg, "content", ""))
+        role = msg.type
+        content = extract_text(msg.content)
 
         if role in ("human", "user"):
             lines.extend([f"## 👤 {user_label}", "", content, ""])
@@ -232,16 +232,16 @@ async def export_session(
             lines.extend([f"## 🤖 {asst_label}", ""])
             if content:
                 lines.extend([content, ""])
-            for tc in getattr(msg, "tool_calls", None) or []:
-                tc_name = tc.get("name", "tool") if isinstance(tc, dict) else getattr(tc, "name", "tool")
-                tc_args = tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {})
+            for tc in getattr(msg, "tool_calls", []):
+                tc_name = tc["name"]
+                tc_args = tc["args"]
                 tool_call_hdr = _("Tool: {name}", name=tc_name)
                 args_str = (
                     json.dumps(tc_args, indent=2, ensure_ascii=False) if isinstance(tc_args, dict) else str(tc_args)
                 )
                 lines.extend([f"### ⚙ {tool_call_hdr}", "```json", args_str, "```", ""])
         elif role == "tool":
-            name = getattr(msg, "name", "tool")
+            name = msg.name
             tool_hdr = _("Tool: {name}", name=name)
             lines.extend([f"### ⚙ {tool_hdr}", "```", content, "```", ""])
 

@@ -416,6 +416,7 @@
   "System Output": "مخرجات النظام",
   "esc to dismiss": "esc للإغلاق",
   "Limit must be greater than 0": "يجب أن يكون الحد أكبر من 0",
+  "Limit must be greater than 0, got {limit}": "يجب أن يكون الحد أكبر من 0، القيمة المستلمة {limit}",
   "Failed to query vector database: {e}": "فشل الاستعلام عن قاعدة بيانات المتجهات: {e}",
   "Failed to get collection info: {e}": "فشل الحصول على معلومات المجموعة: {e}",
   "Failed to create database '{name}': {e}": "فشل إنشاء قاعدة البيانات '{name}': {e}",
@@ -448,5 +449,10 @@
   "Variable assignment in key=value format": "تعيين المتغير بتنسيق مفتاح=قيمة",
   "Unsupported input type '{type}' for input '{name}'": "نوع إدخال غير مدعوم '{type}' للإدخال '{name}'",
   "Database": "قاعدة البيانات",
-  "Database name": "اسم قاعدة البيانات"
+  "Database name": "اسم قاعدة البيانات",
+  "Search query cannot be empty.": "لا يمكن أن يكون استعلام البحث فارغًا.",
+  "Expected mapping for inputs in Task": "تم توقع تخطيط (mapping) للمدخلات في Task",
+  "Invalid input definition for '{name}'": "تعريف إدخال غير صالح لـ '{name}'",
+  "MCP server '{name}': 'command' must be a non-empty string": "خادم MCP '{name}': يجب أن يكون 'command' سلسلة غير فارغة",
+  "MCP server '{name}': 'url' must be a non-empty string": "خادم MCP '{name}': يجب أن يكون 'url' سلسلة غير فارغة"
 }

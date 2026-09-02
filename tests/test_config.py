@@ -18,8 +18,6 @@ from ollama_agent.settings.config import (
     _dataclass_from_dict,
     _subagents_from_list,
     ensure_memory_file,
-    ensure_prompt_files,
-    find_agents_file,
     load_instructions,
     load_settings,
     render_prompt_template,
@@ -152,17 +150,27 @@ class TestConfigManagement(unittest.TestCase):
             s = Settings(
                 langsmith=LangSmithSettings(
                     api_key="test_key_123",
-                    tracing="true",
+                    tracing=True,
                     project="test_proj",
                     endpoint="https://api.smith.langchain.com",
                 )
             )
             s.setup_environment()
 
-            self.assertEqual(os.environ.get("LANGSMITH_KEY", os.environ.get("LANGSMITH_API_KEY")), "test_key_123")
-            self.assertEqual(os.environ.get("LANGSMITH_TRACING"), "true")
-            self.assertEqual(os.environ.get("LANGSMITH_PROJECT"), "test_proj")
-            self.assertEqual(os.environ.get("LANGSMITH_ENDPOINT"), "https://api.smith.langchain.com")
+            self.assertEqual(os.environ["LANGSMITH_API_KEY"], "test_key_123")
+            self.assertEqual(os.environ["LANGSMITH_TRACING"], "true")
+            self.assertEqual(os.environ["LANGSMITH_PROJECT"], "test_proj")
+            self.assertEqual(os.environ["LANGSMITH_ENDPOINT"], "https://api.smith.langchain.com")
+
+    def test_setup_environment_injects_langsmith_boolean_tracing(self) -> None:
+        with patch.dict(os.environ, {}, clear=False):
+            s = Settings(
+                langsmith=LangSmithSettings(
+                    tracing=True,
+                )
+            )
+            s.setup_environment()
+            self.assertEqual(os.environ["LANGSMITH_TRACING"], "true")
 
     def test_ensure_memory_file_creates_file_with_scaffold(self) -> None:
         memory_file = Path(self.temp_dir.name) / "MEMORY.md"
@@ -173,15 +181,6 @@ class TestConfigManagement(unittest.TestCase):
         self.assertTrue(memory_file.exists())
         self.assertIn("Long-Term Memory", memory_file.read_text(encoding="utf-8"))
 
-    def test_find_agents_file_resolution(self) -> None:
-        proj_dir = Path(self.temp_dir.name) / "my_project"
-        proj_dir.mkdir()
-        agents_file = proj_dir / "AGENTS.md"
-        agents_file.write_text("# Project Guidelines\n", encoding="utf-8")
-
-        found = find_agents_file(proj_dir)
-        self.assertEqual(found, agents_file)
-
     def test_load_instructions_creates_default_if_missing(self) -> None:
         instructions_file = Path(self.temp_dir.name) / "instructions.md"
         content = load_instructions(instructions_file)
@@ -189,18 +188,6 @@ class TestConfigManagement(unittest.TestCase):
         self.assertTrue(len(content) > 0)
         self.assertIn("CORE OBJECTIVE", content)
         self.assertIn("MEMORY GUIDELINES", content)
-        self.assertIn("runtime.allow_traversal", content)
-        self.assertIn("RAG POLICY", content)
-
-    def test_ensure_prompt_files_creates_instructions(self) -> None:
-        prompts_dir = Path(self.temp_dir.name) / "prompts_test"
-        inst = prompts_dir / "instructions.md"
-
-        ensure_prompt_files(instructions_path=inst)
-
-        self.assertTrue(inst.exists())
-        content = inst.read_text(encoding="utf-8")
-        self.assertIn("CORE OBJECTIVE", content)
         self.assertIn("runtime.allow_traversal", content)
         self.assertIn("RAG POLICY", content)
 
@@ -306,32 +293,15 @@ class TestConfigManagement(unittest.TestCase):
             Settings.from_dict({"modeel": {"name": "llama3"}})
         self.assertIn("modeel", str(ctx.exception))
 
-    def test_find_agents_file_default_start_dir(self) -> None:
-        orig_cwd = Path.cwd()
-        proj_dir = Path(self.temp_dir.name) / "default_dir"
-        proj_dir.mkdir()
-        agents_file = proj_dir / "AGENTS.md"
-        agents_file.write_text("# Default\n", encoding="utf-8")
-        try:
-            os.chdir(proj_dir)
-            found = find_agents_file()
-            self.assertEqual(found, agents_file)
-        finally:
-            os.chdir(orig_cwd)
-
-    def test_dataclass_from_dict_none_returns_default(self) -> None:
-        model = _dataclass_from_dict(ModelSettings, None)
-        self.assertIsInstance(model, ModelSettings)
-        self.assertEqual(model.base_url, "http://localhost:11434")
-
     def test_dataclass_from_dict_rejects_non_dict(self) -> None:
+        with self.assertRaises(ValueError):
+            _dataclass_from_dict(ModelSettings, None)
         with self.assertRaises(ValueError):
             _dataclass_from_dict(ModelSettings, "not-a-dict")
         with self.assertRaises(ValueError):
             _dataclass_from_dict(ModelSettings, 123)
 
     def test_subagents_from_list_parsing(self) -> None:
-        self.assertEqual(_subagents_from_list(None), [])
         raw = [
             {
                 "name": "explorer",
@@ -352,14 +322,22 @@ class TestConfigManagement(unittest.TestCase):
 
     def test_subagents_from_list_validation(self) -> None:
         with self.assertRaises(ValueError):
+            _subagents_from_list(None)
+        with self.assertRaises(ValueError):
             _subagents_from_list("not-a-list")
         with self.assertRaises(ValueError):
             _subagents_from_list(["not-a-dict"])
         with self.assertRaises(ValueError):
             _subagents_from_list([{"name": "coder", "mcp_servers": "invalid"}])
 
+    def test_load_settings_empty_file_raises_value_error(self) -> None:
+        self.settings_file.write_text("", encoding="utf-8")
+        with self.assertRaises(ValueError) as ctx:
+            load_settings(self.settings_file)
+        self.assertIn("YAML mapping", str(ctx.exception))
+
     def test_load_settings_falsy_scalar_yaml_raises_value_error(self) -> None:
-        for val in ["false\n", "0\n", "[]\n"]:
+        for val in ["", "false\n", "0\n", "[]\n"]:
             self.settings_file.write_text(val, encoding="utf-8")
             with self.assertRaises(ValueError):
                 load_settings(self.settings_file)

@@ -60,7 +60,6 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
         )
         task = self.mgr.get("run-tests")
         self.assertIsNotNone(task)
-        assert task is not None
         self.assertEqual(task.title, "Run Unit Tests")
 
         list_tasks(self.ctx)
@@ -163,13 +162,18 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
 
     def test_resolve_task_errors(self) -> None:
         with self.assertRaises(TaskNotFoundError):
-            self.ctx._resolve_task("missing_task")
+            self.ctx.resolve_task("missing_task")
 
         create_task(self.ctx, "deploy-prod", title="Prod Deploy", prompt="deploy", model="gemma4:26b")
         create_task(self.ctx, "deploy-staging", title="Staging Deploy", prompt="deploy", model="gemma4:26b")
 
         with self.assertRaises(AmbiguousTaskError):
-            self.ctx._resolve_task("deploy")
+            self.ctx.resolve_task("deploy")
+
+        resolved_id, resolved_task = self.ctx.resolve_task("deploy-prod")
+        self.assertEqual(resolved_id, "deploy-prod")
+        self.assertEqual(resolved_task.title, "Prod Deploy")
+        self.assertEqual(self.ctx._resolve_task("deploy-prod"), (resolved_id, resolved_task))
 
     def test_parse_var_assignments_valid(self) -> None:
         raw = ["file=src/main.py", "strict=true", "count=42", "expr=a=b=c"]

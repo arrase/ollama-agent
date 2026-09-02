@@ -76,6 +76,7 @@ class ResolvedContext(NamedTuple):
     attachments: list[dict[str, Any]]
     classifications: dict[Path, str]
     warnings: list[str]
+    total_size: int
 
 
 def _multimodal_kind(mime: str | None) -> str | None:
@@ -169,32 +170,26 @@ def resolve_context_files(
     classifications: dict[Path, str] = {}
     warnings: list[str] = []
     total_size = initial_size
+    resolved_size = 0
     file_count = initial_count
 
     def add_file(file_path: Path) -> None:
-        nonlocal total_size, file_count
-
-        try:
-            size = file_path.stat().st_size
-        except OSError as e:
-            raise PromptProcessingError(_("Failed to read file {file_path}: {e}", file_path=file_path, e=e)) from e
-
-        mime = get_file_type(file_path)
-        attachment_type = _multimodal_kind(mime)
-        if attachment_type is not None:
-            classifications[file_path] = attachment_type
-        elif is_binary_file(file_path):
-            raise PromptProcessingError(_("Cannot read binary file as text: {file_path}", file_path=file_path))
+        nonlocal total_size, resolved_size, file_count
 
         if file_count >= max_files:
             raise ContextLimitExceededError(_("Mentions limit exceeded: max {max_files} files.", max_files=max_files))
+
+        size = _check_file_size(file_path, max_file_size)
 
         if total_size + size > max_total_size:
             raise ContextLimitExceededError(
                 _("Total context size limit of {max_total_size} bytes exceeded.", max_total_size=max_total_size)
             )
 
+        mime = get_file_type(file_path)
+        attachment_type = _multimodal_kind(mime)
         if attachment_type is not None:
+            classifications[file_path] = attachment_type
             b64_data = read_binary_file_b64(file_path, max_file_size)
             binary_attachments.append(
                 {
@@ -207,10 +202,11 @@ def resolve_context_files(
             text_contents[file_path] = read_file_content(file_path, max_file_size)
         file_count += 1
         total_size += size
+        resolved_size += size
 
     if target_path.is_file():
         add_file(target_path)
-        return ResolvedContext(text_contents, binary_attachments, classifications, warnings)
+        return ResolvedContext(text_contents, binary_attachments, classifications, warnings, resolved_size)
 
     if not target_path.is_dir():
         raise PromptProcessingError(_("Path is neither a file nor a directory: {file_path}", file_path=target_path))
@@ -229,7 +225,9 @@ def resolve_context_files(
         if stop:
             break
 
-    return ResolvedContext(text_contents, binary_attachments, classifications, list(dict.fromkeys(warnings)))
+    return ResolvedContext(
+        text_contents, binary_attachments, classifications, list(dict.fromkeys(warnings)), resolved_size
+    )
 
 
 def process_prompt_mentions(
@@ -314,9 +312,7 @@ def process_prompt_mentions(
                 all_classifications.update(context.classifications)
                 all_warnings.extend(context.warnings)
                 cumulative_files = len(all_context_contents) + len(all_binary_attachments)
-                cumulative_size = sum(p.stat().st_size for p in all_context_contents) + sum(
-                    p.stat().st_size for p in all_classifications if p in resolved_paths and p.is_file()
-                )
+                cumulative_size += context.total_size
 
             attachment_type = all_classifications.get(candidate_path)
             if candidate_path.is_file() and attachment_type is not None:

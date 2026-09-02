@@ -416,6 +416,7 @@
   "System Output": "Вивід системи",
   "esc to dismiss": "esc для закриття",
   "Limit must be greater than 0": "Ліміт має бути більше 0",
+  "Limit must be greater than 0, got {limit}": "Ліміт має бути більше 0, отримано {limit}",
   "Failed to query vector database: {e}": "Не вдалося виконати запит до векторної бази даних: {e}",
   "Failed to get collection info: {e}": "Не вдалося отримати інформацію про колекцію: {e}",
   "Failed to create database '{name}': {e}": "Не вдалося створити базу даних '{name}': {e}",
@@ -448,5 +449,10 @@
   "Variable assignment in key=value format": "Присвоєння змінної у форматі ключ=значення",
   "Unsupported input type '{type}' for input '{name}'": "Непідтримуваний тип вводу '{type}' для вводу '{name}'",
   "Database": "База даних",
-  "Database name": "Назва бази даних"
+  "Database name": "Назва бази даних",
+  "Search query cannot be empty.": "Пошуковий запит не може бути порожнім.",
+  "Expected mapping for inputs in Task": "Очікувалося зіставлення для inputs у Task",
+  "Invalid input definition for '{name}'": "Недійсне визначення введення для '{name}'",
+  "MCP server '{name}': 'command' must be a non-empty string": "Сервер MCP '{name}': 'command' має бути непорожнім рядком",
+  "MCP server '{name}': 'url' must be a non-empty string": "Сервер MCP '{name}': 'url' має бути непорожнім рядком"
 }

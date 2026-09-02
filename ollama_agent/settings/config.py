@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import tempfile
 from dataclasses import asdict, dataclass, field, fields
 from importlib import resources
 from pathlib import Path
@@ -12,6 +11,7 @@ from typing import Any, Self, TypeVar
 import yaml  # type: ignore[import-untyped]
 from jinja2 import Environment, StrictUndefined
 
+from ..core import atomic_write_text
 from ..i18n import _
 from .paths import (
     INSTRUCTIONS_PATH,
@@ -58,6 +58,10 @@ class RAGSettings:
     chunk_size: int = 500
     chunk_overlap: int = 50
 
+    def __post_init__(self) -> None:
+        if not self.rag_dir.strip():
+            raise ValueError(_("Setting 'rag.rag_dir' must be a non-empty string"))
+
 
 @dataclass(slots=True)
 class SubAgentMCPServer:
@@ -67,6 +71,13 @@ class SubAgentMCPServer:
     command: str = ""
     args: list[str] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "command": self.command,
+            "args": self.args,
+            "env": self.env,
+        }
 
 
 @dataclass(slots=True)
@@ -84,7 +95,7 @@ class SubAgentSettings:
 @dataclass(slots=True)
 class LangSmithSettings:
     api_key: str = ""
-    tracing: str = ""
+    tracing: bool = False
     project: str = ""
     endpoint: str = ""
 
@@ -116,17 +127,20 @@ class Settings:
         unknown = set(raw) - valid
         if unknown:
             raise ValueError(_("Unknown setting keys: {keys}", keys=sorted(unknown)))
-        settings = cls(
-            model=_dataclass_from_dict(ModelSettings, raw.get("model")),
-            runtime=_dataclass_from_dict(RuntimeSettings, raw.get("runtime")),
-            rag=_dataclass_from_dict(RAGSettings, raw.get("rag")),
-            mentions=_dataclass_from_dict(MentionSettings, raw.get("mentions")),
-            subagents=_subagents_from_list(raw.get("subagents")),
-            langsmith=_dataclass_from_dict(LangSmithSettings, raw.get("langsmith")),
-        )
-        if not settings.rag.rag_dir:
-            raise ValueError(_("Setting 'rag.rag_dir' must be a non-empty string"))
-        return settings
+        kwargs: dict[str, Any] = {}
+        if "model" in raw:
+            kwargs["model"] = _dataclass_from_dict(ModelSettings, raw["model"])
+        if "runtime" in raw:
+            kwargs["runtime"] = _dataclass_from_dict(RuntimeSettings, raw["runtime"])
+        if "rag" in raw:
+            kwargs["rag"] = _dataclass_from_dict(RAGSettings, raw["rag"])
+        if "mentions" in raw:
+            kwargs["mentions"] = _dataclass_from_dict(MentionSettings, raw["mentions"])
+        if "subagents" in raw:
+            kwargs["subagents"] = _subagents_from_list(raw["subagents"])
+        if "langsmith" in raw:
+            kwargs["langsmith"] = _dataclass_from_dict(LangSmithSettings, raw["langsmith"])
+        return cls(**kwargs)
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -141,7 +155,7 @@ class Settings:
         if self.langsmith.api_key:
             os.environ["LANGSMITH_API_KEY"] = self.langsmith.api_key
         if self.langsmith.tracing:
-            os.environ["LANGSMITH_TRACING"] = self.langsmith.tracing
+            os.environ["LANGSMITH_TRACING"] = "true"
         if self.langsmith.project:
             os.environ["LANGSMITH_PROJECT"] = self.langsmith.project
         if self.langsmith.endpoint:
@@ -157,8 +171,6 @@ T = TypeVar("T")
 
 
 def _dataclass_from_dict(cls: type[T], raw: Any) -> T:
-    if raw is None:
-        return cls()
     if not isinstance(raw, dict):
         raise ValueError(
             _("Expected mapping for '{name}', got {type_name}", name=cls.__name__, type_name=type(raw).__name__)
@@ -174,8 +186,6 @@ def _subagents_from_list(
     raw: Any,
 ) -> list[SubAgentSettings]:
     """Parse subagent list from YAML, handling nested mcp_servers."""
-    if raw is None:
-        return []
     if not isinstance(raw, list):
         raise ValueError(_("Expected list for subagents, got {type_name}", type_name=type(raw).__name__))
     subagents: list[SubAgentSettings] = []
@@ -207,8 +217,6 @@ def load_settings(settings_path: Path = SETTINGS_PATH) -> Settings:
         return settings
 
     raw = yaml.safe_load(settings_path.read_text(encoding="utf-8"))
-    if raw is None:
-        raw = {}
     if not isinstance(raw, dict):
         raise ValueError(_("Settings file must contain a YAML mapping: {path}", path=settings_path))
     return Settings.from_dict(raw)
@@ -216,22 +224,8 @@ def load_settings(settings_path: Path = SETTINGS_PATH) -> Settings:
 
 def save_settings(settings: Settings, settings_path: Path = SETTINGS_PATH) -> None:
     """Save settings to YAML file atomically."""
-    parent = settings_path.parent
-    parent.mkdir(parents=True, exist_ok=True)
     text = yaml.safe_dump(settings.to_dict(), sort_keys=False, allow_unicode=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        encoding="utf-8",
-        dir=parent,
-        prefix=f".{settings_path.stem}_",
-        suffix=".tmp",
-        delete=False,
-    ) as tf:
-        tmp_path = Path(tf.name)
-        tf.write(text)
-        tf.flush()
-        os.fsync(tf.fileno())
-    os.replace(tmp_path, settings_path)
+    atomic_write_text(settings_path, text)
 
 
 # ---------------------------------------------------------------------------
@@ -258,11 +252,6 @@ def load_instructions(instructions_path: Path = INSTRUCTIONS_PATH) -> str:
     return instructions_path.read_text(encoding="utf-8").strip()
 
 
-def ensure_prompt_files(instructions_path: Path = INSTRUCTIONS_PATH) -> None:
-    """Ensure default prompt files exist in the user prompts directory."""
-    load_instructions(instructions_path)
-
-
 # ---------------------------------------------------------------------------
 # Memory scaffold
 # ---------------------------------------------------------------------------
@@ -277,19 +266,6 @@ def ensure_memory_file(memory_path: Path = MEMORY_PATH) -> Path:
             encoding="utf-8",
         )
     return memory_path
-
-
-def find_agents_file(start_dir: Path = Path(".")) -> Path | None:
-    """Find AGENTS.md in the given directory or its parent hierarchy up to git root."""
-    current = start_dir.resolve()
-    for parent in [current, *current.parents]:
-        for candidate in ("AGENTS.md", "agents.md", ".agents.md"):
-            target = parent / candidate
-            if target.is_file():
-                return target
-        if (parent / ".git").exists():
-            break
-    return None
 
 
 # ---------------------------------------------------------------------------

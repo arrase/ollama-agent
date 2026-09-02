@@ -97,11 +97,10 @@ class ThinkTagParser:
             return []
         buf = self._buffer
         self._buffer = ""
-        if self.in_think:
-            if hide_reasoning:
-                return []
-            return [{"type": "reasoning_delta", "content": buf}]
-        return [{"type": "text_delta", "content": buf}]
+        if self.in_think and hide_reasoning:
+            return []
+        kind = "reasoning" if self.in_think else "text"
+        return [{"type": f"{kind}_delta", "content": buf}]
 
     def process_chunk(
         self,
@@ -109,11 +108,11 @@ class ThinkTagParser:
         hide_reasoning: bool = False,
     ) -> list[dict[str, Any]]:
         """Process a chunk and return reasoning or text delta events."""
-        if chunk.type in ("tool", "ToolMessageChunk"):
+        if chunk.type == "tool":
             return []
 
         content = chunk.content
-        reasoning = streaming_reasoning(content, getattr(chunk, "additional_kwargs", None))
+        reasoning = streaming_reasoning(content, chunk.additional_kwargs)
         if reasoning:
             return [] if hide_reasoning else [{"type": "reasoning_delta", "content": reasoning}]
 
@@ -124,5 +123,5 @@ class ThinkTagParser:
         return [
             {"type": f"{kind}_delta", "content": delta}
             for kind, delta in self.feed(text)
-            if not (kind == "reasoning" and hide_reasoning)
+            if not hide_reasoning or kind != "reasoning"
         ]

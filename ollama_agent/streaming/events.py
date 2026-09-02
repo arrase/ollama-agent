@@ -6,7 +6,7 @@ Renderers consume those payloads.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Any
 
 from langgraph.types import Command
 from rich.console import Console
@@ -24,11 +24,8 @@ async def stream_agent_events(
     renderer: StreamingRenderer,
     *,
     thread_id: str = "",
-    ignore: Iterable[str] = (),
-    auto_close: bool = True,
 ) -> bool:
     """Stream agent events, returning whether the run completed without aborting."""
-    ignored = set(ignore)
     current_prompt = prompt
     completed = True
     try:
@@ -36,8 +33,6 @@ async def stream_agent_events(
             interrupt_event: dict[str, Any] | None = None
             async for event in runtime.run_streamed(current_prompt, thread_id=thread_id):
                 etype = event["type"]
-                if etype in ignored:
-                    continue
                 if etype == "interrupt":
                     interrupt_event = event
                     continue
@@ -54,8 +49,7 @@ async def stream_agent_events(
 
             break
     finally:
-        if auto_close:
-            renderer.close()
+        renderer.close()
     return completed
 
 

@@ -21,15 +21,15 @@ from ollama_agent.interfaces.tui_components import AgentHeader
 class TestStealthMode(unittest.IsolatedAsyncioTestCase):
     """Unit tests for stealth mode functionality and visual indicators."""
 
-    def test_stealth_checkpointer_selection(self) -> None:
+    async def test_stealth_checkpointer_selection(self) -> None:
         runtime_normal = AgentRuntime(stealth_mode=False)
         self.assertFalse(runtime_normal.stealth_mode)
 
         runtime_stealth = AgentRuntime(stealth_mode=True)
         self.assertTrue(runtime_stealth.stealth_mode)
-        mem_checkpointer = runtime_stealth._get_memory_checkpointer()
+        mem_checkpointer = await runtime_stealth._get_memory_checkpointer()
         self.assertIsInstance(mem_checkpointer, MemorySaver)
-        self.assertIs(runtime_stealth._get_memory_checkpointer(), mem_checkpointer)
+        self.assertIs(await runtime_stealth._get_memory_checkpointer(), mem_checkpointer)
 
     async def test_handle_stealth_command_toggle_and_values(self) -> None:
         out = io.StringIO()

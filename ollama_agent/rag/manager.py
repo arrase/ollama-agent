@@ -14,7 +14,7 @@ from qdrant_client.models import (
     Distance,
     FieldCondition,
     Filter,
-    MatchAny,
+    MatchValue,
     PointStruct,
     VectorParams,
 )
@@ -24,6 +24,20 @@ from ..i18n import _
 from ..settings import RAGSettings
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_name(name: str) -> str:
+    """Validate database name."""
+    try:
+        return validate_identifier(name, "name")
+    except ValueError as e:
+        raise RAGError(str(e)) from e
+
+
+def _generate_point_id(source: str, chunk_index: int) -> str:
+    """Generate a unique point ID as a UUID string from source and chunk index."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"{source}:{chunk_index}"))
+
 
 SUPPORTED_RAG_EXTENSIONS: frozenset[str] = frozenset(
     {
@@ -105,11 +119,6 @@ class RAGManager:
             raise RAGNotLoadedError(_("No RAG database loaded. Use /rag load <name> first."))
         return self._client
 
-    @property
-    def base_dir(self) -> Path:
-        """Return the base directory for RAG databases."""
-        return self._rag_dir
-
     def list_database_names(self) -> list[str]:
         """List the names of all available RAG database directories."""
         return sorted(path.name for path in self._rag_dir.iterdir() if path.is_dir())
@@ -140,7 +149,7 @@ class RAGManager:
 
     def create_database(self, name: str) -> str:
         """Create a new RAG database."""
-        name = self._validate_name(name)
+        name = _validate_name(name)
         db_path = self._db_path(name)
 
         if db_path.exists():
@@ -158,9 +167,10 @@ class RAGManager:
                 ),
             )
         except Exception as e:
+            client.close()
             shutil.rmtree(db_path)
             raise RAGError(_("Failed to create database '{name}': {e}", name=name, e=e)) from e
-        finally:
+        else:
             client.close()
 
         logger.info("Created RAG database: %s", name)
@@ -168,7 +178,7 @@ class RAGManager:
 
     def delete_database(self, name: str) -> None:
         """Delete a RAG database."""
-        name = self._validate_name(name)
+        name = _validate_name(name)
         db_path = self._db_path(name)
 
         if not db_path.exists():
@@ -184,7 +194,7 @@ class RAGManager:
 
     def load_database(self, name: str) -> str:
         """Load a RAG database for use."""
-        name = self._validate_name(name)
+        name = _validate_name(name)
         db_path = self._db_path(name)
 
         if not db_path.exists():
@@ -207,6 +217,30 @@ class RAGManager:
             self._client = None
         self._current_db = None
 
+    async def _index_chunks(self, client: QdrantClient, path: Path, chunks: list[str]) -> None:
+        """Generate embeddings and upsert points for chunks of a file."""
+        embeddings = await self._get_embeddings(chunks)
+        source = str(path)
+        self._delete_source_points(client, source)
+        points = [
+            PointStruct(
+                id=_generate_point_id(source, i),
+                vector=embedding,
+                payload={
+                    "content": chunk,
+                    "source": source,
+                    "filename": path.name,
+                    "chunk_index": i,
+                    "total_chunks": len(chunks),
+                },
+            )
+            for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=True))
+        ]
+        try:
+            client.upsert(collection_name=self.COLLECTION_NAME, points=points)
+        except Exception as e:
+            raise RAGError(_("Failed to upsert points into vector database: {e}", e=e)) from e
+
     async def add_file(self, file_path: str) -> dict[str, Any]:
         """Add a file to the current RAG database."""
         client = self._ensure_loaded()
@@ -226,32 +260,7 @@ class RAGManager:
         # Chunk the content
         chunks = self._chunk_text(content)
 
-        # Generate embeddings in batch and store. Old points are deleted only
-        # after embeddings succeed, so a failure never loses indexed content.
-        embeddings = await self._get_embeddings(chunks)
-        self._delete_source_points(client, str(path))
-
-        points: list[PointStruct] = []
-        for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=True)):
-            point_id = self._generate_point_id(str(path), i)
-            points.append(
-                PointStruct(
-                    id=point_id,
-                    vector=embedding,
-                    payload={
-                        "content": chunk,
-                        "source": str(path),
-                        "filename": path.name,
-                        "chunk_index": i,
-                        "total_chunks": len(chunks),
-                    },
-                )
-            )
-
-        try:
-            client.upsert(collection_name=self.COLLECTION_NAME, points=points)
-        except Exception as e:
-            raise RAGError(_("Failed to upsert points into vector database: {e}", e=e)) from e
+        await self._index_chunks(client, path, chunks)
 
         logger.info("Added file to RAG: %s (%d chunks)", path.name, len(chunks))
         return {
@@ -276,8 +285,6 @@ class RAGManager:
 
         results: dict[str, Any] = {"added": 0, "failed": 0, "skipped": 0}
 
-        all_file_chunks: list[tuple[Path, list[str]]] = []
-
         for file_path in path.rglob("*"):
             if not file_path.is_file():
                 continue
@@ -288,7 +295,7 @@ class RAGManager:
 
             try:
                 content = self._read_file(file_path, allowed_extensions=extensions)
-            except Exception as e:
+            except (OSError, UnicodeDecodeError) as e:
                 logger.warning("Failed to read %s: %s", file_path, e)
                 results["failed"] += 1
                 continue
@@ -297,27 +304,7 @@ class RAGManager:
                 continue
 
             chunks = self._chunk_text(content)
-            all_file_chunks.append((file_path, chunks))
-
-        for file_path, chunks in all_file_chunks:
-            source = str(file_path)
-            embeddings = await self._get_embeddings(chunks)
-            self._delete_source_points(client, source)
-            points = [
-                PointStruct(
-                    id=self._generate_point_id(source, i),
-                    vector=embedding,
-                    payload={
-                        "content": chunk,
-                        "source": source,
-                        "filename": file_path.name,
-                        "chunk_index": i,
-                        "total_chunks": len(chunks),
-                    },
-                )
-                for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=True))
-            ]
-            client.upsert(collection_name=self.COLLECTION_NAME, points=points)
+            await self._index_chunks(client, file_path, chunks)
             results["added"] += 1
             logger.info("Added file to RAG from batch: %s (%d chunks)", file_path.name, len(chunks))
 
@@ -326,7 +313,7 @@ class RAGManager:
     async def search(self, query: str, top_k: int | None = None) -> list[dict[str, Any]]:
         """Search the RAG database for relevant documents."""
         if not query.strip():
-            return []
+            raise RAGError(_("Search query cannot be empty."))
         limit = self.settings.default_top_k if top_k is None else top_k
         if limit <= 0:
             raise RAGError(_("Limit must be greater than 0"))
@@ -365,8 +352,6 @@ class RAGManager:
 
     async def _get_embeddings(self, texts: list[str], batch_size: int = 100) -> list[list[float]]:
         """Generate embeddings for a batch of texts using Ollama."""
-        if not texts:
-            return []
         all_embeddings: list[list[float]] = []
         expected_dim = self.settings.embedding_dims
         for i in range(0, len(texts), batch_size):
@@ -404,7 +389,7 @@ class RAGManager:
 
     def _delete_source_points(self, client: QdrantClient, source: str) -> None:
         """Delete all points previously indexed for a given source path."""
-        filt = Filter(must=[FieldCondition(key="source", match=MatchAny(any=[source]))])
+        filt = Filter(must=[FieldCondition(key="source", match=MatchValue(value=source))])
         try:
             client.delete(collection_name=self.COLLECTION_NAME, points_selector=filt, wait=True)
         except Exception as e:
@@ -412,10 +397,6 @@ class RAGManager:
 
     def _chunk_text(self, text: str) -> list[str]:
         """Split text into chunks with overlap."""
-        text = text.strip()
-        if not text:
-            return []
-
         chunk_size = self.settings.chunk_size
         overlap = self.settings.chunk_overlap
 
@@ -468,16 +449,3 @@ class RAGManager:
             return path.read_text(encoding="utf-8")
         except UnicodeDecodeError as e:
             raise RAGError(_("Could not decode file: {path}", path=path)) from e
-
-    @staticmethod
-    def _validate_name(name: str) -> str:
-        """Validate database name."""
-        try:
-            return validate_identifier(name, "name")
-        except ValueError as e:
-            raise RAGError(str(e)) from e
-
-    @staticmethod
-    def _generate_point_id(source: str, chunk_index: int) -> str:
-        """Generate a unique point ID as a UUID string from source and chunk index."""
-        return str(uuid.uuid5(uuid.NAMESPACE_URL, f"{source}:{chunk_index}"))

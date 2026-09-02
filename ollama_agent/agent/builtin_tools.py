@@ -69,14 +69,15 @@ async def search_past_conversations(query: str, limit: int = 3) -> str:
     """Search past conversation sessions and episodic memory by keywords, topics, or dates
     (e.g. 'yesterday', 'auth', 'database'). Returns timestamped excerpts of previous sessions.
     """
-    safe_limit = max(1, limit)
+    if limit <= 0:
+        raise ValueError(_("Limit must be greater than 0, got {limit}", limit=limit))
     try:
         results = await asyncio.to_thread(
             search_past_conversations_in_db,
             query=query,
             db_path=episodic_memory.HISTORY_DB_PATH,
             exclude_thread_id=get_active_thread_id(),
-            limit=safe_limit,
+            limit=limit,
         )
     except HistoryError as exc:
         return _("Error searching past conversations: {exc}", exc=exc)

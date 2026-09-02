@@ -36,6 +36,32 @@ def _configure_win32_clipboard(u32: Any, k32: Any) -> None:
     k32.GlobalFree.restype = ctypes.c_void_p
 
 
+if sys.platform == "win32":
+    _configure_win32_clipboard(ctypes.windll.user32, ctypes.windll.kernel32)
+
+
+def _get_linux_copy_cmd() -> list[str]:
+    """Detect available Linux clipboard copy command."""
+    if (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("WAYLAND_SOCKET")) and shutil.which("wl-copy"):
+        return ["wl-copy"]
+    if shutil.which("xclip"):
+        return ["xclip", "-selection", "clipboard"]
+    if shutil.which("xsel"):
+        return ["xsel", "--clipboard", "--input"]
+    raise ClipboardError("No clipboard command found (install wl-copy, xclip or xsel)")
+
+
+def _get_linux_paste_cmd() -> list[str]:
+    """Detect available Linux clipboard paste command."""
+    if (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("WAYLAND_SOCKET")) and shutil.which("wl-paste"):
+        return ["wl-paste", "--no-newline"]
+    if shutil.which("xclip"):
+        return ["xclip", "-selection", "clipboard", "-o"]
+    if shutil.which("xsel"):
+        return ["xsel", "--clipboard", "--output"]
+    raise ClipboardError("No clipboard command found (install wl-paste, xclip or xsel)")
+
+
 def _copy_via_command(cmd: list[str], text: str) -> None:
     try:
         proc = subprocess.run(
@@ -79,18 +105,10 @@ def copy_to_system_clipboard(text: str) -> None:
     if sys.platform == "darwin":
         _copy_via_command(["pbcopy"], text)
     elif sys.platform.startswith(("linux", "freebsd", "openbsd")):
-        if (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("WAYLAND_SOCKET")) and shutil.which("wl-copy"):
-            _copy_via_command(["wl-copy"], text)
-        elif shutil.which("xclip"):
-            _copy_via_command(["xclip", "-selection", "clipboard"], text)
-        elif shutil.which("xsel"):
-            _copy_via_command(["xsel", "--clipboard", "--input"], text)
-        else:
-            raise ClipboardError("No clipboard command found (install wl-copy, xclip or xsel)")
+        _copy_via_command(_get_linux_copy_cmd(), text)
     elif sys.platform == "win32":
         u32 = ctypes.windll.user32
         k32 = ctypes.windll.kernel32
-        _configure_win32_clipboard(u32, k32)
         if not u32.OpenClipboard(None):
             raise ClipboardError("Could not open the Windows clipboard")
         try:
@@ -123,30 +141,21 @@ def get_system_clipboard() -> str:
     if sys.platform == "darwin":
         return _paste_via_command(["pbpaste"])
     elif sys.platform.startswith(("linux", "freebsd", "openbsd")):
-        if (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("WAYLAND_SOCKET")) and shutil.which("wl-paste"):
-            return _paste_via_command(["wl-paste", "--no-newline"])
-        elif shutil.which("xclip"):
-            return _paste_via_command(["xclip", "-selection", "clipboard", "-o"])
-        elif shutil.which("xsel"):
-            return _paste_via_command(["xsel", "--clipboard", "--output"])
-        else:
-            raise ClipboardError("No clipboard command found (install wl-paste, xclip or xsel)")
+        return _paste_via_command(_get_linux_paste_cmd())
     elif sys.platform == "win32":
         u32 = ctypes.windll.user32
         k32 = ctypes.windll.kernel32
-        _configure_win32_clipboard(u32, k32)
         if not u32.OpenClipboard(None):
             raise ClipboardError("Could not open the Windows clipboard")
         try:
             h_mem = u32.GetClipboardData(13)  # CF_UNICODETEXT
             if not h_mem:
-                return ""
+                raise ClipboardError("GetClipboardData failed while reading the clipboard")
             p_mem = k32.GlobalLock(h_mem)
             if not p_mem:
                 raise ClipboardError("GlobalLock failed while reading the clipboard")
             try:
-                val = ctypes.c_wchar_p(p_mem).value
-                return val if val is not None else ""
+                return ctypes.c_wchar_p(p_mem).value
             finally:
                 k32.GlobalUnlock(h_mem)
         finally:

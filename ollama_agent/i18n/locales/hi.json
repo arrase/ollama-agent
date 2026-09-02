@@ -416,6 +416,7 @@
   "System Output": "सिस्टम आउटपुट",
   "esc to dismiss": "खारिज करने के लिए esc",
   "Limit must be greater than 0": "सीमा 0 से अधिक होनी चाहिए",
+  "Limit must be greater than 0, got {limit}": "सीमा 0 से अधिक होनी चाहिए, प्राप्त {limit}",
   "Failed to query vector database: {e}": "वेक्टर डेटाबेस से क्वेरी करने में विफल: {e}",
   "Failed to get collection info: {e}": "कलेक्शन की जानकारी प्राप्त करने में विफल: {e}",
   "Failed to create database '{name}': {e}": "डेटाबेस '{name}' बनाने में विफल: {e}",
@@ -448,5 +449,10 @@
   "Variable assignment in key=value format": "key=value प्रारूप में चर असाइनमेंट",
   "Unsupported input type '{type}' for input '{name}'": "इनपुट '{name}' के लिए असमर्थित इनपुट प्रकार '{type}'",
   "Database": "डेटाबेस",
-  "Database name": "डेटाबेस का नाम"
+  "Database name": "डेटाबेस का नाम",
+  "Search query cannot be empty.": "खोज क्वेरी खाली नहीं हो सकती।",
+  "Expected mapping for inputs in Task": "Task में inputs के लिए मैपिंग अपेक्षित थी",
+  "Invalid input definition for '{name}'": "'{name}' के लिए अमान्य इनपुट परिभाषा",
+  "MCP server '{name}': 'command' must be a non-empty string": "MCP सर्वर '{name}': 'command' एक गैर-खाली स्ट्रिंग होनी चाहिए",
+  "MCP server '{name}': 'url' must be a non-empty string": "MCP सर्वर '{name}': 'url' एक गैर-खाली स्ट्रिंग होनी चाहिए"
 }
