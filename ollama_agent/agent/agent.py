@@ -47,6 +47,7 @@ from .builtin_tools import (
     BUILTIN_TOOLS,
     get_rag_manager,
     get_tool_timeout,
+    rag_search,
     set_active_thread_id,
 )
 
@@ -225,7 +226,9 @@ class AgentRuntime:
             for tool_name in ("execute", "write_file", "edit_file")
         }
 
-        tools: list[Any] = [*BUILTIN_TOOLS, *mcp_tools]
+        rag_mgr = get_rag_manager()
+        rag_tools = [rag_search] if rag_mgr and rag_mgr.current_database else []
+        tools: list[Any] = [*BUILTIN_TOOLS, *rag_tools, *mcp_tools]
 
         summarization_tool_mw = create_summarization_tool_middleware(model, backend)
         self._backend = backend

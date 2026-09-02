@@ -319,16 +319,16 @@ def build_repl_handlers(
                 console.print(f"[red]{_('Usage: /rag delete <name>')}[/red]")
                 return None
             delete_rag_database(get_rag_ctx(), args[1])
-            return None
+            return get_runtime().reload()
         if sub == "load":
             if len(args) < 2:
                 console.print(f"[red]{_('Usage: /rag load <name>')}[/red]")
                 return None
             load_rag_database(get_rag_ctx(), args[1])
-            return None
+            return get_runtime().reload()
         if sub == "unload":
             unload_rag_database(get_rag_ctx())
-            return None
+            return get_runtime().reload()
         if sub == "add":
             sub_args = args[1:]
             is_dir = "--dir" in sub_args
