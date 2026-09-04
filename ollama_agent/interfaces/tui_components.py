@@ -57,7 +57,7 @@ class AgentHeader(Static):
             ctx_str = f"{num_ctx / 1000:.1f}k" if num_ctx >= 1000 else str(int(num_ctx))
             ctx_label = _("Context:")
             ctx_info = (
-                f"  [dim]│[/dim]  [bold #8b949e]{ctx_label}[/bold #8b949e] "
+                f"  [#30363d]│[/]  [bold #8b949e]{ctx_label}[/bold #8b949e] "
                 f"[bold {color}]{tok_str}/{ctx_str} ({pct}%)[/bold {color}]"
             )
         else:
@@ -67,7 +67,7 @@ class AgentHeader(Static):
         rag_db = rag_ctx.rag_manager.current_database if rag_ctx else None
         rag_label = _("RAG:")
         rag_info = (
-            f"  [dim]│[/dim]  [bold #8b949e]{rag_label}[/bold #8b949e] "
+            f"  [#30363d]│[/]  [bold #8b949e]{rag_label}[/bold #8b949e] "
             f"[bold #a78bfa]{escape(str(rag_db))}[/bold #a78bfa]"
             if rag_db
             else ""
@@ -76,22 +76,22 @@ class AgentHeader(Static):
         stealth = self.repl.runtime.stealth_mode
 
         yolo_status = (
-            f"[bold #f87171 on #3b181e] {_('YOLO: ON')} [/bold #f87171 on #3b181e]"
+            f"[bold #0d1117 on #f87171] {_('YOLO: ON')} [/bold #0d1117 on #f87171]"
             if yolo
-            else f"[dim #8b949e]{_('YOLO: OFF')}[/dim #8b949e]"
+            else f"[#7d8590]{_('YOLO: OFF')}[/#7d8590]"
         )
         stealth_status = (
-            f"[bold #c084fc on #2e1065] {_('STEALTH: ON')} [/bold #c084fc on #2e1065]"
+            f"[bold #0d1117 on #c084fc] {_('STEALTH: ON')} [/bold #0d1117 on #c084fc]"
             if stealth
-            else f"[dim #8b949e]{_('STEALTH: OFF')}[/dim #8b949e]"
+            else f"[#7d8590]{_('STEALTH: OFF')}[/#7d8590]"
         )
         self.update(
-            f"[bold #38bdf8]● ollama-agent[/bold #38bdf8]  [dim]│[/dim]  "
+            f"[bold #38bdf8]● ollama-agent[/bold #38bdf8]  [#30363d]│[/]  "
             f"[bold #8b949e]{_('Model:')}[/bold #8b949e] "
-            f"[bold #e6edf3]{escape(str(ms.name))}[/bold #e6edf3]{ctx_info}  [dim]│[/dim]  "
+            f"[bold #e6edf3]{escape(str(ms.name))}[/bold #e6edf3]{ctx_info}  [#30363d]│[/]  "
             f"[bold #8b949e]{_('Effort:')}[/bold #8b949e] "
-            f"[#e6edf3]{escape(str(ms.reasoning_effort))}[/#e6edf3]{rag_info}  [dim]│[/dim]  "
-            f"{yolo_status}  [dim]│[/dim]  {stealth_status}"
+            f"[#e6edf3]{escape(str(ms.reasoning_effort))}[/#e6edf3]{rag_info}  [#30363d]│[/]  "
+            f"{yolo_status}  [#30363d]│[/]  {stealth_status}"
         )
 
 
@@ -131,11 +131,11 @@ class AgentFooter(Static):
         if self._is_approval:
             self.update(
                 f"[bold #fbbf24]⚠ {_('Approval required:')}[/bold #fbbf24]   "
-                f"[dim]y[/dim] [bold #8b949e]{_('approve')}[/bold #8b949e]   "
-                f"[dim]n[/dim] [bold #8b949e]{_('reject')}[/bold #8b949e]   "
-                f"[dim]a[/dim] [bold #8b949e]{_('allow session')}[/bold #8b949e]   "
-                f"[dim]esc[/dim] [bold #8b949e]{_('cancel')}[/bold #8b949e]   "
-                f"[dim]←→[/dim] [bold #8b949e]{_('select')}[/bold #8b949e]"
+                f"[bold #7d8590]y[/bold #7d8590] [#c9d1d9]{_('approve')}[/#c9d1d9]   "
+                f"[bold #7d8590]n[/bold #7d8590] [#c9d1d9]{_('reject')}[/#c9d1d9]   "
+                f"[bold #7d8590]a[/bold #7d8590] [#c9d1d9]{_('allow session')}[/#c9d1d9]   "
+                f"[bold #7d8590]esc[/bold #7d8590] [#c9d1d9]{_('cancel')}[/#c9d1d9]   "
+                f"[bold #7d8590]←→[/bold #7d8590] [#c9d1d9]{_('select')}[/#c9d1d9]"
                 f"{queue_info}"
             )
         elif self._is_generating:
@@ -146,12 +146,12 @@ class AgentFooter(Static):
             )
         else:
             self.update(
-                f"[dim]enter[/dim] [bold #8b949e]{_('send')}[/bold #8b949e]   "
-                f"[dim]\\+enter[/dim] [bold #8b949e]{_('newline')}[/bold #8b949e]   "
-                f"[dim]tab[/dim] [bold #8b949e]{_('complete')}[/bold #8b949e]   "
-                f"[dim]↑↓[/dim] [bold #8b949e]{_('history')}[/bold #8b949e]   "
-                f"[dim]esc[/dim] [bold #8b949e]{_('interrupt')}[/bold #8b949e]   "
-                f"[dim]/[/dim] [bold #8b949e]{_('commands')}[/bold #8b949e]"
+                f"[bold #7d8590]enter[/bold #7d8590] [#c9d1d9]{_('send')}[/#c9d1d9]   "
+                f"[bold #7d8590]\\+enter[/bold #7d8590] [#c9d1d9]{_('newline')}[/#c9d1d9]   "
+                f"[bold #7d8590]tab[/bold #7d8590] [#c9d1d9]{_('complete')}[/#c9d1d9]   "
+                f"[bold #7d8590]↑↓[/bold #7d8590] [#c9d1d9]{_('history')}[/#c9d1d9]   "
+                f"[bold #7d8590]esc[/bold #7d8590] [#c9d1d9]{_('interrupt')}[/#c9d1d9]   "
+                f"[bold #7d8590]/[/bold #7d8590] [#c9d1d9]{_('commands')}[/#c9d1d9]"
                 f"{queue_info}"
             )
 
@@ -250,7 +250,7 @@ class ReplInput(TextArea):
         self.run_worker(self._load_history())
 
     def _update_height(self) -> None:
-        lines = max(2, min(8, self.document.line_count))
+        lines = max(1, min(8, self.document.line_count))
         self.styles.height = lines
 
     def on_text_area_changed(self, event: TextArea.Changed) -> None:
@@ -452,14 +452,14 @@ class AgentResponse(Container):
         if self.current_thinking is not None:
             self._thinking_dots_count = (self._thinking_dots_count % 3) + 1
             dots = " ·" * self._thinking_dots_count
-            self.current_thinking.title = f"⟡ {_('Thinking')}{dots}"
+            self.current_thinking.title = f"{_('Thinking')}{dots}"
 
     def _stop_thinking_animation(self) -> None:
         if self.thinking_timer is not None:
             self.thinking_timer.stop()
             self.thinking_timer = None
         if self.current_thinking is not None:
-            self.current_thinking.title = f"⟡ {_('Thought process')}"
+            self.current_thinking.title = _("Thought process")
 
     def append_thinking(self, delta: str) -> None:
         self.current_text_widget = None
@@ -469,7 +469,7 @@ class AgentResponse(Container):
             self._thinking_chunks = []
             self.current_thinking = Collapsible(
                 self.current_thinking_text,
-                title=f"⟡ {_('Thinking ···')}",
+                title=_("Thinking ···"),
                 collapsed=collapse_default,
             )
             self.mount(self.current_thinking)

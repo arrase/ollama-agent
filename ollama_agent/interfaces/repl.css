@@ -9,18 +9,17 @@ Screen {
 AgentHeader {
     background: #161b22;
     color: #e6edf3;
-    height: auto;
-    min-height: 2;
-    content-align: left middle;
+    height: 2;
+    content-align: left top;
     padding: 0 2;
-    border-bottom: solid white;
+    border-bottom: solid #30363d;
 }
 
 /* ── Chat Scroll Area ──────────────────────────────────────────────────── */
 #chat-scroll {
     background: #0d1117;
     height: 1fr;
-    padding: 0 0 1 2;
+    padding: 1 2;
     scrollbar-size: 1 1;
     scrollbar-color: #30363d;
     scrollbar-color-active: #38bdf8;
@@ -86,7 +85,7 @@ SystemOutputWidget, #system-output {
 /* ── Input Container & ReplInput ───────────────────────────────────────── */
 #input-container {
     height: auto;
-    min-height: 4;
+    min-height: 3;
     max-height: 10;
     background: #161b22;
     border: round #30363d;
@@ -112,7 +111,7 @@ SystemOutputWidget, #system-output {
 
 #input-bar {
     height: auto;
-    min-height: 2;
+    min-height: 1;
     background: transparent;
     align-vertical: top;
 }
@@ -132,7 +131,7 @@ ReplInput {
     color: #e6edf3 !important;
     width: 1fr;
     height: auto;
-    min-height: 2;
+    min-height: 1;
     max-height: 8;
     padding: 0 !important;
     margin: 0 !important;
@@ -232,14 +231,14 @@ AgentResponse {
 Collapsible {
     background: transparent !important;
     border: none !important;
-    margin: 0 0 1 2;
+    margin: 0 0 0 2;
     padding: 0;
 }
 
 Collapsible > Contents {
     background: transparent !important;
     border: none !important;
-    margin: 0;
+    margin: 0 0 1 0;
     padding: 0;
 }
 
@@ -251,11 +250,7 @@ CollapsibleTitle {
     padding: 0;
 }
 
-CollapsibleTitle:hover {
-    background: transparent !important;
-    color: #c4b5fd !important;
-}
-
+CollapsibleTitle:hover,
 CollapsibleTitle:focus {
     background: transparent !important;
     color: #c4b5fd !important;
@@ -381,19 +376,19 @@ MarkdownBlockQuote {
 }
 
 MarkdownH1 {
-    color: #38bdf8;
+    color: #f0f6fc;
     text-style: bold;
     margin: 1 0 0 0;
 }
 
 MarkdownH2 {
-    color: #38bdf8;
+    color: #34d399;
     text-style: bold;
     margin: 1 0 0 0;
 }
 
 MarkdownH3 {
-    color: #34d399;
+    color: #6ee7b7;
     text-style: bold;
     margin: 1 0 0 0;
 }

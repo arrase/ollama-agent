@@ -240,11 +240,11 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
                 assert inp.styles.height is not None
                 self.assertEqual(inp.styles.height.value, 3)
 
-                # 2. Text reset resets height to default minimum (2)
+                # 2. Text reset resets height to default minimum (1)
                 inp.text = ""
                 await pilot.pause()
                 assert inp.styles.height is not None
-                self.assertEqual(inp.styles.height.value, 2)
+                self.assertEqual(inp.styles.height.value, 1)
 
                 # 3. Backslash continuation (\ + Enter) inserts newline
                 inp.text = "SELECT * FROM test \\"
