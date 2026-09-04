@@ -13,14 +13,14 @@ AgentHeader {
     min-height: 2;
     content-align: left middle;
     padding: 0 2;
-    border-bottom: solid #21262d;
+    border-bottom: solid white;
 }
 
 /* ── Chat Scroll Area ──────────────────────────────────────────────────── */
 #chat-scroll {
     background: #0d1117;
     height: 1fr;
-    padding: 1 0 1 2;
+    padding: 0 0 1 2;
     scrollbar-size: 1 1;
     scrollbar-color: #30363d;
     scrollbar-color-active: #38bdf8;
@@ -189,7 +189,7 @@ AgentFooter {
 
 /* ── User Message ──────────────────────────────────────────────────────── */
 UserMessage {
-    margin: 1 0;
+    margin: 0 0 1 0;
     padding: 0;
     height: auto;
     background: transparent;
@@ -205,7 +205,7 @@ UserMessage {
 
 /* ── Agent Response ────────────────────────────────────────────────────── */
 AgentResponse {
-    margin: 1 0;
+    margin: 0 0 1 0;
     padding: 0;
     height: auto;
     background: transparent;

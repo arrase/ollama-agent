@@ -56,6 +56,15 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
         self.assertIn("2.0k/16.4k", str(rendered))
         self.assertIn("YOLO: OFF", str(rendered))
 
+    def test_agent_header_format_zero_tokens(self) -> None:
+        self.repl_mock.runtime.settings.model.context_window = 16384
+        self.repl_mock.runtime.last_context_tokens = 0
+        header = AgentHeader(self.repl_mock)
+        header.update_header()
+        rendered = header.render()
+        self.assertIn("Context:", str(rendered))
+        self.assertIn("0/16.4k (0%)", str(rendered))
+
     def test_agent_header_format_yolo_and_rag(self) -> None:
         self.repl_mock.runtime.settings.model.context_window = 8192
         self.repl_mock.runtime.last_context_tokens = 7500

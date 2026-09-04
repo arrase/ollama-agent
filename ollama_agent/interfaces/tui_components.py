@@ -47,10 +47,10 @@ class AgentHeader(Static):
         num_ctx = (
             eff_ctx
             if (isinstance(eff_ctx, int) and eff_ctx > 0)
-            else (ms.context_window if isinstance(ms.context_window, int) else 0)
+            else (int(ms.context_window) if str(ms.context_window).isdigit() else 0)
         )
 
-        if num_ctx and tokens:
+        if num_ctx > 0:
             pct = int((tokens / num_ctx) * 100)
             color = "#f87171" if pct > 90 else "#fbbf24" if pct > 75 else "#38bdf8"
             tok_str = f"{tokens / 1000:.1f}k" if tokens >= 1000 else str(int(tokens))

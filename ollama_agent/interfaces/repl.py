@@ -970,6 +970,7 @@ class OllamaAgentApp(App):
         finally:
             self._is_generating = False
             footer.set_generating(False)
+            self.query_one(AgentHeader).update_header()
             self._process_next_in_queue()
 
 
