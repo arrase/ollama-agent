@@ -29,7 +29,7 @@ dependencies = [
 ollama-agent = "ollama_agent.main:main"
 
 [project.optional-dependencies]
-dev = ["ruff==0.16.4"]
+dev = ["ruff==0.16.5"]
 
 [tool.setuptools.packages.find]
 where = ["."]
