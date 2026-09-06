@@ -29,14 +29,12 @@ Always manage dependencies and installations through `pyproject.toml`:
 
 # Development installation (includes ruff linter)
 .venv/bin/pip install -e ".[dev]"
+
+# Full installation (includes dev tools and mkdocs-material)
+.venv/bin/pip install -e ".[dev,docs]"
 ```
 
-### 4. Optional: Install Documentation Dependencies
-```bash
-.venv/bin/pip install mkdocs-material
-```
-
-### 5. Code Quality & Linting
+### 4. Code Quality & Linting
 Run Ruff to verify code formatting and compliance with project standards:
 ```bash
 .venv/bin/ruff check .
@@ -46,7 +44,7 @@ Run Ruff to verify code formatting and compliance with project standards:
 
 ## Testing & Quality Assurance
 
-`ollama-agent` maintains an automated test suite covering runtime mechanics, prompt processing, session management, RAG vector stores, skills, and TUI components (26 test modules, 517 tests).
+`ollama-agent` maintains an automated test suite covering runtime mechanics, prompt processing, session management, RAG vector stores, skills, and TUI components (27 test modules, 556 tests).
 
 ### Run Unit Tests
 Always execute tests using the virtual environment interpreter:
@@ -76,8 +74,9 @@ tests/
 ├── test_models.py                 # Capability checks, context window resolution & reasoning
 ├── test_prompt_processor.py       # @-mentions parsing, multimodal attachments & safety
 ├── test_prompt_queue.py           # Asynchronous prompt queue, non-blocking execution & FIFO draining
-├── test_rag.py                    # RAG operations, Qdrant client & embeddings
+├── test_rag_commands.py           # CLI/REPL RAG operations, database lifecycle & resolution
 ├── test_rag_manager.py            # Document chunking, batch embeddings & stale point cleanup
+├── test_repl.py                   # Textual REPL application, prompt queue execution & immediate commands
 ├── test_resource_manager.py       # Abstract BaseFileStoreManager tests
 ├── test_sessions.py               # SQLite session resumption, listing, export & deletion
 ├── test_skills.py                 # SKILL.md parsing, frontmatter extraction & validation
@@ -121,6 +120,12 @@ All contributions must strictly follow the engineering guidelines:
 
 ### 5. Dependency Management
 - Dependencies and packaging metadata are managed strictly in `pyproject.toml`.
+
+### 6. Internationalization (i18n) Workflow
+`ollama-agent` natively supports 16 languages (English baseline in Python source code + 15 translated JSON catalogs in `ollama_agent/i18n/locales/`):
+- **Wrapping Strings**: All user-facing strings must be wrapped with `_("Message {param}", param=value)` imported from `ollama_agent.i18n`.
+- **Locale Catalogs**: Translation dictionaries reside in `ollama_agent/i18n/locales/<locale>.json`. The keys must match the exact English format string.
+- **Completeness Enforcement**: `tests/test_i18n.py` uses AST static analysis to parse every Python source file across the repository. It verifies that every `_()` call in the codebase exists in all 15 JSON catalogs and that interpolation keys match. Introducing a new localized string requires adding translations to all 15 JSON catalogs to ensure test suite passes.
 
 ---
 
@@ -179,7 +184,7 @@ ollama-agent/
 │   └── tasks/               # Saved task management
 │       ├── commands.py      # Task CLI and REPL handlers
 │       └── manager.py       # TaskManager and Task YAML serializer
-├── tests/                   # Automated unit test suite (26 test modules)
+├── tests/                   # Automated unit test suite (27 test modules)
 ├── docs/                    # MkDocs documentation source files
 ├── mkdocs.yml               # MkDocs configuration
 ├── AGENTS.md                # Development guidelines and coding conventions

@@ -1,1002 +1,204 @@
 # Ollama Agent
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Python: 3.11+](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![LangChain](https://img.shields.io/badge/Built%20with-LangChain%20%26%20DeepAgents-emerald)](https://github.com/langchain-ai/langchain)
-[![Ollama](https://img.shields.io/badge/Ollama-Native%20API-black)](https://ollama.com/)
+<p align="center">
+  <strong>The autonomous, local-first AI assistant built natively for Ollama.</strong>
+</p>
 
-**Ollama Agent** is a command-line AI assistant (interactive REPL and non-interactive CLI) designed to interact directly with local AI models. Built on top of [DeepAgents](https://docs.langchain.com/oss/python/deepagents/overview), [LangChain](https://github.com/langchain-ai/langchain), and [LangGraph](https://github.com/langchain-ai/langgraph), it delivers stateful multi-turn chat sessions, native tool execution with human-in-the-loop safety, automated context window management, Model Context Protocol (MCP) extensibility, project guidelines discovery (`AGENTS.md`), local RAG, and agent skills.
+<p align="center">
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.11+-blue.svg" alt="Python 3.11+"></a>
+  <a href="https://ollama.com/"><img src="https://img.shields.io/badge/Ollama-Native%20API-black" alt="Ollama Native API"></a>
+  <a href="https://docs.langchain.com/oss/python/deepagents/overview"><img src="https://img.shields.io/badge/Built%20with-DeepAgents%20%26%20LangGraph-purple" alt="DeepAgents & LangGraph"></a>
+  <a href="https://arrase.github.io/ollama-agent/"><img src="https://img.shields.io/badge/Docs-GitHub%20Pages-emerald" alt="Documentation"></a>
+</p>
 
----
-
-## Table of Contents
-
-- [Features](#features)
-- [Prerequisites & Installation](#prerequisites--installation)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Interactive REPL Interface](#interactive-repl-interface)
-  - [Multiline Input & Navigation](#multiline-input--navigation)
-  - [Slash Commands](#slash-commands)
-  - [Prompt Queue & Non-Blocking Execution](#prompt-queue--non-blocking-execution)
-  - [Live Context Usage & Token Gauge](#live-context-usage--token-gauge)
-  - [Human-in-the-Loop (HITL) & YOLO Mode](#human-in-the-loop-hitl--yolo-mode)
-  - [File & Directory Context (`@-mentions`)](#file--directory-context--mentions)
-  - [Context Compression & Compaction](#context-compression--compaction)
-- [CLI Reference & Automation](#cli-reference--automation)
-  - [Global Options & Flags](#global-options--flags)
-  - [Non-Interactive Mode](#non-interactive-mode)
-  - [CLI Subcommands Summary](#cli-subcommands-summary)
-  - [Thinking / Reasoning Effort Mapping](#thinking--reasoning-effort-mapping)
-- [Memory, Sessions & Guidelines](#memory-sessions--guidelines)
-  - [1. Repository Project Guidelines (`AGENTS.md`)](#1-repository-project-guidelines-agentsmd)
-  - [2. Global Agent Guidelines (`~/.ollama-agent/AGENTS.md`)](#2-global-agent-guidelines-ollama-agentagentsmd)
-  - [3. Cross-Session Memory (`~/.ollama-agent/MEMORY.md`)](#3-cross-session-memory-ollama-agentmemorymd)
-  - [4. Session History & Resumption (`history.db`)](#4-session-history--resumption-historydb)
-  - [5. Episodic Memory & Conversation Recall](#5-episodic-memory--conversation-recall)
-- [Productivity & Knowledge Tools](#productivity--knowledge-tools)
-  - [Saved Tasks](#saved-tasks)
-  - [Agent Skills Standard](#agent-skills-standard)
-  - [Local RAG (Retrieval Augmented Generation)](#local-rag-retrieval-augmented-generation)
-- [Extensibility: MCP & Custom Subagents](#extensibility-mcp--custom-subagents)
-  - [MCP Servers & Scopes](#mcp-servers--scopes)
-  - [Main Agent MCP Configuration](#main-agent-mcp-configuration-ollama-agentmcpjson)
-  - [Custom Subagents](#custom-subagents)
-- [Configuration & Settings](#configuration--settings)
-  - [Configuration File (`settings.yaml`)](#configuration-file-settingsyaml)
-  - [Environment Variables](#environment-variables)
-  - [Agent System Prompts](#agent-system-prompts)
-  - [Configuration Reset (`--config-reset`)](#configuration-reset---config-reset)
-  - [LangSmith Tracing](#langsmith-tracing)
-- [Developer Guide](#developer-guide)
-  - [Project Setup](#project-setup)
-  - [Project Structure](#project-structure)
-- [License](#license)
+<p align="center">
+  <a href="#-the-ollama-advantage">Why Ollama Agent?</a> •
+  <a href="#-quick-start">Quick Start</a> •
+  <a href="#-key-features">Key Features</a> •
+  <a href="#-cheat-sheet">Cheat Sheet</a> •
+  <a href="https://arrase.github.io/ollama-agent/">Full Documentation ↗</a>
+</p>
 
 ---
 
-## Features
+**Ollama Agent** is an autonomous terminal AI assistant (interactive REPL and scriptable CLI) designed from the ground up for local LLMs. Powered by [DeepAgents](https://docs.langchain.com/oss/python/deepagents/overview) and [LangGraph](https://github.com/langchain-ai/langgraph), it brings Claude Code-like agentic capabilities to your local machine: stateful multi-turn workflows, autonomous tool execution with human-in-the-loop safety, dynamic context management, project rules (`AGENTS.md`), local RAG, Agent Skills, and Model Context Protocol (MCP) integrations.
 
-- 🖥️ **Interactive Terminal REPL**: Modern Textual-powered TUI featuring rich Markdown rendering, multiline editing (`\ + Enter`), slash command autocompletion, and live session status.
-- ⚡ **Non-Interactive CLI**: Execute single prompts directly from your shell for automation, scripting, and quick queries.
-- 🦙 **Native Ollama Integration**: Direct communication via Ollama's native API (`langchain-ollama`) — no OpenAI compatibility proxy required.
-- 🧠 **Native Thinking / Reasoning Traces**: Harnesses Ollama's native reasoning support. Configurable effort levels (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`) per model and session.
-- 📊 **Automatic Context Resolution & Live Monitor**: Dynamically inspects model context limits (`num_ctx`) and displays real-time token consumption with color-coded gauge alerts in the TUI header.
-- 🗜️ **Context Compression & Compaction**: Automatic background summarization and history offloading at 85% context capacity, plus on-demand context compaction via the agent's built-in `compact_conversation` tool.
-- 🔄 **Per-Session Model Switching**: Change models mid-conversation (`/model set <name>`) while preserving the conversation context for the active session.
-- 🛡️ **Human-in-the-Loop (HITL) & YOLO Mode**: Interactive terminal approval widget before executing shell commands or editing files, with full bypass available via YOLO mode (`-y` or `/yolo`).
-- 🕶️ **Stealth Mode (In-Memory Privacy)**: Run conversations without persisting chat history to SQLite (`-s` or `/stealth`), keeping all state in-memory during the session.
-- 📁 **Interactive `@-mentions`**: Reference local files or entire directory trees directly in prompts (e.g. `@src/main.py`, `@"data folder"`, `@.`) with path autocompletion, multimodal encoding, and binary safety.
-- 💾 **SQLite-Backed Sessions**: Durable conversation checkpoints in `~/.ollama-agent/history.db` with instant resumption (`/session resume <id>`), markdown export (`/session export`), and history management.
-- 📋 **Saved Tasks**: Save reusable prompts as YAML templates with Jinja2 expressions and dynamic input variables, executing them on demand via CLI (`task run`) or interactive REPL commands (`/task run`).
-- 🧩 **Agent Skills Standard**: Extend the agent with modular skills following the [Agent Skills specification](https://agentskills.io/specification) using progressive disclosure.
-- 📚 **Local RAG Engine**: Embed and index documents into local Qdrant vector collections with automated semantic retrieval via the agent's `rag_search` tool.
-- 🧠 **Persistent Memory & Guidelines**: Cross-session user memory (`MEMORY.md`), automatic discovery of project-level guidelines (`AGENTS.md`), and **Episodic Memory** to search past conversations and solutions (`search_past_conversations` tool and `/session search`).
-- 🔌 **Model Context Protocol (MCP)**: Attach MCP servers (`mcp.json`) directly to the main agent across `stdio`, `http`, and `sse` transports, with real-time status inspection via `/mcp` and `mcp list`.
-- 🤖 **Specialized Subagents**: Configure isolated subagents in `settings.yaml` with their own model, system prompt, and dedicated MCP tool servers.
+> 📖 **Comprehensive Guides & Technical Reference**: Visit the official documentation site at **[arrase.github.io/ollama-agent](https://arrase.github.io/ollama-agent/)**.
 
 ---
 
-## Prerequisites & Installation
+## 🦙 The Ollama Advantage
+
+Most generic AI agents treat Ollama as just an OpenAI-compatible endpoint, leading to poor output quality, truncated context, and frustrating crashes. **Ollama Agent communicates directly with Ollama's native API** and is uniquely engineered to extract the full potential of local open-weights models:
+
+| Feature | Generic OpenAI-Proxy Agents | Ollama Agent |
+| :--- | :--- | :--- |
+| **Context Window (`num_ctx`)** | ❌ Defaults to Ollama's 2K–4K limit; truncates large prompts and forgets context quickly. | ✅ **Auto-detects model capacity** from GGUF metadata (`context_length`) or Modelfile parameters. Sets `num_ctx` dynamically (or `/context max`). |
+| **Model Hyperparameters** | ❌ Forces fixed defaults (`temp=0.7`, `top_p=1.0`), ignoring model-specific tuning. | ✅ **Auto-discovers optimal sampling** from the Modelfile (`temperature`, `top_p`, `top_k`, `min_p`, `repeat_penalty`). |
+| **Token Telemetry** | ❌ Approximates tokens with `tiktoken` (inaccurate for Llama, Qwen, Gemma, DeepSeek). | ✅ **Reads native server metrics** (`prompt_eval_count` + `eval_count`) directly from Ollama for exact real-time tracking. |
+| **Context Management** | ❌ Crashes with context overflow errors when conversation exceeds limit. | ✅ **Auto-compaction at 85% capacity**: summarizes older turns, prunes bulky tool arguments, and offloads history to disk. |
+| **Reasoning Traces** | ❌ May leak raw `<think>` tokens into output or fail to configure thinking effort. | ✅ **Architecture-aware thinking**: translates effort levels per model family (Qwen, DeepSeek, GPT-OSS) into collapsible UI blocks. |
+| **Model Verification** | ❌ Blindly attempts tool calls, failing with cryptic errors if unsupported. | ✅ **Pre-flight capability check**: verifies `tools` support, presents an interactive selector if unconfigured, and hot-swaps models mid-session (`/model set`). |
+
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
+- **Python 3.11+**
+- **[Ollama](https://ollama.com/)** running locally (or reachable via network)
+- A local tool-calling model (e.g. `ollama pull qwen3.8:27b`, `ollama pull qwen2.5:14b`, or `ollama pull llama3.1:8b`)
 
-Before running Ollama Agent, ensure the following dependencies are available on your system:
+### 1. Installation
 
-1. **Python 3.11+**: Ensure Python 3.11 or newer is installed.
-2. **Ollama**: Installed and running locally (or reachable at your configured host).
-3. **Tool-Calling Model**: A local model with tool/function-calling capabilities (e.g. `qwen3.8:27b`, `qwen2.5:14b`, `llama3.1:8b`). If the selected model lacks tool support, the agent will report an error and exit. If no model is configured or the configured model is missing, the agent will prompt you to select one interactively from your downloaded Ollama models.
-4. **Embeddings Model (for RAG)**: If using RAG features, download the default embedding model in Ollama:
-   ```bash
-   ollama pull nomic-embed-text:latest
-   ```
-
-### Installation
-
-For end-users, the recommended installation method is using **`pipx`**, which installs the application in an isolated environment and adds the `ollama-agent` executable to your system PATH:
+Install in an isolated environment using **`pipx`** (recommended):
 
 ```bash
-# Install directly from GitHub
 pipx install git+https://github.com/arrase/ollama-agent.git
 ```
 
-To upgrade an existing installation:
-
+*Or via pip into an active virtual environment:*
 ```bash
-pipx upgrade ollama-agent
+pip install git+https://github.com/arrase/ollama-agent.git
 ```
 
----
-
-## Quick Start
-
-### 1. Launch the Interactive REPL
-Start the interactive terminal interface:
+### 2. Launch the Interactive REPL
 
 ```bash
 ollama-agent
 ```
+*If no model is configured, Ollama Agent will automatically detect your downloaded models and let you choose one interactively.*
 
-### 2. Run a One-Off Prompt (Non-Interactive)
-Execute a single query directly from your command line:
+### 3. Run One-Off Commands from the Shell
 
 ```bash
-ollama-agent -p "Summarize the git commits made in the last 7 days."
-```
+# Quick query
+ollama-agent -p "Explain the role of middleware in this project."
 
-### 3. Run with Specific Model, Effort, and YOLO Mode
-```bash
-ollama-agent -m "gemma4:26b" -e "high" -y -p "Refactor src/utils.py to follow PEP 8."
+# Non-interactive refactoring with YOLO mode (auto-approves tool actions)
+ollama-agent -m "qwen3.8:27b" -e "high" -y -p "Refactor @src/utils.py to comply with PEP 8."
 ```
 
 ---
 
-## Interactive REPL Interface
+## 🖥️ Interactive REPL Experience
 
-The interactive REPL is a full-featured terminal UI built on Textual and Rich, providing a persistent chat session with markdown rendering, status gauges, and interactive workflows.
+The interactive terminal interface is built with **Textual** and **Rich** to provide a fast, keyboard-first development environment:
 
 ```text
-● ollama-agent │ Model: gemma4:26b │ Context: 2.1k/10.0k (21%) │ Effort: medium │ YOLO: OFF │ STEALTH: OFF
+● ollama-agent │ Model: qwen3.8:27b │ Context: 3.4k/32.0k (11%) │ Effort: high │ YOLO: OFF │ STEALTH: OFF
 ```
 
----
-
-### Multiline Input & Navigation
-
-The REPL prompt input supports convenient multiline editing, history recall, and tab completion:
-
-- **Insert Newline**: End the current line with a backslash `\` and press `Enter` (`\ + Enter`). The trailing backslash is automatically stripped, inserting a clean newline. The input box dynamically expands up to 8 lines.
-- **Submit Prompt**: Press `Enter` without a trailing backslash to send your message.
-- **Cursor Navigation**: Use `↑` and `↓` arrow keys to move freely across lines in multiline prompts.
-- **Command History**: Pressing `↑` at the top-left `(row 0, col 0)` navigates to previous prompts; pressing `↓` at the end of the text navigates forward.
-- **Tab Autocompletion**: Press `Tab` to autocomplete slash commands, subcommands, entity IDs (models, sessions, tasks, skills, RAG databases), and `@-mention` file paths.
+- **Non-Blocking Prompt Queue**: Never wait for generation to finish. Type follow-up prompts or execute read-only slash commands while the model is actively streaming or waiting for tool confirmation.
+- **Multiline Editing**: Type `\` followed by `Enter` (`\ + Enter`) to create clean newlines. The input area expands dynamically up to 8 lines.
+- **3-Level Tab Autocompletion**: Autocompletes slash commands, subcommands, entities (models, sessions, tasks, skills, RAG databases), and `@-mention` file paths.
+- **Real-Time Token Gauge**: Color-coded header indicator (Cyan $\le 75\%$, Amber $76\%-90\%$, Red $>90\%$) based on real Ollama server token counts.
+- **Mid-Session Switching**: Switch models (`/model set <name>`), change reasoning effort (`/effort high`), or update context window (`/context max`) mid-conversation without losing thread state.
 
 ---
 
-### Slash Commands
+## ✨ Key Features
 
-The REPL provides built-in slash commands for managing models, sessions, tasks, skills, and memory. Commands and entities support **3-level tab autocompletion**:
+### 🛡️ Human-in-the-Loop (HITL), YOLO & Stealth Modes
+- **Action Approval Dialog**: Sensitive tool operations (running shell commands, writing/editing files) require keyboard confirmation (`y` approve, `n` reject, `a` allow for session, `c` cancel).
+- **YOLO Mode (`-y` / `/yolo`)**: Bypass confirmation pauses for fully autonomous agent runs.
+- **Stealth Mode (`-s` / `/stealth`)**: Run conversations in-memory without saving conversation turns or checkpoints to SQLite history.
 
-| Command | Subcommands / Syntax | Description |
+### 📁 Interactive Context Injection (`@-mentions`)
+Reference local files or folders directly in your prompts with autocompletion:
+- **Single & Quoted Files**: `@src/main.py`, `@"data/financial report.csv"`
+- **Directory Traversal**: `@src` or `@.` (recursively attaches all supported source files).
+- **Multimodal Assets**: Automatically base64-encodes images (`.png`, `.jpg`, `.webp`), audio, video, and documents (`.pdf`, `.pptx`) for vision-enabled models.
+
+### 🧠 Project Guidelines & Persistent Memory
+- **Repository Guidelines (`AGENTS.md`)**: Automatically discovered in the working directory up to the git root and mounted into agent memory.
+- **Cross-Session Memory (`MEMORY.md`)**: Preserves user preferences and architectural decisions across sessions.
+- **Episodic Memory**: Autonomous past conversation search via the `search_past_conversations` tool and user search via `/session search <query>`.
+
+### 🧩 Tasks, Skills & Local RAG
+- **Saved Tasks**: Reusable YAML prompt templates with Jinja2 expressions (`~/.ollama-agent/tasks/`), input type validation, and CLI execution (`ollama-agent task run <id>`).
+- **Agent Skills**: Modular procedural workflows adhering to the open [Agent Skills specification](https://agentskills.io/specification).
+- **Local RAG Engine**: Embed and index documents into local Qdrant collections using Ollama embeddings (`ollama pull nomic-embed-text`), retrieved automatically via the `rag_search` tool.
+
+### 🔌 Model Context Protocol (MCP) & Subagents
+- **MCP Extensibility**: Connect external tools over `stdio`, `http`, and `sse` transports declared in `~/.ollama-agent/mcp.json`.
+- **Specialized Subagents**: Configure isolated subagents in `settings.yaml` with their own model, system prompt, context window, and dedicated MCP tool servers.
+
+---
+
+## ⚡ Cheat Sheet
+
+### Common Slash Commands (REPL)
+
+| Command | Usage | Description |
 | :--- | :--- | :--- |
-| `/model` | `/model [list \| set <model>]` | List available Ollama models (with tool support indicators) or switch the active model for the current session. |
-| `/effort` | `/effort [<level>]` | Show current reasoning effort or switch the thinking/reasoning effort level (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`) for the active session. |
-| `/context` | `/context [<size\|max>]` | Show current context window or switch context window token size (`num_ctx`) or `'max'` for the active session. |
-| `/params` | `/params [list \| set <parameter> <value>]` | Inspect active sampling parameters and resolution sources, or dynamically update parameter values for the active session. |
-| `/queue` | `/queue [list \| clear \| rm <position>]` | Inspect pending prompts in the queue, remove a specific item by index (`/queue rm 2`, aliases: `remove`, `delete`), or clear all queued prompts. |
-| `/session` | `/session [list \| search <query> \| resume <id> (alias: switch) \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume previous threads, export to Markdown, or delete history. |
-| `/task` | `/task [list \| create [<id>] \| run <id> [key=value ...] [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` initiates an interactive conversational creation flow with the agent. Supports dynamic Jinja2 template variables. |
-| `/skill` | `/skill [list \| show <id> \| create [<id>] \| delete <id>]` | Manage agent skills. `/skill create` initiates an interactive conversational creation flow with the agent. |
-| `/rag` | `/rag [status \| list \| create <name> \| load <name> \| unload \| add <path> [--dir] \| delete <name>]` | Manage local RAG vector databases, index files/directories, and toggle active knowledge bases. |
-| `/mcp` | `/mcp [list \| reload]` | List configured MCP servers, check connection status, or reload MCP servers and rebuild tool graph mid-session. |
-| `/agents` | `/agents [list]` | List configured specialized subagents, inspecting their models, context windows, and dedicated MCP tool servers. |
-| `/yolo` | `/yolo [on \| off]` | Toggle YOLO mode or explicitly enable/disable it to bypass tool confirmations. |
-| `/stealth` | `/stealth [on \| off]` | Toggle Stealth mode or set it explicitly to run in-memory without saving conversation to SQLite history. |
-| `/new` | `/new` (alias: `/clear`) | Start a clean new session with fresh context and clear the screen (alias for `/session new`). |
-| `/clear` | `/clear` | Clear the screen and start a clean new session (alias for `/new`). |
-| `/exit` | `/exit` (alias: `/quit`) | Exit the application cleanly. |
+| `/model` | `/model [list \| set <name>]` | List local models with tool support or switch active model. |
+| `/context` | `/context [<size \| max>]` | Inspect or change context window (`num_ctx`) on the fly. |
+| `/params` | `/params [list \| set <param> <val>]` | View effective parameters and resolution sources, or update sampling values. |
+| `/effort` | `/effort [<level>]` | Set reasoning effort (`low`, `medium`, `high`, `xhigh`, `hide`, `disabled`). |
+| `/queue` | `/queue [list \| clear \| rm <pos>]` | Inspect and manage pending prompts in the FIFO execution queue. |
+| `/session` | `/session [list \| resume <id> \| new]` | Manage chat threads, resume past conversations, or start fresh. |
+| `/task` | `/task [list \| run <id> \| create]` | List, run with variables (`key=val`), or create saved YAML tasks. |
+| `/skill` | `/skill [list \| show <id> \| create]` | Inspect, create, or manage modular Agent Skills. |
+| `/rag` | `/rag [status \| list \| load <db>]` | Inspect status, list vector databases, or attach knowledge bases. |
+| `/agents` | `/agents [list]` | List specialized subagents and their assigned models/tools. |
+| `/mcp` | `/mcp [list \| reload]` | Check MCP server connection health or reload tool definitions live. |
+| `/yolo` | `/yolo [on \| off]` | Toggle confirmation bypass for autonomous execution. |
+| `/stealth` | `/stealth [on \| off]` | Toggle ephemeral mode without saving to SQLite history. |
 
-> [!WARNING]
-> Not all models support all reasoning effort levels (or reasoning traces at all). Support for reasoning effort levels depends on the model provider and architecture. It is the user's responsibility to know and verify which levels are supported by the model being used. See [Thinking / Reasoning Effort Mapping](#thinking--reasoning-effort-mapping) for details.
-
----
-
-### Prompt Queue & Non-Blocking Execution
-
-In Ollama Agent, the user input is **never locked**. You can freely type and submit messages or slash commands at any time—even while the model is actively streaming an inference response or waiting for human tool approval.
-
-```text
-╭── Prompt Queue Flow ────────────────────────────────────────────────────────╮
-│ User inputs message while agent is busy (generating or waiting for approval)│
-│                                                                             │
-│  ├─ Immediate / Non-Blocking Slash Commands (/queue, /yolo, /stealth, etc.) │
-│  │  └─► Executed INSTANTLY without interrupting the active stream           │
-│  │                                                                          │
-│  └─ Stateful Slash Commands & Normal Prompts                                │
-│     └─► Enqueued in FIFO Queue (PromptQueueWidget card & ⏳ N queued)        │
-│         └─► Automatically processed in sequence when current turn finishes  │
-╰─────────────────────────────────────────────────────────────────────────────╯
-```
-
-- **Immediate / Non-Blocking Commands**: Commands that do not modify active stream graph state execute immediately in the chat scroll without pausing or queuing:
-  - Inspection & List commands: `/queue`, `/model list`, `/effort`, `/context`, `/params list`, `/session list`, `/session search`, `/session export`, `/session delete`, `/task list`, `/task delete`, `/skill list`, `/skill show`, `/skill delete`, `/rag status`, `/rag list`, `/rag create`, `/rag load`, `/rag unload`, `/rag delete`, `/mcp list`, `/agents list`.
-  - Mode toggles: `/yolo`, `/stealth` (toggle or on/off).
-  - Lifecycle: `/exit`, `/quit`.
-- **Enqueued Prompts & Stateful Commands**: Normal conversation prompts and state-mutating commands (e.g. `/model set`, `/session resume`, `/session new`, `/clear`, `/task run`, `/skill create`, `/rag add`, `/mcp reload`) are placed in a FIFO queue. The persistent `PromptQueueWidget` card displays the queued prompts in real time, and the bottom status bar shows a live counter (`⏳ N queued`).
-- **Persistent TUI Queue Panel**: When prompts are in the queue, a dedicated `PromptQueueWidget` card automatically appears above the input container, displaying the active item count, prompt previews, and position numbers in real time. It automatically collapses when the queue is drained.
-- **Unblocked Tool Approvals**: The prompt input box remains active while a tool confirmation modal (`ToolApprovalWidget`) is shown, allowing you to queue follow-up prompts while reviewing pending tool actions.
-- **Queue Management (`/queue`)**:
-  - `/queue`: Lists all currently queued prompts with their position numbers.
-  - `/queue rm <position>` (aliases: `/queue remove <position>`, `/queue delete <position>`): Removes a specific prompt from the queue without interrupting the active stream (e.g. `/queue rm 2` or `/queue rm #2`). Includes full Level 2 autocompletion with prompt text previews.
-  - `/queue clear`: Clears all pending prompts from the queue while letting active stream generation continue uninterrupted.
-- **Cancellation**: Pressing `Esc` or `Ctrl+C` cancels active generation or pending tool approvals and purges the prompt queue.
-
----
-
-### Live Context Usage & Token Gauge
-
-The dynamic header bar monitors token consumption and model parameters in real-time:
-
-```text
-● ollama-agent │ Model: gemma4:26b │ Context: 3.4k/10.0k (34%) │ Effort: medium │ RAG: my-docs │ YOLO: OFF │ STEALTH: OFF
-```
-
-- **Metrics**: Displays consumed tokens vs. effective context window limit (`num_ctx`), formatted with `k` suffixes.
-- **Visual Alert Thresholds**:
-  - 🔵 **Cyan / Sky Blue (`#38bdf8`)**: Healthy context utilization (`≤ 75%`).
-  - 🟡 **Yellow / Amber (`#fbbf24`)**: Elevated context warning (`76% – 90%`).
-  - 🔴 **Red (`#f87171`)**: Critical limit proximity (`> 90%`).
-- **Dynamic Indicators**: Displays active RAG database in purple (`#a78bfa`) when loaded, reasoning effort level, highlighted YOLO status, and Stealth status.
-
----
-
-### Human-in-the-Loop (HITL), YOLO & Stealth Modes
-
-To ensure safety when interacting with your local system, Ollama Agent enforces a Human-in-the-Loop confirmation policy before executing potentially sensitive operations (such as running shell commands via `execute` or modifying files via `write_file` and `edit_file`).
-
-```text
-╭─ ⚠ Action Approval Required ────────────────────────────────────────────────╮
-│ Tool: execute                                                               │
-│ Arguments: {'command': 'pytest tests/'}                                     │
-╰─────────────────────────────────────────────────────────────────────────────╯
- Approve (y)    Reject (n)    Allow Session (a)    Cancel (c)
-```
-
-The approval dialog provides full keyboard-first navigation without requiring a mouse:
-
-- **Direct Keyboard Shortcuts**:
-  - **Approve (`y`)**: Authorize this single tool execution.
-  - **Reject (`n`)**: Block execution and provide feedback to the agent so it can select an alternative approach.
-  - **Allow Session (`a`)**: Approve this call and automatically authorize all subsequent calls for this specific tool for the remainder of the active session.
-  - **Cancel (`c`)**: Abort the execution and return focus to the prompt input.
-- **Arrow & Tab Navigation**: Use `←` / `→` / `↑` / `↓` arrow keys or `Tab` / `Shift+Tab` to cycle focus between buttons with high-contrast visual indicators.
-- **Default Action (`Enter` / `Space`)**: The `Approve (y)` button is focused automatically upon appearance; pressing `Enter` or `Space` immediately executes the focused button.
-- **Live Footer Status**: The bottom status bar automatically switches to display the confirmation key guide whenever an approval is pending.
-
-#### YOLO Mode
-
-When you want autonomous execution without confirmation pauses:
-- **CLI Flag**: Start the agent with `-y` or `--yolo` (e.g. `ollama-agent -y`).
-- **REPL Slash Command**: Toggle dynamically with `/yolo` or set explicitly via `/yolo on` and `/yolo off`.
-
-When YOLO mode is active:
-1. Tool approval prompts are bypassed automatically.
-2. The header displays `YOLO: ON` with a red highlight badge (`#f87171`).
-3. The prompt chevron (`❯ `) and input box border change color to **red** (`#f87171`) for clear visual status.
-
-#### Stealth Mode
-
-When you want private execution without saving conversation turns or checkpoints to SQLite (`~/.ollama-agent/history.db`):
-- **CLI Flag**: Start the agent with `-s` or `--stealth` (e.g. `ollama-agent -s`).
-- **REPL Slash Command**: Toggle dynamically with `/stealth` or set explicitly via `/stealth on` and `/stealth off`.
-
-When Stealth mode is active:
-1. Checkpoints are kept in-memory (`MemorySaver`) for multi-turn execution during the session, but no history is written to SQLite.
-2. The header displays `STEALTH: ON` with a purple highlight badge (`#c084fc`).
-3. The prompt chevron (`❯ `) and focused input border turn **purple** (`#c084fc`).
-4. **Dual Mode (YOLO + Stealth)**: When both YOLO and Stealth modes are active simultaneously, both header badges light up (`[YOLO: ON] │ [STEALTH: ON]`), and the prompt chevron and focused input border turn **amber / warm gold** (`#fbbf24`).
-
----
-
-### File & Directory Context (`@-mentions`)
-
-Reference files or entire folder trees directly inside your prompts using `@` syntax. The agent resolves the paths and injects the contents into the model's context.
-
-- **Single Files**: `@filename.txt`, `@src/main.py`
-- **Quoted Paths (with spaces)**: `@"my notes/todo.txt"` or `@'my notes/todo.txt'`
-- **Directory Traversal**: `@src` or `@.` (recursively reads all supported text files within the directory).
-- **Interactive Autocompletion**: Type `@` and press `Tab` in the REPL to interactively search and insert file paths.
-
-#### Supported Content Types
-- **Text Files**: Read as UTF-8 and attached as structured `<context_file path="...">...</context_file>` blocks.
-- **Multimodal Attachments**: Images (`.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.bmp`, `.svg`, `.heic`, `.heif`), audio (`.mp3`, `.wav`, `.ogg`, `.flac`, `.m4a`, `.aac`, `.aiff`), video (`.mp4`, `.mpeg`, `.mpg`, `.mov`, `.avi`, `.flv`, `.webm`, `.wmv`, `.3gpp`), and documents (`.pdf`, `.ppt`, `.pptx`) are base64-encoded and attached as native multimodal inputs.
-- **Binary Safety**: Non-multimodal binaries (e.g. `.zip`, `.exe`, `.pyc`) are skipped during directory traversal.
-
-#### Safety Limits & Configuration
-Configurable under the `mentions` section in `~/.ollama-agent/settings.yaml`:
-
-```yaml
-mentions:
-  max_file_size: 1048576      # Max single file size (default: 1 MB)
-  max_files: 100               # Max files loaded in directory traversal (default: 100)
-  max_total_size: 10485760     # Max total attached context size (default: 10 MB)
-  max_completions: 200         # Max autocompletion candidates (default: 200)
-```
-
-#### Decorator & Syntax Safety
-Common programming decorators (e.g. `@staticmethod`, `@property`, `@app.route`) that do not exist as files on disk are recognized and treated as literal text. A missing path halts and reports a clear `File or directory not found` error only when it is explicitly intended as a file reference: namely, if it is quoted (e.g. `@"notes.txt"`), prefixed with relative indicators (e.g. `@./missing.py`, `@../config.yaml`), or contains directory separators (e.g. `@src/missing.py`).
-
----
-
-### Context Compression & Compaction
-
-To prevent conversation degradation and context overflow errors, Ollama Agent features both automatic context compression and proactive tool-driven compaction.
-
-```mermaid
-flowchart LR
-    A[Full Conversation Turns] -->|Auto at 85% context OR compact_conversation| B[Summarization Engine]
-    B --> C[Structured Summary\n• Session Intent\n• Key Decisions\n• Artifacts\n• Next Steps]
-    B --> D[Durable History Saved to\n/conversation_history/session_id.md]
-    C --> E[Reclaimed Context Window]
-```
-
-1. **Automatic Background Summarization**:
-   - **Threshold**: Triggers automatically when conversation tokens reach **85%** of the model's maximum input tokens (`max_input_tokens` from the model profile; models that do not report a profile fall back to a fixed 170,000-token trigger).
-   - **Retention**: Compresses older turns into a structured summary while keeping the most recent **10%** of tokens intact (or the last 6 messages for models without profile data).
-   - **Tool Argument Pruning**: Older tool arguments (e.g. large file contents in `write_file` / `edit_file`) are truncated to 2,000 characters to reclaim space.
-   - **History Preservation**: Evicted turns are saved to `<cwd>/conversation_history/{session_id}.md` (a dedicated `session_<uuid>` id, appended across repeated compactions of the same thread) for durable offline recovery.
-   - **Overflow Recovery**: Catches context overflow errors dynamically, summarizes older turns, and retries the turn seamlessly.
-
-2. **Agent-Driven Compaction Tool (`compact_conversation`)**:
-   - The agent is equipped with the `compact_conversation` tool and can proactively summarize older messages when moving to a new topic or when the context grows long.
-   - You can also ask the agent directly in natural language (e.g., *"compact the conversation history"* or *"comprime el contexto"*) and the agent will execute the tool in-graph.
-
----
-
-## CLI Reference & Automation
-
-### Global Options & Flags
-
-| Flag | Short | Type | Default | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `--model` | `-m` | `str` | `settings.yaml` | Specify the Ollama model for this session (falls back to interactive selection if unconfigured or missing in Ollama). |
-| `--prompt` | `-p` | `str` | `None` | Run in non-interactive mode with the provided prompt. |
-| `--effort` | `-e` | `str` | `medium` | Set reasoning effort level (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
-| `--num-ctx` | `-c` | `int \| str` | `10000` | Set context window size in tokens (`num_ctx`) or `'max'`. |
-| `--builtin-tool-timeout` | `-t` | `int` | `30` | Timeout in seconds for tool executions (including shell commands). |
-| `--yolo` | `-y` | `flag` | `False` | Enable YOLO mode (bypasses all tool approval prompts). |
-| `--stealth` | `-s` | `flag` | `False` | Enable stealth mode (do not save conversation to SQLite history). |
-| `--rag` | — | `str` | `None` | Preload a RAG database collection at startup. |
-| `--allow-traversal` | — | `flag` | `False` | Allow filesystem traversal outside current working directory. |
-| `--no-allow-traversal` | — | `flag` | `True` | Sandbox filesystem operations to current working directory (default). |
-| `--lang`, `--language` | `-l` | `str` | `None` *(auto)* | Set interface language (`en`, `es`, `fr`, `de`, `it`, `pt`, `zh`, `ja`, `ko`, `ru`, `hi`, `ar`, `tr`, `pl`, `nl`, `uk`). Auto-detects system locale when omitted. |
-| `--config-reset` | — | `str` | `None` | Reset configuration files: `all`, `system-prompt`, or `config-file`. |
-
----
-
-### Non-Interactive Mode
-
-Execute single prompts directly from your shell without opening the TUI:
+### Essential CLI Flags
 
 ```bash
-ollama-agent -p "Extract all email addresses from logs/app.log."
+ollama-agent -m <model>      # Specify Ollama model
+ollama-agent -p "<prompt>"   # Run in non-interactive single-shot mode
+ollama-agent -y              # Run in YOLO mode (bypass tool approvals)
+ollama-agent -s              # Run in Stealth mode (in-memory only)
+ollama-agent -c <num|max>    # Set context window size (tokens or 'max')
+ollama-agent -e <effort>     # Set reasoning effort level
+ollama-agent --rag <db>      # Preload a RAG vector collection
+ollama-agent -l <lang>       # Override interface language (e.g. en, es, fr, de, ja, zh)
 ```
 
-Combine with specific models, effort levels, and YOLO execution for scripting:
+---
+
+## 📚 Documentation
+
+For complete architecture diagrams, configuration manuals, and development guides, visit our **[Documentation Site](https://arrase.github.io/ollama-agent/)**:
+
+- 📖 **[CLI & REPL User Guide](https://arrase.github.io/ollama-agent/cli_repl/)** — Full terminal navigation, slash commands, multiline inputs, and scriptable subcommands.
+- 🧩 **[Agent Skills](https://arrase.github.io/ollama-agent/skills/)** — Modular procedural workflows adhering to the open Agent Skills standard.
+- 📋 **[Saved Tasks](https://arrase.github.io/ollama-agent/tasks/)** — Reusable Jinja2 prompt automation routines with typed inputs.
+- 🔌 **[Model Context Protocol (MCP)](https://arrase.github.io/ollama-agent/mcp/)** — External tool servers, stdio/SSE transports, and live reloading.
+- 🤖 **[Specialized Subagents](https://arrase.github.io/ollama-agent/subagents/)** — Isolated subagent graphs, dedicated models, and exclusive MCP tools.
+- 🧠 **[Memory & Guidelines](https://arrase.github.io/ollama-agent/memory/)** — `AGENTS.md` project rules, `MEMORY.md` user preferences, SQLite sessions, and episodic memory.
+- 📚 **[Local RAG Guide](https://arrase.github.io/ollama-agent/rag/)** — Qdrant vector store management, Ollama embeddings, chunking, and semantic search.
+- ⚙️ **[Configuration Reference](https://arrase.github.io/ollama-agent/configuration/)** — Complete `settings.yaml` schema, parameter precedence, context resolution, and LangSmith.
+- 🏗️ **[System Architecture](https://arrase.github.io/ollama-agent/architecture/)** — DeepAgents orchestration, SQLite checkpoints, streaming parsers, and compaction engine.
+- 🛠️ **[Developer Guide](https://arrase.github.io/ollama-agent/developer_guide/)** — Contributing guidelines, local environment setup, and test suite execution.
+
+---
+
+## 💻 Developer Setup
 
 ```bash
-ollama-agent -m "qwen2.5:14b" -e "high" -y -p "Generate a pytest test suite for src/parser.py."
+# Clone the repository
+git clone https://github.com/arrase/ollama-agent.git
+cd ollama-agent
+
+# Create virtual environment and install in editable mode
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+
+# Run test suite
+.venv/bin/python -m unittest discover -s tests
 ```
 
----
-
-### CLI Subcommands Summary
-
-In addition to top-level flags, Ollama Agent provides dedicated CLI subcommands for scriptable management:
-
-| Domain | Subcommand | Example Usage | Description |
-| :--- | :--- | :--- | :--- |
-| **Sessions** | `session list` | `ollama-agent session list` | List all saved chat sessions. |
-| | `session search` | `ollama-agent session search "sqlite fix"` | Search past sessions by keyword. |
-| | `session export` | `ollama-agent session export <id> -o export.md` | Export a session to Markdown. |
-| | `session delete` | `ollama-agent session delete <id>` | Delete a session from SQLite history. |
-| **Tasks** | `task list` | `ollama-agent task list` | List all saved YAML tasks. |
-| | `task create` | `ollama-agent task create review --title "..." --task-prompt "..."` | Create a reusable task. |
-| | `task run` | `ollama-agent task run review [key=value ...] [-y]` | Execute a saved task with optional dynamic variables. |
-| | `task delete` | `ollama-agent task delete review` | Delete a saved task. |
-| **Skills** | `skill list` | `ollama-agent skill list` | List all discovered agent skills. |
-| | `skill show` | `ollama-agent skill show <id>` | Display skill metadata & instructions. |
-| | `skill create` | `ollama-agent skill create <id> --name "..." --description "..." --instructions "..."` | Create a new skill directory & `SKILL.md`. |
-| | `skill delete` | `ollama-agent skill delete <id>` | Delete a skill directory. |
-| **RAG** | `rag list` | `ollama-agent rag list` | List all local RAG vector databases. |
-| | `rag create` | `ollama-agent rag create docs-kb` | Create a new Qdrant vector database. |
-| | `rag add` | `ollama-agent rag add docs-kb ./docs --dir` | Index a file or directory into a RAG collection. |
-| | `rag delete` | `ollama-agent rag delete docs-kb` | Delete a RAG database. |
-| **MCP** | `mcp list` | `ollama-agent mcp list` | List configured MCP servers and check their connection health. |
-| **Agents** | `agents list` | `ollama-agent agents list` | List all configured specialized subagents. |
-
----
-
-### Thinking / Reasoning Effort Mapping
-
-The `--effort` flag, `/effort` slash command, and `model.reasoning_effort` in `settings.yaml` control model reasoning traces via Ollama's native thinking capabilities:
-
-> [!WARNING]
-> Not all models support all reasoning effort levels (or reasoning traces at all). Support for reasoning effort levels depends on the model manufacturer and architecture. For example, **Qwen3.8** officially supports granular reasoning effort levels (`xhigh` as default for thorough analysis, `medium` for balanced accuracy/speed, and `low` for fast/cost-effective reasoning), **GPT-OSS** accepts string levels without allowing thinking to be disabled, whereas general thinking-capable models accept string effort levels or boolean toggles, and standard models ignore reasoning settings entirely. It is the user's responsibility to know and verify which levels are supported by the model being used.
-
-| Model Family | `--effort` Value | Ollama API Parameter | Behavior |
-| :--- | :--- | :--- | :--- |
-| **Qwen3.8 Series** | `xhigh` / `high` | `"high"` | Thorough reasoning for complex analysis (translated to Ollama API `"high"`). |
-| **Qwen3.8 Series** | `medium` | `"medium"` | Balanced reasoning optimizing accuracy and speed. |
-| **Qwen3.8 Series** | `low` | `"low"` | Efficient reasoning optimizing for speed and cost. |
-| **Qwen3.8 Series** | `enabled` | `"high"` | Enables reasoning with Qwen3.8 default `"high"` level. |
-| **Qwen3.8 Series** | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
-| **Qwen3.8 Series** | `disabled` | `false` | Disables reasoning trace generation at the model level. |
-| **GPT-OSS** | `low` / `medium` / `high` | `"low"` / `"medium"` / `"high"` | Sets thinking trace depth. |
-| **GPT-OSS** | `xhigh` | `"high"` | Translated to maximum supported level `"high"`. |
-| **GPT-OSS** | `enabled` | `true` | Enables thinking trace generation. |
-| **GPT-OSS** | `hide` | `true` | Generates reasoning trace but hides it from UI. |
-| **GPT-OSS** | `disabled` | `true` | GPT-OSS cannot disable thinking; emits warning and keeps thinking enabled. |
-| **Thinking Models (General)**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek, etc.)* | `low` / `medium` / `high` | `"low"` / `"medium"` / `"high"` | Passes configured effort level to Ollama API. |
-| **Thinking Models (General)**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek, etc.)* | `xhigh` | `"high"` | Translated to `"high"`. |
-| **Thinking Models (General)**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek, etc.)* | `enabled` | `true` | Enables native reasoning generation. |
-| **Thinking Models (General)**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek, etc.)* | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
-| **Thinking Models (General)**<br>*(Qwen 2.5 / 3, Gemma 4, DeepSeek, etc.)* | `disabled` | `false` | Disables reasoning trace generation at the model level. |
-| **Non-Thinking Models** | *(any)* | *(omitted)* | Setting is ignored gracefully. |
-
----
-
-## Memory, Sessions & Guidelines
-
-Ollama Agent combines repository-specific guidelines, global user preferences, persistent multi-turn session checkpoints, and episodic memory search into a unified memory context.
-
-```mermaid
-flowchart TD
-    A[Agent Startup] --> B[1. Load Repository Guidelines\nAGENTS.md / agents.md / .agents.md up to .git root]
-    A --> C[2. Load Global User Guidelines\n~/.ollama-agent/AGENTS.md]
-    A --> D[3. Mount Cross-Session Memory\n~/.ollama-agent/MEMORY.md]
-    B & C & D --> E[Unified Agent Memory Context]
-```
-
-### 1. Repository Project Guidelines (`AGENTS.md`)
-The agent searches the current working directory and ascends parent directories up to the repository root (`.git`) for `AGENTS.md` (or `agents.md`, `.agents.md`). Discovered instructions are mounted directly into agent memory.
-
-### 2. Global Agent Guidelines (`~/.ollama-agent/AGENTS.md`)
-An optional user-defined file loaded when present to maintain global coding standards and preferences across all repositories and directories.
-
-### 3. Cross-Session Memory (`~/.ollama-agent/MEMORY.md`)
-Maintained by the agent across sessions to record user preferences, persistent architectural decisions, and project notes. When you instruct the agent to remember something (e.g. *"remember that we always use pytest"*), it updates this file.
-
-### 4. Session History & Resumption (`history.db`)
-All conversations are saved to a local SQLite database at `~/.ollama-agent/history.db` using LangGraph checkpoints, enabling full session resumption and markdown export.
-
-| Action | REPL Command | CLI Command | Description |
-| :--- | :--- | :--- | :--- |
-| **List Sessions** | `/session list` | `ollama-agent session list` | Display saved sessions with thread IDs, step counts, and active status. |
-| **Search Sessions** | `/session search <query>` | `ollama-agent session search <query>` | Search across past chat sessions and conversations by keyword. |
-| **Resume Session** | `/session resume <id>` (alias: `/session switch`) | — | Resume a past conversation by exact ID or prefix, restoring message history into the viewport. |
-| **New Session** | `/session new` (or `/new`, `/clear`) | — | Initialize a fresh conversation session with a new thread ID and clear the screen. |
-| **Export Session** | `/session export [path]` | `ollama-agent session export <id> [-o path]` | Export conversation history to a structured Markdown document. |
-| **Delete Session** | `/session delete <id>` | `ollama-agent session delete <id>` | Delete session checkpoints and metadata from the SQLite database. |
-
-> [!TIP]
-> In the REPL, typing `/session resume ` or `/session delete ` dynamically lists and autocompletes available session IDs. User prompt history (accessed via `↑`/`↓` arrow keys) is also persisted in and loaded from `history.db`.
-
-### 5. Episodic Memory & Conversation Recall
-Allows the AI agent to search and recall past conversation sessions, past troubleshooting steps, and previous architectural decisions stored in `~/.ollama-agent/history.db`:
-- **Autonomous Agent Tool**: The `search_past_conversations` tool is available to the agent so it can query prior sessions on demand when asked about past context (e.g., *"how did we resolve the database migration issue yesterday?"*).
-- **User Discovery**: Users can also search past sessions manually via `/session search <query>` in the REPL or `ollama-agent session search <query>` in the CLI.
-
----
-
-## Productivity & Knowledge Tools
-
-### Saved Tasks
-
-Tasks are reusable prompt templates stored as YAML files in `~/.ollama-agent/tasks/`. Tasks support full **Jinja2 templating** (`{{ var }}`, `{% if %}`, `{% for %}`, `{{ var | default(...) }}`), input validation, automatic type coercion (`string`, `boolean`, `number`), and dynamic `@-mentions` expansion (e.g. `@{{ target_file }}`).
-
-#### 1. CLI Task Commands
-
-```bash
-# Create a static task
-ollama-agent task create code-review \
-    --title "Code Review Assistant" \
-    --task-prompt "Review the git diff against main and highlight bugs, complexity, and styling issues." \
-    -m "gemma4:26b" \
-    -e "high"
-
-# List saved tasks
-ollama-agent task list
-
-# Run a static task (with optional YOLO mode)
-ollama-agent task run code-review -y
-
-# Run a parameterized task with dynamic variables (positional or --var flags)
-ollama-agent task run code-review target_file=src/app.py strict=true -y
-ollama-agent task run code-review --var target_file=src/app.py --var strict=true
-
-# Delete a task
-ollama-agent task delete code-review
-```
-
-#### 2. REPL Task Management & Conversational Flow
-
-- **Create via Agent Guidance**: Type `/task create my-task` (or `/task create`) in the REPL. The agent will guide you through clarifying the task objective, identifying dynamic inputs, crafting a Jinja2 template prompt, and saving the YAML configuration.
-- **Run in REPL**: Type `/task run code-review` or pass dynamic variables directly:
-  ```text
-  /task run code-review target_file=src/app.py strict=true
-  /task run code-review target_file=src/app.py strict=true -y
-  ```
-- **List / Delete**: Use `/task list` and `/task delete <id>`.
-
-#### 3. Task Definition with Jinja2 Templating & Inputs
-
-Create `<task_id>.yaml` inside `~/.ollama-agent/tasks/`:
-
-```yaml
-title: "Single File Code Review"
-prompt: |
-  Review the code in @{{ target_file }}.
-  Focus on bugs, performance, security issues, and style.
-  {% if strict %}
-  Apply strict zero-tolerance linting and flag any minor deviations.
-  {% else %}
-  Focus primarily on critical defects and architectural concerns.
-  {% endif %}
-model: "gemma4:26b"
-reasoning_effort: "high"
-inputs:
-  target_file:
-    description: "Relative path of the source file to review"
-    type: "string"
-    required: true
-  strict:
-    description: "Whether to enable strict review mode"
-    type: "boolean"
-    default: false
-```
-
----
-
-### Agent Skills Standard
-
-Ollama Agent supports the open [Agent Skills specification](https://agentskills.io/specification) powered by DeepAgents. Skills provide modular domain knowledge and specialized workflows through **progressive disclosure** — the agent inspects concise skill descriptions at prompt time and loads full instructions only when relevant.
-
-#### Skill Directory Layout
-
-Ollama Agent supports both built-in system skills and user-defined skills:
-- **Built-in System Skills** (`/system_skills/`): Core skills shipped with the package (`mcp-configurator`, `skill-creator`, `task-creator`) that cannot be deleted.
-- **User Skills** (`~/.ollama-agent/skills/`): User-created skills residing in `~/.ollama-agent/skills/<skill_id>/SKILL.md` (and may include helper scripts in `scripts/`):
-
-```text
-~/.ollama-agent/skills/
-├── api-design/
-│   └── SKILL.md
-└── web-scraper/
-    ├── SKILL.md
-    └── scripts/
-        └── scraper.py
-```
-
-#### Example `SKILL.md`
-
-```markdown
----
-name: api-design
-description: Guidelines and best practices for designing RESTful and OpenAPI compliant APIs.
----
-
-# API Design Guidelines
-
-## Instructions
-1. Review API endpoint naming conventions (nouns, plural, kebab-case).
-2. Validate HTTP status codes (200, 201, 400, 404, 409, 500).
-3. Ensure request/response schemas use JSON and camelCase properties.
-```
-
-#### Skill Management Commands
-
-| Action | REPL Command | CLI Command |
-| :--- | :--- | :--- |
-| **List Skills** | `/skill list` | `ollama-agent skill list` |
-| **Show Skill** | `/skill show <id>` | `ollama-agent skill show <id>` |
-| **Create Skill** | `/skill create <id>` *(conversational flow)* | `ollama-agent skill create <id> --name "..." --description "..." --instructions "..."` |
-| **Delete Skill** | `/skill delete <id>` | `ollama-agent skill delete <id>` |
-
-> [!NOTE]
-> `SKILL.md` files must be under 10 MB. Descriptions longer than 1,024 characters are truncated automatically during skill indexing. Built-in system skills cannot be deleted.
-
----
-
-### Local RAG (Retrieval Augmented Generation)
-
-Local RAG empowers the agent to index documents into local Qdrant vector databases and automatically retrieve relevant excerpts using Ollama embeddings.
-
-#### 1. Managing Databases
-
-```bash
-# CLI: Create, list, and delete databases
-ollama-agent rag create project-docs
-ollama-agent rag list
-ollama-agent rag delete project-docs
-```
-
-Inside REPL:
-```text
-/rag status
-/rag create project-docs
-/rag list
-/rag load project-docs
-/rag unload
-/rag delete project-docs
-```
-
-#### 2. Indexing Documents
-
-```bash
-# CLI: Index a single file or an entire directory
-ollama-agent rag add project-docs ./docs/architecture.md
-ollama-agent rag add project-docs ./src --dir
-```
-
-Inside REPL:
-```text
-/rag load project-docs
-/rag add ./docs/architecture.md
-/rag add ./src --dir
-```
-
-**Supported File Formats**: `.py`, `.js`, `.ts`, `.tsx`, `.jsx`, `.sh`, `.yaml`, `.yml`, `.json`, `.xml`, `.md`, `.txt`, `.toml`, `.c`, `.cpp`, `.h`, `.hpp`, `.go`, `.rs`, `.css`, `.html`, `.sql`, `.ini`, `.cfg`, `.properties`, `.java`, `.kt`, `.gradle`, `.bat`, `.ps1`, `.csv`, `.rst`.
-
-#### 3. Automated RAG Retrieval
-
-When a database is loaded, the agent automatically gains access to the `rag_search` tool:
-- The system prompt is dynamically updated with RAG search instructions.
-- The agent queries the database when relevant, returning retrieved source chunks formatted as `[Source: <filename>]\n<content>` delimited by `---`.
-
-```bash
-# Start REPL with preloaded RAG database
-ollama-agent --rag project-docs
-
-# Non-interactive query against RAG database
-ollama-agent --rag project-docs -p "How is authentication handled in this project?"
-```
-
----
-
-## Extensibility: MCP & Custom Subagents
-
-### MCP Servers & Scopes
-
-Extend Ollama Agent with external tools, databases, and third-party APIs via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). In `ollama-agent`, MCP servers can be configured in two distinct scopes:
-
-| Scope | Configuration File | Description |
-| :--- | :--- | :--- |
-| **Main Agent (Global)** | `~/.ollama-agent/mcp.json` | Tools loaded into the primary agent orchestrator and available in all general chat turns. |
-| **Subagents (Scoped)** | `~/.ollama-agent/settings.yaml` | Tools attached exclusively to specific subagents, isolating tool schemas and execution context. |
-
----
-
-### Main Agent MCP Configuration (`~/.ollama-agent/mcp.json`)
-
-Global MCP servers are defined in JSON format under the `"mcpServers"` object in `~/.ollama-agent/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/documents"],
-      "cwd": "/home/user/documents",
-      "env": {
-        "DEBUG": "true"
-      }
-    },
-    "brave-search": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
-      "env": {
-        "BRAVE_API_KEY": "${BRAVE_API_KEY}"
-      }
-    },
-    "git": {
-      "command": "uvx",
-      "args": ["mcp-server-git"]
-    },
-    "remote-api": {
-      "type": "http",
-      "url": "https://mcp.example.com/api",
-      "headers": {
-        "Authorization": "Bearer my-secret-token"
-      },
-      "timeout": 30,
-      "sse_read_timeout": 300
-    },
-    "sse-server": {
-      "transport": "sse",
-      "url": "http://localhost:8000/sse"
-    }
-  }
-}
-```
-
-#### Supported Transports & Options:
-- **Standard I/O Subprocess (`stdio`)**:
-  - `command` (*string*, required): Executable command (e.g. `npx`, `uvx`, `python`, `node`, `docker`).
-  - `args` (*array of strings*, optional): Command-line arguments.
-  - `cwd` (*string*, optional): Working directory for the process.
-  - `env` (*object*, optional): Environment variables with dynamic `${VAR}` and `%VAR%` expansion.
-  - `transport` (*string*, optional): Defaults to `"stdio"` when `command` is present.
-- **Remote Network Transports (`http`, `sse`, `websocket`, `streamable_http`)**:
-  - `url` (*string*, required): Target server URL endpoint.
-  - `transport` / `type` (*string*, optional): `"http"`, `"sse"`, `"websocket"`, `"streamable_http"`, or `"streamable-http"` (defaults to `"http"`).
-  - `headers` (*object*, optional): Custom HTTP headers (e.g. authorization tokens).
-  - `timeout` (*number*, optional): Request timeout in seconds.
-  - `sse_read_timeout` (*number*, optional): SSE stream read timeout in seconds.
-
-#### Key Features:
-- **Environment Variable Expansion**: Values in subprocess `"env"` blocks support `${VAR_NAME}` and `%VAR_NAME%` syntax, resolved dynamically from `os.environ`. Unset variables trigger immediate fail-fast errors to prevent silent configuration issues.
-- **Built-in `mcp-configurator` Skill**: The agent is equipped with a built-in system skill that guides you through adding, updating, and troubleshooting MCP servers interactively.
-- **Server Health & Dynamic Reloading**: Run `/mcp` (or `/mcp list`) in the REPL or `ollama-agent mcp list` in the CLI to inspect connection health. Run `/mcp reload` in the REPL to immediately re-read MCP configurations and rebuild the tool graph without restarting the session.
-
----
-
-### Custom Subagents
-
-Define domain-specific subagents in `~/.ollama-agent/settings.yaml` for task delegation. Each subagent operates with its own isolated context window, preventing orchestrator context bloat. Subagents support dedicated `stdio` MCP tool servers (`name`, `command`, `args`, `env`). Subagent `system_prompt` definitions support full **Jinja2 templating** evaluated with `subagent` (`SubAgentSettings`) and `model_settings` (`ModelSettings`) context variables.
-
-```yaml
-subagents:
-  - name: "researcher"
-    description: "Specialist for comprehensive web research and external documentation search."
-    system_prompt: |
-      You are {{ subagent.name }}, a {{ subagent.description }}.
-      Base model: {{ model_settings.name }}.
-      {% if model_settings.reasoning_effort in ['high', 'xhigh'] %}
-      Perform exhaustive analysis and verify findings against multiple sources.
-      {% else %}
-      Provide concise and direct research summaries.
-      {% endif %}
-    model: "gemma4:26b"          # Optional (inherits from main agent if omitted)
-    context_window: 32768        # Optional (inherits from main agent if omitted)
-    mcp_servers:
-      - name: "brave-search"
-        command: "npx"
-        args: ["-y", "@modelcontextprotocol/server-brave-search"]
-        env:
-          BRAVE_API_KEY: "${BRAVE_API_KEY}"
-
-  - name: "sql-analyst"
-    description: "Specialist for querying customer databases and generating analytics reports."
-    system_prompt: "You are {{ subagent.name }}, a {{ subagent.description }}. Execute SQL queries and interpret results."
-    mcp_servers:
-      - name: "sqlite-server"
-        command: "uvx"
-        args: ["mcp-server-sqlite", "--db-path", "./data/analytics.db"]
-```
-
-Inspect configured subagents anytime with `/agents` (or `/agents list`) in the REPL, or `ollama-agent agents list` from the CLI.
-
----
-
-## Configuration & Customization
-
-On initial launch, Ollama Agent generates its configuration directory at `~/.ollama-agent/` and initializes `settings.yaml`. If no model is configured or if the configured model is not downloaded in Ollama, the agent interactively prompts you to choose from your locally available Ollama models and saves your choice to `settings.yaml`.
-
-### Configuration File (`settings.yaml`)
-
-```yaml
-model:
-  name: qwen3.8:27b
-  base_url: http://localhost:11434
-  context_window: 10000
-  reasoning_effort: medium
-  # Optional sampling parameter overrides (omitted by default to resolve dynamically):
-  # temperature: 0.8
-  # top_p: 0.9
-  # top_k: 40
-  # min_p: 0.0
-  # presence_penalty: 0.0
-  # repeat_penalty: 1.1
-runtime:
-  allow_traversal: false
-  builtin_tool_timeout: 30
-  collapse_thinking: true
-  inherit_env: true
-  language: ""                 # Interface language code (e.g. en, es, fr, de; auto-detects if unset)
-rag:
-  rag_dir: ~/.ollama-agent/rag
-  embedder_model: nomic-embed-text:latest
-  embedder_base_url: http://localhost:11434
-  embedding_dims: 768
-  default_top_k: 5
-  chunk_size: 500
-  chunk_overlap: 50
-mentions:
-  max_file_size: 1048576
-  max_files: 100
-  max_total_size: 10485760
-  max_completions: 200
-subagents: []
-```
-
-### Settings Reference
-
-| Section & Key | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `model.name` | `str` | *(interactive)* | Configured Ollama model name (must support tool calling). Selected interactively if unconfigured or missing. |
-| `model.base_url` | `str` | `http://localhost:11434` | Ollama native API endpoint. |
-| `model.temperature` | `float` | *(dynamic)* | Optional temperature override (0.8 engine default if unset in Modelfile). |
-| `model.top_p` | `float` | *(dynamic)* | Optional nucleus sampling threshold override (0.9 engine default if unset). |
-| `model.top_k` | `int` | *(dynamic)* | Optional top-k candidates limit override (40 engine default if unset). |
-| `model.min_p` | `float` | *(dynamic)* | Optional minimum probability threshold override (0.0 default if unset). |
-| `model.presence_penalty` | `float` | *(dynamic)* | Optional presence penalty override (0.0 default if unset). |
-| `model.repeat_penalty` | `float` | *(dynamic)* | Optional repetition penalty override (1.1 engine default; `repetition_penalty` accepted as an alias in Modelfile metadata and `/params set`, not as a `settings.yaml` key). |
-| `model.context_window` | `int` \| `str` | `10000` | Context window token limit (`num_ctx`), or `'max'` to auto-detect model maximum. |
-| `model.reasoning_effort` | `str` | `medium` | Default reasoning effort (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
-| `runtime.allow_traversal` | `bool` | `false` | If true, permits filesystem operations outside project working directory. |
-| `runtime.builtin_tool_timeout` | `int` | `30` | Execution timeout in seconds for tool and shell commands. |
-| `runtime.collapse_thinking` | `bool` | `true` | If true, collapses reasoning blocks by default in REPL output. |
-| `runtime.inherit_env` | `bool` | `true` | If true, tool executions inherit the full parent environment. |
-| `runtime.language` | `str` | `""` | Interface language code (e.g. `en`, `es`, `fr`, `de`, `it`, `pt`, `zh`, `ja`, `ru`, `hi`). Auto-detects system locale if unset. |
-| `rag.rag_dir` | `str` | `~/.ollama-agent/rag` | Storage directory for local RAG databases and vector indices. |
-| `rag.embedder_base_url` | `str` | `http://localhost:11434` | Ollama native API endpoint for embedding generation. |
-| `rag.embedder_model` | `str` | `nomic-embed-text:latest` | Ollama model used to generate vector embeddings. |
-| `rag.embedding_dims` | `int` | `768` | Vector embedding dimension size. |
-| `rag.default_top_k` | `int` | `5` | Default number of relevant chunks retrieved per query. |
-| `rag.chunk_size` | `int` | `500` | Document chunk size in characters. |
-| `rag.chunk_overlap` | `int` | `50` | Character overlap between adjacent chunks. |
-| `mentions.max_file_size` | `int` | `1048576` | Maximum allowed individual file size for `@-mentions` (1 MB). |
-| `mentions.max_files` | `int` | `100` | Maximum number of files processed during directory mentions. |
-| `mentions.max_total_size` | `int` | `10485760` | Maximum total context size for prompt attachments (10 MB). |
-| `mentions.max_completions` | `int` | `200` | Maximum autocompletion candidates for `@-mentions`. |
-| `subagents` | `list` | `[]` | List of specialized subagent definitions (see [Custom Subagents](#custom-subagents)). |
-| `langsmith` | `dict` | *(omitted)* | Optional LangSmith tracing credentials (see [LangSmith Tracing](#langsmith-tracing)). |
-
----
-
-### Model Parameter Resolution Hierarchy
-
-Sampling parameters (`temperature`, `top_p`, `top_k`, `min_p`, `presence_penalty`, `repeat_penalty`) are resolved dynamically at startup and on model switches following a strict precedence hierarchy:
-
-```mermaid
-flowchart TD
-    A[Start Parameter Resolution] --> B{Defined in settings.yaml?}
-    B -- Yes --> C[Use User Configured Value]
-    B -- No --> D{Declared in Modelfile / Metadata?}
-    D -- Yes --> E[Use Modelfile Recommended Value]
-    D -- No --> F[Use Ollama Engine Default]
-```
-
-1. **User Settings (`settings.yaml`)**: If explicitly specified in configuration, the user's value takes precedence.
-2. **Modelfile / Model Metadata**: If omitted in configuration, the agent inspects the model's metadata (`PARAMETER <name> <value>`) for model-specific recommendations.
-3. **Ollama Engine Defaults**: If not specified in `settings.yaml` or the Modelfile, parameters are not artificially overridden, allowing Ollama's native model engine defaults to apply directly.
-
-> [!TIP]
-> You can inspect active parameters at any time using `/params` (or `/params list`), and dynamically override parameters for the active session (saving to `settings.yaml`) using `/params set <parameter> <value>` (e.g. `/params set temperature 0.7`).
-
----
-
-### Context Window Resolution
-
-The effective context window (`num_ctx`) is resolved automatically in the following hierarchy:
-
-1. `model.context_window` defined in `settings.yaml` (if explicitly configured as a positive number > 0).
-2. Dynamic detection when explicitly set to `'max'`:
-   - Structured metadata from `ollama show <model>` (e.g. `llama.context_length`, `qwen2.context_length`).
-   - Modelfile parameter regex (`PARAMETER num_ctx <size>`) from `ollama show <model>`.
-3. If unresolved, the agent halts with an error instructing you to define `context_window`.
-
----
-
-### Agent System Prompts
-
-System prompt instructions are managed via a single, unified Jinja2 template at `~/.ollama-agent/prompts/instructions.md`.
-
-When `ollama-agent` initializes, `instructions.md` is rendered dynamically using Jinja2 with strict variable evaluation (`StrictUndefined`) and injected into the agent graph:
-- **`runtime`**: Runtime settings (`runtime.allow_traversal`, `runtime.builtin_tool_timeout`, `runtime.collapse_thinking`, `runtime.inherit_env`, `runtime.language`).
-- **`settings`**: Complete `Settings` configuration object (`.model`, `.runtime`, `.rag`, `.mentions`, `.subagents`, `.langsmith`).
-- **`rag`**: RAG parameters (`rag.rag_dir`, `rag.embedder_model`, `rag.embedding_dims`, `rag.default_top_k`, etc.).
-- **`model`**: Active LLM parameters (`model.name`, `model.base_url`, `model.context_window`, `model.reasoning_effort`, `model.temperature`, etc.).
-- **`rag_active`**: Boolean flag indicating whether a RAG database is loaded in the active session.
-- **`rag_database`**: Name string of the active RAG database (or empty string when inactive).
-
-#### Conditional Policies Example
-
-The unified template uses Jinja2 conditionals to toggle operational filesystem rules based on the traversal setting and conditionally activate RAG search guidance:
-
-```jinja2
-{% if runtime.allow_traversal %}
-# FILESYSTEM
-- You have full access to the host filesystem. File tools use REAL absolute host paths.
-- ALWAYS pass absolute paths to file tools. Relative paths are anchored at root `/`.
-{% else %}
-# FILESYSTEM
-- File tools operate on a virtual root: `/` IS the project directory.
-- Virtual mounts (`/agent/`, `/skills/`, `/tasks/`) are accessible via file tools.
-- Do not access anything outside the project directory through shell commands.
-{% endif %}
-
-{% if rag_active %}
-# RAG POLICY
-A RAG knowledge base{% if rag_database %} ('{{ rag_database }}'){% endif %} is currently loaded and active. You have access to the `rag_search` tool to retrieve relevant documents and context.
-- Use `rag_search` when the user asks questions about documents in the loaded knowledge base.
-{% endif %}
-```
-
----
-
-### Configuration Reset (`--config-reset`)
-
-Reset configuration files or the system prompt template back to package defaults:
-
-```bash
-# Reset settings.yaml only
-ollama-agent --config-reset config-file
-
-# Reset system prompt template (instructions.md)
-ollama-agent --config-reset system-prompt
-
-# Reset both configuration and prompt template
-ollama-agent --config-reset all
-```
-
----
-
-### LangSmith Tracing
-
-Enable deep observability and execution tracing by adding the `langsmith` block to `~/.ollama-agent/settings.yaml`:
-
-```yaml
-langsmith:
-  api_key: "your-langsmith-api-key"
-  tracing: "true"
-  project: "ollama-agent"
-  endpoint: "https://api.smith.langchain.com"
-```
-
-When present, these values are automatically exported into the environment on startup.
-
----
-
-## Developer Guide
-
-Contributions are welcome! Follow these steps to set up a local development environment.
-
-### Project Setup
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/arrase/ollama-agent.git
-   cd ollama-agent
-   ```
-
-2. **Create and activate a virtual environment**:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   ```
-
-3. **Install in editable mode**:
-   ```bash
-   pip install -e .
-   ```
-
-4. **Run tests**:
-   ```bash
-   .venv/bin/python -m unittest discover -s tests
-   ```
-
----
-
-### Project Structure
-
-```text
-ollama-agent/
-├── ollama_agent/
-│   ├── main.py              # Main CLI / REPL entry point and signal routing
-│   ├── agent/               # DeepAgents graph orchestration, middleware, session & tools
-│   ├── core/                # Model capability checks, context calculations, prompt processing
-│   ├── i18n/                # Internationalization engine, translation helpers & locale catalogs
-│   ├── interfaces/          # Textual REPL TUI, CLI dispatchers, keybindings
-│   ├── mcp/                 # Model Context Protocol client lifecycle and connections
-│   ├── rag/                 # Local Qdrant vector store manager and embeddings pipeline
-│   ├── settings/            # Settings models, default prompt templates, path resolutions
-│   ├── skills/              # Agent Skills discovery, frontmatter parsing, execution
-│   ├── streaming/           # Live console token streaming and non-interactive output
-│   └── tasks/               # YAML task repository and execution handlers
-├── tests/                   # Automated unit and integration test suite
-├── docs/                    # MkDocs documentation source files
-├── mkdocs.yml               # MkDocs site configuration
-├── pyproject.toml           # Project dependencies and packaging metadata
-├── AGENTS.md                # Development guidelines and coding conventions
-├── LICENSE                  # MIT license file
-└── README.md                # Project documentation
-```
+For detailed contributing standards, linting with Ruff, and architectural breakdowns, see the [Developer Guide](docs/developer_guide.md).
 
 ---
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the [MIT License](LICENSE).

@@ -54,7 +54,7 @@ mentions:
 # Telemetry & Tracing via LangSmith (Optional, omitted by default if unset)
 # langsmith:
 #   api_key: ""                          # LangSmith API key (e.g. "lsv2_pt_...")
-#   tracing: "true"                      # Enable LangChain / LangGraph tracing ("true" / "false")
+#   tracing: true                        # Enable LangChain / LangGraph tracing (true / false)
 #   project: "ollama-agent"              # LangSmith project name
 #   endpoint: "https://api.smith.langchain.com" # LangSmith API endpoint URL
 
@@ -106,10 +106,15 @@ subagents:
 | `mentions.max_total_size` | `int` | `10485760` | Maximum total context size for prompt attachments (10 MB). |
 | `mentions.max_completions` | `int` | `200` | Maximum autocomplete suggestions displayed in REPL dropdown. |
 | `langsmith.api_key` | `str` | `""` | API key for LangSmith tracing platform (optional). |
-| `langsmith.tracing` | `str` | `""` | Enable tracing (`"true"` / `"false"`). |
+| `langsmith.tracing` | `bool` | `false` | Enable LangChain / LangGraph tracing (`true` / `false`). |
 | `langsmith.project` | `str` | `""` | LangSmith project name for traces. |
 | `langsmith.endpoint` | `str` | `""` | API endpoint for LangSmith telemetry. |
 | `subagents` | `list` | `[]` | List of specialized subagent definitions (`name`, `description`, `system_prompt`, optional `model`, optional `context_window`, `mcp_servers`). Unspecified `model` and `context_window` inherit from `model.name` and `model.context_window`. |
+
+> [!NOTE]
+> **Strict Schema Validation**: `settings.yaml` enforces strict schema parsing. Any unrecognized or misspelled configuration keys will raise a `ValueError` on startup to prevent silent misconfigurations.
+>
+> **Ollama Endpoint Configuration**: `ollama-agent` establishes connections to Ollama using `model.base_url` (and `rag.embedder_base_url`), which defaults to `http://localhost:11434`. The shell environment variable `OLLAMA_HOST` is not automatically read; configure remote servers directly in `settings.yaml`.
 
 ---
 
