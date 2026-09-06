@@ -1,19 +1,20 @@
 # Ollama Agent
 
 <p align="center">
-  <strong>The autonomous, local-first AI assistant built natively for Ollama.</strong>
+  <strong>Your AI assistant. Your rules. Running on your machine.</strong>
 </p>
 
 <p align="center">
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.11+-blue.svg" alt="Python 3.11+"></a>
   <a href="https://ollama.com/"><img src="https://img.shields.io/badge/Ollama-Native%20API-black" alt="Ollama Native API"></a>
-  <a href="https://docs.langchain.com/oss/python/deepagents/overview"><img src="https://img.shields.io/badge/Built%20with-DeepAgents%20%26%20LangGraph-purple" alt="DeepAgents & LangGraph"></a>
+  <a href="https://docs.langchain.com/oss/python/deepagents/overview"><img src="https://img.shields.io/badge/Built%20with-DeepAgents%20%26%20LangGraph-purple" alt="DeepAgents &amp; LangGraph"></a>
   <a href="https://arrase.github.io/ollama-agent/"><img src="https://img.shields.io/badge/Docs-GitHub%20Pages-emerald" alt="Documentation"></a>
 </p>
 
 <p align="center">
-  <a href="#-the-ollama-advantage">Why Ollama Agent?</a> •
+  <a href="#-not-another-coding-agent">Why Ollama Agent?</a> •
+  <a href="#-built-for-ollama-not-bolted-on">The Ollama Advantage</a> •
   <a href="#-quick-start">Quick Start</a> •
   <a href="#-key-features">Key Features</a> •
   <a href="#-cheat-sheet">Cheat Sheet</a> •
@@ -22,24 +23,59 @@
 
 ---
 
-**Ollama Agent** is an autonomous terminal AI assistant (interactive REPL and scriptable CLI) designed from the ground up for local LLMs. Powered by [DeepAgents](https://docs.langchain.com/oss/python/deepagents/overview) and [LangGraph](https://github.com/langchain-ai/langgraph), it brings Claude Code-like agentic capabilities to your local machine: stateful multi-turn workflows, autonomous tool execution with human-in-the-loop safety, dynamic context management, project rules (`AGENTS.md`), local RAG, Agent Skills, and Model Context Protocol (MCP) integrations.
+**Ollama Agent** is an autonomous, local-first AI assistant that runs entirely on your hardware through [Ollama](https://ollama.com/). It's a **general-purpose agent** — not a coding assistant, not a chatbot, not a narrow tool — but whatever *you* need it to be. Write research reports, manage files, analyze documents, automate workflows, query knowledge bases, or yes, write code too. Every prompt that shapes its behavior is an editable file on your disk, so you stay in control of *what* the agent is and *how* it thinks.
 
 > 📖 **Comprehensive Guides & Technical Reference**: Visit the official documentation site at **[arrase.github.io/ollama-agent](https://arrase.github.io/ollama-agent/)**.
 
 ---
 
-## 🦙 The Ollama Advantage
+## 🎯 Not Another Coding Agent
 
-Most generic AI agents treat Ollama as just an OpenAI-compatible endpoint, leading to poor output quality, truncated context, and frustrating crashes. **Ollama Agent communicates directly with Ollama's native API** and is uniquely engineered to extract the full potential of local open-weights models:
+Most open-source AI agents are coding assistants in disguise. They ship with hardcoded system prompts about writing code, generating tests, and refactoring functions. If you want to use them for anything else, you're fighting their DNA.
 
-| Feature | Generic OpenAI-Proxy Agents | Ollama Agent |
+**Ollama Agent is different.** It ships as a blank canvas with general-purpose defaults, and gives you the tools to make it *yours*:
+
+### 🧬 Fully Editable Prompts — You Define the Agent
+
+The system prompt that drives Ollama Agent is a plain Jinja2 template sitting at `~/.ollama-agent/prompts/instructions.md`. Open it, rewrite it, and the agent becomes whatever you need:
+
+```
+~/.ollama-agent/
+├── prompts/
+│   └── instructions.md      ← The agent's brain. Edit freely.
+├── MEMORY.md                 ← Persistent cross-session memory
+├── settings.yaml             ← Model, context, sampling, subagents
+├── tasks/                    ← Reusable YAML prompt templates
+├── skills/                   ← Modular procedural workflows
+└── mcp.json                  ← External tool server connections
+```
+
+- **Research analyst?** Rewrite the prompt to focus on source evaluation, citation formatting, and document synthesis.
+- **System administrator?** Shape it around infrastructure monitoring, log analysis, and runbook execution.
+- **Creative writer?** Tune it for narrative structure, world-building, and stylistic consistency.
+- **Personal assistant?** Optimize it for calendar planning, email drafting, and task management.
+- **Software engineer?** Sure, that works too — but it's *your choice*, not the default assumption.
+
+The template has access to the full configuration context via Jinja2 variables (`runtime`, `model`, `rag`, `settings`), so your instructions can adapt dynamically to runtime conditions. Made a mess? `ollama-agent --config-reset system-prompt` restores the defaults instantly.
+
+### 🌍 Multilingual Interface
+
+The entire UI speaks your language. Ollama Agent ships with **15 built-in locales** (English, Spanish, French, German, Japanese, Chinese, Korean, Arabic, Hindi, Italian, Dutch, Polish, Portuguese, Russian, Turkish, Ukrainian) and auto-detects your system locale. Override anytime with `-l <lang>` or `runtime.language` in settings.
+
+---
+
+## 🦙 Built for Ollama, Not Bolted On
+
+Most agents treat Ollama as a dumb OpenAI-compatible proxy. They send requests to `/v1/chat/completions`, cross their fingers, and wonder why the output is truncated, the context is wrong, and the model ignores tool calls. **Ollama Agent talks directly to Ollama's native API** and is engineered to squeeze every capability out of your local models:
+
+| What goes wrong | Generic OpenAI-proxy agents | Ollama Agent |
 | :--- | :--- | :--- |
-| **Context Window (`num_ctx`)** | ❌ Defaults to Ollama's 2K–4K limit; truncates large prompts and forgets context quickly. | ✅ **Auto-detects model capacity** from GGUF metadata (`context_length`) or Modelfile parameters. Sets `num_ctx` dynamically (or `/context max`). |
-| **Model Hyperparameters** | ❌ Forces fixed defaults (`temp=0.7`, `top_p=1.0`), ignoring model-specific tuning. | ✅ **Auto-discovers optimal sampling** from the Modelfile (`temperature`, `top_p`, `top_k`, `min_p`, `repeat_penalty`). |
-| **Token Telemetry** | ❌ Approximates tokens with `tiktoken` (inaccurate for Llama, Qwen, Gemma, DeepSeek). | ✅ **Reads native server metrics** (`prompt_eval_count` + `eval_count`) directly from Ollama for exact real-time tracking. |
-| **Context Management** | ❌ Crashes with context overflow errors when conversation exceeds limit. | ✅ **Auto-compaction at 85% capacity**: summarizes older turns, prunes bulky tool arguments, and offloads history to disk. |
-| **Reasoning Traces** | ❌ May leak raw `<think>` tokens into output or fail to configure thinking effort. | ✅ **Architecture-aware thinking**: translates effort levels per model family (Qwen, DeepSeek, GPT-OSS) into collapsible UI blocks. |
-| **Model Verification** | ❌ Blindly attempts tool calls, failing with cryptic errors if unsupported. | ✅ **Pre-flight capability check**: verifies `tools` support, presents an interactive selector if unconfigured, and hot-swaps models mid-session (`/model set`). |
+| **Context window** | Default to Ollama's 2K–4K `num_ctx`; large prompts get silently truncated. | Auto-detects model capacity from GGUF metadata and sets `num_ctx` dynamically. Use `/context max` for full range. |
+| **Sampling parameters** | Force fixed defaults (`temp=0.7`, `top_p=1.0`), ignoring the Modelfile. | Auto-discovers optimal sampling (`temperature`, `top_p`, `top_k`, `min_p`, `repeat_penalty`) from the Modelfile. |
+| **Token counting** | Approximate with `tiktoken` — wrong tokenizer for Llama, Qwen, Gemma, DeepSeek. | Reads native server metrics (`prompt_eval_count` + `eval_count`) for exact real-time tracking. |
+| **Context overflow** | Crash with obscure errors when the conversation exceeds the limit. | Auto-compaction at 85% capacity: summarizes older turns, prunes tool output, offloads history to disk. |
+| **Reasoning traces** | Leak raw `<think>` tokens into output or fail to configure thinking effort. | Architecture-aware thinking: translates effort levels per model family (Qwen, DeepSeek, GPT-OSS) into collapsible UI blocks. |
+| **Model compatibility** | Blindly attempt tool calls on models that don't support them; fail with cryptic errors. | Pre-flight capability check: verifies `tools` support, offers interactive model selector, hot-swaps models mid-session (`/model set`). |
 
 ---
 
@@ -74,17 +110,17 @@ ollama-agent
 
 ```bash
 # Quick query
-ollama-agent -p "Explain the role of middleware in this project."
+ollama-agent -p "Summarize the key findings in @report.pdf"
 
-# Non-interactive refactoring with YOLO mode (auto-approves tool actions)
-ollama-agent -m "qwen3.8:27b" -e "high" -y -p "Refactor @src/utils.py to comply with PEP 8."
+# Autonomous research with YOLO mode (auto-approves tool actions)
+ollama-agent -m "qwen3.8:27b" -e "high" -y -p "Analyze the logs in @/var/log/syslog and report anomalies."
 ```
 
 ---
 
 ## 🖥️ Interactive REPL Experience
 
-The interactive terminal interface is built with **Textual** and **Rich** to provide a fast, keyboard-first development environment:
+The interactive terminal interface is built with **Textual** and **Rich** to provide a fast, keyboard-first environment:
 
 ```text
 ● ollama-agent │ Model: qwen3.8:27b │ Context: 3.4k/32.0k (11%) │ Effort: high │ YOLO: OFF │ STEALTH: OFF
