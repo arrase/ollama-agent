@@ -35,6 +35,8 @@ flowchart TD
         MemoryStore["FilesystemBackend (/agent/, /system_skills/, /skills/, /tasks/, /project/)"]
         RAGEngine["Qdrant Vector Store & Ollama Embeddings"]
         MCPAdapter["MCP Client Adapters (MultiServerMCPClient)"]
+    end
+
     subgraph Storage ["Durable Persistence Layer"]
         SqliteDB[("SQLite Storage (~/.ollama-agent/history.db)")]
     end
