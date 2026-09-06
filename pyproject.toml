@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ollama-agent"
-version = "0.10.3"
+version = "0.10.4"
 description = "AI agent to interact with local language models through Ollama"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -30,6 +30,7 @@ ollama-agent = "ollama_agent.main:main"
 
 [project.optional-dependencies]
 dev = ["ruff==0.16.5"]
+docs = ["mkdocs-material>=9.5.0"]
 
 [tool.setuptools.packages.find]
 where = ["."]

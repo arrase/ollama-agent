@@ -20,6 +20,18 @@
 
 ---
 
+## Why Ollama Agent? (The Native Ollama Advantage)
+
+Unlike generic AI agents that treat Ollama as a basic OpenAI-compatible proxy, **Ollama Agent** communicates directly with Ollama's native API and is specifically engineered around the strengths and nuances of local language models:
+
+* 🎯 **Intelligent Context Window (`num_ctx`) Resolution**: Generic agents default to Ollama's 2,048 or 4,096 token limit, causing premature amnesia and truncated files. Ollama Agent inspects GGUF architecture metadata (`context_length`) or Modelfile parameters to unlock your model's true maximum context (`num_ctx`), paired with automatic background summarization at 85% capacity.
+* ⚙️ **Modelfile Hyperparameter Auto-Discovery**: Model creators publish optimal sampling parameters in their Modelfiles (`temperature`, `top_p`, `top_k`, `min_p`, `repeat_penalty`). Ollama Agent automatically extracts and applies these recommendations, while allowing dynamic runtime adjustments via `/params`.
+* 📊 **Server-Native Token Counting**: Avoids inaccurate `tiktoken` approximations. Ollama Agent reads exact server evaluation metrics (`prompt_eval_count` + `eval_count`) directly from Ollama's streaming response metadata, powering a real-time color-coded health gauge.
+* 🧠 **Architecture-Aware Thinking Traces**: Native reasoning support that adapts to model architecture quirks (Qwen 3.8, GPT-OSS, DeepSeek R1, Gemma), parsing `<think>` tags cleanly into collapsible UI blocks without token fragmentation.
+* 🔍 **Zero-Friction Discovery & Tool Verification**: Automatically verifies native tool-calling capabilities (`tools`) before execution, prompts with an interactive terminal selector when unconfigured, and allows hot-swapping models mid-conversation (`/model set`) while preserving full chat history.
+
+---
+
 ## Key Features
 
 <div class="projects-grid">
@@ -168,10 +180,18 @@ ollama-agent -m "qwen3.8:27b" -e "high" -y -s -p "Refactor src/utils.py to follo
 
 Explore the complete technical guides for Ollama Agent:
 
-- **[System Architecture](architecture.md)**: Graph orchestration, SQLite state persistence, streaming parsers, universal tool middleware, context compaction, episodic memory, and reasoning trace capture.
+### User Guides & Tools
 - **[CLI & REPL User Guide](cli_repl.md)**: Terminal interface commands, keyboard shortcuts, `@`-file mentions, multiline inputs, HITL approvals, dynamic parameters, and non-interactive usage.
-- **[MCP & Subagents Architecture](mcp_subagents.md)**: Model Context Protocol setup, subagent configuration, isolated context delegation, and dependency notes.
-- **[RAG Engine Guide](rag.md)**: Local vector database creation, document chunking, embeddings setup with Ollama & Qdrant, and automated search.
-- **[Skills, Tasks & Memory](skills_tasks_memory.md)**: Authoring reusable skills, managing saved task templates, `AGENTS.md` project rules, `MEMORY.md` user preferences, and episodic memory.
-- **[Configuration & Tracing](configuration.md)**: Comprehensive `settings.yaml` reference, context window auto-resolution, reasoning effort mapping, and LangSmith tracing.
+- **[Agent Skills Standard](skills.md)**: Authoring reusable skills, progressive disclosure architecture, `SKILL.md` format, and system skills.
+- **[Saved Tasks & Automation](tasks.md)**: Managing parameterized Jinja2 prompt templates, input validation, and execution.
+- **[Model Context Protocol (MCP)](mcp.md)**: Attaching external MCP tools over `stdio`, `http`, `sse`, environment variable expansion, and live reload.
+- **[Specialized Custom Subagents](subagents.md)**: Subagent architecture, context isolation, dedicated model assignments, and exclusive MCP toolsets.
+
+### Knowledge & Memory
+- **[Memory, Sessions & Guidelines](memory.md)**: `AGENTS.md` project guidelines, `MEMORY.md` user preferences, SQLite `history.db` checkpoints, and episodic memory search.
+- **[Local RAG Engine](rag.md)**: Local vector database creation with Qdrant, document chunking, embeddings setup with Ollama, and automated search.
+
+### Reference & Internals
+- **[Configuration & Settings](configuration.md)**: Comprehensive `settings.yaml` reference, parameter precedence, context window auto-resolution, reasoning effort mapping, and LangSmith tracing.
+- **[System Architecture](architecture.md)**: Graph orchestration, SQLite state persistence, streaming parsers, universal tool middleware, context compaction, and reasoning trace capture.
 - **[Developer Guide](developer_guide.md)**: Local development setup, codebase architecture, test suites, and contribution standards.

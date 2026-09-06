@@ -120,7 +120,7 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         "-m",
         "--task-model",
         type=str,
-        required=False,
+        required=True,
         help=_("Model to save with the task"),
     )
     task_create.add_argument(

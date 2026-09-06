@@ -8,13 +8,20 @@ repo_url: https://github.com/arrase/ollama-agent
 
 nav:
   - Overview: index.md
-  - Architecture: architecture.md
-  - CLI & REPL Guide: cli_repl.md
-  - MCP & Subagents: mcp_subagents.md
-  - RAG Engine: rag.md
-  - Skills, Tasks & Memory: skills_tasks_memory.md
-  - Configuration & Tracing: configuration.md
-  - Developer Guide: developer_guide.md
+  - User Guide:
+      - CLI & REPL Interface: cli_repl.md
+  - Extensibility & Tools:
+      - Agent Skills: skills.md
+      - Saved Tasks: tasks.md
+      - Model Context Protocol (MCP): mcp.md
+      - Specialized Subagents: subagents.md
+  - Knowledge & Memory:
+      - Memory & Guidelines: memory.md
+      - Local RAG Engine: rag.md
+  - Reference & Architecture:
+      - Configuration Reference: configuration.md
+      - System Architecture: architecture.md
+      - Developer Guide: developer_guide.md
 
 theme:
   name: material

@@ -35,13 +35,16 @@ flowchart TD
         MemoryStore["FilesystemBackend (/agent/, /system_skills/, /skills/, /tasks/, /project/)"]
         RAGEngine["Qdrant Vector Store & Ollama Embeddings"]
         MCPAdapter["MCP Client Adapters (MultiServerMCPClient)"]
+    subgraph Storage ["Durable Persistence Layer"]
+        SqliteDB[("SQLite Storage (~/.ollama-agent/history.db)")]
     end
 
     REPL --> Runtime
     CLI --> Runtime
     Runtime --> Graph
     Graph <--> Checkpointer
-    Checkpointer <--> EpisodicMemory
+    Checkpointer -->|"Persist checkpoints"| SqliteDB
+    EpisodicMemory -->|"Direct SQL query & JsonPlusSerializer"| SqliteDB
     Graph --> ToolMW
     Graph --> SummarizerMW
     Graph --> HITL
@@ -85,7 +88,7 @@ sequenceDiagram
 ```
 
 #### Graph Construction Details
-- **Lifecycle Management**: `AgentRuntime` owns internal `AsyncExitStack` instances (`_exit_stack` and `_checkpointer_stack`) to manage resources (SQLite database connections, MCP process pipes, and HTTP sessions). Calling `reload()` gracefully tears down existing resources and re-instantiates the graph live without restarting the application.
+- **Lifecycle Management**: `AgentRuntime` owns an internal `AsyncExitStack` instance (`_checkpointer_stack`) to manage the SQLite checkpointer connection context. Calling `reload()` gracefully re-instantiates the graph live with updated tools, models, and prompts without restarting the application.
 - **Backend Composition**: A `CompositeBackend` routes filesystem and tool requests:
   - `/agent/`: Routed to `FilesystemBackend` pointing to `~/.ollama-agent/` (`MEMORY.md`, global `AGENTS.md`).
   - `/system_skills/`: Routed to `FilesystemBackend` pointing to built-in system skills (`mcp-configurator`, `skill-creator`, `task-creator`).
@@ -96,7 +99,7 @@ sequenceDiagram
 - **Memory Sources Resolution**:
   - Global user memory: `["/agent/MEMORY.md"]`.
   - Global agent instructions: `["/agent/AGENTS.md"]` if present.
-  - Project instructions: Discovered via `find_agents_file(Path.cwd())`. If in CWD root -> `/{filename}`; if in an ancestor directory -> `/project/` route is created and `memory_sources.append("/project/{filename}")`; if not found -> `["/AGENTS.md"]`.
+  - Project instructions: Discovered via `find_agents_file(Path.cwd())`. If in CWD root -> `/{filename}`; if in an ancestor directory -> `/project/` route is created and `memory_sources.append("/project/{filename}")`; if no file is discovered, project instructions are omitted (no fallback file is injected).
 - **Tool Assembly & Dynamic Registration**: Base built-in tools (`search_past_conversations`) are combined with active MCP tools (`load_main_mcp_tools()`) and conditional RAG search (`rag_search`). The `rag_search` tool is conditionally included only when an active RAG database is loaded (`rag_mgr.current_database is not None`). Loading, unloading, or deleting a RAG database triggers `runtime.reload()`, dynamically updating the tool registry.
 - **Dynamic System Instructions**: The system prompt is constructed dynamically using unified Jinja2 template rendering (`render_prompt_template`), evaluating filesystem policy directives (traversal mode vs sandboxed mode), conditional RAG search policies (`{% if rag_active %}`), and local environment runtime metadata (`platform.system()`, `platform.release()`, `platform.machine()`, working directory, and current date/time).
 
@@ -261,7 +264,42 @@ User prompts are pre-processed by `ollama_agent/core/prompt_processor.py` before
 
 ---
 
-### 7. Ollama Thinking / Reasoning Trace Capture
+### 7. Ollama Model Adaptation & Precedence Engine (`ollama_agent/core/models.py`)
+
+Unlike generic AI frameworks that treat Ollama as a standard OpenAI proxy, `ollama-agent` implements a specialized adaptation layer designed specifically for Ollama's architecture:
+
+```mermaid
+flowchart TD
+    A["Model Target Assigned"] --> B["Introspect Model Capabilities\n(ensure_model_supports_tools)"]
+    B --> C["Resolve Context Window\n(resolve_context_window)"]
+    C --> D{"Context Resolution"}
+    D -- "Explicit Setting" --> E["Apply configured num_ctx"]
+    D -- "max / auto" --> F["Inspect GGUF metadata (*context_length)\nFallback to Modelfile num_ctx"]
+    
+    A --> G["Resolve Sampling Parameters\n(resolve_model_parameters)"]
+    G --> H["Precedence: User Override > Modelfile PARAMETER > Engine Default"]
+    
+    E --> I["Construct OllamaChatModel\n(Pass num_ctx, profile, effective_params)"]
+    F --> I
+    H --> I
+    I --> J["ChatOllama Request with min_p & presence_penalty injection"]
+```
+
+- **Tool Support Validation**: Before compiling the graph, `ensure_model_supports_tools()` queries the Ollama API to verify that the target model declares `"tools"` capability, preventing silent failures during inference.
+- **Context Window Auto-Detection (`resolve_context_window`)**:
+  - Checks if user configured an explicit numeric context (`> 0`).
+  - When set to `'max'` or unset, queries Ollama's `show()` API and inspects raw model metadata for keys ending in `context_length`.
+  - If metadata is missing, it parses Modelfile parameters for `PARAMETER num_ctx <val>`.
+  - Configures `profile={"max_input_tokens": num_ctx}` so DeepAgents accurately computes the 85% summarization threshold.
+- **Sampling Parameters Auto-Tuning (`resolve_model_parameters`)**:
+  - Tracks six core parameters: `temperature`, `top_p`, `top_k`, `min_p`, `presence_penalty`, `repeat_penalty` (with `repetition_penalty` alias).
+  - Precedence hierarchy: Explicit User Setting (`settings.yaml` or `/params set`) > Modelfile Parameter > Ollama Default.
+  - Returns `effective_params` preserving the resolution source (`"user"`, `"modelfile"`, `"default"`) for UI inspection via `/params`.
+- **Extended Options Subclass (`OllamaChatModel`)**: Subclasses LangChain's `ChatOllama` to dynamically inject Ollama-specific options (`min_p`, `presence_penalty`) into the underlying `_chat_params` dictionary payload.
+
+---
+
+### 8. Ollama Thinking / Reasoning Trace Capture
 
 The agent natively captures reasoning traces from models with thinking support (e.g. DeepSeek R1, Qwen 3, Qwen 3.8, GPT-OSS).
 
@@ -299,7 +337,7 @@ flowchart TD
 
 ---
 
-### 8. Custom Subagents Architecture
+### 9. Custom Subagents Architecture
 
 Subagents are auxiliary AI agent instances configured in `settings.yaml` to handle specialized subtasks with isolated context windows:
 
@@ -322,12 +360,12 @@ flowchart TD
 
 ---
 
-### 9. Core Subsystems (RAG, Skills, Tasks & MCP)
+### 10. Core Subsystems (RAG, Skills, Tasks & MCP)
 
 ```mermaid
 flowchart TD
     subgraph Subsystems ["Integrated Subsystems"]
-        RAG["RAG Engine (ollama_agent/rag/)\n• Qdrant Vector Store (~/.ollama-agent/rag/)\n• Ollama Embeddings (all-minilm)\n• rag_search Tool (dynamic registration)"]
+        RAG["RAG Engine (ollama_agent/rag/)\n• Qdrant Vector Store (~/.ollama-agent/rag/)\n• Ollama Embeddings (nomic-embed-text:latest, 768 dims)\n• rag_search Tool (dynamic registration)"]
         Skills["Skills Engine (ollama_agent/skills/)\n• Agent Skills Specification\n• Built-in (/system_skills/): mcp-configurator, skill-creator, task-creator\n• User Skills (/skills/): ~/.ollama-agent/skills/"]
         Tasks["Tasks Engine (ollama_agent/tasks/)\n• Parameterized YAML Templates (~/.ollama-agent/tasks/)\n• Typed Inputs (string, boolean, number)\n• Jinja2 Prompt Rendering (/tasks/)"]
         MCP["MCP Engine (ollama_agent/mcp/)\n• MultiServerMCPClient (~/.ollama-agent/mcp.json)\n• Transports: stdio (stderr -> mcp.log), SSE, HTTP, WS\n• Env Expansion (${VAR}, %VAR%)\n• Dynamic Reloading (/mcp reload)"]
@@ -336,7 +374,7 @@ flowchart TD
 
 - **RAG Subsystem (`ollama_agent/rag/`)**:
   - Embedded vector database powered by Qdrant stored locally in `~/.ollama-agent/rag/<database_name>/`.
-  - Asynchronous embeddings generated using Ollama's embeddings endpoint (`all-minilm` by default).
+  - Asynchronous embeddings generated using Ollama's embeddings endpoint (`nomic-embed-text:latest` by default).
   - Dynamic tool registration & prompt updates: `rag_search` is conditionally exposed only when a RAG database is loaded (`/rag load <name>`). Loading, unloading (`/rag unload`), or deleting (`/rag delete <name>`) a database triggers `runtime.reload()`, dynamically adding/removing `rag_search` from the active tools and updating the system prompt's `{% if rag_active %}` policy without restarting the session.
 - **Skills Subsystem (`ollama_agent/skills/`)**:
   - Follows the open Agent Skills specification with `SKILL.md` files declaring YAML frontmatter (`name`, `description`) and markdown instructions.
@@ -355,5 +393,30 @@ flowchart TD
   - Uses `MultiServerMCPClient` from `langchain-mcp-adapters`.
   - Stdio stderr redirection: Stdio servers redirect stderr output to `~/.ollama-agent/mcp.log` to prevent corrupting the TUI display.
   - Environment variable resolution: Supports `${VAR}` and `%VAR%` syntax evaluated against `os.environ`.
-  - Live reloading: The `/mcp reload` slash command closes existing MCP connections and rebuilds the runtime graph without restarting the REPL.
+  - Live reloading: The `/mcp reload` slash command triggers `runtime.reload()`, establishing fresh connections and updating the LangGraph tool graph while preserving active session history in checkpoints.
+
+---
+
+### 11. Textual REPL TUI Architecture (`ollama_agent/interfaces/`)
+
+The interactive Terminal User Interface (TUI) is constructed on top of Textual and Rich, featuring an event-driven architecture designed for high-throughput streaming and user responsiveness:
+
+```mermaid
+flowchart TD
+    App["OllamaAgentApp (Textual App)"]
+    App --> Header["AgentHeader\n• Model & Host\n• Context Gauge (% of num_ctx)\n• YOLO / Stealth / RAG badges"]
+    App --> ScrollArea["VerticalScroll (Chat Container)"]
+    ScrollArea --> Prompts["UserPromptWidget (Syntax highlighted)"]
+    ScrollArea --> Thinking["CollapsibleThinking (Live timer & collapsible reasoning)"]
+    ScrollArea --> Responses["AgentResponseWidget (Markdown stream)"]
+    ScrollArea --> Approvals["ToolApprovalWidget (Interactive buttons & hotkeys)"]
+    ScrollArea --> SysOutputs["SystemOutputWidget (Isolated table / diagnostic cards)"]
+    App --> QueueWidget["PromptQueueWidget (Pending turn indicator)"]
+    App --> InputArea["ReplInput (Multiline TextArea with tab autocompletion)"]
+    App --> Footer["AgentFooter (Status line & key hints)"]
+```
+
+- **Smart Auto-Scroll Detection**: `_TUIStreamingRenderer` monitors the user's scroll position. If the user scrolls upward (`scroll_y < last_scroll_y`) to review past conversation history, auto-scrolling disengages automatically so reading is never interrupted by incoming tokens. It re-engages as soon as the user scrolls back to the bottom.
+- **Immediate Command Fast-Path**: Commands categorized as `_is_immediate_command()` bypass the inference queue, allowing the user to inspect status, queue, models, or toggle flags in real time without interrupting running LLM output.
+- **Isolated System Output Cards**: Slash commands and system diagnostic reports render in dedicated `SystemOutputWidget` containers rather than polluting the LLM conversation stream bubbles.
 
