@@ -1,424 +1,215 @@
-# Ollama Agent Architectural Overview
+# System Architecture
 
-Ollama Agent is designed around a modular, event-driven architecture that bridges local LLM inference engines (via Ollama and LangChain) with stateful graph orchestration (via DeepAgents and LangGraph). This document outlines the core system design, execution pipeline, persistence layer, tool middleware, context compaction engine, episodic memory, streaming parsers, and subsystem integrations.
+**Ollama Agent** is an autonomous, local-first AI assistant engineered to run entirely on your machine. It unites local LLM inference—powered directly by Ollama's native API—with stateful graph orchestration, fine-grained safety controls, and multi-tier persistent memory.
+
+Whether you run tasks from the interactive terminal workspace (REPL) or trigger automated workflows via the command-line interface (CLI), Ollama Agent gives local models full agency to inspect files, execute terminal commands, query documentation, and retain context across sessions—with zero data ever leaving your system.
+
+---
+
+## Architectural Philosophy
+
+Ollama Agent is built around four core design principles:
+
+1. **Local-First & Zero Telemetry**: Every prompt, tool call, reasoning trace, and vector embedding stays strictly on your local hardware. There are no cloud relays, no tracking pings, and no third-party telemetry.
+2. **Stateful Resilience**: Conversation state is treated as a transactional graph backed by persistent local storage. If your terminal closes or a command crashes, your session state is safely preserved.
+3. **Safety by Default**: Non-destructive operations execute smoothly, while sensitive system actions (such as running shell commands or modifying files) require interactive approval—unless you explicitly enable YOLO mode.
+4. **Native Ollama Optimization**: Rather than treating Ollama as a generic OpenAI clone, the agent directly interrogates Ollama's APIs to auto-detect maximum context windows, creator-tuned hyperparameters, and native reasoning tokens.
 
 ---
 
 ## High-Level Architecture
 
-The system uses a layered architecture where user interactions (CLI or REPL UI) trigger asynchronous event streams through a stateful graph. The graph coordinates tool invocation, memory read/writes, RAG queries, episodic search, and subagent delegation while maintaining human-in-the-loop (HITL) checkpoints.
+The following diagram illustrates how user interactions flow through the runtime, safety layer, tool adapters, and local storage:
 
 ```mermaid
 flowchart TD
-    subgraph UI ["User Interface Layer"]
-        REPL["Interactive REPL UI (Textual / Rich)"]
-        CLI["Non-Interactive CLI (argparse)"]
+    subgraph UI ["User Interfaces"]
+        REPL["Interactive Terminal REPL\n(Live Streaming & Autocomplete)"]
+        CLI["One-Shot CLI\n(Headless Shell Execution)"]
     end
 
-    subgraph Core ["Agent Runtime & Graph Engine"]
-        Runtime["AgentRuntime (State Manager & AsyncExitStack)"]
-        Graph["DeepAgents Graph (create_deep_agent)"]
-        Checkpointer["Checkpointer (AsyncSqliteSaver / MemorySaver)"]
-        EpisodicMemory["Episodic Memory Engine (search_past_conversations)"]
+    subgraph Runtime ["Agent Runtime & State Graph"]
+        StateGraph["Stateful Graph Engine\n(Turn Execution & Routing)"]
+        PromptQueue["Non-Blocking Prompt Queue\n(Concurrent Input & Immediate Commands)"]
     end
 
-    subgraph Middleware ["Execution & Control Layer"]
-        ToolMW["Tool Middleware (stream_tool_events_mw)"]
-        SummarizerMW["Summarization Middleware (Auto 85% & compact_conversation)"]
-        HITL["Human-in-the-Loop Interrupt Controller"]
+    subgraph Safety ["Control & Safety Layer"]
+        HITL["Human-in-the-Loop (HITL)\n(Approval Modal & YOLO Bypass)"]
+        Compaction["Context Management\n(85% Threshold Compaction)"]
+        StreamBus["Event Streaming & Parsers\n(Token Stream & <think> Tags)"]
     end
 
-    subgraph Adapters ["Integration & Backend Adapters"]
-        OllamaLLM["OllamaChatModel (LangChain ChatOllama with sampling params)"]
-        CompositeRouter["CompositeBackend (Virtual Filesystem Router)"]
-        ShellBackend["LocalShellBackend (CWD Default)"]
-        MemoryStore["FilesystemBackend (/agent/, /system_skills/, /skills/, /tasks/, /project/)"]
-        RAGEngine["Qdrant Vector Store & Ollama Embeddings"]
-        MCPAdapter["MCP Client Adapters (MultiServerMCPClient)"]
+    subgraph Tools ["Tool Adapters & Extensibility"]
+        ShellFS["Local Shell & Filesystem Tools"]
+        MCPClient["Model Context Protocol (MCP)\n(Stdio, SSE & HTTP Servers)"]
+        RAGEngine["Local RAG Search\n(Qdrant & Ollama Embeddings)"]
+        EpisodicSearch["Episodic Memory Search"]
     end
 
-    subgraph Storage ["Durable Persistence Layer"]
-        SqliteDB[("SQLite Storage (~/.ollama-agent/history.db)")]
+    subgraph Storage ["Durable Local Storage"]
+        SQLiteDB[("Session History\n~/.ollama-agent/history.db")]
+        QdrantDB[("Vector Collections\n~/.ollama-agent/rag/")]
     end
 
-    REPL --> Runtime
-    CLI --> Runtime
-    Runtime --> Graph
-    Graph <--> Checkpointer
-    Checkpointer -->|"Persist checkpoints"| SqliteDB
-    EpisodicMemory -->|"Direct SQL query & JsonPlusSerializer"| SqliteDB
-    Graph --> ToolMW
-    Graph --> SummarizerMW
-    Graph --> HITL
-    Graph --> CompositeRouter
-    CompositeRouter --> ShellBackend
-    CompositeRouter --> MemoryStore
-    ToolMW --> ShellBackend
-    ToolMW --> MCPAdapter
-    ToolMW --> RAGEngine
-    ToolMW --> EpisodicMemory
-    Graph --> OllamaLLM
+    subgraph Backend ["Local LLM Inference"]
+        Ollama["Native Ollama API\n• Chat & Token Streaming\n• Context & Hyperparameter Introspection\n• Native Embeddings Generation"]
+    end
+
+    REPL --> PromptQueue
+    CLI --> PromptQueue
+    PromptQueue --> StateGraph
+    StateGraph <--> SQLiteDB
+    StateGraph --> Compaction
+    StateGraph --> HITL
+    HITL --> Tools
+    Tools --> ShellFS
+    Tools --> MCPClient
+    Tools --> RAGEngine
+    Tools --> EpisodicSearch
+    RAGEngine <--> QdrantDB
+    EpisodicSearch <--> SQLiteDB
+    StateGraph <--> Ollama
+    StateGraph --> StreamBus
+    StreamBus --> REPL
+    StreamBus --> CLI
 ```
 
 ---
 
-## Component Breakdowns
+## Core Subsystems
 
-### 1. DeepAgents Graph Integration & Backend Routing
+### 1. Stateful Multi-Turn Execution
 
-The core agent state machine is built using **DeepAgents** (`deepagents.create_deep_agent`), which compiles a LangGraph state graph configured with specialized virtual backends, dynamic system prompts, memory layers, and tool subnets.
+At the center of Ollama Agent is a stateful execution graph that tracks every conversation turn, tool invocation, and intermediate result.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant UI as Terminal REPL / CLI
-    participant Streaming as stream_agent_events
-    participant Runtime as AgentRuntime
-    participant Graph as DeepAgents Graph
-    participant MW as Tool Middleware (stream_tool_events_mw)
-    participant LLM as OllamaChatModel
+* **Durable Session Store**: All turns are recorded in an embedded SQLite database (`~/.ollama-agent/history.db`) tied to a unique session ID (`thread_id`).
+* **Crash Resilience & Instant Resume**: If a process is interrupted, you can resume your exact conversation state anytime with `ollama-agent session resume <id>` or `/session resume <id>` in the REPL.
+* **Live Reconfiguration**: You can switch models (`/model set <name>`), change reasoning levels (`/effort set <level>`), or adjust context windows (`/context set <size>`) mid-session without losing your conversational history.
+* **Stealth Mode**: For sensitive one-off sessions where you want zero traces saved to disk, running with `--stealth` (or `/stealth on`) executes the entire graph purely in volatile memory.
 
-    UI->>Streaming: stream_agent_events(runtime, prompt, renderer)
-    Streaming->>Runtime: run_streamed(prompt)
-    Runtime->>Graph: astream(inputs, config, stream_mode=['messages', 'custom'])
-    Graph->>LLM: Generate response / tool calls
-    LLM-->>Graph: Tool Call Request
-    Graph->>MW: Invoke Tool Request
-    MW-->>Runtime: Emit custom tool_call / tool_output events
-    Runtime-->>Streaming: Yield parsed events (text_delta, reasoning_delta, tool_call, tool_output)
-    Streaming-->>UI: Render deltas & tool widgets in UI
-```
-
-#### Graph Construction Details
-- **Lifecycle Management**: `AgentRuntime` owns an internal `AsyncExitStack` instance (`_checkpointer_stack`) to manage the SQLite checkpointer connection context. Calling `reload()` gracefully re-instantiates the graph live with updated tools, models, and prompts without restarting the application.
-- **Backend Composition**: A `CompositeBackend` routes filesystem and tool requests:
-  - `/agent/`: Routed to `FilesystemBackend` pointing to `~/.ollama-agent/` (`MEMORY.md`, global `AGENTS.md`).
-  - `/system_skills/`: Routed to `FilesystemBackend` pointing to built-in system skills (`mcp-configurator`, `skill-creator`, `task-creator`).
-  - `/skills/`: Routed to `FilesystemBackend` pointing to user skills in `~/.ollama-agent/skills/`.
-  - `/tasks/`: Routed to `FilesystemBackend` pointing to saved YAML prompt tasks in `~/.ollama-agent/tasks/`.
-  - `/project/`: Optional route to `FilesystemBackend` pointing to the repository root when `AGENTS.md` is discovered in an ancestor directory.
-  - Default route: `LocalShellBackend` operating on the current working directory (`Path.cwd().resolve()`), configured with `timeout=get_tool_timeout()`, `virtual_mode=not allow_traversal`, and `inherit_env=inherit_env`.
-- **Memory Sources Resolution**:
-  - Global user memory: `["/agent/MEMORY.md"]`.
-  - Global agent instructions: `["/agent/AGENTS.md"]` if present.
-  - Project instructions: Discovered via `find_agents_file(Path.cwd())`. If in CWD root -> `/{filename}`; if in an ancestor directory -> `/project/` route is created and `memory_sources.append("/project/{filename}")`; if no file is discovered, project instructions are omitted (no fallback file is injected).
-- **Tool Assembly & Dynamic Registration**: Base built-in tools (`search_past_conversations`) are combined with active MCP tools (`load_main_mcp_tools()`) and conditional RAG search (`rag_search`). The `rag_search` tool is conditionally included only when an active RAG database is loaded (`rag_mgr.current_database is not None`). Loading, unloading, or deleting a RAG database triggers `runtime.reload()`, dynamically updating the tool registry.
-- **Dynamic System Instructions**: The system prompt is constructed dynamically using unified Jinja2 template rendering (`render_prompt_template`), evaluating filesystem policy directives (traversal mode vs sandboxed mode), conditional RAG search policies (`{% if rag_active %}`), and local environment runtime metadata (`platform.system()`, `platform.release()`, `platform.machine()`, working directory, and current date/time).
+For details on managing sessions, see the [CLI & REPL Guide](cli_repl.md#session-management).
 
 ---
 
-### 2. Context Compression & Compaction Engine
+### 2. Intelligent Context Window Management
 
-To prevent conversation degradation and context overflow errors, Ollama Agent integrates both automatic background summarization and proactive tool-driven compaction.
+Local models have strict token boundaries. Ollama Agent prevents conversation degradation and out-of-memory errors through proactive context management:
 
 ```mermaid
 flowchart LR
-    A["Conversation Turns"] -->|Auto at 85% capacity OR compact_conversation| B["Summarization Engine"]
-    B --> C["Structured Summary\n• Session Intent\n• Key Decisions\n• Artifacts\n• Next Steps"]
-    B --> D["Durable History Saved to\n/conversation_history/session_UUID.md"]
-    C --> E["Reclaimed Context Window"]
+    A["Conversation Turns"] --> B{"Token Threshold\n(85% of num_ctx)"}
+    B -- "< 85%" --> C["Standard Execution"]
+    B -- ">= 85%" --> D["Context Compaction Engine"]
+    D --> E["Structured Summary\n• Key Decisions\n• Active Goals\n• Modified Files"]
+    D --> F["Recent Turns Preserved\n(Last 10% / 6 messages)"]
+    E & F --> G["Reclaimed Context Window"]
 ```
 
-1. **Automatic Background Summarization (`SummarizationMiddleware`)**:
-   - Built into DeepAgents and initialized in the agent pipeline.
-   - **Trigger Threshold**: Automatically triggers when conversation tokens reach **85%** of the model's `max_input_tokens` (or 170k token fallback).
-   - **Token Retention**: Compresses older turns into a structured summary while preserving the most recent **10%** of tokens (or 6 messages).
-   - **Tool Argument Pruning**: Large arguments in past tool calls are truncated to 2,000 characters.
-   - **Media & History Offloading**: Evicted message turns and inline media are safely offloaded to `/conversation_history/session_<uuid>.md` on the persistent backend.
-   - **Context Overflow Recovery**: Catches context window errors from the LLM and triggers emergency summarization.
-
-2. **Agent-Driven Compaction Tool (`compact_conversation`)**:
-   - Exposed to the agent via `create_summarization_tool_middleware(model, backend)`.
-   - **Tool Execution**: Enables the model to proactively compact context when transitioning to new subtasks or when requested by the user in natural language (*"compact conversation"*, *"comprime el contexto"*).
-   - **Eligibility Gating**: Implements an eligibility gate requiring conversation tokens to reach at least ~50% of the threshold before compaction runs.
-   - **In-Graph State Update**: Emits a `Command(update={"_summarization_event": ...})` within the LangGraph graph loop to cleanly update state without out-of-band mutations.
-   - **Effective Token Accounting**: `AgentRuntime.count_effective_tokens()` inspects `_summarization_event` to calculate accurate token counts (`[summary_message] + messages[cutoff_index:]`).
-
-3. **Autonomous Compaction vs. Manual Commands**:
-   - Previous manual slash commands (`/compact`, `/compress`) were removed.
-   - Context compaction is executed entirely in-graph—either autonomously by the model calling `compact_conversation` or automatically at the 85% threshold—ensuring clean LangGraph state transitions without out-of-band state mutation.
+* **Hardware-Aware Context Discovery**: Upon model selection, Ollama Agent inspects the model's GGUF metadata directly through Ollama's API to detect its true maximum context length (`context_length`), automatically overriding the conservative 2,048-token default.
+* **Exact Token Accounting**: Rather than guessing token usage with external approximation tools, the agent reads the exact evaluation metrics (`prompt_eval_count` and `eval_count`) returned by Ollama after each turn.
+* **Automatic Background Compaction**: When conversation tokens hit **85%** of the configured limit, the compaction engine summarizes older history while keeping recent messages and critical decisions intact.
+* **Autonomous & Natural Language Compaction**: The agent can autonomously trigger compaction when concluding large subtasks, or you can request it naturally (*"compact context before we write the tests"*).
+* **Live Visual Gauge**: The REPL header features a real-time visual meter displaying current context consumption against your model's ceiling.
 
 ---
 
-### 3. State Persistence & Episodic Memory
+### 3. Safety & Human-in-the-Loop (HITL)
 
-Session persistence is handled dynamically by `AgentRuntime`:
-- **Default Mode (`stealth_mode = False`)**: Uses `AsyncSqliteSaver` from `langgraph-checkpoint-sqlite` storing state in `~/.ollama-agent/history.db`.
-- **Stealth Mode (`stealth_mode = True`)**: Uses `MemorySaver` from `langgraph.checkpoint.memory` keeping conversation checkpoints strictly in-memory during the active session without persisting to SQLite.
+Ollama Agent protects your system by enforcing an explicit permission boundary between the LLM and your environment:
 
-```mermaid
-flowchart LR
-    subgraph Storage ["Storage Resolution"]
-        CheckpointerDecision{"stealth_mode?"}
-        SqliteDB[("SQLite Storage (~/.ollama-agent/history.db)")]
-        MemStore[("In-Memory Store (MemorySaver)")]
-        CheckpointerDecision -- False --> SqliteDB
-        CheckpointerDecision -- True --> MemStore
-    end
+* **Interactive Approval Modal**: Non-destructive operations (such as reading files or searching directories) execute immediately. Actions that modify state (shell execution, writing files, editing code) trigger an interactive approval dialog:
+  * **Approve (`y`)**: Executes the pending action once.
+  * **Approve for Session (`a`)**: Permits this specific tool to run without further prompts for the rest of the session.
+  * **Reject (`n`)**: Blocks execution and feeds your denial rationale back to the model so it can propose an alternative.
+  * **Cancel (`c`)**: Aborts the active turn immediately.
+* **Autonomous YOLO Mode (`-y`, `--yolo`)**: For automated build pipelines, batch scripting, or trusted environments, YOLO mode bypasses interactive confirmations while keeping filesystem sandboxing and execution timeouts intact.
 
-    subgraph Runtime ["Agent Graph Execution"]
-        GraphState["Graph State & Message History"]
-        EpisodicSearch["search_past_conversations Tool"]
-    end
-
-    SqliteDB <--> GraphState
-    MemStore <--> GraphState
-    SqliteDB --> EpisodicSearch
-```
-
-- **Thread Tracking**: Each chat session is assigned a unique `thread_id`. State snapshots are recorded after every node execution step in the graph.
-- **Mid-Session Reconfiguration**: Changing models (`/model set <model>`), context window (`/context set <size>`), reasoning effort (`/effort set <level>`), or parameters (`/params set <k> <v>`) reloads the graph while preserving conversation state under the active `thread_id`.
-- **Session Management & Export**:
-  - Past sessions stored in SQLite can be inspected (`/session list`), resumed with full UI message restoration (`/session resume <id>` or `/session switch <id>`), started afresh (`/session new`, `/new`, `/clear`), exported to Markdown (`/session export [id] [-o path]`), or deleted (`/session delete <id>`).
-  - Equivalent CLI commands: `ollama-agent session list`, `search`, `delete`, `export`.
-- **Episodic Memory Subsystem**:
-  - Implemented in `ollama_agent/agent/episodic_memory.py`.
-  - Queries SQLite `checkpoints` and `writes` records where `channel = 'messages'`, deserialized with `JsonPlusSerializer`.
-  - The active thread is tracked via `set_active_thread_id()` to exclude the current session from search results.
-  - Exposed as the built-in agent tool `search_past_conversations(query: str, limit: int = 3)` to enable autonomous recall of past solutions across sessions.
-  - Exposed to users via the `/session search <query>` slash command and `ollama-agent session search` CLI command.
-  - Powers `load_past_user_prompts()` for prompt history navigation (`↑`/`↓`) in the REPL.
+For full safety configuration options, see the [Configuration Guide](configuration.md#configuration-reference-table).
 
 ---
 
-### 4. Streaming Responses & Event Processing
+### 4. Extensible Tool System & Model Context Protocol (MCP)
 
-Ollama Agent processes inference and execution in real time by listening to LangGraph event streams via `stream_agent_events` (`ollama_agent/streaming/events.py`).
+The agent’s tool system combines built-in file and shell utilities with dynamic external capabilities via the open **Model Context Protocol (MCP)**:
+
+* **Native Toolset**: Out of the box, the agent can inspect directory trees, read files, search project source code, run shell commands, and query past conversation history.
+* **Dynamic MCP Integration**: Connect external tools (GitHub, PostgreSQL, web scrapers, Docker, Jira) by adding servers to `~/.ollama-agent/mcp.json`. Transports over `stdio`, `sse`, and `http` are supported natively.
+* **Environment Variable Expansion**: Safely reference secrets in your MCP configuration using standard `${ENV_VAR}` syntax.
+* **Zero-Downtime Reloading**: Run `/mcp reload` inside the REPL to connect newly added servers or refresh tool definitions without restarting your session.
+* **Subagent Tool Isolation**: Specialized subagents can be granted dedicated MCP toolsets, ensuring the primary agent's context window is not saturated with unused tool schemas.
+
+Learn how to configure servers in the [MCP Guide](mcp.md).
+
+---
+
+### 5. Multi-Tier Persistent Memory
+
+To provide context-aware responses across different projects and workflows, Ollama Agent utilizes a four-tier memory architecture:
 
 ```mermaid
 flowchart TD
-    A["graph.astream(inputs, stream_mode=['messages', 'custom'])"] --> B{"Event Mode?"}
-    
-    B -- "custom" --> C["Emit Tool Events (tool_call / tool_output)"]
-    B -- "messages" --> D["Extract Message Chunk & Metadata"]
-    
-    D --> E["Track Token Count (prompt_eval_count + eval_count)"]
-    D --> F["Process Chunk (ThinkTagParser)"]
-    
-    F -- "Reasoning Delta" --> G["Render Thinking Trace in UI"]
-    F -- "Text Delta" --> H["Render Markdown Response in UI"]
-    
-    C --> I["Update Tool Status / Spinners in UI"]
-```
-
-- **Dual-Stream Listening**: Streams both `messages` (raw LLM token outputs) and `custom` events (tool middleware lifecycle events).
-- **Token Consumption Tracking**: Inspects `response_metadata` for `prompt_eval_count` and `eval_count` to maintain accurate `last_context_tokens` metrics for the live gauge.
-- **Stateful Streaming Parsers (`ollama_agent/streaming/parsers.py`)**:
-  - `ThinkTagParser`: Stateful stream parser that tracks `<think>` and `</think>` tags across token chunks, buffering partial tag boundaries (`_buffer`) to prevent tag fragmentation leaks and separating `reasoning_delta` from `text_delta`.
-  - `streaming_text()`: Extracts raw text across string, dictionary, and list block payloads without altering whitespace.
-  - `streaming_reasoning()`: Extracts reasoning from `additional_kwargs['reasoning_content']` or structured reasoning content blocks.
-- **Interrupt Handling**: When `state.interrupts` is encountered during streaming, `extract_action_requests()` (`ollama_agent/streaming/interrupts.py`) extracts and validates the action requests before handing off to the renderer's `handle_interrupt()` callback.
-- **Prompt Queue & Concurrent Command Dispatch**:
-  - `_prompt_queue: deque[QueuedItem]` holds pending turns when generation or tool approval is active.
-  - `_is_immediate_command()` fast-path dispatches read-only slash commands (`/exit`, `/quit`, `/queue`, `/yolo`, `/stealth`, `/model list`, `/effort`, `/context`, `/params list`, `/session list/search/export/delete`, `/task list/delete`, `/skill list/show/delete`, `/rag status/list/create/delete/load/unload`, `/mcp list/status`, `/agents list`) directly without blocking or interrupting active streams.
-  - `SystemOutputWidget`: Dedicated TUI widget card that cleanly renders command tables, notices, and system responses separately from conversation message bubbles.
-  - Stateful commands and user prompts are enqueued FIFO and automatically drained by `_process_next_in_queue()` inside `finally` blocks of stream workers.
-  - Unblocked tool approval keeps `ReplInput` enabled (`_is_approval_pending = True`), allowing users to submit follow-up prompts or immediate commands while reviewing sensitive tool actions.
-
----
-
-### 5. Tool Execution Middleware & Human-in-the-Loop (HITL) Control
-
-All tool calls (shell execution, built-in tools, MCP tools, subagent task calls, RAG search) are wrapped by the universal tool execution middleware (`stream_tool_events_mw`) in `ollama_agent/agent/middleware.py`.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Graph as DeepAgents Graph
-    participant MW as stream_tool_events_mw
-    participant Writer as runtime.stream_writer
-    participant Handler as Tool Handler
-    
-    Graph->>MW: Invoke Tool Request
-    MW->>Writer: Emit event {"type": "tool_call", "name": tool_name, "agent_name": agent_name}
-    alt Execution within Timeout
-        MW->>Handler: asyncio.wait_for(handler(request), timeout)
-        Handler-->>MW: Tool Execution Result
-        MW->>Writer: Emit event {"type": "tool_output", "output_len": len, "agent_name": agent_name}
-        MW-->>Graph: Return Tool Output
-    else Execution Timeout
-        MW->>MW: TimeoutError Raised
-        MW-->>Graph: Return Timeout Error Message
+    subgraph MemoryTiers ["Multi-Tier Memory Architecture"]
+        T1["Tier 1: Project Guidelines\n(./AGENTS.md or git root)\nProject architecture, conventions, and test commands"]
+        T2["Tier 2: Personal Guidelines\n(~/.ollama-agent/AGENTS.md)\nYour personal coding preferences, tooling, and aliases"]
+        T3["Tier 3: Long-Term Memory\n(~/.ollama-agent/MEMORY.md)\nFacts, recurring preferences, and workflow notes"]
+        T4["Tier 4: Episodic Memory Search\n(SQLite Checkpoint Index)\nRecall past conversations, code snippets, and debug sessions"]
     end
 ```
 
-- **Universal Event Dispatch**: Emits structured UI events before tool execution starts (`tool_call`) and after completion (`tool_output`), with subagent attribution tags (`agent_name`) extracted from `task` arguments or `lc_agent_name` metadata.
-- **Timeout Protection**: Wraps execution in `asyncio.wait_for(timeout=timeout_s)` using dynamic timeout resolution via `get_tool_timeout()`. On timeout, returns a structured error `ToolMessage`.
-- **Sensitive Tool Interruption**: Sensitive tools (`execute`, `write_file`, `edit_file`) trigger graph interrupts via `interrupt_on`. Users can approve (`y`), reject (`n`), allow for session (`a`), or cancel (`c`). In YOLO mode (`-y` / `/yolo on`), interrupts are bypassed. Tools allowed for session are added to `auto_approved_tools` and bypass subsequent prompts.
+1. **Project Instructions (`AGENTS.md`)**: Automatically discovered in your project directory or repository root. Checked into version control so the entire team shares identical agent instructions.
+2. **Personal Global Instructions (`~/.ollama-agent/AGENTS.md`)**: User-level rules loaded across every session, regardless of the active project.
+3. **Cross-Session Memory (`~/.ollama-agent/MEMORY.md`)**: A persistent markdown knowledge base where the agent stores key facts, user preferences, and project-specific notes that persist across restarts.
+4. **Episodic Memory Search**: Built-in semantic and keyword search across past session transcripts (`/session search <query>`), allowing the agent to recall how previous problems were solved.
+
+Learn more about managing agent memory in the [Memory Guide](memory.md).
 
 ---
 
-### 6. Context Injection & Multimodal Pipeline
+### 6. Streaming UI, Reasoning Traces & Prompt Queue
 
-User prompts are pre-processed by `ollama_agent/core/prompt_processor.py` before being passed to the LangGraph execution graph:
+The terminal user interface is engineered for real-time responsiveness and high-throughput streaming:
 
-1. **`@-mentions` Parsing**: Extracts file and directory references (e.g. `@src/main.py`, `@"data folder"`, `@'path with spaces'`, `@.`, `@dir`).
-2. **Type Detection & Multimodal Attachments**:
-   - **Text Files**: Read as UTF-8 and appended as structured `<context_file path="...">` blocks under `--- Attached Context ---`.
-   - **Multimodal Assets**:
-     - Images (`.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.bmp`, `.svg`, `.heic`, `.heif`) -> `image`
-     - Audio (`.mp3`, `.wav`, `.ogg`, `.flac`, `.m4a`, `.aac`, `.aiff`) -> `audio`
-     - Video (`.mp4`, `.mpeg`, `.mov`, `.avi`, `.flv`, `.mpg`, `.webm`, `.wmv`, `.3gpp`) -> `video`
-     - Documents (`.pdf`, `.ppt`, `.pptx`) -> `file`
-     - Attachments are base64-encoded and placed in a multimodal `HumanMessage` payload (`{"role": "user", "content": [{"type": "text", ...}, {"type": "image", ...}]}`).
-   - **Binary Safety**: Non-multimodal binary files containing null bytes (`is_binary_file`) are safely blocked with descriptive `PromptProcessingError` errors.
-3. **Budget Enforcement**: Validates file size (`max_file_size`), count (`max_files`), and total volume (`max_total_size`) against `MentionSettings`.
+* **Token-by-Token Streaming**: Responses render instantly as tokens are generated by Ollama, providing immediate visual feedback.
+* **Collapsible Reasoning Traces**: For reasoning models (such as DeepSeek R1, Qwen 2.5/3, or GPT-OSS), raw `<think>` blocks are automatically parsed into collapsible thinking cards featuring a live duration timer, keeping conversation output tidy.
+* **Non-Blocking Prompt Queue**: You can type subsequent instructions while the agent is still running. Pending prompts are placed in a FIFO queue and processed sequentially once the current turn completes.
+* **Immediate Command Fast-Path**: Diagnostic and management commands (`/model`, `/context`, `/params`, `/session`, `/queue`, `/yolo`) execute immediately without waiting for or interrupting ongoing model generation.
+* **Smart Auto-Scroll**: Scrolling up to read previous messages automatically pauses auto-scroll. Scrolling back to the bottom re-engages live tracking instantly.
+
+For keyboard shortcuts and TUI controls, see the [CLI & REPL Guide](cli_repl.md#interactive-repl-walkthrough).
 
 ---
 
-### 7. Ollama Model Adaptation & Precedence Engine (`ollama_agent/core/models.py`)
+## Security & Isolation Model
 
-Unlike generic AI frameworks that treat Ollama as a standard OpenAI proxy, `ollama-agent` implements a specialized adaptation layer designed specifically for Ollama's architecture:
+Ollama Agent is engineered with security and operational safety at its core:
 
-```mermaid
-flowchart TD
-    A["Model Target Assigned"] --> B["Introspect Model Capabilities\n(ensure_model_supports_tools)"]
-    B --> C["Resolve Context Window\n(resolve_context_window)"]
-    C --> D{"Context Resolution"}
-    D -- "Explicit Setting" --> E["Apply configured num_ctx"]
-    D -- "max / auto" --> F["Inspect GGUF metadata (*context_length)\nFallback to Modelfile num_ctx"]
-    
-    A --> G["Resolve Sampling Parameters\n(resolve_model_parameters)"]
-    G --> H["Precedence: User Override > Modelfile PARAMETER > Engine Default"]
-    
-    E --> I["Construct OllamaChatModel\n(Pass num_ctx, profile, effective_params)"]
-    F --> I
-    H --> I
-    I --> J["ChatOllama Request with min_p & presence_penalty injection"]
-```
-
-- **Tool Support Validation**: Before compiling the graph, `ensure_model_supports_tools()` queries the Ollama API to verify that the target model declares `"tools"` capability, preventing silent failures during inference.
-- **Context Window Auto-Detection (`resolve_context_window`)**:
-  - Checks if user configured an explicit numeric context (`> 0`).
-  - When set to `'max'` or unset, queries Ollama's `show()` API and inspects raw model metadata for keys ending in `context_length`.
-  - If metadata is missing, it parses Modelfile parameters for `PARAMETER num_ctx <val>`.
-  - Configures `profile={"max_input_tokens": num_ctx}` so DeepAgents accurately computes the 85% summarization threshold.
-- **Sampling Parameters Auto-Tuning (`resolve_model_parameters`)**:
-  - Tracks six core parameters: `temperature`, `top_p`, `top_k`, `min_p`, `presence_penalty`, `repeat_penalty` (with `repetition_penalty` alias).
-  - Precedence hierarchy: Explicit User Setting (`settings.yaml` or `/params set`) > Modelfile Parameter > Ollama Default.
-  - Returns `effective_params` preserving the resolution source (`"user"`, `"modelfile"`, `"default"`) for UI inspection via `/params`.
-- **Extended Options Subclass (`OllamaChatModel`)**: Subclasses LangChain's `ChatOllama` to dynamically inject Ollama-specific options (`min_p`, `presence_penalty`) into the underlying `_chat_params` dictionary payload.
+| Security Pillar | Mechanism | User Benefit |
+| :--- | :--- | :--- |
+| **Local-First Privacy** | Native HTTP communication with local Ollama daemon (`localhost:11434`). | Zero prompts, code files, or environment secrets leave your workstation. |
+| **Filesystem Sandboxing** | Path validation restricts agent file operations to the current working directory. | Prevents unauthorized traversal (`../../`) outside the designated project root. |
+| **Tool Execution Timeouts** | All shell invocations and tool calls execute under strict configurable timeouts. | Runaway scripts, infinite loops, or hung network requests are automatically killed. |
+| **Subprocess Stderr Isolation** | Background tool processes (e.g., MCP server stderr) redirect to `~/.ollama-agent/mcp.log`. | Stderr noise and crash dumps never corrupt your active terminal workspace. |
+| **Stealth Mode** | Volatile in-memory checkpointer bypasses SQLite writes. | Run sensitive queries without leaving traces in local session databases. |
 
 ---
 
-### 8. Ollama Thinking / Reasoning Trace Capture
+## Architecture Summary
 
-The agent natively captures reasoning traces from models with thinking support (e.g. DeepSeek R1, Qwen 3, Qwen 3.8, GPT-OSS).
-
-```mermaid
-flowchart TD
-    A["Model Selected"] --> B["get_model_capabilities(model, base_url)"]
-    B --> C{"Supports 'thinking'?"}
-    
-    C -- Yes --> D["resolve_ollama_reasoning()"]
-    C -- No --> E["Disable Reasoning Engine"]
-    
-    D --> F{"Model Architecture"}
-    F -- "GPT-OSS" --> G["Map effort to parameter string ('high', 'medium', 'low')\nEnforce thinking enabled"]
-    F -- "Qwen 3.8" --> H["Map effort to parameter string ('high', 'medium', 'low')\nRespect disabled"]
-    F -- "Standard Thinking Model" --> I["Map effort to boolean true/false or level string"]
-    
-    G --> J["ChatOllama Request"]
-    H --> J
-    I --> J
-    
-    J --> K["Parse Streaming Response (ThinkTagParser)"]
-    K --> L{"reasoning_effort Setting"}
-    
-    L -- "hide / disabled" --> M["Suppress Thinking Output from UI"]
-    L -- "low / medium / high / xhigh / enabled" --> N["Stream Thinking Trace to Collapsible UI Block"]
-```
-
-- **Capability Detection**: Queries `ollama.AsyncClient.show()` to inspect model capabilities for the `thinking` flag.
-- **Effort Levels**: Supported levels are `low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, and `enabled`.
-- **Effort Translation**:
-  - `GPT-OSS`: Thinking-only model; `disabled` generates a warning and keeps thinking active (`True`); `xhigh` maps to `"high"`.
-  - `Qwen 3.8`: Supports `disabled` (`False`), `hide` (`True`), `xhigh`/`high`/`enabled` (`"high"`), or effort string.
-  - General reasoning models: Translate `disabled` to `False`, `hide`/`enabled` to `True`, `xhigh` to `"high"`, or pass effort level.
-- **UI Filtering**: When `reasoning_effort` is set to `hide` or `disabled`, reasoning chunks extracted by `streaming_reasoning()` or parsed by `ThinkTagParser` are suppressed before reaching the UI layer.
+| Layer | Primary Responsibilities | User Controls & Configuration |
+| :--- | :--- | :--- |
+| **User Interface** | Terminal workspace (REPL) & one-shot execution (CLI). | `ollama-agent [flags]`, keyboard shortcuts, slash commands. |
+| **Runtime & Graph** | Stateful turn execution, prompt queue, and lifecycle reload. | `/reload`, `/clear`, `/session new`, `/queue`. |
+| **Control & Safety** | HITL approval modal, context tracking, 85% compaction. | `/yolo [on\|off]`, `/context set <size>`, auto-compaction. |
+| **Memory & Knowledge** | Multi-tier rules (`AGENTS.md`, `MEMORY.md`), episodic search, local RAG. | `/memory show`, `/session search`, `/rag load <name>`. |
+| **Tool Ecosystem** | Shell execution, file editing, and external MCP servers. | `~/.ollama-agent/mcp.json`, `/mcp reload`, `/skill list`. |
+| **LLM Backend** | Native Ollama inference, context auto-detection, reasoning capture. | `/model set <name>`, `/effort set <level>`, `/params set <k> <v>`. |
+| **Storage Layer** | SQLite session persistence (`history.db`) and Qdrant vector storage. | `~/.ollama-agent/history.db`, `~/.ollama-agent/rag/`. |
 
 ---
 
-### 9. Custom Subagents Architecture
+## Next Steps
 
-Subagents are auxiliary AI agent instances configured in `settings.yaml` to handle specialized subtasks with isolated context windows:
-
-```mermaid
-flowchart TD
-    MainAgent["Main Agent (ollama-agent)"] -->|Delegates Task| SubagentGraph["Subagent Graph"]
-    
-    subgraph SubagentGraph ["Subagent Execution Environment"]
-        SubModel["Custom Ollama Model Instance"]
-        SubPrompt["Dedicated System Prompt (Required) + OS Info"]
-        SubSkills["Mounted Skills (/system_skills/, /skills/)"]
-        SubMCP["Dedicated MCP Tools (load_subagent_mcp_tools)"]
-    end
-```
-
-- **Isolated Execution**: Subagents run on separate graph nodes with independent context windows. Subagent system prompts support Jinja2 template rendering (`render_prompt_template`) with access to `{"subagent": sa, "model_settings": model_settings}` context, appended with OS environment metadata (`environment_block(include_cwd=False)`).
-- **Dedicated Tools**: Subagent MCP servers are loaded independently via `load_subagent_mcp_tools()` and isolated from the main agent's tool set.
-- **Attribution**: Tool execution middleware attaches `agent_name` metadata to `tool_call` and `tool_output` events for clear attribution in the UI.
-- **Parameter Inheritance**: If not specified in `settings.yaml`, subagents inherit model sampling parameters (`temperature`, `top_p`, `top_k`, `min_p`, `presence_penalty`, `repeat_penalty`), `model`, `context_window`, `base_url`, and `reasoning_effort` from the main configuration.
-
----
-
-### 10. Core Subsystems (RAG, Skills, Tasks & MCP)
-
-```mermaid
-flowchart TD
-    subgraph Subsystems ["Integrated Subsystems"]
-        RAG["RAG Engine (ollama_agent/rag/)\n• Qdrant Vector Store (~/.ollama-agent/rag/)\n• Ollama Embeddings (nomic-embed-text:latest, 768 dims)\n• rag_search Tool (dynamic registration)"]
-        Skills["Skills Engine (ollama_agent/skills/)\n• Agent Skills Specification\n• Built-in (/system_skills/): mcp-configurator, skill-creator, task-creator\n• User Skills (/skills/): ~/.ollama-agent/skills/"]
-        Tasks["Tasks Engine (ollama_agent/tasks/)\n• Parameterized YAML Templates (~/.ollama-agent/tasks/)\n• Typed Inputs (string, boolean, number)\n• Jinja2 Prompt Rendering (/tasks/)"]
-        MCP["MCP Engine (ollama_agent/mcp/)\n• MultiServerMCPClient (~/.ollama-agent/mcp.json)\n• Transports: stdio (stderr -> mcp.log), SSE, HTTP, WS\n• Env Expansion (${VAR}, %VAR%)\n• Dynamic Reloading (/mcp reload)"]
-    end
-```
-
-- **RAG Subsystem (`ollama_agent/rag/`)**:
-  - Embedded vector database powered by Qdrant stored locally in `~/.ollama-agent/rag/<database_name>/`.
-  - Asynchronous embeddings generated using Ollama's embeddings endpoint (`nomic-embed-text:latest` by default).
-  - Dynamic tool registration & prompt updates: `rag_search` is conditionally exposed only when a RAG database is loaded (`/rag load <name>`). Loading, unloading (`/rag unload`), or deleting (`/rag delete <name>`) a database triggers `runtime.reload()`, dynamically adding/removing `rag_search` from the active tools and updating the system prompt's `{% if rag_active %}` policy without restarting the session.
-- **Skills Subsystem (`ollama_agent/skills/`)**:
-  - Follows the open Agent Skills specification with `SKILL.md` files declaring YAML frontmatter (`name`, `description`) and markdown instructions.
-  - Built-in skills located in `ollama_agent/skills/builtin/` (`mcp-configurator`, `skill-creator`, `task-creator`) mounted at `/system_skills/`.
-  - User skills located in `~/.ollama-agent/skills/` mounted at `/skills/`.
-  - Interactive creation via `/skill create` (guided by the `skill-creator` subagent) and management via `/skill list`, `/skill show <id>`, `/skill delete <id>`.
-- **Tasks Subsystem (`ollama_agent/tasks/`)**:
-  - Reusable parameterized prompt tasks stored as YAML files in `~/.ollama-agent/tasks/<task_id>.yaml`.
-  - Declares `title`, `prompt` (Jinja2 template), `model`, `reasoning_effort`, and typed `inputs` (`string`, `boolean`, `number` with defaults and required flags).
-  - Jinja2 template rendering: Renders prompts via Jinja2 (`StrictUndefined`) with input type coercion (`_coerce_value`), validation, and required variable enforcement.
-  - Mounted into the virtual backend at `/tasks/`.
-  - Execution: Executed via `/task run <id> [var=val]` in REPL or `ollama-agent task run <id> [var=val]` in CLI, applying the task's configured model and reasoning effort.
-  - Interactive creation via `/task create` (guided by the `task-creator` subagent) or CLI `ollama-agent task create`.
-- **MCP Subsystem (`ollama_agent/mcp/`)**:
-  - Connects to external Model Context Protocol (MCP) tool servers declared in `~/.ollama-agent/mcp.json`.
-  - Uses `MultiServerMCPClient` from `langchain-mcp-adapters`.
-  - Stdio stderr redirection: Stdio servers redirect stderr output to `~/.ollama-agent/mcp.log` to prevent corrupting the TUI display.
-  - Environment variable resolution: Supports `${VAR}` and `%VAR%` syntax evaluated against `os.environ`.
-  - Live reloading: The `/mcp reload` slash command triggers `runtime.reload()`, establishing fresh connections and updating the LangGraph tool graph while preserving active session history in checkpoints.
-
----
-
-### 11. Textual REPL TUI Architecture (`ollama_agent/interfaces/`)
-
-The interactive Terminal User Interface (TUI) is constructed on top of Textual and Rich, featuring an event-driven architecture designed for high-throughput streaming and user responsiveness:
-
-```mermaid
-flowchart TD
-    App["OllamaAgentApp (Textual App)"]
-    App --> Header["AgentHeader\n• Model & Host\n• Context Gauge (% of num_ctx)\n• YOLO / Stealth / RAG badges"]
-    App --> ScrollArea["VerticalScroll (Chat Container)"]
-    ScrollArea --> Prompts["UserPromptWidget (Syntax highlighted)"]
-    ScrollArea --> Thinking["CollapsibleThinking (Live timer & collapsible reasoning)"]
-    ScrollArea --> Responses["AgentResponseWidget (Markdown stream)"]
-    ScrollArea --> Approvals["ToolApprovalWidget (Interactive buttons & hotkeys)"]
-    ScrollArea --> SysOutputs["SystemOutputWidget (Isolated table / diagnostic cards)"]
-    App --> QueueWidget["PromptQueueWidget (Pending turn indicator)"]
-    App --> InputArea["ReplInput (Multiline TextArea with tab autocompletion)"]
-    App --> Footer["AgentFooter (Status line & key hints)"]
-```
-
-- **Smart Auto-Scroll Detection**: `_TUIStreamingRenderer` monitors the user's scroll position. If the user scrolls upward (`scroll_y < last_scroll_y`) to review past conversation history, auto-scrolling disengages automatically so reading is never interrupted by incoming tokens. It re-engages as soon as the user scrolls back to the bottom.
-- **Immediate Command Fast-Path**: Commands categorized as `_is_immediate_command()` bypass the inference queue, allowing the user to inspect status, queue, models, or toggle flags in real time without interrupting running LLM output.
-- **Isolated System Output Cards**: Slash commands and system diagnostic reports render in dedicated `SystemOutputWidget` containers rather than polluting the LLM conversation stream bubbles.
-
+* **Interactive REPL & CLI**: Master terminal controls and commands in the [CLI & REPL Guide](cli_repl.md).
+* **System Configuration**: Fine-tune models, context sizes, and tool timeouts in the [Configuration Guide](configuration.md).
+* **Extend with MCP**: Connect external developer tools and data sources in the [Model Context Protocol Guide](mcp.md).
+* **Skills & Subagents**: Learn how to create specialized subagents in the [Subagents Guide](subagents.md) and modular skills in the [Agent Skills Guide](skills.md).

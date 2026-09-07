@@ -1,231 +1,393 @@
 # Developer Guide & Contribution Standards
 
-This guide explains how to set up a local development environment, run test suites, navigate the codebase, and adhere to the architectural and engineering principles of `ollama-agent`.
+Welcome to the **Ollama Agent** developer guide! Ollama Agent is built on a clear mission: to deliver a clean, robust, local AI assistant powered by stateful agent graphs, native tool calling, extensible skills, and multi-server MCP integrations—grounded strictly in **KISS (Keep It Simple, Stupid)** and **zero defensive bloat**.
+
+Whether you are fixing a bug, contributing a new feature, optimizing test coverage, or expanding internationalization catalogs, this guide provides everything you need to set up your environment, navigate the codebase, and uphold project standards.
 
 ---
 
-## Project Setup
+## Quick Development Setup
 
-### 1. Clone the Repository
+Ollama Agent requires **Python 3.11+**, **Git**, and a running **[Ollama](https://ollama.com)** instance with your preferred models pulled (e.g., `ollama pull qwen2.5:latest`).
+
+### Recommended Setup with `uv`
+
+We recommend [uv](https://github.com/astral-sh/uv) for lightning-fast virtual environment creation and dependency resolution:
+
 ```bash
+# 1. Clone repository
 git clone https://github.com/arrase/ollama-agent.git
 cd ollama-agent
+
+# 2. Create and activate a virtual environment
+uv venv
+source .venv/bin/activate
+
+# 3. Install in editable mode with development and documentation dependencies
+uv pip install -e ".[dev,docs]"
 ```
 
-### 2. Create and Activate a Virtual Environment
-`ollama-agent` requires Python 3.11 or higher:
+### Alternative Setup with Standard `venv`
+
+You can also use Python's built-in `venv` module and `pip`:
 
 ```bash
+# 1. Clone repository
+git clone https://github.com/arrase/ollama-agent.git
+cd ollama-agent
+
+# 2. Create and activate virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
+
+# 3. Install in editable mode with development and documentation dependencies
+pip install -e ".[dev,docs]"
 ```
 
-### 3. Install in Editable Mode
-Always manage dependencies and installations through `pyproject.toml`:
+!!! tip "Verify Installation"
+    After activating the virtual environment, verify that the CLI binary is available:
+    ```bash
+    ollama-agent --version
+    ```
+    If Ollama is running locally, you can start the interactive Textual REPL immediately by running `ollama-agent`.
+
+---
+
+## Code Quality & Linting
+
+We maintain a strict, uniform codebase using [Ruff](https://astral-sh.github.io/ruff/) for high-speed linting and formatting.
+
+### Running Ruff
+
+Run Ruff against the entire repository:
 
 ```bash
-# Basic installation
-.venv/bin/pip install -e .
-
-# Development installation (includes ruff linter)
-.venv/bin/pip install -e ".[dev]"
-
-# Full installation (includes dev tools and mkdocs-material)
-.venv/bin/pip install -e ".[dev,docs]"
+ruff check .
 ```
 
-### 4. Code Quality & Linting
-Run Ruff to verify code formatting and compliance with project standards:
+Or invoke the linter directly through your active virtual environment:
+
 ```bash
 .venv/bin/ruff check .
 ```
 
----
-
-## Testing & Quality Assurance
-
-`ollama-agent` maintains an automated test suite covering runtime mechanics, prompt processing, session management, RAG vector stores, skills, and TUI components (27 test modules, 556 tests).
-
-### Run Unit Tests
-Always execute tests using the virtual environment interpreter:
+To automatically apply safe autofixes:
 
 ```bash
-# Run all unit tests
+ruff check --fix .
+```
+
+### Formatting and Linting Standards
+
+The linter configuration is defined directly in `pyproject.toml`:
+
+```toml
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+```
+
+Key linting expectations:
+
+- **Target Version**: Python 3.11+ modern syntax (e.g., `X | Y` union types instead of `Union[X, Y]`).
+- **Line Length**: 120 characters maximum.
+- **Strict Cleanliness**: Zero unused imports, undefined names, syntax errors, or unused variables.
+- **Top-Level Imports**: All imports must reside strictly at the top of the file (see [Engineering Standards](#engineering-standards-kiss-zero-defensive-bloat)).
+
+---
+
+## Running the Test Suite
+
+Ollama Agent uses Python's standard `unittest` framework. The automated test suite contains **27 test modules** covering over **550 tests** running in ~10 seconds with zero external test runner overhead.
+
+### Running All Tests
+
+Execute the full suite using your virtual environment Python binary:
+
+```bash
 .venv/bin/python -m unittest discover -s tests
+```
 
-# Run a specific test module
+### Running Specific Test Modules
+
+Target individual modules during development for immediate feedback:
+
+```bash
+# Run agent runtime tests
 .venv/bin/python -m unittest tests/test_agent_runtime.py
+
+# Run prompt queue and execution pipeline tests
+.venv/bin/python -m unittest tests/test_prompt_queue.py
+
+# Run Textual TUI and widget tests
+.venv/bin/python -m unittest tests/test_tui.py
+
+# Run internationalization static analysis checks
+.venv/bin/python -m unittest tests/test_i18n.py
 ```
 
-### Test Suite Structure
+To run a single test case or method:
 
-```text
-tests/
-├── test_agent_runtime.py          # DeepAgents graph initialization, reloading & tool timeout
-├── test_agents_md.py              # Hierarchical AGENTS.md discovery up to .git root
-├── test_clipboard.py              # Cross-platform clipboard backend integration
-├── test_common.py                 # Payload text extraction & identifier validation
-├── test_config.py                 # Settings loading, dataclass conversions & env injection
-├── test_dispatch_cli.py           # CLI command handlers and argument parsing
-├── test_episodic_memory.py        # Episodic memory search over stored conversations
-├── test_i18n.py                   # Locale catalog validation & translation loading
-├── test_interfaces_commands.py    # Session, model, task, skill, and RAG dispatching
-├── test_mcp_loader.py             # MCP server configs, env expansions & connection handling
-├── test_models.py                 # Capability checks, context window resolution & reasoning
-├── test_prompt_processor.py       # @-mentions parsing, multimodal attachments & safety
-├── test_prompt_queue.py           # Asynchronous prompt queue, non-blocking execution & FIFO draining
-├── test_rag_commands.py           # CLI/REPL RAG operations, database lifecycle & resolution
-├── test_rag_manager.py            # Document chunking, batch embeddings & stale point cleanup
-├── test_repl.py                   # Textual REPL application, prompt queue execution & immediate commands
-├── test_resource_manager.py       # Abstract BaseFileStoreManager tests
-├── test_sessions.py               # SQLite session resumption, listing, export & deletion
-├── test_skills.py                 # SKILL.md parsing, frontmatter extraction & validation
-├── test_skills_commands.py        # Skill CRUD operations & error handling
-├── test_stealth.py                # In-memory session execution without SQLite persistence
-├── test_streaming.py              # Streaming event generators & async iteration
-├── test_streaming_parsers.py      # Text & reasoning delta extraction logic
-├── test_subagents.py              # Subagent graph compilation & isolated MCP server configs
-├── test_tasks.py                  # YAML task persistence, data model & loading
-├── test_tasks_commands.py         # Task execution & CLI dispatch tests
-└── test_tui.py                    # Textual REPL widgets, header status & autocomplete
+```bash
+.venv/bin/python -m unittest tests.test_agent_runtime.TestAgentRuntime.test_runtime_initialization
 ```
 
----
+### Overview of Test Coverage
 
-## Coding Standards & Engineering Rules
+The test suite thoroughly verifies every layer of the application:
 
-All contributions must strictly follow the engineering guidelines:
-
-### 1. KISS (Keep It Simple, Stupid)
-- **Radical Simplicity**: Write the least amount of straightforward, readable code that directly solves the problem. Never overengineer.
-- **Do What Was Asked**: Implement the exact requirements. Do not anticipate hypothetical scenarios or speculative edge cases.
-- **Linear & Obvious Flow**: Code must read top-to-bottom with obvious control flow. Avoid convoluted branching, unnecessary indirection layers, or wrapper functions.
-- **No Premature Abstraction (YAGNI)**: Do not create interfaces, abstract base classes, or factories unless there is an immediate, concrete need.
-- **Single Responsibility (SRP)**: Functions and modules should do one cohesive task and do it well. Keep them focused and concise.
-- **Self-Documenting Code**: Write code so clear that comments explaining "what" it does are redundant. Only use comments to explain non-obvious business rules or external quirks ("why").
-
-### 2. Zero Defensive Bloat
-- **No Unsolicited Fallbacks & Safe Defaults**: Never mask errors or missing values with artificial defaults (e.g., returning `""`, `[]`, `{}`, `None`, `0`, or fallback objects) unless explicitly requested. Access properties and dictionary keys directly.
-- **No Defensive Catch-and-Swallow**: Never wrap code in `try/except` just to catch generic exceptions, log a warning, and return a fallback value. Let exceptions propagate naturally unless performing an explicit retry or converting low-level errors at a system boundary.
-- **No Internal Paranoid Null/Type Checking**: Do not check for `None` or validate types inside internal functions when data flow is guaranteed. Strict input validation belongs exclusively at public system boundaries (CLI inputs, raw user input, external APIs).
-- **No Unnecessary `Optional` Types**: Do not use `Optional` (`| None`) types or fallback checks for parameters/variables when their presence and values are fully controlled and guaranteed by internal flow.
-- **Fail Fast, Fail Loud**: If an invariant is violated or required input is missing, let the application fail immediately.
-
-### 3. Top-Level Imports & Clean Architecture
-- **Top-Level Imports Only**: All `import` and `from ... import` statements must reside at the very top of each Python file (PEP 8 standard). Never use function-level or inline imports.
-- **No Structural Shortcuts**: Do not use inline imports or hacky workarounds to bypass circular dependencies. Solve the underlying structural problem properly through refactoring.
-
-### 4. Virtual Environment & Python Tooling
-- Always execute Python scripts, tools, and test suites using the project's virtual environment (`.venv/bin/python`).
-
-### 5. Dependency Management
-- Dependencies and packaging metadata are managed strictly in `pyproject.toml`.
-
-### 6. Internationalization (i18n) Workflow
-`ollama-agent` natively supports 16 languages (English baseline in Python source code + 15 translated JSON catalogs in `ollama_agent/i18n/locales/`):
-- **Wrapping Strings**: All user-facing strings must be wrapped with `_("Message {param}", param=value)` imported from `ollama_agent.i18n`.
-- **Locale Catalogs**: Translation dictionaries reside in `ollama_agent/i18n/locales/<locale>.json`. The keys must match the exact English format string.
-- **Completeness Enforcement**: `tests/test_i18n.py` uses AST static analysis to parse every Python source file across the repository. It verifies that every `_()` call in the codebase exists in all 15 JSON catalogs and that interpolation keys match. Introducing a new localized string requires adding translations to all 15 JSON catalogs to ensure test suite passes.
-
----
-
-## Codebase Architecture
-
-```text
-ollama-agent/
-├── ollama_agent/
-│   ├── __init__.py          # Package exports and version metadata
-│   ├── main.py              # CLI/REPL entry point, signal routing, config resets
-│   ├── agent/               # DeepAgents graph orchestration, middleware, tools & subagents
-│   │   ├── agent.py         # AgentRuntime lifecycle, backend mounting, graph construction
-│   │   ├── builtin_tools.py # Built-in tools (rag_search, search_past_conversations) and runtime context variables
-│   │   ├── environment.py   # Shared prompt-environment helpers (OS, CWD, datetime)
-│   │   ├── episodic_memory.py # Episodic memory search engine over past conversations
-│   │   ├── middleware.py    # Tool call event streaming & execution timeout protection
-│   │   └── subagents.py     # SubAgentSettings to DeepAgents subagent specification builder
-│   ├── core/                # Model capability checks, context resolution, prompt processing
-│   │   ├── common.py        # Shared types, identifier validation, text extraction
-│   │   ├── models.py        # ChatOllama initialization, tool checks, reasoning mapping
-│   │   ├── prompt_processor.py # @-mention parsing, path resolution, multimodal encoding
-│   │   └── resource_manager.py # Generic BaseFileStoreManager for tasks and skills
-│   ├── i18n/                # Internationalization engine and translation catalogs
-│   │   ├── __init__.py      # Translation loader, _() helper, locale negotiation
-│   │   └── locales/         # JSON translation catalogs (15 languages: ar, de, es, fr, hi, it, ja, ko, nl, pl, pt, ru, tr, uk, zh)
-│   ├── interfaces/          # User interface implementations (CLI & Textual REPL)
-│   │   ├── cli.py           # Argparse setup, command-line dispatch, non-interactive mode
-│   │   ├── clipboard.py     # OS clipboard integration (macOS, Wayland, X11, Windows)
-│   │   ├── dispatch.py      # Unified CLI/REPL command handler registry
-│   │   ├── model_commands.py# Model listing with tool capabilities, model switching
-│   │   ├── session_commands.py # SQLite session management, markdown export
-│   │   ├── tui_components.py# Textual TUI widgets (header, footer, input, messages, approvals, prompt queue, system notices)
-│   │   ├── repl.py          # Interactive Textual REPL application & autocomplete
-│   │   └── repl.css         # Styling for Textual REPL interface
-│   ├── mcp/                 # Model Context Protocol integration
-│   │   ├── commands.py      # MCP status inspection (/mcp and mcp list)
-│   │   └── loader.py        # MultiServerMCPClient loader with env expansion
-│   ├── rag/                 # Local RAG engine
-│   │   ├── commands.py      # CLI/REPL RAG command handlers
-│   │   └── manager.py       # Qdrant client, chunking, Ollama embeddings pipeline
-│   ├── settings/            # Configuration management
-│   │   ├── config.py        # YAML configuration loader, dataclasses (ModelSettings, RAGSettings), reset logic
-│   │   ├── paths.py         # Centralized filesystem constants (~/.ollama-agent/)
-│   │   └── prompts/         # Bundled markdown prompt templates
-│   │       └── default_instructions.md
-│   ├── skills/              # Agent Skills implementation
-│   │   ├── builtin/         # Internal application skills (mcp-configurator, skill-creator, task-creator)
-│   │   ├── commands.py      # Skill CLI and REPL handlers
-│   │   └── manager.py       # SkillManager and SKILL.md YAML frontmatter parser
-│   ├── streaming/           # Streaming event handling and rendering
-│   │   ├── base.py          # Abstract StreamingRenderer
-│   │   ├── console_renderer.py # Rich live console renderer for CLI output
-│   │   ├── events.py        # stream_agent_events and non-interactive runner
-│   │   ├── interrupts.py    # Tool interrupt and human approval streaming handlers
-│   │   └── parsers.py       # ThinkTagParser, streaming_text, and streaming_reasoning chunk parsers
-│   └── tasks/               # Saved task management
-│       ├── commands.py      # Task CLI and REPL handlers
-│       └── manager.py       # TaskManager and Task YAML serializer
-├── tests/                   # Automated unit test suite (27 test modules)
-├── docs/                    # MkDocs documentation source files
-├── mkdocs.yml               # MkDocs configuration
-├── AGENTS.md                # Development guidelines and coding conventions
-├── pyproject.toml           # Project dependencies and packaging metadata
-├── LICENSE                  # MIT license file
-└── README.md                # Project documentation overview
-```
-
----
-
-## Contributing Guidelines
-
-When contributing changes to `ollama-agent`:
-
-1. **Branch**: Create a focused feature or bugfix branch from `main`:
-   ```bash
-   git checkout -b feature/my-feature
-   ```
-2. **Implement**: Keep changes minimal, direct, and aligned with KISS and Zero Defensive Bloat principles.
-3. **Verify Locally**: Run linting and the test suite before submitting:
-   ```bash
-   .venv/bin/ruff check .
-   .venv/bin/python -m unittest discover -s tests
-   ```
-4. **Pre-Submission Checklist**:
-   - [ ] All unit tests pass (`.venv/bin/python -m unittest discover -s tests`).
-   - [ ] Ruff check reports no errors (`.venv/bin/ruff check .`).
-   - [ ] All imports are strictly placed at the top of files (PEP 8).
-   - [ ] No unsolicited fallback defaults, defensive try/except blocks, or unnecessary `Optional` types.
-   - [ ] Any new dependencies are declared in `pyproject.toml`.
+| Subsystem / Area | Test Modules | Coverage & Verification Scope |
+|:---|:---|:---|
+| **Runtime & Graph** | `test_agent_runtime.py`, `test_stealth.py`, `test_sessions.py` | State graph initialization, SQLite checkpointing, context compaction, session reload & export |
+| **Tool Execution & Streaming** | `test_streaming.py`, `test_streaming_parsers.py`, `test_mcp_loader.py` | Tool timeout middleware, thinking tag delta parsing, MCP multi-server client connectivity |
+| **Queue & Dispatch** | `test_prompt_queue.py`, `test_prompt_processor.py`, `test_dispatch_cli.py` | FIFO asynchronous prompt queue, multimodal @-mention resolution, CLI argument dispatch |
+| **Terminal UI (TUI)** | `test_tui.py`, `test_repl.py`, `test_clipboard.py` | Textual REPL widgets, header/footer state, autocomplete, prompt approvals, OS clipboard |
+| **Knowledge & RAG** | `test_rag_manager.py`, `test_rag_commands.py` | Local Qdrant vector database lifecycle, document chunking, batch Ollama embeddings |
+| **Memory Systems** | `test_episodic_memory.py`, `test_agents_md.py` | SQLite episodic conversation search, recursive `AGENTS.md` project context discovery |
+| **Skills & Tasks** | `test_skills.py`, `test_skills_commands.py`, `test_tasks.py`, `test_tasks_commands.py`, `test_resource_manager.py` | `SKILL.md` frontmatter validation, YAML task persistence, CRUD file storage managers |
+| **Subagents** | `test_subagents.py` | Subagent graph compilation, tool inheritance, isolated prompt boundaries |
+| **Internationalization** | `test_i18n.py` | AST static analysis verifying all `_()` strings are present in all 15 translated locale catalogs |
 
 ---
 
 ## Building Documentation
 
-To build and preview the documentation site locally:
+The documentation is authored in Markdown and rendered using [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/).
+
+### Live Preview Server
+
+Start the local development server with hot-reload:
 
 ```bash
-# Build the static site into site/
-.venv/bin/python -m mkdocs build
-
-# Start the local development server with live reload
-.venv/bin/python -m mkdocs serve
+mkdocs serve
 ```
+
+Or using your virtual environment binary:
+
+```bash
+.venv/bin/mkdocs serve
+```
+
+Open your browser to `http://127.0.0.1:8000/` to preview changes in real time as you edit.
+
+### Strict Build Verification
+
+Before submitting documentation changes or opening a pull request, run a strict build:
+
+```bash
+mkdocs build --strict
+```
+
+`--strict` mode treats all warnings—such as broken internal links, malformed admonitions, or missing navigation references—as fatal build errors. Ensure your documentation builds with zero warnings.
+
+---
+
+## Codebase Tour & Architecture
+
+Ollama Agent coordinates user interfaces, runtime state graphs, external tools, vector stores, and local models.
+
+```mermaid
+flowchart TD
+    subgraph UI ["interfaces/"]
+        CLI["CLI Command Dispatcher (cli.py, dispatch.py)"]
+        TUI["Interactive Textual REPL (repl.py, tui_components.py)"]
+    end
+
+    subgraph Core ["core/ & settings/"]
+        Common["Common Types & Validators (common.py)"]
+        PromptProc["Prompt Processor & Multimodal Ingestion (prompt_processor.py)"]
+        Models["Model Capabilities & Context Resolution (models.py)"]
+        Settings["Configuration & Paths (config.py, paths.py)"]
+    end
+
+    subgraph Agent ["agent/ & streaming/"]
+        Runtime["AgentRuntime & Graph Construction (agent.py)"]
+        Middleware["Tool Streaming & Timeout Middleware (middleware.py)"]
+        Episodic["Episodic Memory Engine (episodic_memory.py)"]
+        Subagents["Subagent Graph Compiler (subagents.py)"]
+        Streaming["Streaming Parsers & Renderers (streaming/)"]
+    end
+
+    subgraph Extensions ["rag/, skills/, tasks/, mcp/"]
+        RAG["Local Vector Store & Embeddings (rag/)"]
+        Skills["Skills Loader & System Skills (skills/)"]
+        Tasks["Saved Task Manager (tasks/)"]
+        MCP["MCP Client Adapter (mcp/)"]
+    end
+
+    UI --> Core
+    Core --> Agent
+    Agent --> Extensions
+```
+
+### Annotated Directory Map
+
+- **`ollama_agent/agent/`**: The orchestration core.
+  - `agent.py`: `AgentRuntime` lifecycle, checkpointer initialization, virtual filesystem mounting, and graph construction.
+  - `builtin_tools.py`: Native agent tools (`rag_search`, `search_past_conversations`) and runtime context injection.
+  - `middleware.py`: Real-time tool event streaming and execution timeout guards.
+  - `subagents.py`: Isolated subagent state graphs with delegated toolsets.
+  - `episodic_memory.py`: Semantic search engine over stored conversation checkpoints.
+- **`ollama_agent/core/`**: Shared foundational primitives.
+  - `common.py`: Shared dataclasses, payload text extraction, and identifier validation.
+  - `models.py`: ChatOllama initialization, model context window resolution, and reasoning flag detection.
+  - `prompt_processor.py`: Command-line @-mention file resolution, image encoding, and prompt templating.
+  - `resource_manager.py`: Generic `BaseFileStoreManager` abstraction for tasks and skills.
+- **`ollama_agent/interfaces/`**: User-facing entry points.
+  - `cli.py`: Non-interactive CLI argument parser, file input streaming, and command routing.
+  - `repl.py`: Interactive full-screen terminal UI built with Textual.
+  - `tui_components.py`: Widgets for conversation messages, prompt history, approvals, and headers.
+  - `repl.css`: Textual style definitions and theme tokens.
+  - `dispatch.py`: Unified command dispatcher shared by both CLI and REPL.
+  - `clipboard.py`: Cross-platform clipboard backend (macOS, Wayland, X11, Windows).
+- **`ollama_agent/rag/`**: Local retrieval-augmented generation engine.
+  - `manager.py`: Embedded Qdrant client, chunking strategies, and Ollama embedding pipelines.
+  - `commands.py`: CLI and REPL commands for indexing, clearing, and querying RAG databases.
+- **`ollama_agent/skills/`**: Extensible agent capabilities following the Agent Skills specification.
+  - `manager.py`: Frontmatter parsing and dynamic skill loading from `.agent/skills/` and `~/.ollama-agent/skills/`.
+  - `builtin/`: Bundled core skills (`mcp-configurator`, `skill-creator`, `task-creator`).
+  - `commands.py`: Skill management and execution commands.
+- **`ollama_agent/tasks/`**: Reusable task automation.
+  - `manager.py`: YAML serialization and lifecycle management for automated prompt sequences.
+  - `commands.py`: Task running, creation, and inspection commands.
+- **`ollama_agent/mcp/`**: Model Context Protocol integrations.
+  - `loader.py`: `MultiServerMCPClient` connection manager with environment variable expansion.
+  - `commands.py`: MCP server status inspection and tool listing.
+- **`ollama_agent/i18n/`**: Multi-language localization system.
+  - `__init__.py`: Locale negotiation, string catalog loader, and `_()` translation helper.
+  - `locales/`: JSON translation catalogs for 15 supported languages (Arabic, German, Spanish, French, Hindi, Italian, Japanese, Korean, Dutch, Polish, Portuguese, Russian, Turkish, Ukrainian, Chinese).
+- **`ollama_agent/settings/`**: Configuration management.
+  - `config.py`: YAML configuration loading, typed dataclasses, and default generation.
+  - `paths.py`: Centralized filesystem constants (`~/.ollama-agent/`).
+- **`ollama_agent/streaming/`**: Event streaming and token parsing.
+  - `events.py`: Asynchronous agent event stream generator.
+  - `parsers.py`: Reasoning and thinking tag extraction (`<think>...</think>`), text deltas, and tool chunk parsers.
+  - `console_renderer.py`: Rich live console rendering for CLI execution.
+
+For deeper architectural context, read the [System Architecture Guide](architecture.md).
+
+---
+
+## Engineering Standards: KISS & Zero Defensive Bloat
+
+Every contribution to Ollama Agent must adhere to our fundamental engineering principles. We value clear, unpretentious code over speculative design patterns.
+
+### 1. Radical Simplicity (KISS)
+
+- **Do what was asked, nothing more**: Solve the immediate problem directly. Do not build speculative features, redundant wrappers, or preemptive hooks for future requirements.
+- **Linear, obvious control flow**: Code should read top-to-bottom with plain conditional logic. Avoid deep callback hierarchies or unnecessary indirection layers.
+- **No premature abstraction (YAGNI)**: Do not create interfaces, abstract base classes, or factories until multiple concrete implementations genuinely require them.
+- **Single Responsibility Principle (SRP)**: Keep functions and modules tightly focused on one cohesive task.
+- **Self-documenting code**: Code should explain *what* it does through descriptive naming and structure. Use comments exclusively to explain non-obvious business rules or external quirks (*why*).
+
+### 2. Zero Defensive Bloat
+
+Defensive coding patterns mask bugs, degrade developer velocity, and create silent failures. In Ollama Agent:
+
+- **No generic catch-and-swallow**: Never wrap code in broad `try/except Exception:` blocks just to log a warning and return dummy values (`""`, `[]`, `{}`, `None`). Let exceptions propagate naturally unless handling an explicit, expected system boundary failure.
+- **No unsolicited fallback defaults**: Access dictionary keys, object attributes, and function arguments directly. Do not mask missing data with synthetic fallbacks unless the specification explicitly demands it.
+- **No paranoid internal null-checks**: Validate inputs once at the public boundaries (CLI arguments, raw user input, external network APIs). Once inside internal modules, trust data flow invariants.
+- **No unnecessary `Optional` types**: Avoid typing variables or parameters as `T | None` if their values are strictly controlled and guaranteed internally.
+- **Fail fast and fail loud**: If an internal invariant is violated or expected data is absent, allow the program to raise an exception immediately so bugs are diagnosed and resolved at the source.
+
+```python
+# ❌ ANTI-PATTERN: Defensive bloat and exception swallowing
+def get_user_session_defensive(session_id: str | None = None) -> Session | None:
+    if not session_id:
+        return None
+    try:
+        data = db.query(session_id)
+        if data is None:
+            return Session(id="default", name="")  # Artificial fallback
+        return Session(**data)
+    except Exception as e:
+        logger.warning(f"Failed to load: {e}")
+        return None  # Bug masked!
+
+# ✅ RECOMMENDED: Fast, loud, and direct
+def get_user_session(session_id: str) -> Session:
+    data = db.query(session_id)
+    return Session(**data)
+```
+
+### 3. Strict Top-Level Imports Only
+
+All `import` and `from ... import` statements must reside at the very top of each Python file, adhering to the PEP 8 standard.
+
+- **Never use inline or function-level imports**: Inline imports hide dependencies and complicate testing.
+- **Fix circular dependencies properly**: If an import causes a circular dependency, refactor the shared types or models into an appropriate module (such as `ollama_agent/core/common.py`). Never use an inline import as a shortcut.
+
+### 4. Virtual Environment Discipline
+
+Always execute Python commands, test discovery, and scripts using the virtual environment interpreter (`.venv/bin/python`) or with your virtual environment actively sourced.
+
+### 5. `pyproject.toml` as the Single Source of Truth
+
+Dependencies and packaging configurations belong strictly in `pyproject.toml`. Do not introduce ad-hoc requirements files or unpinned installation scripts.
+
+### 6. Internationalization (i18n) Rigor
+
+Ollama Agent is fully localized across 16 languages:
+
+- **Wrap all user-facing strings**: Always wrap strings displayed in the CLI, REPL, or notices with `_("Message {param}", param=value)` imported from `ollama_agent.i18n`.
+- **Update all 15 locale JSON catalogs**: When adding a new translatable string, add the corresponding English key and translated text to all 15 files in `ollama_agent/i18n/locales/<locale>.json`.
+- **Enforced via AST**: The test suite (`tests/test_i18n.py`) statically parses all Python files in the repository to guarantee that every `_()` call exists in every JSON catalog and that variable interpolation keys match identically.
+
+---
+
+## Contribution Workflow & Pull Request Checklist
+
+Follow this workflow to submit contributions to Ollama Agent:
+
+### Step 1: Create a Feature Branch
+
+Fork the repository and create a descriptive branch off `main`:
+
+```bash
+git checkout -b feature/my-feature-name
+```
+
+### Step 2: Implement Changes Cleanly
+
+Write clean, focused code aligned with our KISS and Zero Defensive Bloat guidelines. When adding a new capability or fixing a bug, add corresponding unit tests in `tests/`.
+
+### Step 3: Run Local Validation
+
+Before pushing your branch, run the complete local validation trifecta:
+
+```bash
+# 1. Lint and style check
+.venv/bin/ruff check .
+
+# 2. Automated test suite
+.venv/bin/python -m unittest discover -s tests
+
+# 3. Documentation build verification
+.venv/bin/mkdocs build --strict
+```
+
+### Step 4: Submit Your Pull Request
+
+Open a pull request against the `main` branch with a clear title and description explaining:
+
+1. The problem or feature being addressed.
+2. The architectural approach taken.
+3. How the changes were tested.
+
+### Pull Request Checklist
+
+Ensure all items on this checklist are satisfied before requesting a review:
+
+- [ ] **Tests Pass**: `.venv/bin/python -m unittest discover -s tests` runs cleanly (all 550+ tests pass).
+- [ ] **Linting Passes**: `ruff check .` reports no errors or warnings.
+- [ ] **Strict Docs Build**: `mkdocs build --strict` builds successfully without warnings.
+- [ ] **Top-Level Imports**: All imports are at the very top of each modified file (PEP 8).
+- [ ] **Zero Defensive Bloat**: No swallowed exceptions, artificial fallbacks, or paranoid null-checks.
+- [ ] **Dependencies Declared**: Any newly introduced dependencies are declared in `pyproject.toml`.
+- [ ] **i18n Maintained**: All new user-facing messages are wrapped in `_()` and mirrored across all 15 locale files in `ollama_agent/i18n/locales/`.
+- [ ] **Tests Added**: New functionality or bug fixes include dedicated unit tests in `tests/`.
+
+Thank you for helping make Ollama Agent the cleanest, most powerful local AI assistant!

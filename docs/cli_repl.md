@@ -1,74 +1,399 @@
-# CLI & REPL Interface Guide
+# CLI & REPL User Guide
 
-`ollama-agent` offers two operational interfaces for interacting with local LLMs: an interactive terminal user interface (**REPL**) powered by Textual and Rich, and a non-interactive command-line interface (**CLI**) for automation and single-shot queries.
+**Ollama Agent** provides two complementary interfaces designed for different workflows: a dynamic, full-featured **Interactive REPL** (Read-Eval-Print Loop) for multi-turn conversations and visual tool interaction, and a lean, scriptable **Non-Interactive CLI** for one-off commands and pipeline automation.
+
+Whether you are iteratively designing a complex software architecture or running an automated code audit in a continuous integration script, Ollama Agent adapts to your terminal environment.
 
 ---
 
-## Interactive REPL vs Non-Interactive CLI Mode
+## 30-Second Quickstart
 
-### Interactive REPL Mode
+=== "Interactive REPL"
+    Launch the full terminal user interface with streaming Markdown, live context tracking, and tool approvals:
 
-The REPL (Read-Eval-Print Loop) is the default mode when launching `ollama-agent` without prompt arguments. It provides a full terminal workspace featuring:
+    ```bash
+    # Start with your default model
+    ollama-agent
 
-* **Stateful Sessions**: Multi-turn conversation history stored and checkpointed in SQLite (`~/.ollama-agent/history.db`).
-* **Rich Markdown Formatting**: Real-time streaming output with syntax-highlighted code blocks, thinking containers, and status cards.
-* **Live Context & Token Gauge**: Dynamic header showing consumed tokens vs. model context limit (`num_ctx`) with color-coded alert thresholds.
-* **Context Management & Summarization**: Automatic background summarization via DeepAgents middleware keeps token usage within context window limits without manual intervention.
-* **Human-in-the-Loop (HITL) Approvals**: Inline approval widgets before executing shell commands or editing files, with YOLO mode bypass.
-* **3-Level Tab Autocompletion**: Autocompletion for slash commands, subcommands, entities (models, sessions, tasks, skills, RAG databases), and `@-mention` file paths.
-* **System Clipboard Integration**: Native copy and paste across macOS, Linux (Wayland / X11), and Windows.
+    # Or start with a specific model and reasoning level
+    ollama-agent -m "deepseek-r1:14b" -e "high"
+    ```
 
-To start the REPL:
-```bash
-ollama-agent
+=== "Non-Interactive CLI"
+    Execute a single prompt directly from your shell, stream the response to standard output, and exit cleanly:
+
+    ```bash
+    # Ask a one-off question
+    ollama-agent -p "Explain the difference between mutexes and semaphores."
+
+    # Analyze local code with file attachments and auto-approval
+    ollama-agent -y -p "Audit @src/auth.py for security vulnerabilities and suggest fixes."
+    ```
+
+### Choosing the Right Mode
+
+```mermaid
+flowchart TD
+    Start([Your Task]) --> Q1{Need iterative dialog<br/>or visual tool approvals?}
+    Q1 -- Yes --> REPL["Interactive REPL (`ollama-agent`)<br/>• Multi-turn conversational memory<br/>• Live token gauge & thinking blocks<br/>• Inline approval cards & prompt queue"]
+    Q1 -- No --> Q2{Scripting, piping, or<br/>batch automation?}
+    Q2 -- Yes --> CLI["Non-Interactive CLI (`ollama-agent -p ...`)<br/>• Single-shot prompt execution<br/>• Standard Unix pipes & redirects<br/>• YOLO mode for zero-intervention automation"]
+    Q2 -- No --> Sub["CLI Subcommands<br/>• `ollama-agent task run ...`<br/>• `ollama-agent rag add ...`<br/>• `ollama-agent session export ...`"]
 ```
 
-### Non-Interactive CLI Mode
+| Feature | Interactive REPL (`ollama-agent`) | Non-Interactive CLI (`-p "..."`) |
+| :--- | :--- | :--- |
+| **Primary Use Case** | Deep exploration, pair programming, debugging | Scripts, cron jobs, git hooks, one-off questions |
+| **Session Memory** | Stateful multi-turn history saved to SQLite | Ephemeral single-turn (exits immediately on finish) |
+| **User Interface** | Full TUI with syntax highlighting, modals, & status bar | Standard terminal output (`stdout`), pipe-friendly |
+| **Tool Approvals** | Interactive keyboard confirmation cards | Interactive prompt (or bypassed with `-y` / `--yolo`) |
+| **Prompt Queuing** | Submit follow-up prompts while streaming | Not applicable |
+| **Tab Completion** | 3-level completion for commands, models, files | Bash / Zsh shell autocompletion |
 
-Non-interactive mode enables single-shot execution directly from your terminal or shell scripts. When provided with `-p` or `--prompt`, `ollama-agent` runs the input, processes tool calls, streams the output directly to standard output, and exits cleanly.
+---
 
-```bash
-# Basic single-shot query
-ollama-agent -p "Summarize the git commits made in the last 7 days."
+## Interactive REPL Walkthrough
 
-# Advanced non-interactive query with model, effort, timeout, language, and YOLO mode
-ollama-agent -m "gemma4:26b" -e "high" -t 60 -l "es" -y -p "Refactor src/utils.py to follow PEP 8."
+Launch the REPL by typing `ollama-agent` without prompt flags. You are greeted with a full-screen, responsive terminal interface.
 
-# Run a query against a preloaded RAG database
-ollama-agent --rag project-docs -p "How is authentication configured in this repository?"
+```text
+● ollama-agent │ Model: gemma4:26b │ Context: 2.1k/10.0k (21%) │ Effort: medium │ YOLO: OFF │ STEALTH: OFF
 ```
 
-> [!NOTE]
-> The `-p` / `--prompt` option runs single-shot execution and cannot be combined with subcommands (such as `task`, `rag`, `skill`, or `session`).
+### TUI Interface Tour
+
+The interactive workspace is organized into four core visual areas:
+
+1. **Dynamic Header Bar**:
+   - **Model Indicator**: Displays the active Ollama model.
+   - **Real-Time Token Gauge**: Shows consumed tokens versus your configured context window limit (e.g., `2.1k/10.0k (21%)`). The gauge dynamically updates after each interaction and uses color-coded warning thresholds:
+     - 🔵 **Cyan (`≤ 75%`)**: Healthy context utilization.
+     - 🟡 **Amber (`76% – 90%`)**: Elevated context usage.
+     - 🔴 **Red (`> 90%`)**: Approaching context limits (automatic summarization will activate).
+   - **Effort & RAG Badges**: Displays current reasoning effort (`low`, `medium`, `high`) and active RAG knowledge base.
+   - **Mode Badges**: Visual indicators for **YOLO** (auto-approve tools) and **STEALTH** (in-memory, no disk history).
+
+2. **Markdown Chat Stream**:
+   - Live streaming responses rendered with GitHub-flavored Markdown.
+   - Syntax-highlighted code blocks with copy-friendly formatting.
+   - Formatted tables, bullet points, and blockquotes.
+
+3. **Thinking Containers**:
+   - When using reasoning models (such as DeepSeek-R1, Qwen 2.5/3, or Gemma 4), internal chain-of-thought traces are neatly contained in expandable containers so you can inspect the model's inner reasoning without cluttering your chat stream.
+
+4. **Input Container & Status Bar**:
+   - Multi-line input area that expands dynamically up to 8 lines.
+   - Live queue counter (`⏳ N queued`) when background prompts are pending.
+   - Status hints showing keybindings and current activity.
 
 ---
 
-## CLI Reference & Options
+### Multiline Editing & History Navigation
 
-### Global Flags & Options
+The input box supports natural editing and shell-like history navigation:
 
-| Flag | Short | Type | Default | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `--model` | `-m` | `str` | `settings.yaml` | Specify the Ollama model for this session (falls back to interactive selection if unconfigured or missing in Ollama). |
-| `--prompt` | `-p` | `str` | `None` | Run in non-interactive mode with the provided prompt. |
-| `--effort` | `-e` | `str` | `medium` | Set reasoning effort level (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
-| `--num-ctx` | `-c` | `int \| str` | `10000` | Set context window size in tokens (`num_ctx`) or `'max'`. |
-| `--lang`, `--language` | `-l` | `str` | `None` (auto-detect) | Set UI language code (`en`, `es`, `fr`, `de`, `it`, `pt`, `zh`, `ja`, `ru`, `hi`, `ko`, `ar`, `tr`, `pl`, `nl`, `uk`). Default auto-detects from system locale (or `settings.yaml`, fallback `en`). Note: `auto` is not a valid flag argument. |
-| `--builtin-tool-timeout` | `-t` | `int` | `30` | Timeout in seconds for tool executions (including shell commands). |
-| `--yolo` | `-y` | `flag` | `False` | Enable YOLO mode (bypasses all tool approval prompts). |
-| `--stealth` | `-s` | `flag` | `False` | Enable stealth mode (do not save conversation to SQLite history). |
-| `--rag` | — | `str` | `None` | Preload a RAG database collection at startup. |
-| `--allow-traversal` | — | `flag` | `False` | Allow filesystem traversal outside current working directory. |
-| `--no-allow-traversal` | — | `flag` | `True` | Sandbox filesystem operations to current working directory (default). |
-| `--config-reset` | — | `str` | `None` | Reset configuration files: `all`, `system-prompt`, or `config-file`. |
+* **Insert a Newline (`\ + Enter`)**: End any line with a backslash `\` and press `Enter`. The backslash is automatically stripped, inserting a clean newline. The prompt box expands smoothly up to 8 lines high.
+* **Submit Your Message (`Enter`)**: Press `Enter` on any line without a trailing backslash to send your prompt immediately.
+* **Cursor Movement (`↑` / `↓` / `←` / `→`)**: Navigate freely between lines and characters.
+* **Prompt History**:
+  - Press `↑` on the first line to cycle back through previously submitted prompts.
+  - Press `↓` on the last line to move forward in history.
+  - *Note: Slash commands (`/model`, `/session`, etc.) are kept out of prompt history to keep your history clean.*
+* **Quick Dismiss / Cancel (`Esc` / `Ctrl+C`)**:
+  - Press `Esc` to close autocomplete dropdowns or cancel active generation and clear the queue.
+  - Press `Ctrl+C` while generating to abort the current response, or press it when idle to exit cleanly.
 
 ---
 
-### CLI Subcommands
+### Tab Autocompletion
 
-`ollama-agent` provides subcommands for managing tasks, RAG databases, skills, and chat sessions:
+Press <kbd>Tab</kbd> at any point in the input field to trigger intelligent autocompletion:
 
-#### 1. Task Commands
+* **Slash Commands**: Type `/` and press <kbd>Tab</kbd> to see all available root commands (`/model`, `/session`, `/task`, `/skill`, `/rag`, `/queue`, etc.).
+* **Subcommands**: Type a command followed by a space (e.g., `/session ` or `/task `) and press <kbd>Tab</kbd> to view valid subcommands (`list`, `switch`, `search`, `export`, etc.).
+* **Dynamic Entities**:
+  - `/model set <Tab>`: Shows locally installed Ollama models with their disk sizes.
+  - `/context set <Tab>`: Shows standard token presets (`4096`, `8192`, `16384`, `32768`, `65536`, `max`).
+  - `/session switch <Tab>`: Lists recent session IDs with message counts.
+  - `/task run <Tab>`: Lists saved tasks with descriptive titles.
+  - `/skill show <Tab>`: Lists discovered skill identifiers.
+  - `/rag load <Tab>`: Lists indexed RAG vector databases.
+  - `/queue rm <Tab>`: Lists active queued prompts with live text previews.
+* **File Paths**: Type `@` and press <kbd>Tab</kbd> to autocomplete files and directories in your current workspace.
+
+---
+
+### Attaching Files with `@-mentions`
+
+Inject file contents or multimodal media directly into the model's context by referencing them with `@`:
+
+```bash
+# Attach a single source file
+Explain the request validation logic in @src/api/routes.py
+
+# Attach multiple files
+Compare the schema in @models/v1.py with @models/v2.py
+
+# Paths with spaces (use single or double quotes)
+Review the notes in @"project docs/meeting_notes.md"
+
+# Attach an entire directory tree (recursively loads text files)
+Analyze the test coverage across @tests/
+```
+
+#### Supported Attachment Types
+
+* **Code & Plain Text**: Loaded as UTF-8 context files and highlighted with full source path metadata.
+* **Images**: `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.svg`, `.bmp`, `.heic` are encoded and provided directly to vision-capable models.
+* **Audio**: `.mp3`, `.wav`, `.ogg`, `.flac`, `.m4a`, `.aac` for audio-capable models.
+* **Documents & Presentations**: `.pdf`, `.ppt`, `.pptx` documents are read and attached automatically.
+* **Binary Protection**: Executables and arbitrary binary files with null bytes are safely skipped to avoid corrupting the model's prompt.
+
+!!! tip "Safety with Code Decorators"
+    Standard programming decorators such as `@staticmethod`, `@property`, `@app.route`, or `@dataclass` are automatically detected and preserved as literal text. Ollama Agent will only resolve an `@` token if a matching file or directory actually exists on disk.
+
+#### Attachment Safety Limits
+
+Default limits prevent accidentally exhausting context memory with massive files. You can customize these in `~/.ollama-agent/settings.yaml`:
+
+```yaml
+mentions:
+  max_file_size: 1048576      # 1 MB max per individual file
+  max_files: 100               # 100 files max during directory traversal
+  max_total_size: 10485760     # 10 MB max total attached context per prompt
+  max_completions: 200         # Maximum autocompletion candidates displayed
+```
+
+---
+
+### Non-Blocking Prompt Queue
+
+Unlike traditional CLI tools that lock the terminal while the model is responding, Ollama Agent features an **asynchronous FIFO prompt queue**. You can continue typing prompts or running slash commands even while a response is actively streaming or while an approval card is pending!
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant REPL as REPL Interface
+    participant Queue as Prompt Queue (FIFO)
+    participant Agent as Agent Execution Engine
+
+    User->>REPL: Submit Prompt A
+    REPL->>Agent: Begin streaming Response A
+    Note over Agent: Response A is streaming...
+    User->>REPL: Submit Prompt B
+    REPL->>Queue: Enqueue Prompt B (Position #1)
+    REPL-->>User: Visual cue: "⏳ Prompt added to queue (#1)"
+    User->>REPL: Run `/model list`
+    REPL->>User: Immediate display (non-blocking command!)
+    Agent-->>REPL: Response A finished
+    Queue->>Agent: Automatically dequeue Prompt B
+    Agent->>REPL: Begin streaming Response B
+```
+
+* **Immediate Commands**: Fast inspection commands (such as `/model list`, `/effort`, `/context`, `/params list`, `/session list`, `/queue`, `/yolo`, and `/stealth`) execute immediately in the viewport without waiting for active generation to finish.
+* **Queued Prompts**: Normal chat prompts, parameter changes (`/model set`, `/context set`), and task executions are placed in the FIFO queue.
+* **Queue Panel**: When items are waiting, a persistent queue card appears above the input box showing pending prompt positions and snippets.
+* **Queue Management**:
+  - `/queue`: Display all queued prompts and their numerical positions.
+  - `/queue rm <#>`: Remove a specific queued prompt (e.g., `/queue rm 2`).
+  - `/queue clear`: Purge all queued prompts without interrupting the active stream.
+  - Press <kbd>Esc</kbd> or <kbd>Ctrl+C</kbd> to abort the active generation and flush the queue simultaneously.
+
+---
+
+### Tool Approvals (Human-in-the-Loop) & YOLO Mode
+
+When the agent decides to execute a potentially destructive system action—such as executing a bash command or writing to a file—an interactive **Action Approval** modal pauses execution and requests your consent:
+
+```text
+╭─ ⚠ Action Approval Required ────────────────────────────────────────────────╮
+│ Tool: execute                                                               │
+│ Arguments: {'command': 'pytest tests/test_api.py'}                          │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ [ Approve (y) ]    [ Reject (n) ]    [ Allow Session (a) ]    [ Cancel (c) ]
+```
+
+#### Keyboard-First Approval Controls
+
+* <kbd>y</kbd> (**Approve**): Execute this specific tool call.
+* <kbd>n</kbd> (**Reject**): Reject execution. You can provide optional feedback to the agent so it can revise its approach.
+* <kbd>a</kbd> (**Allow Session**): Approve this call and allow all subsequent calls for this specific tool for the rest of the active session.
+* <kbd>c</kbd> or <kbd>Esc</kbd> (**Cancel**): Abort the tool call and return focus to the prompt input.
+* <kbd>Tab</kbd> / Arrow keys: Cycle between buttons.
+* <kbd>Enter</kbd> / <kbd>Space</kbd>: Trigger the currently focused button (defaults to `Approve`).
+
+!!! note "Unblocked Queue During Approvals"
+    Your prompt input remains fully responsive while an approval card is visible. You can queue follow-up prompts or inspect configurations while deciding whether to approve an action.
+
+#### YOLO Mode (`-y` / `/yolo on`)
+
+For trusted automated tasks where you do not want confirmation pauses, enable **YOLO mode**:
+
+* **Via CLI Flag**: Launch with `-y` or `--yolo` (e.g., `ollama-agent -y`).
+* **In REPL**: Toggle dynamically with `/yolo`, `/yolo on`, or `/yolo off`.
+
+When YOLO mode is active:
+
+1. All tool approval prompts are automatically bypassed.
+2. The header displays a bright red `YOLO: ON` badge.
+3. The prompt chevron (`❯ `) and input border turn **red** as a prominent visual safety warning.
+
+#### Stealth Mode (`-s` / `/stealth on`)
+
+When you need confidential interactions without saving chat logs or state checkpoints to disk (`~/.ollama-agent/history.db`):
+
+* **Via CLI Flag**: Launch with `-s` or `--stealth` (e.g., `ollama-agent -s`).
+* **In REPL**: Toggle dynamically with `/stealth`, `/stealth on`, or `/stealth off`.
+* **Visual Cue**: The header displays a purple `STEALTH: ON` badge, and the prompt chevron turns **purple**.
+* *(If both YOLO and Stealth are enabled, the prompt chevron turns **amber / warm gold**).*
+
+---
+
+### System Clipboard Integration
+
+Ollama Agent integrates natively with your operating system's clipboard across macOS, Linux (Wayland & X11), and Windows:
+
+* **Copying Output**: Click and drag with your mouse, or select text and press <kbd>Ctrl+Shift+C</kbd>, <kbd>Super+C</kbd>, or <kbd>Ctrl+Insert</kbd> to copy markdown or code blocks directly to your system clipboard.
+* **Pasting Input**: Paste multiline prompts or code snippets into the input field using <kbd>Ctrl+V</kbd>, <kbd>Super+V</kbd>, or <kbd>Shift+Insert</kbd>.
+
+---
+
+## Slash Commands Reference
+
+Slash commands provide complete control over model parameters, persistent sessions, skills, tasks, and system settings directly inside the REPL.
+
+### General Commands
+
+| Command | Subcommands / Syntax | Description |
+| :--- | :--- | :--- |
+| `/help` | `/help` | Display interactive command help and keyboard shortcut tips (or press <kbd>Tab</kbd> on `/`). |
+| `/clear` | `/clear` | Clear the chat screen and start a fresh session (alias for `/new`). |
+| `/new` | `/new` | Start a fresh session with clean context and clear the screen. |
+| `/exit` | `/exit` *(alias: `/quit`)* | Exit Ollama Agent cleanly. |
+
+### Model & Sampling Parameters
+
+| Command | Subcommands / Syntax | Description |
+| :--- | :--- | :--- |
+| `/model` | `/model` or `/model list` | List all available local Ollama models with disk sizes and tool support flags. |
+| `/model set` | `/model set <model_name>` | Switch the active model for the current conversation. |
+| `/effort` | `/effort [set <level>]` | View or adjust reasoning/thinking effort (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
+| `/context` | `/context [set <size\|max>]` | View or set context window token limit (`num_ctx`) or set to `'max'`. |
+| `/params` | `/params` or `/params list` | Display active sampling parameters (`temperature`, `top_p`, `top_k`, etc.) and their configuration sources. |
+| `/params set` | `/params set <key> <val>` | Dynamically update a parameter (e.g., `/params set temperature 0.7`). |
+
+### Session Management
+
+| Command | Subcommands / Syntax | Description |
+| :--- | :--- | :--- |
+| `/session list` | `/session list` | List past conversation sessions with IDs, timestamps, and turn counts. |
+| `/session switch` | `/session switch <id>` *(alias: `/session resume`)* | Switch to and resume a previous conversation thread. |
+| `/session new` | `/session new` | Start a brand new conversation session. |
+| `/session search` | `/session search <query>` | Search conversation history across all sessions for keywords. |
+| `/session export` | `/session export [output_path.md]` | Export the active conversation into a formatted Markdown document. |
+| `/session delete` | `/session delete <id>` | Remove a session from local SQLite history. |
+
+### Tasks & Skills
+
+| Command | Subcommands / Syntax | Description |
+| :--- | :--- | :--- |
+| `/task list` | `/task list` | List all saved reusable prompt tasks. See [Saved Tasks](tasks.md). |
+| `/task run` | `/task run <id> [var=val ...] [-y]` | Execute a saved task with dynamic variable substitutions and optional YOLO mode. |
+| `/task view` | `/task view <id>` *(or `/task list`)* | Inspect the template prompt, model, and variables for a saved task. |
+| `/task create` | `/task create [<id>]` | Launch an interactive agent-guided flow to create and save a new task. |
+| `/task delete` | `/task delete <id>` | Delete a saved task file. |
+| `/skill list` | `/skill list` | List all discovered procedural skills. See [Agent Skills](skills.md). |
+| `/skill show` | `/skill show <id>` | Display instructions and metadata for a specific skill. |
+| `/skill create` | `/skill create [<id>]` | Launch an interactive agent-guided flow to author a new skill package. |
+| `/skill delete` | `/skill delete <id>` | Delete a skill package from disk. |
+
+### Knowledge & RAG
+
+| Command | Subcommands / Syntax | Description |
+| :--- | :--- | :--- |
+| `/rag status` | `/rag status` | Show active RAG database name, indexed chunks, and embedding configuration. |
+| `/rag list` | `/rag list` | List all local vector databases. See [Local RAG Engine](rag.md). |
+| `/rag search` | `/rag search <query>` | Query the active knowledge base directly to inspect retrieved context chunks. |
+| `/rag create` | `/rag create <name>` | Create a new vector database collection. |
+| `/rag load` | `/rag load <name>` | Load a vector database into the active session. |
+| `/rag unload` | `/rag unload` | Unload the current database from the active session. |
+| `/rag add` | `/rag add <path> [--dir]` | Index a file or directory tree into the active RAG collection. |
+| `/rag delete` | `/rag delete <name>` | Delete a RAG vector database collection. |
+
+### Prompt Queue & Operational Toggles
+
+| Command | Subcommands / Syntax | Description |
+| :--- | :--- | :--- |
+| `/queue` | `/queue` or `/queue list` | Inspect all pending prompts in the background FIFO queue. |
+| `/queue rm` | `/queue rm <position>` | Remove a prompt from the queue by its number (e.g., `/queue rm 1`). |
+| `/queue clear` | `/queue clear` | Purge all pending prompts from the queue. |
+| `/yolo` | `/yolo [on \| off]` | Toggle or set YOLO mode (bypasses tool execution confirmations). |
+| `/stealth` | `/stealth [on \| off]` | Toggle or set Stealth mode (runs in-memory without saving SQLite logs). |
+| `/mcp list` | `/mcp list` | Check connection status of configured MCP tool servers. See [MCP Guide](mcp.md). |
+| `/mcp reload` | `/mcp reload` | Reconnect MCP servers and rebuild tool definitions mid-session. |
+| `/agents list` | `/agents list` | List configured specialized subagents and their capabilities. See [Subagents](subagents.md). |
+
+---
+
+## Non-Interactive CLI Guide
+
+Non-interactive mode is ideal for shell scripts, git hooks, CI/CD pipelines, and quick one-liners where you want immediate answers without entering the TUI.
+
+Run Ollama Agent with `-p` or `--prompt` to trigger non-interactive execution:
+
+```bash
+ollama-agent -p "What is the command to find large files over 100MB in Linux?"
+```
+
+### Real-World CLI One-Liners & Recipes
+
+#### 1. Smart Git Commit Messages
+Pipe your staged git diff directly into Ollama Agent to draft clean, conventional commit messages:
+
+```bash
+git diff --staged | ollama-agent -p "Write a concise Conventional Commit message based on this diff. Output only the commit message."
+```
+
+#### 2. Automated Code Refactoring (with YOLO mode)
+Combine `-y` with file attachments to refactor code in-place without manual approval prompts:
+
+```bash
+ollama-agent -y -p "Refactor @src/utils.py to use standard typing and add comprehensive docstrings."
+```
+
+#### 3. Generating Documentation into Files
+Redirect agent output directly into project markdown documentation:
+
+```bash
+ollama-agent -p "Generate a comprehensive API documentation table for @src/api/v1/endpoints.py" > docs/endpoints.md
+```
+
+#### 4. Preloading RAG Knowledge Bases
+Query an existing project knowledge base directly from the command line:
+
+```bash
+ollama-agent --rag engineering-handbook -p "What is our policy on database migrations?"
+```
+
+#### 5. Codebase Security & Quality Audits
+Run a targeted security review across an entire folder:
+
+```bash
+ollama-agent -p "Review the code in @src/auth/ for common security flaws like timing attacks or SQL injection."
+```
+
+!!! warning "Combining Subcommands with `-p`"
+    The `-p` / `--prompt` option is reserved for top-level non-interactive queries. It cannot be combined with subcommands such as `ollama-agent task` or `ollama-agent rag`.
+
+---
+
+## CLI Subcommands Quick Reference
+
+In addition to top-level prompt execution, `ollama-agent` provides subcommands for headless administration of tasks, RAG databases, skills, and sessions.
+
+### `task`: Saved Prompt Tasks
+
 ```bash
 # List all saved tasks
 ollama-agent task list
@@ -81,39 +406,42 @@ ollama-agent task create code-review \
     --task-effort "high" \
     [--force]
 
-# Execute a saved task (with optional YOLO mode)
-ollama-agent task run code-review -y
-
-# Execute a parameterized task with dynamic variables (positional or --var flags)
-ollama-agent task run code-review target_file=src/app.py strict=true -y
+# Run a saved task with dynamic variable substitutions
+ollama-agent task run code-review target_file=src/app.py -y
 ollama-agent task run code-review --var target_file=src/app.py --var strict=true
 
 # Delete a saved task
 ollama-agent task delete code-review
 ```
 
-#### 2. RAG Commands
+For full details on templating and task options, see [Saved Tasks](tasks.md).
+
+### `rag`: Local Vector Databases
+
 ```bash
-# List all RAG vector databases
+# List all vector database collections
 ollama-agent rag list
 
-# Create a new RAG database
+# Create a new RAG database collection
 ollama-agent rag create project-docs
 
 # Ingest a single file or an entire directory
 ollama-agent rag add project-docs ./docs/architecture.md
 ollama-agent rag add project-docs ./src --dir
 
-# Delete a RAG database
+# Delete a collection
 ollama-agent rag delete project-docs
 ```
 
-#### 3. Skill Commands
+For chunking strategies and embedding models, see [Local RAG Engine](rag.md).
+
+### `skill`: Procedural Skills
+
 ```bash
-# List all available skills
+# List all installed skills
 ollama-agent skill list
 
-# Show details and instructions for a skill
+# Inspect instructions for a skill
 ollama-agent skill show api-design
 
 # Create a new skill
@@ -127,258 +455,69 @@ ollama-agent skill create api-design \
 ollama-agent skill delete api-design
 ```
 
-#### 4. Session Commands
+For structuring multi-file skills and custom scripts, see [Agent Skills](skills.md).
+
+### `session`: Chat History Management
+
 ```bash
-# List all saved chat sessions with step counts
+# List saved sessions with timestamps and message counts
 ollama-agent session list
 
-# Search past sessions by keyword
-ollama-agent session search "dockerize fastapi"
+# Search past conversations by keyword
+ollama-agent session search "database migration"
 
-# Export a session to a Markdown document
+# Export a session transcript to a Markdown document
 ollama-agent session export 4d7e2a1b -o ./exports/session_summary.md
 
 # Delete a session from SQLite history
 ollama-agent session delete 4d7e2a1b
 ```
 
-#### 5. MCP (Model Context Protocol) Commands
-```bash
-# List all configured MCP servers and check their connection status
-ollama-agent mcp list
-```
+### `mcp` & `agents`: Tool & Subagent Inspection
 
-#### 6. Agents (Subagents) Commands
 ```bash
-# List all configured subagents and their properties
+# Check connectivity and tool definitions for configured MCP servers
+ollama-agent mcp list
+
+# List configured specialized subagents
 ollama-agent agents list
 ```
 
 ---
 
-## Interactive REPL Reference
+## Global CLI Flags Reference
 
-The interactive REPL is powered by Textual and Rich, featuring rich Markdown rendering, live token gauges, modal forms, and multi-turn persistence.
+All global flags can be used when launching either the interactive REPL or non-interactive CLI:
 
-```text
-● ollama-agent │ Model: gemma4:26b │ Context: 2.1k/10.0k (21%) │ Effort: medium │ YOLO: OFF │ STEALTH: OFF
-```
-
-### Slash Commands Reference
-
-Slash commands provide full application control directly within the REPL:
-
-| Command | Subcommands / Syntax | Description |
-| :--- | :--- | :--- |
-| `/model` | `/model [list \| set <model>]` | List available Ollama models (with tool support indicators) or switch active model for current session. |
-| `/effort` | `/effort [[set] <level>]` | Show current reasoning effort or change thinking/reasoning effort mid-session (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
-| `/context` | `/context [[set] <size\|max>]` | Show current context window or switch context window token size (`num_ctx`) or `'max'` for the active session. |
-| `/params` | `/params [list \| set <parameter> <value>]` | Inspect active sampling parameters and resolution sources, or dynamically update parameter values for the active session. |
-| `/queue` | `/queue [list \| clear \| rm <position>]` | Inspect pending prompts in the queue, remove an item by index (`/queue rm <id>`, aliases: `remove`, `delete`), or clear all queued prompts. |
-| `/session` | `/session [list \| search <query> \| resume <id> (alias: switch) \| new \| export [path] \| delete <id>]` | Manage persistent chat sessions. Search past conversations, resume threads, export to Markdown, or delete history. |
-| `/task` | `/task [list \| create [<id>] \| run <id> [key=value ...] [-y] \| delete <id>]` | Manage saved prompt tasks. `/task create` launches an interactive conversational creation flow with the agent. Supports dynamic Jinja2 template variables. |
-| `/skill` | `/skill [list \| show <id> \| create [<id>] \| delete <id>]` | Manage agent skills. `/skill create` launches an interactive conversational creation flow with the agent. |
-| `/rag` | `/rag [status \| list \| create <name> \| load <name> \| unload \| add <path> [--dir] \| delete <name>]` | Manage local RAG databases, index documents, and toggle active knowledge bases. |
-| `/mcp` | `/mcp [list \| reload]` | List configured MCP servers, check connection status, or reload MCP servers and rebuild tool graph mid-session. |
-| `/agents` | `/agents [list]` | List configured specialized subagents, inspecting their models, context windows, and dedicated MCP tool servers. |
-| `/yolo` | `/yolo [on \| off]` | Toggle YOLO mode or set it explicitly to bypass tool execution confirmation prompts. |
-| `/stealth` | `/stealth [on \| off]` | Toggle Stealth mode or set it explicitly to run in-memory without saving conversation to SQLite history. |
-| `/new` | `/new` (alias: `/clear`) | Start a clean session with fresh context and clear the screen (alias for `/session new`). |
-| `/clear` | `/clear` | Clear the screen and start a clean session (alias for `/new`). |
-| `/exit` | `/exit` (alias: `/quit`) | Exit the application cleanly. |
+| Flag | Short | Type | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `--model` | `-m` | `string` | Configured default in `settings.yaml` | Specify the Ollama model to use for this execution. |
+| `--prompt` | `-p` | `string` | `None` | Run in non-interactive mode with the specified prompt string. |
+| `--effort` | `-e` | `string` | `medium` | Set reasoning effort level (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
+| `--num-ctx` | `-c` | `int \| str` | `10000` | Set context window size in tokens (`num_ctx`) or set to `'max'`. |
+| `--language`, `--lang` | `-l` | `string` | System locale (fallback `en`) | Set interface language code (`en`, `es`, `fr`, `de`, `it`, `pt`, `zh`, `ja`, `ru`, `hi`, `ko`, `ar`, `tr`, `pl`, `nl`, `uk`). |
+| `--builtin-tool-timeout`| `-t` | `int` | `30` | Execution timeout in seconds for built-in tools (including shell commands). |
+| `--yolo` | `-y` | `flag` | `false` | Enable YOLO mode (bypasses all tool execution confirmation prompts). |
+| `--stealth` | `-s` | `flag` | `false` | Enable stealth mode (runs in-memory without saving conversation history to SQLite). |
+| `--rag` | — | `string` | `None` | Preload and activate a named RAG database collection at launch. |
+| `--allow-traversal` | — | `flag` | `false` | Allow filesystem tools to read and write outside the current working directory. |
+| `--no-allow-traversal` | — | `flag` | `true` | Sandbox filesystem operations strictly to the current working directory (default). |
+| `--config-reset` | — | `string` | `None` | Reset configuration files to defaults: `all`, `system-prompt`, or `config-file`. |
 
 ---
 
-### Multiline Input & Keyboard Navigation
+## Pro Tips & Best Practices
 
-The prompt input box (`ReplInput`) provides intuitive editing, history navigation, and keybindings:
+1. **Automatic Memory Summarization**:
+   Don't worry about hitting context limits during long conversations. Ollama Agent continuously tracks token usage and automatically summarizes earlier dialogue turns in the background when the threshold is reached, preserving the active instructions and recent messages. See [Memory & Guidelines](memory.md).
 
-* **Insert Newline (`\ + Enter`)**: End any line with a backslash `\` and press `Enter`. The trailing backslash is automatically removed, inserting a clean newline. The input container dynamically expands up to 8 lines.
-* **Submit Prompt (`Enter`)**: Press `Enter` without a trailing backslash to submit your message.
-* **Cursor Navigation (`↑` / `↓`)**: Move freely between lines in multiline text.
-* **Command History**: Pressing `↑` anywhere on row 0 recalls prior user prompts; pressing `↓` on the last line at the end of the text navigates forward. Slash commands (`/cmd`) are filtered out from stored history.
-* **Tab Autocompletion (`Tab`)**: Activates 3-level autocompletion:
-  1. *Level 0*: Root slash commands (`/mo` -> `/model`, `/co` -> `/context`, `/qu` -> `/queue`).
-  2. *Level 1*: Subcommands (`/task ` -> `list`, `create`, `run`, `delete`, `/queue ` -> `clear`, `rm`, `remove`, `delete`).
-  3. *Level 2*: Dynamic entities:
-     - `/model set ` -> Dynamic list of available Ollama models + disk size.
-     - `/context set ` -> Token presets (`4096`, `8192`, `16384`, `32768`, `65536`, `131072`, `max`).
-     - `/queue rm `, `/queue remove `, `/queue delete ` -> Dynamic list of active queued prompt IDs (`#1`, `#2`, ...) + preview text.
-     - `/task run `, `/task delete ` -> Dynamic list of saved task IDs + titles.
-     - `/skill show `, `/skill delete ` -> Dynamic list of discovered skill IDs + names.
-     - `/session resume `, `/session switch `, `/session delete ` -> Dynamic list of session IDs + step counts.
-     - `/rag load `, `/rag delete ` -> Dynamic list of RAG databases + chunk counts.
-  4. *Filesystem*: Path autocompletion for `@-mentions` with directory traversal.
-* **Interrupt / Cancel (`Esc` / `Ctrl+C`)**: `Esc` cancels active generation or tool approvals and purges the prompt queue (or dismisses autocompletion). `Ctrl+C` cancels generation and queue if active, or exits the REPL if idle.
-* **Clipboard Shortcuts**:
-  - Copy: `Super+C`, `Ctrl+Shift+C`, `Ctrl+Insert`, or mouse selection.
-  - Paste: `Super+V`, `Ctrl+V`, `Shift+Insert`.
+2. **Reasoning Effort Optimization**:
+   Tune your reasoning effort with `-e` or `/effort`:
+   - Use `low` for fast, lightweight code edits, commit messages, and simple queries.
+   - Use `high` or `xhigh` for complex multi-file architectural refactors, debugging subtle race conditions, or algorithmic analysis.
 
----
+3. **Sandboxing by Default**:
+   By default, Ollama Agent restricts file tools to the current working directory (`--no-allow-traversal`). If your project references shared libraries or configuration files in parent folders, launch with `--allow-traversal` to permit safe access across directories.
 
-### Prompt Queue & Non-Blocking Execution
-
-The REPL is designed with an asynchronous non-blocking event loop. The user input field remains accessible and interactive at all times, allowing you to submit commands and prompts while inference is actively streaming or while a tool approval prompt is waiting for user confirmation.
-
-#### Immediate (Non-Blocking) Commands
-Slash commands that perform fast metadata queries, instant state toggles, or synchronous deletions execute immediately in the chat viewport without waiting for the active stream to complete:
-
-* **Inspection & Fast Operations**: `/queue` (all subcommands: `list`, `clear`, `rm`), `/model list`, `/effort` (view), `/context` (view), `/params list`, `/session list`, `/session search`, `/session export`, `/session delete`, `/task list`, `/task delete`, `/skill list`, `/skill show`, `/skill delete`, `/rag status`, `/rag list`, `/rag create`, `/rag delete`, `/rag load`, `/rag unload`, `/mcp list`, `/agents list`.
-* **Toggles & Exit**: `/yolo` (toggle or `on`/`off`), `/stealth` (toggle or `on`/`off`), `/exit`, `/quit`.
-
-#### Enqueued Prompts & Stateful Operations
-Chat prompts and long-running or graph-mutating operations that require active agent execution are placed in a FIFO queue:
-* Normal user chat prompts.
-* Model and parameter reconfiguration: `/model set`, `/effort set` (or `/effort <level>`), `/context set` (or `/context <size>`), `/params set`.
-* Session workflows: `/session resume` (alias: `switch`), `/session new` (alias: `/new`, `/clear`).
-* Agent-guided interactive creation flows: `/task create`, `/skill create`.
-* Saved task execution: `/task run`.
-* Knowledge ingestion: `/rag add`.
-* Graph rebuilding: `/mcp reload`.
-
-* **Queue Feedback**: Submitting an item while busy renders a subtle notification (`⏳ Prompt added to queue (position #N)`) and updates the footer counter (`⏳ N queued`).
-* **Persistent TUI Queue Panel**: A dedicated `PromptQueueWidget` card renders above the input container whenever items are queued, showing prompt previews and position numbers in real time.
-* **FIFO Draining**: As soon as the active stream or tool execution completes, the next queued item is automatically dispatched.
-* **Unblocked Tool Approvals**: The prompt input box is not locked while a `ToolApprovalWidget` modal is displayed, allowing you to queue follow-up prompts while reviewing pending tool actions.
-* **Managing the Queue**:
-  * Run `/queue` to inspect all pending prompts and their indices.
-  * Run `/queue rm <position>` (aliases: `remove`, `delete`) to remove a single prompt without interrupting active inference.
-  * Run `/queue clear` to purge all queued items while letting active inference continue.
-  * Press `Esc` or `Ctrl+C` to cancel current generation or tool approvals and purge the queue simultaneously.
-
----
-
-### Live Context Usage & Token Gauge
-
-The dynamic header bar monitors token consumption and model parameters in real time:
-
-```text
-● ollama-agent │ Model: gemma4:26b │ Context: 3.4k/10.0k (34%) │ Effort: medium │ RAG: my-docs │ YOLO: OFF │ STEALTH: OFF
-```
-
-* **Metrics**: Displays consumed tokens vs. effective context window limit (`num_ctx`), formatted with `k` suffixes.
-* **Visual Alert Thresholds**:
-  - 🔵 **Cyan / Sky Blue (`#38bdf8`)**: Healthy context utilization (`≤ 75%`).
-  - 🟡 **Yellow / Amber (`#fbbf24`)**: Elevated context warning (`76% – 90%`).
-  - 🔴 **Red (`#f87171`)**: Critical limit proximity (`> 90%`).
-* **Dynamic Indicators**: Displays active RAG database in purple (`#a78bfa`) when loaded, reasoning effort level, highlighted YOLO status badge, and Stealth status badge.
-
----
-
-### Context Management & Automatic Summarization
-
-To prevent context window overflow and preserve coherent multi-turn reasoning:
-
-* **Automatic Summarization Middleware**: DeepAgents' `create_summarization_tool_middleware` actively monitors token consumption across conversation turns.
-* **Stateful Summaries**: When conversation history approaches the context limit, older turns are automatically condensed into a structured summary (`_summarization_event`) in LangGraph state.
-* **Preserved Recency**: The most recent conversation turns and system instructions are preserved intact to maintain immediate conversational context.
-* **Zero User Intervention**: Summarization operates transparently in the background without requiring manual compaction commands or tools.
-
----
-
-### File & Directory Context (`@-mentions`)
-
-Reference files or entire folder trees directly inside your prompts using `@` syntax. The agent resolves the paths and injects the contents into the model's context.
-
-* **Single Files**: `@filename.txt`, `@src/main.py`
-* **Quoted Paths (with spaces)**: `@"my notes/todo.txt"` or `@'my notes/todo.txt'`
-* **Directory Traversal**: `@src` or `@.` (recursively reads all supported text files within the directory).
-* **Interactive Autocompletion**: Type `@` and press `Tab` in the REPL to interactively search and insert file paths.
-
-#### Supported Content Types
-* **Text Files**: Read as UTF-8 and attached as structured `<context_file path="...">...</context_file>` blocks.
-* **Multimodal Attachments**: Images (`.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.bmp`, `.svg`, `.heic`, `.heif`), audio (`.mp3`, `.wav`, `.ogg`, `.flac`, `.m4a`, `.aac`, `.aiff`), video (`.mp4`, `.mpeg`, `.mov`, `.avi`, `.flv`, `.mpg`, `.webm`, `.wmv`, `.3gpp`), and documents (`.pdf`, `.ppt`, `.pptx`) are base64-encoded and attached as native multimodal inputs.
-* **Binary Safety**: Non-multimodal binaries containing null bytes are safely blocked from direct references and skipped during directory traversal.
-
-#### Safety Limits & Configuration
-Configurable under the `mentions` section in `~/.ollama-agent/settings.yaml`:
-
-```yaml
-mentions:
-  max_file_size: 1048576      # Max single file size (default: 1 MB)
-  max_files: 100               # Max files loaded in directory traversal (default: 100)
-  max_total_size: 10485760     # Max total attached context size (default: 10 MB)
-  max_completions: 200         # Max autocompletion candidates (default: 200)
-```
-
-#### Decorator & Syntax Safety
-Common programming decorators (e.g. `@staticmethod`, `@property`, `@decorator`) or bare identifiers that do not exist as files on disk are recognized and treated as literal text. If a missing reference is quoted (e.g. `@"notes.txt"`), contains directory separators (e.g. `@src/missing.py`), or uses relative path prefixes (e.g. `@./app.py`), the agent immediately halts and reports a clear `File or directory not found` error.
-
----
-
-### Human-in-the-Loop (HITL), YOLO & Stealth Modes
-
-To ensure safety when interacting with your local system, Ollama Agent enforces a Human-in-the-Loop confirmation policy before executing potentially sensitive operations (such as running shell commands via `execute` or modifying files via `write_file` and `edit_file`).
-
-```text
-╭─ ⚠ Action Approval Required ────────────────────────────────────────────────╮
-│ Tool: execute                                                               │
-│ Arguments: {'command': 'pytest tests/'}                                     │
-╰─────────────────────────────────────────────────────────────────────────────╯
- Approve (y)    Reject (n)    Allow Session (a)    Cancel (c)
-```
-
-The approval dialog provides full keyboard-first navigation without requiring a mouse:
-
-* **Direct Keyboard Shortcuts**:
-  - **Approve (`y`)**: Authorize this single tool execution.
-  - **Reject (`n`)**: Block execution and provide feedback to the agent so it can select an alternative approach.
-  - **Allow Session (`a`)**: Approve this call and automatically authorize all subsequent calls for this specific tool for the remainder of the active session.
-  - **Cancel (`c` / `Esc`)**: Abort the execution and return focus to the prompt input.
-* **Arrow & Tab Navigation**: Use `←` / `→` / `↑` / `↓` arrow keys or `Tab` / `Shift+Tab` to cycle focus between buttons with high-contrast visual indicators.
-* **Default Action (`Enter` / `Space`)**: The `Approve (y)` button is focused automatically upon appearance; pressing `Enter` or `Space` immediately executes the focused button.
-* **Live Footer Status**: The bottom status bar automatically switches to display the confirmation key guide whenever an approval is pending.
-
-#### YOLO Mode
-When you want autonomous execution without confirmation pauses:
-* **CLI Flag**: Start the agent with `-y` or `--yolo` (e.g. `ollama-agent -y`).
-* **REPL Slash Command**: Toggle dynamically with `/yolo` or set explicitly via `/yolo on` and `/yolo off`.
-
-When YOLO mode is active:
-1. Tool approval prompts are bypassed automatically.
-2. The header displays `YOLO: ON` with a highlighted badge (`#f87171`).
-3. The prompt chevron (`❯ `) and input box border change color to **red** (`#f87171`) for clear visual status.
-
-#### Stealth Mode
-When you want private execution without persisting conversation turns or checkpoints to SQLite (`~/.ollama-agent/history.db`):
-* **CLI Flag**: Start the agent with `-s` or `--stealth` (e.g. `ollama-agent -s`).
-* **REPL Slash Command**: Toggle dynamically with `/stealth` or set explicitly via `/stealth on` and `/stealth off`.
-
-When Stealth mode is active:
-1. Checkpoints are kept in-memory (`MemorySaver`) for multi-turn execution during the session, but no history is written to SQLite.
-2. The header displays `STEALTH: ON` with a purple highlight badge (`#c084fc`).
-3. The prompt chevron (`❯ `) and focused input border turn **purple** (`#c084fc`).
-4. **Dual Mode (YOLO + Stealth)**: When both YOLO and Stealth modes are active simultaneously, both header badges light up (`[YOLO: ON] │ [STEALTH: ON]`), and the prompt chevron and focused input border turn **amber / warm gold** (`#fbbf24`).
-
----
-
-### System Clipboard Integration
-
-Ollama Agent features seamless cross-platform clipboard integration:
-
-* **Copy Selection**: Select text with your mouse or keyboard in the TUI, or press `Super+C`, `Ctrl+Shift+C`, or `Ctrl+Insert` to copy directly to the OS system clipboard.
-* **Paste Input**: Use `Super+V`, `Ctrl+V`, or `Shift+Insert` to paste clipboard text into the prompt.
-* **Native Tool Backends**: Uses `pbcopy`/`pbpaste` on macOS, `wl-copy`/`wl-paste` on Linux Wayland, `xclip`/`xsel` on Linux X11, and `clip`/PowerShell on Windows.
-
----
-
-### Thinking / Reasoning Effort Controls
-
-The `--effort` flag (and `model.reasoning_effort` in `settings.yaml`) controls model reasoning traces via Ollama's native thinking capabilities:
-
-| Model Family | `--effort` Value | Ollama API Parameter | Behavior |
-| :--- | :--- | :--- | :--- |
-| **Qwen3.8 Series** | `xhigh` / `high` / `enabled` | `"high"` | Thorough reasoning for complex analysis (translated to Ollama API `"high"`). |
-| **Qwen3.8 Series** | `medium` | `"medium"` | Balanced reasoning optimizing accuracy and speed. |
-| **Qwen3.8 Series** | `low` | `"low"` | Efficient reasoning optimizing for speed and cost. |
-| **Qwen3.8 Series** | `hide` | `true` | Generates reasoning trace but collapses/hides it from the UI. |
-| **Qwen3.8 Series** | `disabled` | `false` | Disables reasoning trace generation at the model level. |
-| **GPT-OSS** | `low` / `medium` / `high` | `"low"` / `"medium"` / `"high"` | Sets thinking trace depth. GPT-OSS accepts string effort levels. |
-| **GPT-OSS** | `xhigh` | `"high"` | High reasoning depth (mapped to `"high"`). |
-| **GPT-OSS** | `enabled` / `hide` | `true` | Uses model default effort and collapses/hides reasoning trace in UI when `hide`. |
-| **GPT-OSS** | `disabled` | `true` | GPT-OSS cannot disable thinking; emits warning, keeps thinking enabled, and hides reasoning trace in UI. |
-| **Thinking-Capable Models**<br>*(e.g. Qwen 2.5 / 3, Gemma 4, DeepSeek R1)* | `low` / `medium` / `high` | `"low"` / `"medium"` / `"high"` | Passes configured reasoning effort string to Ollama API. |
-| **Thinking-Capable Models**<br>*(e.g. Qwen 2.5 / 3, Gemma 4, DeepSeek R1)* | `xhigh` | `"high"` | Maps `xhigh` to `"high"`. |
-| **Thinking-Capable Models**<br>*(e.g. Qwen 2.5 / 3, Gemma 4, DeepSeek R1)* | `enabled` / `hide` | `true` | Enables native reasoning generation (collapsed/hidden in UI when `hide`). |
-| **Thinking-Capable Models**<br>*(e.g. Qwen 2.5 / 3, Gemma 4, DeepSeek R1)* | `disabled` | `false` | Disables reasoning trace generation at the model level. |
-| **Non-Thinking Models** | *(any)* | *(omitted)* | Setting is omitted and ignored gracefully. |
+4. **Combine Mentions with RAG**:
+   For the best results on large codebases, index your extensive project documentation into a RAG database (`ollama-agent --rag docs`), and use `@-mentions` (`@src/main.py`) to inject the exact files you want the model to edit.
