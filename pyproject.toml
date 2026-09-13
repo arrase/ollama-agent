@@ -30,7 +30,7 @@ ollama-agent = "ollama_agent.main:main"
 
 [project.optional-dependencies]
 dev = ["ruff==0.16.5"]
-docs = ["mkdocs-material>=9.5.0"]
+docs = ["mkdocs-material>=9.7.7"]
 
 [tool.setuptools.packages.find]
 where = ["."]
