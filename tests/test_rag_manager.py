@@ -97,6 +97,11 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
         content = self.manager._read_file(f_custom, allowed_extensions=frozenset({".custom"}))
         self.assertEqual(content, "custom content")
 
+    def test_read_file_os_error(self) -> None:
+        missing = self.rag_dir / "nonexistent.txt"
+        with self.assertRaises(RAGError):
+            self.manager._read_file(missing)
+
     def test_database_crud(self) -> None:
         # Create database
         with patch("ollama_agent.rag.manager.QdrantClient") as mock_qdrant_cls:
@@ -232,6 +237,8 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
         f2.write_text("def hello(): return 'world'", encoding="utf-8")
         f_empty = sub_dir / "empty.txt"
         f_empty.write_text("   \n", encoding="utf-8")
+        f_corrupt = sub_dir / "corrupt.txt"
+        f_corrupt.write_bytes(b"\x80\x81\x82")
 
         mock_client = MagicMock()
         self.manager._client = mock_client
@@ -242,7 +249,7 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
         ):
             res = await self.manager.add_directory(str(sub_dir))
             self.assertEqual(res["added"], 2)
-            self.assertEqual(res["failed"], 0)
+            self.assertEqual(res["failed"], 1)
 
         # Nonexistent directory raises RAGError
         with self.assertRaises(RAGError):

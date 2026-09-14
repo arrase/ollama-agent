@@ -295,7 +295,7 @@ class RAGManager:
 
             try:
                 content = self._read_file(file_path, allowed_extensions=extensions)
-            except (OSError, UnicodeDecodeError) as e:
+            except RAGError as e:
                 logger.warning("Failed to read %s: %s", file_path, e)
                 results["failed"] += 1
                 continue
@@ -449,3 +449,5 @@ class RAGManager:
             return path.read_text(encoding="utf-8")
         except UnicodeDecodeError as e:
             raise RAGError(_("Could not decode file: {path}", path=path)) from e
+        except OSError as e:
+            raise RAGError(_("Failed to read file {file_path}: {e}", file_path=path, e=e)) from e
