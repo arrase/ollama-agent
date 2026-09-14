@@ -775,8 +775,8 @@ class OllamaAgentApp(App):
                     messages = await self.repl.runtime.get_thread_messages(resolved)
                     self.repl.runtime.last_context_tokens = await self.repl.runtime.count_effective_tokens(resolved)
                     for msg in messages:
-                        role = getattr(msg, "type", "unknown")
-                        content = extract_text(getattr(msg, "content", ""))
+                        role = msg.type
+                        content = extract_text(msg.content)
                         if not content:
                             continue
                         if role in ("human", "user"):

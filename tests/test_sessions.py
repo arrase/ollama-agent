@@ -110,6 +110,23 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         self.assertIn("session-12345678", out)
         self.assertIn("current", out)
 
+    def test_get_available_sessions_missing_timestamp(self) -> None:
+        self._init_sample_db()
+        conn = sqlite3.connect(str(self.db_path))
+        cursor = conn.cursor()
+        typ, blob = _serializer.dumps_typed({"v": 1})
+        cursor.execute(
+            "INSERT INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, type, checkpoint) VALUES (?, '', ?, ?, ?)",
+            ("session-nots", "cp-session-nots", typ, blob),
+        )
+        conn.commit()
+        conn.close()
+
+        sessions = get_available_sessions(self.db_path)
+        session_map = {s["thread_id"]: s["timestamp"] for s in sessions}
+        self.assertIn("session-nots", session_map)
+        self.assertEqual(session_map["session-nots"], "-")
+
     def test_resolve_session_id(self) -> None:
         available = [
             {"thread_id": "abcdef123456"},

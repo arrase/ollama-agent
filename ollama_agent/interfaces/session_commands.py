@@ -74,7 +74,7 @@ def get_available_sessions(db_path: Path = HISTORY_DB_PATH) -> list[dict[str, An
                 {
                     "thread_id": row[0],
                     "steps": row[1],
-                    "timestamp": format_iso_timestamp(timestamps.get(row[0], "")),
+                    "timestamp": format_iso_timestamp(timestamps[row[0]]) if row[0] in timestamps else "-",
                 }
                 for row in rows
             ]
@@ -232,7 +232,7 @@ async def export_session(
             lines.extend([f"## 🤖 {asst_label}", ""])
             if content:
                 lines.extend([content, ""])
-            for tc in getattr(msg, "tool_calls", []):
+            for tc in msg.tool_calls:
                 tc_name = tc["name"]
                 tc_args = tc["args"]
                 tool_call_hdr = _("Tool: {name}", name=tc_name)
