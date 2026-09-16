@@ -235,10 +235,14 @@ def process_prompt_mentions(
     max_file_size: int = 1024 * 1024,
     max_files: int = 100,
     max_total_size: int = 10 * 1024 * 1024,
+    allow_traversal: bool = True,
+    base_dir: Path | None = None,
 ) -> tuple[str, list[dict[str, Any]], list[str]]:
     """Find all @<path> mentions, resolve their contents, and attach/append them.
 
     If a mention looks like a path but does not exist, raises PromptProcessingError.
+    If allow_traversal is False and a mention references a path outside base_dir,
+    raises PromptProcessingError.
 
     Returns:
         tuple containing:
@@ -246,6 +250,7 @@ def process_prompt_mentions(
         - A list of binary attachment dicts (suitable for HumanMessage content list).
         - A list of formatted warnings for files skipped during directory resolution.
     """
+    resolved_base = (base_dir or Path.cwd()).resolve()
     pattern = re.compile(r'(?:^|(?<=[\s\(\[\{<]))@(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'\(\[\{<>,;]+))')
 
     matches = list(pattern.finditer(prompt))
@@ -294,7 +299,12 @@ def process_prompt_mentions(
             parsed = urlparse(resolved_target)
             resolved_target = url2pathname(unquote(parsed.path))
 
-        candidate_path = Path(resolved_target).expanduser().resolve()
+        candidate_path = (resolved_base / Path(resolved_target).expanduser()).resolve()
+
+        if not allow_traversal and not candidate_path.is_relative_to(resolved_base):
+            raise PromptProcessingError(
+                _("Access to path outside working directory is not allowed: '{path_str}'", path_str=path_str)
+            )
 
         if candidate_path.exists():
             if candidate_path not in resolved_paths:
@@ -334,10 +344,9 @@ def process_prompt_mentions(
         return processed_prompt, all_binary_attachments, all_warnings
 
     context_blocks = []
-    cwd = Path.cwd()
     for file_path, content in sorted(all_context_contents.items()):
         try:
-            rel_path = file_path.relative_to(cwd).as_posix()
+            rel_path = file_path.relative_to(resolved_base).as_posix()
         except ValueError:
             rel_path = file_path.as_posix()
 
