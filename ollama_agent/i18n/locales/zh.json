@@ -270,6 +270,7 @@
   "Mentions limit exceeded: max {max_files} files.": "超出文件引用上限：最多 {max_files} 个文件。",
   "Total context size limit of {max_total_size} bytes exceeded.": "超出总上下文大小限制 ({max_total_size} 字节)。",
   "File or directory not found: '{path_str}'": "未找到文件或目录：'{path_str}'",
+  "Access to path outside working directory is not allowed: '{path_str}'": "不允许访问工作目录以外的路径：'{path_str}'",
   "Model set to {model_name}.": "模型已设置为 {model_name}。",
   "Reasoning effort set to {validated}.": "推理强度已设置为 {validated}。",
   "Failed to open history database {db_path}: {e}": "打开历史数据库 {db_path} 失败：{e}",

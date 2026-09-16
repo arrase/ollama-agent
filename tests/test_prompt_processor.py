@@ -210,6 +210,99 @@ class TestPromptProcessor(unittest.TestCase):
         with self.assertRaises(ContextLimitExceededError):
             process_prompt_mentions(prompt, max_total_size=img_size + extra_size - 1)
 
+    def test_process_prompt_mentions_allow_traversal_false_blocks_external_file(self) -> None:
+        with tempfile.TemporaryDirectory() as outside_dir:
+            outside_file = Path(outside_dir) / "secret.txt"
+            outside_file.write_text("confidential", encoding="utf-8")
+
+            with self.assertRaises(PromptProcessingError) as ctx:
+                process_prompt_mentions(
+                    f"Check @{outside_file}",
+                    allow_traversal=False,
+                    base_dir=self.base_path,
+                )
+            self.assertIn("Access to path outside working directory is not allowed", str(ctx.exception))
+
+    def test_process_prompt_mentions_allow_traversal_false_allows_internal_file(self) -> None:
+        inside_file = self.base_path / "allowed.txt"
+        inside_file.write_text("allowed content", encoding="utf-8")
+
+        processed, attachments, warnings = process_prompt_mentions(
+            f"Check @{inside_file}",
+            allow_traversal=False,
+            base_dir=self.base_path,
+        )
+        self.assertIn("allowed content", processed)
+        self.assertEqual(attachments, [])
+        self.assertEqual(warnings, [])
+
+    def test_process_prompt_mentions_allow_traversal_true_allows_external_file(self) -> None:
+        with tempfile.TemporaryDirectory() as outside_dir:
+            outside_file = Path(outside_dir) / "external.txt"
+            outside_file.write_text("external content", encoding="utf-8")
+
+            processed, attachments, warnings = process_prompt_mentions(
+                f"Check @{outside_file}",
+                allow_traversal=True,
+                base_dir=self.base_path,
+            )
+            self.assertIn("external content", processed)
+            self.assertEqual(attachments, [])
+            self.assertEqual(warnings, [])
+
+    def test_process_prompt_mentions_allow_traversal_false_blocks_relative_traversal(self) -> None:
+        with self.assertRaises(PromptProcessingError) as ctx:
+            process_prompt_mentions(
+                'Check @"../outside_escape.txt"',
+                allow_traversal=False,
+                base_dir=self.base_path,
+            )
+        self.assertIn("Access to path outside working directory is not allowed", str(ctx.exception))
+
+    def test_process_prompt_mentions_allow_traversal_false_default_base_dir_blocks_outside_cwd(self) -> None:
+        with tempfile.TemporaryDirectory() as outside_dir:
+            outside_file = Path(outside_dir) / "host_secret.txt"
+            outside_file.write_text("sensitive", encoding="utf-8")
+
+            with self.assertRaises(PromptProcessingError) as ctx:
+                process_prompt_mentions(
+                    f"Check @{outside_file}",
+                    allow_traversal=False,
+                )
+            self.assertIn("Access to path outside working directory is not allowed", str(ctx.exception))
+
+    def test_process_prompt_mentions_allow_traversal_false_blocks_tilde_expansion(self) -> None:
+        with self.assertRaises(PromptProcessingError) as ctx:
+            process_prompt_mentions(
+                'Check @"~/secret_user_file.txt"',
+                allow_traversal=False,
+                base_dir=self.base_path,
+            )
+        self.assertIn("Access to path outside working directory is not allowed", str(ctx.exception))
+
+        with self.assertRaises(PromptProcessingError) as ctx:
+            process_prompt_mentions(
+                "Check @~/secret_user_file.txt",
+                allow_traversal=False,
+                base_dir=self.base_path,
+            )
+        self.assertIn("Access to path outside working directory is not allowed", str(ctx.exception))
+
+    def test_process_prompt_mentions_allow_traversal_false_blocks_symlink_pointing_outside(self) -> None:
+        with tempfile.TemporaryDirectory() as outside_dir:
+            outside_file = Path(outside_dir) / "outside_target.txt"
+            outside_file.write_text("external secret", encoding="utf-8")
+            symlink = self.base_path / "symlink_escape.txt"
+            symlink.symlink_to(outside_file)
+
+            with self.assertRaises(PromptProcessingError) as ctx:
+                process_prompt_mentions(
+                    f"Check @{symlink}",
+                    allow_traversal=False,
+                    base_dir=self.base_path,
+                )
+            self.assertIn("Access to path outside working directory is not allowed", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -276,6 +276,7 @@ class AgentRuntime:
                     max_file_size=mentions_cfg.max_file_size,
                     max_files=mentions_cfg.max_files,
                     max_total_size=mentions_cfg.max_total_size,
+                    allow_traversal=self.settings.runtime.allow_traversal,
                 )
             except PromptProcessingError as exc:
                 yield {"type": "error", "content": str(exc)}

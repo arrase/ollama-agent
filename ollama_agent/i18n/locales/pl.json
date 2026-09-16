@@ -270,6 +270,7 @@
   "Mentions limit exceeded: max {max_files} files.": "Przekroczono limit wzmianek: maksymalnie {max_files} plików.",
   "Total context size limit of {max_total_size} bytes exceeded.": "Przekroczono całkowity limit rozmiaru kontekstu wynoszący {max_total_size} bajtów.",
   "File or directory not found: '{path_str}'": "Nie znaleziono pliku ani katalogu: '{path_str}'",
+  "Access to path outside working directory is not allowed: '{path_str}'": "Dostęp do ścieżki poza katalogiem roboczym jest niedozwolony: '{path_str}'",
   "Model set to {model_name}.": "Ustawiono model na {model_name}.",
   "Reasoning effort set to {validated}.": "Ustawiono poziom rozumowania na {validated}.",
   "Failed to open history database {db_path}: {e}": "Nie udało się otworzyć bazy danych historii {db_path}: {e}",

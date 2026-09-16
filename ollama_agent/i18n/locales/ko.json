@@ -270,6 +270,7 @@
   "Mentions limit exceeded: max {max_files} files.": "멘션 개수 제한 초과: 최대 {max_files}개 파일.",
   "Total context size limit of {max_total_size} bytes exceeded.": "전체 컨텍스트 크기 제한({max_total_size}바이트)을 초과했습니다.",
   "File or directory not found: '{path_str}'": "파일 또는 디렉터리를 찾을 수 없음: '{path_str}'",
+  "Access to path outside working directory is not allowed: '{path_str}'": "작업 디렉터리 외부 경로에 대한 액세스는 허용되지 않습니다: '{path_str}'",
   "Model set to {model_name}.": "모델이 {model_name}(으)로 설정되었습니다.",
   "Reasoning effort set to {validated}.": "추론 강도가 {validated}(으)로 설정되었습니다.",
   "Failed to open history database {db_path}: {e}": "기록 데이터베이스 {db_path}을(를) 열지 못했습니다: {e}",

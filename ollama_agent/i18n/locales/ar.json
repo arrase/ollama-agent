@@ -270,6 +270,7 @@
   "Mentions limit exceeded: max {max_files} files.": "تم تجاوز حد الإشارات: {max_files} ملفًا كحد أقصى.",
   "Total context size limit of {max_total_size} bytes exceeded.": "تم تجاوز الحد الكلي لحجم السياق البالغ {max_total_size} بايت.",
   "File or directory not found: '{path_str}'": "الملف أو المجلد غير موجود: '{path_str}'",
+  "Access to path outside working directory is not allowed: '{path_str}'": "لا يُسمح بالوصول إلى المسار خارج دليل العمل: '{path_str}'",
   "Model set to {model_name}.": "تم ضبط النموذج على {model_name}.",
   "Reasoning effort set to {validated}.": "تم ضبط مستوى الاستدلال على {validated}.",
   "Failed to open history database {db_path}: {e}": "فشل فتح قاعدة بيانات السجل {db_path}: {e}",

@@ -437,6 +437,52 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(events[0]["type"], "error")
             self.assertIn("Invalid file mention", events[0]["content"])
 
+    async def test_agent_runtime_run_streamed_external_mention_blocked_no_traversal(self) -> None:
+        settings = Settings()
+        settings.runtime.allow_traversal = False
+        runtime = AgentRuntime(settings=settings)
+        mock_graph = MagicMock()
+        runtime.graph = mock_graph
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            outside_file = Path(tmpdir) / "secret.txt"
+            outside_file.write_text("secret_data", encoding="utf-8")
+
+            events = []
+            async for event in runtime.run_streamed(f"Analyze @{outside_file}"):
+                events.append(event)
+
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0]["type"], "error")
+            self.assertIn("Access to path outside working directory is not allowed", events[0]["content"])
+
+    async def test_agent_runtime_run_streamed_external_mention_allowed_with_traversal(self) -> None:
+        settings = Settings()
+        settings.runtime.allow_traversal = True
+        runtime = AgentRuntime(settings=settings)
+
+        async def mock_astream(inputs: Any, *args: Any, **kwargs: Any):
+            ai_chunk = MagicMock(type="ai", content="Done", additional_kwargs={})
+            yield "messages", (ai_chunk,)
+
+        mock_graph = MagicMock()
+        mock_graph.astream = mock_astream
+        mock_state = MagicMock(interrupts=[])
+        mock_graph.aget_state = AsyncMock(return_value=mock_state)
+        runtime.graph = mock_graph
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            outside_file = Path(tmpdir) / "secret.txt"
+            outside_file.write_text("secret_data", encoding="utf-8")
+
+            events = []
+            async for event in runtime.run_streamed(f"Analyze @{outside_file}"):
+                events.append(event)
+
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0]["type"], "text_delta")
+            self.assertEqual(events[0]["content"], "Done")
+
     async def test_count_effective_tokens_without_and_with_summary(self) -> None:
         settings = Settings()
         runtime = AgentRuntime(settings=settings)
