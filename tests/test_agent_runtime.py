@@ -23,6 +23,7 @@ from ollama_agent.settings.config import (
     ModelSettings,
     RuntimeSettings,
     Settings,
+    SubAgentMCPServer,
     SubAgentSettings,
 )
 
@@ -534,3 +535,79 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             res2 = await runtime.set_context_window("max")
             self.assertEqual(runtime.settings.model.context_window, "max")
             self.assertIn("max", res2)
+
+    async def test_build_graph_mcp_tools_and_subagent_mcp_tools_in_interrupt_on(self) -> None:
+        settings = Settings()
+        settings.subagents = [
+            SubAgentSettings(
+                name="mcp_subagent",
+                description="Subagent with MCP",
+                system_prompt="Subagent prompt.",
+                mcp_servers=[SubAgentMCPServer(name="git", command="npx")],
+            )
+        ]
+        runtime = AgentRuntime(settings=settings)
+
+        mock_main_mcp_tool = MagicMock()
+        mock_main_mcp_tool.name = "main_fetch"
+        mock_sub_mcp_tool = MagicMock()
+        mock_sub_mcp_tool.name = "git_diff"
+
+        with (
+            patch("ollama_agent.agent.agent.ensure_model_supports_tools", AsyncMock()),
+            patch("ollama_agent.agent.agent.create_ollama_chat_model", AsyncMock(return_value=MagicMock())),
+            patch("ollama_agent.agent.subagents.create_ollama_chat_model", AsyncMock(return_value=MagicMock())),
+            patch("ollama_agent.agent.agent.create_summarization_tool_middleware", return_value=MagicMock()),
+            patch("ollama_agent.agent.agent.load_main_mcp_tools", AsyncMock(return_value=[mock_main_mcp_tool])),
+            patch(
+                "ollama_agent.agent.subagents.load_subagent_mcp_tools",
+                AsyncMock(return_value=[mock_sub_mcp_tool]),
+            ),
+            patch("ollama_agent.agent.agent.create_deep_agent") as mock_cda,
+            patch.object(AgentRuntime, "_sqlite_checkpointer", AsyncMock(return_value=MagicMock())),
+        ):
+            await runtime._build_graph()
+
+            kwargs = mock_cda.call_args.kwargs
+            interrupt_on = kwargs["interrupt_on"]
+
+            # Main agent interrupt_on
+            self.assertIn("main_fetch", interrupt_on)
+            self.assertIn("execute", interrupt_on)
+            self.assertIn("write_file", interrupt_on)
+            self.assertIn("edit_file", interrupt_on)
+            self.assertEqual(interrupt_on["main_fetch"]["allowed_decisions"], ["approve", "reject"])
+
+            # Subagent interrupt_on
+            subagents = kwargs["subagents"]
+            self.assertEqual(len(subagents), 1)
+            sub_spec = subagents[0]
+            self.assertIn("interrupt_on", sub_spec)
+            sub_interrupt_on = sub_spec["interrupt_on"]
+            self.assertIn("git_diff", sub_interrupt_on)
+            self.assertIn("execute", sub_interrupt_on)
+            self.assertIn("write_file", sub_interrupt_on)
+            self.assertIn("edit_file", sub_interrupt_on)
+            self.assertEqual(sub_interrupt_on["git_diff"]["allowed_decisions"], ["approve", "reject"])
+
+            # When predicate: normal HITL
+            req_main = MagicMock(tool_call={"name": "main_fetch"})
+            req_sub = MagicMock(tool_call={"name": "git_diff"})
+            self.assertTrue(interrupt_on["main_fetch"]["when"](req_main))
+            self.assertTrue(sub_interrupt_on["git_diff"]["when"](req_sub))
+
+            # When predicate: YOLO mode
+            runtime.yolo_mode = True
+            self.assertFalse(interrupt_on["main_fetch"]["when"](req_main))
+            self.assertFalse(sub_interrupt_on["git_diff"]["when"](req_sub))
+
+            # When predicate: auto_approved_tools
+            runtime.yolo_mode = False
+            runtime.auto_approved_tools.add("main_fetch")
+            self.assertFalse(interrupt_on["main_fetch"]["when"](req_main))
+            self.assertTrue(sub_interrupt_on["git_diff"]["when"](req_sub))
+            runtime.auto_approved_tools.add("git_diff")
+            self.assertFalse(sub_interrupt_on["git_diff"]["when"](req_sub))
+
+        await runtime.aclose()
+

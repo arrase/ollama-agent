@@ -110,11 +110,15 @@ class AgentRuntime:
     async def _build_graph(self) -> Any:
         ms = self.settings.model
 
+        def should_interrupt_tool(request: Any) -> bool:
+            return not self.yolo_mode and request.tool_call["name"] not in self.auto_approved_tools
+
         model_coro = create_ollama_chat_model(**get_model_creation_kwargs(ms, warn_callback=_log.warning))
         mcp_coro = load_main_mcp_tools()
         subagents_coro = build_subagents(
             self.settings.subagents,
             model_settings=self.settings.model,
+            should_interrupt_tool=should_interrupt_tool,
         )
         checkpointer_coro = self._get_memory_checkpointer() if self.stealth_mode else self._sqlite_checkpointer()
 
@@ -190,15 +194,12 @@ class AgentRuntime:
             routes=routes,
         )
 
-        def should_interrupt_tool(request: Any) -> bool:
-            return not self.yolo_mode and request.tool_call["name"] not in self.auto_approved_tools
-
         interrupt_on = {
             tool_name: {
                 "allowed_decisions": ["approve", "reject"],
                 "when": should_interrupt_tool,
             }
-            for tool_name in ("execute", "write_file", "edit_file")
+            for tool_name in ("execute", "write_file", "edit_file", *(t.name for t in mcp_tools))
         }
 
         rag_mgr = get_rag_manager()

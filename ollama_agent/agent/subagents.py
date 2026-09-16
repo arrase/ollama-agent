@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from rich import box
@@ -69,13 +70,21 @@ def list_subagents(
     console.print(table)
 
 
+def _default_should_interrupt(_request: Any) -> bool:
+    return True
+
+
 async def build_subagents(
     subagent_settings: list[SubAgentSettings],
     *,
     model_settings: ModelSettings,
+    should_interrupt_tool: Callable[[Any], bool] = _default_should_interrupt,
 ) -> list[dict[str, Any]]:
     """Convert ``SubAgentSettings`` into dicts for ``create_deep_agent(subagents=...)``."""
-    tasks = [_build_spec(sa, model_settings=model_settings) for sa in subagent_settings]
+    tasks = [
+        _build_spec(sa, model_settings=model_settings, should_interrupt_tool=should_interrupt_tool)
+        for sa in subagent_settings
+    ]
     return await asyncio.gather(*tasks)
 
 
@@ -83,6 +92,7 @@ async def _build_spec(
     sa: SubAgentSettings,
     *,
     model_settings: ModelSettings,
+    should_interrupt_tool: Callable[[Any], bool] = _default_should_interrupt,
 ) -> dict[str, Any]:
     """Build a single subagent spec dict."""
     if not sa.name:
@@ -117,5 +127,12 @@ async def _build_spec(
         tools = await load_subagent_mcp_tools(sa.name, sa.mcp_servers)
         if tools:
             spec["tools"] = tools
+            spec["interrupt_on"] = {
+                tool_name: {
+                    "allowed_decisions": ["approve", "reject"],
+                    "when": should_interrupt_tool,
+                }
+                for tool_name in ("execute", "write_file", "edit_file", *(t.name for t in tools))
+            }
 
     return spec
