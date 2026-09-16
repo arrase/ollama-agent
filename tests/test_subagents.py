@@ -121,6 +121,7 @@ class TestSubAgents(unittest.IsolatedAsyncioTestCase):
         ]
         mock_model = MagicMock()
         mock_tool = MagicMock()
+        mock_tool.name = "git_status"
 
         with (
             patch("ollama_agent.agent.subagents.create_ollama_chat_model", AsyncMock(return_value=mock_model)),
@@ -133,6 +134,65 @@ class TestSubAgents(unittest.IsolatedAsyncioTestCase):
             self.assertIn("tools", specs[0])
             self.assertEqual(specs[0]["tools"], [mock_tool])
             mock_mcp.assert_awaited_once_with("mcp_agent", sa_list[0].mcp_servers)
+
+            self.assertIn("interrupt_on", specs[0])
+            interrupt_on = specs[0]["interrupt_on"]
+            self.assertIn("git_status", interrupt_on)
+            self.assertIn("execute", interrupt_on)
+            self.assertIn("write_file", interrupt_on)
+            self.assertIn("edit_file", interrupt_on)
+            self.assertEqual(interrupt_on["git_status"]["allowed_decisions"], ["approve", "reject"])
+            self.assertTrue(callable(interrupt_on["git_status"]["when"]))
+            self.assertTrue(interrupt_on["git_status"]["when"](MagicMock()))
+
+    async def test_build_subagents_with_custom_should_interrupt(self) -> None:
+        ms = ModelSettings(name="gemma4:26b")
+        sa_list = [
+            SubAgentSettings(
+                name="mcp_agent",
+                description="Agent with MCP tools",
+                system_prompt="MCP instructions.",
+                mcp_servers=[SubAgentMCPServer(name="git", command="npx")],
+            )
+        ]
+        mock_model = MagicMock()
+        mock_tool = MagicMock()
+        mock_tool.name = "git_commit"
+
+        custom_policy = MagicMock(return_value=False)
+
+        with (
+            patch("ollama_agent.agent.subagents.create_ollama_chat_model", AsyncMock(return_value=mock_model)),
+            patch(
+                "ollama_agent.agent.subagents.load_subagent_mcp_tools", AsyncMock(return_value=[mock_tool])
+            ),
+        ):
+            specs = await build_subagents(sa_list, model_settings=ms, should_interrupt_tool=custom_policy)
+            self.assertEqual(len(specs), 1)
+            interrupt_on = specs[0]["interrupt_on"]
+            self.assertIn("git_commit", interrupt_on)
+            when_fn = interrupt_on["git_commit"]["when"]
+            mock_req = MagicMock()
+            self.assertFalse(when_fn(mock_req))
+            custom_policy.assert_called_once_with(mock_req)
+
+    async def test_build_subagents_without_mcp_servers_no_interrupt_on(self) -> None:
+        ms = ModelSettings(name="gemma4:26b")
+        sa_list = [
+            SubAgentSettings(
+                name="plain_agent",
+                description="Agent without MCP tools",
+                system_prompt="Plain instructions.",
+                mcp_servers=[],
+            )
+        ]
+        mock_model = MagicMock()
+
+        with patch("ollama_agent.agent.subagents.create_ollama_chat_model", AsyncMock(return_value=mock_model)):
+            specs = await build_subagents(sa_list, model_settings=ms)
+            self.assertEqual(len(specs), 1)
+            self.assertNotIn("interrupt_on", specs[0])
+            self.assertNotIn("tools", specs[0])
 
     async def test_build_subagents_invalid_name_raises(self) -> None:
         ms = ModelSettings(name="gemma4:26b")
