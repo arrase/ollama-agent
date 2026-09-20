@@ -57,7 +57,7 @@ flowchart TD
 Launch the REPL by typing `ollama-agent` without prompt flags. You are greeted with a full-screen, responsive terminal interface.
 
 ```text
-● ollama-agent │ Model: gemma4:26b │ Context: 2.1k/10.0k (21%) │ Effort: medium │ YOLO: OFF │ STEALTH: OFF
+● ollama-agent │ Model: gemma4:26b │ Context: 2.1k/10.0k (21%) │ Effort: default │ YOLO: OFF │ STEALTH: OFF
 ```
 
 ### TUI Interface Tour
@@ -70,7 +70,7 @@ The interactive workspace is organized into four core visual areas:
      - 🔵 **Cyan (`≤ 75%`)**: Healthy context utilization.
      - 🟡 **Amber (`76% – 90%`)**: Elevated context usage.
      - 🔴 **Red (`> 90%`)**: Approaching context limits (automatic summarization will activate).
-   - **Effort & RAG Badges**: Displays current reasoning effort (`low`, `medium`, `high`) and active RAG knowledge base.
+   - **Effort & RAG Badges**: Displays current reasoning effort (`default`, `high`, etc.) and active RAG knowledge base.
    - **Mode Badges**: Visual indicators for **YOLO** (auto-approve tools) and **STEALTH** (in-memory, no disk history).
 
 2. **Markdown Chat Stream**:
@@ -278,7 +278,7 @@ Slash commands provide complete control over model parameters, persistent sessio
 | :--- | :--- | :--- |
 | `/model` | `/model` or `/model list` | List all available local Ollama models with disk sizes and tool support flags. |
 | `/model set` | `/model set <model_name>` | Switch the active model for the current conversation. |
-| `/effort` | `/effort [set <level>]` | View or adjust reasoning/thinking effort (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
+| `/effort` | `/effort [<level>]` | View advertised model thinking options or set reasoning effort (`low`, `high`, `max`, `true`, `false`, `default`). |
 | `/context` | `/context [set <size\|max>]` | View or set context window token limit (`num_ctx`) or set to `'max'`. |
 | `/params` | `/params` or `/params list` | Display active sampling parameters (`temperature`, `top_p`, `top_k`, etc.) and their configuration sources. |
 | `/params set` | `/params set <key> <val>` | Dynamically update a parameter (e.g., `/params set temperature 0.7`). |
@@ -493,7 +493,7 @@ All global flags can be used when launching either the interactive REPL or non-i
 | :--- | :--- | :--- | :--- | :--- |
 | `--model` | `-m` | `string` | Configured default in `settings.yaml` | Specify the Ollama model to use for this execution. |
 | `--prompt` | `-p` | `string` | `None` | Run in non-interactive mode with the specified prompt string. |
-| `--effort` | `-e` | `string` | `medium` | Set reasoning effort level (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
+| `--effort` | `-e` | `string` | `default` | Set reasoning effort level (dynamically matched to model-supported values, e.g. `low`, `high`, `max`, or boolean toggles). |
 | `--num-ctx` | `-c` | `int \| str` | `10000` | Set context window size in tokens (`num_ctx`) or set to `'max'`. |
 | `--language`, `--lang` | `-l` | `string` | System locale (fallback `en`) | Set interface language code (`en`, `es`, `fr`, `de`, `it`, `pt`, `zh`, `ja`, `ru`, `hi`, `ko`, `ar`, `tr`, `pl`, `nl`, `uk`). |
 | `--builtin-tool-timeout`| `-t` | `int` | `30` | Execution timeout in seconds for built-in tools (including shell commands). |
@@ -513,8 +513,8 @@ All global flags can be used when launching either the interactive REPL or non-i
 
 2. **Reasoning Effort Optimization**:
    Tune your reasoning effort with `-e` or `/effort`:
-   - Use `low` for fast, lightweight code edits, commit messages, and simple queries.
-   - Use `high` or `xhigh` for complex multi-file architectural refactors, debugging subtle race conditions, or algorithmic analysis.
+   - Use lower effort levels (e.g. `low`) for fast, lightweight code edits, commit messages, and simple queries.
+   - Use higher effort levels (e.g. `high` or `max`) for complex multi-file architectural refactors, debugging subtle race conditions, or algorithmic analysis.
 
 3. **Sandboxing by Default**:
    By default, Ollama Agent restricts file tools to the current working directory (`--no-allow-traversal`). If your project references shared libraries or configuration files in parent folders, launch with `--allow-traversal` to permit safe access across directories.

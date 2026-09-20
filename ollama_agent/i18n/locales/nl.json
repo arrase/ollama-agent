@@ -2,7 +2,6 @@
   "Ollama Agent - AI agent to interact with local models": "Ollama Agent - AI-agent voor interactie met lokale modellen",
   "Specify the AI model to use": "Geef het te gebruiken AI-model op",
   "Non-interactive mode, provide a prompt directly from the command line": "Niet-interactieve modus, geef een prompt rechtstreeks vanaf de opdrachtregel op",
-  "Set reasoning effort level (low, medium, high, xhigh, disabled, hide, enabled)": "Stel het niveau van redeneringsinspanning in (low, medium, high, xhigh, disabled, hide, enabled)",
   "Set tool-call timeout in seconds (includes shell middleware and built-in tools)": "Stel de time-out voor tool-aanroepen in seconden in (inclusief shell-middleware en ingebouwde tools)",
   "Load a RAG database for the session": "Laad een RAG-database voor de sessie",
   "Allow virtual filesystem traversal to OS directories": "Sta traversering van het virtuele bestandssysteem naar OS-mappen toe",
@@ -15,7 +14,6 @@
   "Task title": "Taaktitel",
   "Task prompt text (use quotes; REPL supports multiline)": "Prompttekst van de taak (gebruik aanhalingstekens; REPL ondersteunt meerdere regels)",
   "Model to save with the task": "Model om bij de taak op te slaan",
-  "Reasoning effort to save with the task (low, medium, high, xhigh, disabled, hide, enabled)": "Redeneringsinspanning om bij de taak op te slaan (low, medium, high, xhigh, disabled, hide, enabled)",
   "Overwrite task if it already exists": "Overschrijf de taak als deze al bestaat",
   "Execute a saved task": "Voer een opgeslagen taak uit",
   "Task ID or prefix to execute": "Taak-ID of voorvoegsel om uit te voeren",
@@ -156,7 +154,6 @@
   "Cannot verify model capabilities: {exc}": "Kan de mogelijkheden van het model niet verifiëren: {exc}",
   "Switched from {current} to {model_name}\nConversation preserved. Continue chatting.": "Gewisseld van {current} naar {model_name}\nGesprek bewaard. Ga verder met chatten.",
   "Failed to switch to model '{model_name}': {exc}": "Wisselen naar model '{model_name}' mislukt: {exc}",
-  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)": "Huidige redeneringsinspanning: {effort} (model: {model})\nGebruik: /effort <niveau> (bijv. low, medium, high, disabled, hide, enabled)",
   "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}": "Ongeldige redeneringsinspanning '{effort}'. Toegestane waarden: {valid_list}",
   "Already using reasoning effort '{norm_effort}'.": "Je gebruikt al redeneringsinspanning '{norm_effort}'.",
   "Switched reasoning effort from {current} to {norm_effort}\nConversation preserved. Continue chatting.": "Redeneringsinspanning gewijzigd van {current} naar {norm_effort}\nGesprek bewaard. Ga verder met chatten.",
@@ -455,5 +452,11 @@
   "Expected mapping for inputs in Task": "Mapping verwacht voor inputs in Task",
   "Invalid input definition for '{name}'": "Ongeldige invoerdefinitie voor '{name}'",
   "MCP server '{name}': 'command' must be a non-empty string": "MCP-server '{name}': 'command' moet een niet-lege tekenreeks zijn",
-  "MCP server '{name}': 'url' must be a non-empty string": "MCP-server '{name}': 'url' moet een niet-lege tekenreeks zijn"
+  "MCP server '{name}': 'url' must be a non-empty string": "MCP-server '{name}': 'url' moet een niet-lege tekenreeks zijn",
+  "Set reasoning effort level supported by the model, or 'default'": "Stel het door het model ondersteunde niveau van redeneringsinspanning in, of 'default'",
+  "Reasoning effort to save with the task (e.g. default, low, high, max, false)": "Redeneringsinspanning om bij de taak op te slaan (bijv. default, low, high, max, false)",
+  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "Huidige redeneringsinspanning: {effort} (model: {model})\nGebruik: /effort <niveau> | default",
+  "Model thinking controls: {values} (default: {default})": "Denkbesturingselementen van het model: {values} (standaard: {default})",
+  "(model default)": "(modelstandaard)",
+  "(default)": "(standaard)"
 }

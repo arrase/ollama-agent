@@ -2,7 +2,6 @@
   "Ollama Agent - AI agent to interact with local models": "Ollama Agent - Agente IA per interagire con modelli locali",
   "Specify the AI model to use": "Specificare il modello IA da utilizzare",
   "Non-interactive mode, provide a prompt directly from the command line": "Modalità non interattiva, fornire un prompt direttamente dalla riga di comando",
-  "Set reasoning effort level (low, medium, high, xhigh, disabled, hide, enabled)": "Impostare il livello di sforzo di ragionamento (low, medium, high, xhigh, disabled, hide, enabled)",
   "Set tool-call timeout in seconds (includes shell middleware and built-in tools)": "Impostare il timeout delle chiamate ai tool in secondi (include middleware shell e tool integrati)",
   "Load a RAG database for the session": "Caricare un database RAG per la sessione",
   "Allow virtual filesystem traversal to OS directories": "Consentire l'esplorazione del filesystem virtuale verso le cartelle del SO",
@@ -15,7 +14,6 @@
   "Task title": "Titolo attività",
   "Task prompt text (use quotes; REPL supports multiline)": "Testo del prompt dell'attività (usare virgolette; la REPL supporta più righe)",
   "Model to save with the task": "Modello da salvare con l'attività",
-  "Reasoning effort to save with the task (low, medium, high, xhigh, disabled, hide, enabled)": "Sforzo di ragionamento da salvare con l'attività (low, medium, high, xhigh, disabled, hide, enabled)",
   "Overwrite task if it already exists": "Sovrascrivere l'attività se già esistente",
   "Execute a saved task": "Eseguire un'attività salvata",
   "Task ID or prefix to execute": "ID o prefisso dell'attività da eseguire",
@@ -156,7 +154,6 @@
   "Cannot verify model capabilities: {exc}": "Impossibile verificare le capacità del modello: {exc}",
   "Switched from {current} to {model_name}\nConversation preserved. Continue chatting.": "Passato da {current} a {model_name}\nConversazione conservata. Continua a chattare.",
   "Failed to switch to model '{model_name}': {exc}": "Impossibile passare al modello '{model_name}': {exc}",
-  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)": "Sforzo di ragionamento attuale: {effort} (modello: {model})\nUso: /effort <livello> (es. low, medium, high, disabled, hide, enabled)",
   "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}": "Sforzo di ragionamento non valido '{effort}'. Valori consentiti: {valid_list}",
   "Already using reasoning effort '{norm_effort}'.": "Stai già usando lo sforzo di ragionamento '{norm_effort}'.",
   "Switched reasoning effort from {current} to {norm_effort}\nConversation preserved. Continue chatting.": "Sforzo di ragionamento cambiato da {current} a {norm_effort}\nConversazione conservata. Continua a chattare.",
@@ -455,5 +452,11 @@
   "Expected mapping for inputs in Task": "Attesa mappatura per inputs in Task",
   "Invalid input definition for '{name}'": "Definizione di input non valida per '{name}'",
   "MCP server '{name}': 'command' must be a non-empty string": "Server MCP '{name}': 'command' deve essere una stringa non vuota",
-  "MCP server '{name}': 'url' must be a non-empty string": "Server MCP '{name}': 'url' deve essere una stringa non vuota"
+  "MCP server '{name}': 'url' must be a non-empty string": "Server MCP '{name}': 'url' deve essere una stringa non vuota",
+  "Set reasoning effort level supported by the model, or 'default'": "Impostare il livello di sforzo di ragionamento supportato dal modello, o 'default'",
+  "Reasoning effort to save with the task (e.g. default, low, high, max, false)": "Sforzo di ragionamento da salvare con l'attività (es. default, low, high, max, false)",
+  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "Sforzo di ragionamento attuale: {effort} (modello: {model})\nUso: /effort <livello> | default",
+  "Model thinking controls: {values} (default: {default})": "Controlli di pensiero del modello: {values} (predefinito: {default})",
+  "(model default)": "(predefinito del modello)",
+  "(default)": "(predefinito)"
 }

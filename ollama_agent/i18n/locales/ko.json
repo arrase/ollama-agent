@@ -2,7 +2,6 @@
   "Ollama Agent - AI agent to interact with local models": "Ollama Agent - 로컬 모델과 상호작용하는 AI 에이전트",
   "Specify the AI model to use": "사용할 AI 모델 지정",
   "Non-interactive mode, provide a prompt directly from the command line": "비대화형 모드, 명령줄에서 프롬프트를 직접 입력",
-  "Set reasoning effort level (low, medium, high, xhigh, disabled, hide, enabled)": "추론 강도 수준 설정 (low, medium, high, xhigh, disabled, hide, enabled)",
   "Set tool-call timeout in seconds (includes shell middleware and built-in tools)": "도구 호출 제한 시간을 초 단위로 설정 (셸 미들웨어 및 내장 도구 포함)",
   "Load a RAG database for the session": "세션에 사용할 RAG 데이터베이스 로드",
   "Allow virtual filesystem traversal to OS directories": "가상 파일 시스템의 OS 디렉터리 접근 허용",
@@ -15,7 +14,6 @@
   "Task title": "작업 제목",
   "Task prompt text (use quotes; REPL supports multiline)": "작업 프롬프트 텍스트 (따옴표 사용; REPL은 여러 줄 지원)",
   "Model to save with the task": "작업과 함께 저장할 모델",
-  "Reasoning effort to save with the task (low, medium, high, xhigh, disabled, hide, enabled)": "작업과 함께 저장할 추론 강도 (low, medium, high, xhigh, disabled, hide, enabled)",
   "Overwrite task if it already exists": "작업이 이미 존재하면 덮어쓰기",
   "Execute a saved task": "저장된 작업 실행",
   "Task ID or prefix to execute": "실행할 작업 ID 또는 접두사",
@@ -156,7 +154,6 @@
   "Cannot verify model capabilities: {exc}": "모델 기능을 확인할 수 없습니다: {exc}",
   "Switched from {current} to {model_name}\nConversation preserved. Continue chatting.": "{current}에서 {model_name}(으)로 전환했습니다\n대화가 유지됩니다. 계속 대화하세요.",
   "Failed to switch to model '{model_name}': {exc}": "모델 '{model_name}'으로 전환하지 못했습니다: {exc}",
-  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)": "현재 추론 강도: {effort} (모델: {model})\n사용법: /effort <수준> (예: low, medium, high, disabled, hide, enabled)",
   "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}": "잘못된 추론 강도 '{effort}'입니다. 허용되는 값: {valid_list}",
   "Already using reasoning effort '{norm_effort}'.": "이미 추론 강도 '{norm_effort}'을(를) 사용하고 있습니다.",
   "Switched reasoning effort from {current} to {norm_effort}\nConversation preserved. Continue chatting.": "추론 강도를 {current}에서 {norm_effort}(으)로 변경했습니다\n대화가 유지됩니다. 계속 대화하세요.",
@@ -455,5 +452,11 @@
   "Expected mapping for inputs in Task": "Task의 inputs에 매핑이 필요합니다",
   "Invalid input definition for '{name}'": "'{name}'에 대한 잘못된 입력 정의입니다",
   "MCP server '{name}': 'command' must be a non-empty string": "MCP 서버 '{name}': 'command'은(는) 빈 문자열이 아니어야 합니다",
-  "MCP server '{name}': 'url' must be a non-empty string": "MCP 서버 '{name}': 'url'은(는) 빈 문자열이 아니어야 합니다"
+  "MCP server '{name}': 'url' must be a non-empty string": "MCP 서버 '{name}': 'url'은(는) 빈 문자열이 아니어야 합니다",
+  "Set reasoning effort level supported by the model, or 'default'": "모델에서 지원하는 추론 강도 수준 설정, 또는 'default'",
+  "Reasoning effort to save with the task (e.g. default, low, high, max, false)": "작업과 함께 저장할 추론 강도 (예: default, low, high, max, false)",
+  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "현재 추론 강도: {effort} (모델: {model})\n사용법: /effort <수준> | default",
+  "Model thinking controls: {values} (default: {default})": "모델 사고 제어: {values} (기본값: {default})",
+  "(model default)": "(모델 기본값)",
+  "(default)": "(기본값)"
 }

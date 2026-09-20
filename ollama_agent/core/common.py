@@ -6,22 +6,13 @@ import os
 import re
 import tempfile
 from pathlib import Path
-from typing import Any, Literal, TypedDict
+from typing import Any, TypedDict
 
 from ..i18n import _
 
-# Reasoning effort types
-ReasoningEffortValue = Literal["low", "medium", "high", "xhigh", "disabled", "hide", "enabled"]
-ALLOWED_REASONING_EFFORTS: tuple[ReasoningEffortValue, ...] = (
-    "low",
-    "medium",
-    "high",
-    "xhigh",
-    "disabled",
-    "hide",
-    "enabled",
-)
-DEFAULT_REASONING_EFFORT: ReasoningEffortValue = "medium"
+# Reasoning effort type alias
+ReasoningEffortValue = str
+DEFAULT_REASONING_EFFORT: ReasoningEffortValue = "default"
 
 
 class RAGToolResult(TypedDict, total=False):

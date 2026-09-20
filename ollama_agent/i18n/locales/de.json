@@ -2,7 +2,6 @@
   "Ollama Agent - AI agent to interact with local models": "Ollama Agent - KI-Agent zur Interaktion mit lokalen Modellen",
   "Specify the AI model to use": "Zu verwendendes KI-Modell angeben",
   "Non-interactive mode, provide a prompt directly from the command line": "Nicht-interaktiver Modus, Prompt direkt über die Befehlszeile übergeben",
-  "Set reasoning effort level (low, medium, high, xhigh, disabled, hide, enabled)": "Denkaufwand-Stufe festlegen (low, medium, high, xhigh, disabled, hide, enabled)",
   "Set tool-call timeout in seconds (includes shell middleware and built-in tools)": "Timeout für Tool-Aufrufe in Sekunden festlegen (einschließlich Shell-Middleware und integrierter Tools)",
   "Load a RAG database for the session": "Eine RAG-Datenbank für die Sitzung laden",
   "Allow virtual filesystem traversal to OS directories": "Virtuelles Dateisystem-Traversal zu BS-Verzeichnissen erlauben",
@@ -15,7 +14,6 @@
   "Task title": "Aufgabentitel",
   "Task prompt text (use quotes; REPL supports multiline)": "Aufgaben-Prompt-Text (Anführungszeichen verwenden; REPL unterstützt Mehrzeiler)",
   "Model to save with the task": "Mit der Aufgabe zu speicherndes Modell",
-  "Reasoning effort to save with the task (low, medium, high, xhigh, disabled, hide, enabled)": "Mit der Aufgabe zu speichernder Denkaufwand (low, medium, high, xhigh, disabled, hide, enabled)",
   "Overwrite task if it already exists": "Aufgabe überschreiben, falls sie bereits existiert",
   "Execute a saved task": "Eine gespeicherte Aufgabe ausführen",
   "Task ID or prefix to execute": "Auszuführende Aufgaben-ID oder Präfix",
@@ -156,7 +154,6 @@
   "Cannot verify model capabilities: {exc}": "Modellfähigkeiten können nicht überprüft werden: {exc}",
   "Switched from {current} to {model_name}\nConversation preserved. Continue chatting.": "Von {current} zu {model_name} gewechselt\nGesprächsverlauf beibehalten. Chat fortsetzen.",
   "Failed to switch to model '{model_name}': {exc}": "Wechsel zu Modell '{model_name}' fehlgeschlagen: {exc}",
-  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)": "Aktueller Denkaufwand: {effort} (Modell: {model})\nVerwendung: /effort <Stufe> (z. B. low, medium, high, disabled, hide, enabled)",
   "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}": "Ungültiger Denkaufwand '{effort}'. Erlaubte Werte: {valid_list}",
   "Already using reasoning effort '{norm_effort}'.": "Denkaufwand '{norm_effort}' wird bereits verwendet.",
   "Switched reasoning effort from {current} to {norm_effort}\nConversation preserved. Continue chatting.": "Denkaufwand von {current} zu {norm_effort} gewechselt\nGesprächsverlauf beibehalten. Chat fortsetzen.",
@@ -455,5 +452,11 @@
   "Expected mapping for inputs in Task": "Mapping für inputs in Task erwartet",
   "Invalid input definition for '{name}'": "Ungültige Eingabedefinition für '{name}'",
   "MCP server '{name}': 'command' must be a non-empty string": "MCP-Server '{name}': 'command' darf keine leere Zeichenkette sein",
-  "MCP server '{name}': 'url' must be a non-empty string": "MCP-Server '{name}': 'url' darf keine leere Zeichenkette sein"
+  "MCP server '{name}': 'url' must be a non-empty string": "MCP-Server '{name}': 'url' darf keine leere Zeichenkette sein",
+  "Set reasoning effort level supported by the model, or 'default'": "Vom Modell unterstützte Denkaufwand-Stufe festlegen, oder 'default'",
+  "Reasoning effort to save with the task (e.g. default, low, high, max, false)": "Mit der Aufgabe zu speichernder Denkaufwand (z. B. default, low, high, max, false)",
+  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "Aktueller Denkaufwand: {effort} (Modell: {model})\nVerwendung: /effort <Stufe> | default",
+  "Model thinking controls: {values} (default: {default})": "Denksteuerungen des Modells: {values} (Standard: {default})",
+  "(model default)": "(Modellstandard)",
+  "(default)": "(Standard)"
 }

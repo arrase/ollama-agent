@@ -2,7 +2,6 @@
   "Ollama Agent - AI agent to interact with local models": "Ollama Agent - ローカル言語モデルと対話するAIエージェント",
   "Specify the AI model to use": "使用するAIモデルを指定",
   "Non-interactive mode, provide a prompt directly from the command line": "非対話モード、コマンドラインからプロンプトを直接指定",
-  "Set reasoning effort level (low, medium, high, xhigh, disabled, hide, enabled)": "推論・思考レベルを設定 (low, medium, high, xhigh, disabled, hide, enabled)",
   "Set tool-call timeout in seconds (includes shell middleware and built-in tools)": "ツール呼び出しのタイムアウトを秒単位で設定（シェルミドルウェアおよび組み込みツールを含む）",
   "Load a RAG database for the session": "セッション用のRAGデータベースを読み込む",
   "Allow virtual filesystem traversal to OS directories": "OSディレクトリへの仮想ファイルシステム走査を許可",
@@ -15,7 +14,6 @@
   "Task title": "タスクのタイトル",
   "Task prompt text (use quotes; REPL supports multiline)": "タスクのプロンプト本文（引用符を使用；REPLは複数行対応）",
   "Model to save with the task": "タスクと一緒に保存するモデル",
-  "Reasoning effort to save with the task (low, medium, high, xhigh, disabled, hide, enabled)": "タスクと一緒に保存する推論レベル (low, medium, high, xhigh, disabled, hide, enabled)",
   "Overwrite task if it already exists": "タスクが既に存在する場合は上書き",
   "Execute a saved task": "保存されたタスクを実行",
   "Task ID or prefix to execute": "実行するタスクIDまたはプレフィックス",
@@ -156,7 +154,6 @@
   "Cannot verify model capabilities: {exc}": "モデルの機能を確認できません: {exc}",
   "Switched from {current} to {model_name}\nConversation preserved. Continue chatting.": "{current} から {model_name} に切り替えました\n会話は保持されています。チャットを続けてください。",
   "Failed to switch to model '{model_name}': {exc}": "モデル '{model_name}' への切り替えに失敗しました: {exc}",
-  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)": "現在の思考レベル: {effort} (モデル: {model})\n使用法: /effort <レベル> (例: low, medium, high, disabled, hide, enabled)",
   "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}": "無効な思考レベル '{effort}' です。許可される値: {valid_list}",
   "Already using reasoning effort '{norm_effort}'.": "既に思考レベル '{norm_effort}' を使用中です。",
   "Switched reasoning effort from {current} to {norm_effort}\nConversation preserved. Continue chatting.": "思考レベルを {current} から {norm_effort} に切り替えました\n会話は保持されています。チャットを続けてください。",
@@ -455,5 +452,11 @@
   "Expected mapping for inputs in Task": "Task の inputs にはマッピングが必要です",
   "Invalid input definition for '{name}'": "'{name}' の入力定義が無効です",
   "MCP server '{name}': 'command' must be a non-empty string": "MCP サーバー '{name}': 'command' は空でない文字列である必要があります",
-  "MCP server '{name}': 'url' must be a non-empty string": "MCP サーバー '{name}': 'url' は空でない文字列である必要があります"
+  "MCP server '{name}': 'url' must be a non-empty string": "MCP サーバー '{name}': 'url' は空でない文字列である必要があります",
+  "Set reasoning effort level supported by the model, or 'default'": "モデルがサポートする推論・思考レベルを設定、または 'default'",
+  "Reasoning effort to save with the task (e.g. default, low, high, max, false)": "タスクと一緒に保存する推論レベル (例: default, low, high, max, false)",
+  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "現在の思考レベル: {effort} (モデル: {model})\n使用法: /effort <レベル> | default",
+  "Model thinking controls: {values} (default: {default})": "モデルの思考制御: {values} (デフォルト: {default})",
+  "(model default)": "(モデルデフォルト)",
+  "(default)": "(デフォルト)"
 }

@@ -11,7 +11,7 @@ from typing import Any, Self, TypeVar
 import yaml  # type: ignore[import-untyped]
 from jinja2 import Environment, StrictUndefined
 
-from ..core import atomic_write_text
+from ..core import DEFAULT_REASONING_EFFORT, atomic_write_text
 from ..i18n import _
 from .paths import (
     INSTRUCTIONS_PATH,
@@ -36,7 +36,7 @@ class ModelSettings:
     presence_penalty: float | None = None
     repeat_penalty: float | None = None
     context_window: int | str = 10000
-    reasoning_effort: str = "medium"
+    reasoning_effort: str = DEFAULT_REASONING_EFFORT
 
 
 @dataclass(slots=True)

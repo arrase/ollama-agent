@@ -4,19 +4,26 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Callable, cast
+from typing import Any, Callable
 
 import ollama
 from langchain_ollama import ChatOllama
+from ollama import ShowResponse
 from pydantic import Field
 
 from ..i18n import _
 from .common import (
-    ALLOWED_REASONING_EFFORTS,
+    DEFAULT_REASONING_EFFORT,
     ReasoningEffortValue,
 )
 
 _log = logging.getLogger(__name__)
+
+
+class ExtendedShowResponse(ShowResponse):
+    """Extended ShowResponse capturing the thinking metadata advertised by Ollama."""
+
+    thinking: Any = None
 
 
 class ModelCapabilityError(RuntimeError):
@@ -27,12 +34,17 @@ class ModelContextWindowError(RuntimeError):
     """Raised when the context window for a model cannot be resolved."""
 
 
-async def _show_model(model: str, base_url: str) -> Any:
+async def _show_model(model: str, base_url: str) -> ExtendedShowResponse:
     """Fetch Ollama model metadata asynchronously."""
     host = base_url.rstrip("/")
     try:
         client = ollama.AsyncClient(host=host)
-        return await client.show(model)
+        return await client._request(
+            ExtendedShowResponse,
+            "POST",
+            "/api/show",
+            json={"model": model},
+        )
     except Exception as exc:
         raise ModelCapabilityError(_("Failed to fetch metadata for '{model}': {exc}", model=model, exc=exc)) from exc
 
@@ -92,6 +104,12 @@ async def ensure_model_supports_tools(
         raise ModelCapabilityError(_("Model '{model}' does not support tools.", model=model))
 
 
+def get_model_thinking_config(response: Any) -> dict[str, Any] | None:
+    """Extract thinking configuration from Ollama show metadata."""
+    thinking = response.get("thinking") if isinstance(response, dict) else getattr(response, "thinking", None)
+    return thinking if isinstance(thinking, dict) else None
+
+
 async def model_supports_thinking(
     model: str,
     base_url: str,
@@ -99,7 +117,10 @@ async def model_supports_thinking(
     show_info: Any | None = None,
 ) -> bool:
     """Detection of Ollama thinking support for a model."""
-    return "thinking" in await get_model_capabilities(model, base_url, show_info=show_info)
+    response = show_info if show_info is not None else await _show_model(model, base_url)
+    if get_model_thinking_config(response) is not None:
+        return True
+    return "thinking" in await get_model_capabilities(model, base_url, show_info=response)
 
 
 def _get_model_info(response: Any) -> dict[str, Any] | None:
@@ -165,19 +186,40 @@ async def resolve_context_window(
 
 async def resolve_ollama_reasoning(
     model: str,
-    effort: ReasoningEffortValue,
+    effort: Any,
     base_url: str,
     warn_callback: Callable[[str], None],
     *,
     show_info: Any | None = None,
 ) -> bool | str | None:
-    """Translate reasoning_effort to Ollama's native reasoning setting."""
-    lower_name = model.lower()
-    if "qwen3.8" in lower_name:
-        if effort in ("xhigh", "enabled"):
-            return "high"
-    elif "gpt-oss" in lower_name:
-        if effort == "disabled":
+    """Translate reasoning_effort to Ollama's native reasoning setting using /api/show metadata."""
+    response = show_info if show_info is not None else await _show_model(model, base_url)
+    thinking_cfg = get_model_thinking_config(response)
+
+    effort_clean = "" if effort is None else str(effort).strip()
+    is_default = not effort_clean or effort_clean.lower() == "default"
+
+    if thinking_cfg is not None:
+        values: list[Any] = thinking_cfg.get("values") or []
+        default: Any = thinking_cfg.get("default")
+
+        if is_default:
+            return default
+
+        effort_lower = effort_clean.lower()
+        for v in values:
+            if isinstance(v, bool):
+                if effort_lower in ("false", "0", "disabled", "off") and not v:
+                    return False
+                if effort_lower in ("true", "1", "enabled", "on") and v:
+                    return True
+            elif str(v).lower() == effort_lower:
+                return v
+
+        if effort_lower in ("true", "1", "enabled", "on"):
+            return default
+
+        if effort_lower in ("false", "0", "disabled", "off"):
             warn_callback(
                 _(
                     "Model '{model}' is a thinking-only model. reasoning_effort='disabled' is not supported; "
@@ -185,17 +227,28 @@ async def resolve_ollama_reasoning(
                     model=model,
                 )
             )
-            return True
-    elif not await model_supports_thinking(model, base_url, show_info=show_info):
+            return default
+
+        warn_callback(
+            _(
+                "Invalid reasoning effort '{effort}'. Allowed values are: {allowed}",
+                effort=effort,
+                allowed=", ".join(str(v) for v in values),
+            )
+        )
+        return default
+
+    if not await model_supports_thinking(model, base_url, show_info=response):
         return None
 
-    if effort == "disabled":
-        return False
-    if effort in ("hide", "enabled"):
+    if is_default:
         return True
-    if effort == "xhigh":
-        return "high"
-    return effort
+    effort_lower = effort_clean.lower()
+    if effort_lower in ("false", "0", "disabled", "off"):
+        return False
+    if effort_lower in ("true", "1", "enabled", "on"):
+        return True
+    return effort_clean
 
 
 async def resolve_model_parameters(
@@ -320,18 +373,14 @@ async def create_ollama_chat_model(
     return OllamaChatModel(**kwargs)
 
 
-def validate_reasoning_effort(effort: str) -> ReasoningEffortValue:
-    """Validate and normalize reasoning effort value."""
-    normalized = effort.strip().lower()
-    if normalized in ALLOWED_REASONING_EFFORTS:
-        return cast(ReasoningEffortValue, normalized)
-    raise ValueError(
-        _(
-            "Invalid reasoning effort '{effort}'. Allowed values are: {allowed}",
-            effort=effort,
-            allowed=sorted(ALLOWED_REASONING_EFFORTS),
-        )
-    )
+def validate_reasoning_effort(effort: Any) -> ReasoningEffortValue:
+    """Normalize and validate reasoning effort value."""
+    if isinstance(effort, bool):
+        return "true" if effort else "false"
+    normalized = str(effort).strip()
+    if not normalized:
+        raise ValueError(_("{name} cannot be empty.", name="Reasoning effort"))
+    return normalized
 
 
 def get_model_creation_kwargs(

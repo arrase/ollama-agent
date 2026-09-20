@@ -2,7 +2,6 @@
   "Ollama Agent - AI agent to interact with local models": "Ollama Agent - ИИ-агент для взаимодействия с локальными моделями",
   "Specify the AI model to use": "Указать используемую модель ИИ",
   "Non-interactive mode, provide a prompt directly from the command line": "Неинтерактивный режим, передать запрос прямо из командной строки",
-  "Set reasoning effort level (low, medium, high, xhigh, disabled, hide, enabled)": "Установить уровень рассуждений (low, medium, high, xhigh, disabled, hide, enabled)",
   "Set tool-call timeout in seconds (includes shell middleware and built-in tools)": "Установить таймаут вызова инструментов в секундах (включая shell-middleware и встроенные инструменты)",
   "Load a RAG database for the session": "Загрузить базу данных RAG для сессии",
   "Allow virtual filesystem traversal to OS directories": "Разрешить виртуальный обход файловой системы к каталогам ОС",
@@ -15,7 +14,6 @@
   "Task title": "Название задачи",
   "Task prompt text (use quotes; REPL supports multiline)": "Текст промпта задачи (используйте кавычки; REPL поддерживает многострочность)",
   "Model to save with the task": "Модель для сохранения с задачей",
-  "Reasoning effort to save with the task (low, medium, high, xhigh, disabled, hide, enabled)": "Уровень рассуждений для сохранения с задачей (low, medium, high, xhigh, disabled, hide, enabled)",
   "Overwrite task if it already exists": "Перезаписать задачу, если она уже существует",
   "Execute a saved task": "Выполнить сохраненную задачу",
   "Task ID or prefix to execute": "ID или префикс задачи для выполнения",
@@ -156,7 +154,6 @@
   "Cannot verify model capabilities: {exc}": "Не удалось проверить возможности модели: {exc}",
   "Switched from {current} to {model_name}\nConversation preserved. Continue chatting.": "Переключено с {current} на {model_name}\nБеседа сохранена. Продолжайте общение.",
   "Failed to switch to model '{model_name}': {exc}": "Не удалось переключиться на модель '{model_name}': {exc}",
-  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)": "Текущий уровень рассуждений: {effort} (модель: {model})\nИспользование: /effort <уровень> (напр. low, medium, high, disabled, hide, enabled)",
   "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}": "Недопустимый уровень рассуждений '{effort}'. Разрешенные значения: {valid_list}",
   "Already using reasoning effort '{norm_effort}'.": "Уровень рассуждений '{norm_effort}' уже используется.",
   "Switched reasoning effort from {current} to {norm_effort}\nConversation preserved. Continue chatting.": "Уровень рассуждений переключен с {current} на {norm_effort}\nБеседа сохранена. Продолжайте общение.",
@@ -455,5 +452,11 @@
   "Expected mapping for inputs in Task": "Ожидалось сопоставление для inputs в Task",
   "Invalid input definition for '{name}'": "Недопустимое определение ввода для '{name}'",
   "MCP server '{name}': 'command' must be a non-empty string": "MCP-сервер '{name}': 'command' должен быть непустой строкой",
-  "MCP server '{name}': 'url' must be a non-empty string": "MCP-сервер '{name}': 'url' должен быть непустой строкой"
+  "MCP server '{name}': 'url' must be a non-empty string": "MCP-сервер '{name}': 'url' должен быть непустой строкой",
+  "Set reasoning effort level supported by the model, or 'default'": "Установить поддерживаемый моделью уровень рассуждений или 'default'",
+  "Reasoning effort to save with the task (e.g. default, low, high, max, false)": "Уровень рассуждений для сохранения с задачей (напр. default, low, high, max, false)",
+  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "Текущий уровень рассуждений: {effort} (модель: {model})\nИспользование: /effort <уровень> | default",
+  "Model thinking controls: {values} (default: {default})": "Элементы управления рассуждениями модели: {values} (по умолчанию: {default})",
+  "(model default)": "(по умолчанию модели)",
+  "(default)": "(по умолчанию)"
 }

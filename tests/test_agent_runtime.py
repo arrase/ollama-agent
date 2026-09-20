@@ -235,7 +235,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             self.assertIn("high", effort_msg)
 
             with self.assertRaises(ValueError):
-                await runtime.set_reasoning_effort("invalid_effort")
+                await runtime.set_reasoning_effort("")
 
         await runtime.aclose()
 
@@ -372,6 +372,46 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(events), 2)
         self.assertEqual(events[0], {"type": "tool_call", "name": "test_tool"})
         self.assertEqual(events[1], {"type": "text_delta", "content": "Hello response"})
+
+    async def test_agent_runtime_run_streamed_hide_reasoning(self) -> None:
+        for effort, expected_hidden in [
+            ("hide", True),
+            ("disabled", True),
+            ("false", True),
+            ("0", True),
+            ("off", True),
+            ("high", False),
+            ("default", False),
+            ("low", False),
+        ]:
+            settings = Settings()
+            settings.model.reasoning_effort = effort
+            runtime = AgentRuntime(settings=settings)
+
+            captured_hide: list[bool] = []
+
+            class DummyParser:
+                def process_chunk(self, chunk: Any, hide_reasoning: bool = False) -> list[Any]:
+                    captured_hide.append(hide_reasoning)
+                    return []
+
+                def flush(self, hide_reasoning: bool = False) -> list[Any]:
+                    return []
+
+            mock_graph = MagicMock()
+
+            async def mock_astream(*args: Any, **kwargs: Any):
+                yield "messages", (MagicMock(response_metadata={}),)
+
+            mock_graph.astream = mock_astream
+            mock_graph.aget_state = AsyncMock(return_value=MagicMock(interrupts=[]))
+            runtime.graph = mock_graph
+
+            with patch("ollama_agent.agent.agent.ThinkTagParser", DummyParser):
+                async for _ in runtime.run_streamed("Test"):
+                    pass
+
+            self.assertEqual(captured_hide, [expected_hidden], f"Failed for effort={effort}")
 
     async def test_agent_runtime_run_streamed_interrupt(self) -> None:
         settings = Settings()

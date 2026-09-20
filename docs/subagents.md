@@ -161,7 +161,7 @@ Your `system_prompt` can use Jinja2 variables to adapt dynamically to your curre
 ```yaml
 system_prompt: |
   You are {{ subagent.name }}, a {{ subagent.description }}.
-  {% if model_settings.reasoning_effort in ['high', 'xhigh'] %}
+  {% if model_settings.reasoning_effort in ['high', 'max'] %}
   Conduct a rigorous, exhaustive analysis. Examine subtle edge cases, race conditions, and theoretical attack vectors.
   {% else %}
   Focus on the most impactful defects, architectural clarity, and immediate fixes.
@@ -200,7 +200,7 @@ subagents:
       2. Check for security flaws (OWASP Top 10, injection, timing attacks).
       3. Suggest idiom and clean code improvements.
       
-      {% if model_settings.reasoning_effort in ['high', 'xhigh'] %}
+      {% if model_settings.reasoning_effort in ['high', 'max'] %}
       Perform deep verification of all edge cases and trace data flows exhaustively.
       {% else %}
       Focus on critical defects, performance bottlenecks, and clear code patterns.

@@ -37,7 +37,7 @@ flowchart LR
 1. **Storage & Access**: Tasks are saved as clean YAML files in `~/.ollama-agent/tasks/<task_id>.yaml`. During agent sessions, they are also accessible within the virtual filesystem at `/tasks/<task_id>.yaml`.
 2. **Template Rendering**: Prompt templates leverage standard **Jinja2** syntax (`{{ variable }}`). When a task executes, supplied arguments are validated and merged into the template.
 3. **Dynamic Context Expansion (`@{{ var }}`)**: Using an `@-mention` with a variable (e.g. `@{{ target_file }}`) resolves the variable path first, then automatically expands into the full content of the file with binary safety checks.
-4. **Model & Effort Isolation**: Each task defines its own optimal model (e.g. a heavy reasoning model for deep audits or a lightweight model for quick summaries) and reasoning effort level (`low`, `medium`, `high`, `xhigh`, `disabled`). These settings apply during the task execution and revert automatically once completed.
+4. **Model & Effort Isolation**: Each task defines its own optimal model (e.g. a heavy reasoning model for deep audits or a lightweight model for quick summaries) and reasoning effort level (e.g. `default`, `low`, `high`, `max`, `true`, `false`). These settings apply during the task execution and revert automatically once completed.
 5. **Type Safety & Coercion**: Input parameters are strictly validated against their declared schema (`string`, `boolean`, or `number`) before any model inference begins.
 
 ---
@@ -57,7 +57,7 @@ title: "Single File Code Review"
 # Specific Ollama model dedicated to this task
 model: "qwen3.8:27b"
 
-# Desired reasoning effort (low, medium, high, xhigh, disabled, hide, enabled)
+# Desired reasoning effort (e.g. default, low, high, max, true, false)
 reasoning_effort: "high"
 
 # Parameterized prompt template supporting full Jinja2 syntax
@@ -89,7 +89,7 @@ inputs:
 | `title` | `string` | **Yes** | Clear name displayed in `/task list` and terminal logs. |
 | `prompt` | `string` | **Yes** | Multi-line instruction template evaluated with Jinja2. |
 | `model` | `string` | **Yes** | Designated Ollama model (e.g. `qwen3.8:27b`, `gemma4:26b`). |
-| `reasoning_effort` | `string` | **Yes** | Reasoning intensity: `low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, or `enabled`. |
+| `reasoning_effort` | `string` | **Yes** (YAML) / Optional (CLI) | Reasoning intensity supported by the model (e.g., `default`, `low`, `high`, `max`, `true`, `false`). Optional when creating tasks via CLI, but always saved in YAML (defaults to `"default"`). |
 | `inputs` | `mapping` | No | Map of expected input variables, their types, requirements, and defaults. |
 
 ### Input Parameter Schema (`inputs.<name>`)
@@ -243,7 +243,7 @@ Save as `~/.ollama-agent/tasks/release-notes.yaml`:
 ```yaml
 title: "Release Notes Generator"
 model: "gemma4:26b"
-reasoning_effort: "medium"
+reasoning_effort: "default"
 prompt: |
   Generate professional, user-facing release notes for version {{ version }}.
   Run `git log {{ since_tag }}..HEAD --oneline` using the shell tool to review all commit messages since the previous tag.
@@ -303,7 +303,7 @@ Save as `~/.ollama-agent/tasks/translate-doc.yaml`:
 ```yaml
 title: "Technical Document Translator"
 model: "qwen3.8:27b"
-reasoning_effort: "medium"
+reasoning_effort: "default"
 prompt: |
   Translate the Markdown document located at @{{ source_file }} into {{ target_language }}.
 
@@ -387,7 +387,7 @@ ollama-agent -y -p "Run 'git diff --cached' and verify there are no leaked secre
 Because each task specifies its own model, you can optimize resource usage and inference latency:
 
 - **Heavy Reasoning Tasks** (e.g. complex architectural reviews, bug audits): Assign a high-capacity model with `reasoning_effort: "high"` (e.g. `qwen3.8:27b`).
-- **Fast Generation Tasks** (e.g. release notes, changelog generation, commit message formatting): Assign a smaller, faster model with `reasoning_effort: "low"` or `"disabled"` (e.g. `gemma4:9b`).
+- **Fast Generation Tasks** (e.g. release notes, changelog generation, commit message formatting): Assign a smaller, faster model with `reasoning_effort: "false"` or `"low"` (e.g. `gemma4:9b`).
 
 When the task completes, your default model set in `settings.yaml` or your active REPL session remains untouched.
 

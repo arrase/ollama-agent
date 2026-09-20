@@ -74,7 +74,7 @@ Most agents treat Ollama as a dumb OpenAI-compatible proxy. They send requests t
 | **Sampling parameters** | Force fixed defaults (`temp=0.7`, `top_p=1.0`), ignoring the Modelfile. | Auto-discovers optimal sampling (`temperature`, `top_p`, `top_k`, `min_p`, `repeat_penalty`) from the Modelfile. |
 | **Token counting** | Approximate with `tiktoken` — wrong tokenizer for Llama, Qwen, Gemma, DeepSeek. | Reads native server metrics (`prompt_eval_count` + `eval_count`) for exact real-time tracking. |
 | **Context overflow** | Crash with obscure errors when the conversation exceeds the limit. | Auto-compaction at 85% capacity: summarizes older turns, prunes tool output, offloads history to disk. |
-| **Reasoning traces** | Leak raw `<think>` tokens into output or fail to configure thinking effort. | Architecture-aware thinking: translates effort levels per model family (Qwen, DeepSeek, GPT-OSS) into collapsible UI blocks. |
+| **Reasoning traces** | Leak raw `<think>` tokens into output or fail to configure thinking effort. | API-driven thinking controls: dynamically discovers supported effort levels (`thinking.values`) and defaults via `/api/show`, rendering traces into collapsible UI blocks. |
 | **Model compatibility** | Blindly attempt tool calls on models that don't support them; fail with cryptic errors. | Pre-flight capability check: verifies `tools` support, offers interactive model selector, hot-swaps models mid-session (`/model set`). |
 
 ---
@@ -172,7 +172,7 @@ Reference local files or folders directly in your prompts with autocompletion:
 | `/model` | `/model [list \| set <name>]` | List local models with tool support or switch active model. |
 | `/context` | `/context [<size \| max>]` | Inspect or change context window (`num_ctx`) on the fly. |
 | `/params` | `/params [list \| set <param> <val>]` | View effective parameters and resolution sources, or update sampling values. |
-| `/effort` | `/effort [<level>]` | Set reasoning effort (`low`, `medium`, `high`, `xhigh`, `hide`, `disabled`). |
+| `/effort` | `/effort [<level>]` | Inspect or set reasoning effort (dynamically validated against active model values, or boolean toggles). |
 | `/queue` | `/queue [list \| clear \| rm <pos>]` | Inspect and manage pending prompts in the FIFO execution queue. |
 | `/session` | `/session [list \| resume <id> \| new]` | Manage chat threads, resume past conversations, or start fresh. |
 | `/task` | `/task [list \| run <id> \| create]` | List, run with variables (`key=val`), or create saved YAML tasks. |

@@ -233,7 +233,7 @@ flowchart TD
   - `episodic_memory.py`: Semantic search engine over stored conversation checkpoints.
 - **`ollama_agent/core/`**: Shared foundational primitives.
   - `common.py`: Shared dataclasses, payload text extraction, and identifier validation.
-  - `models.py`: ChatOllama initialization, model context window resolution, and reasoning flag detection.
+  - `models.py`: ChatOllama initialization, model context window resolution, and dynamic API-driven reasoning controls.
   - `prompt_processor.py`: Command-line @-mention file resolution, image encoding, and prompt templating.
   - `resource_manager.py`: Generic `BaseFileStoreManager` abstraction for tasks and skills.
 - **`ollama_agent/interfaces/`**: User-facing entry points.

@@ -84,7 +84,7 @@ At the center of Ollama Agent is a stateful execution graph that tracks every co
 
 * **Durable Session Store**: All turns are recorded in an embedded SQLite database (`~/.ollama-agent/history.db`) tied to a unique session ID (`thread_id`).
 * **Crash Resilience & Instant Resume**: If a process is interrupted, you can resume your exact conversation state anytime with `ollama-agent session resume <id>` or `/session resume <id>` in the REPL.
-* **Live Reconfiguration**: You can switch models (`/model set <name>`), change reasoning levels (`/effort set <level>`), or adjust context windows (`/context set <size>`) mid-session without losing your conversational history.
+* **Live Reconfiguration**: You can switch models (`/model set <name>`), change reasoning levels (`/effort [<level>]`), or adjust context windows (`/context set <size>`) mid-session without losing your conversational history.
 * **Stealth Mode**: For sensitive one-off sessions where you want zero traces saved to disk, running with `--stealth` (or `/stealth on`) executes the entire graph purely in volatile memory.
 
 For details on managing sessions, see the [CLI & REPL Guide](cli_repl.md#session-management).
@@ -202,7 +202,7 @@ Ollama Agent is engineered with security and operational safety at its core:
 | **Control & Safety** | HITL approval modal, context tracking, 85% compaction. | `/yolo [on\|off]`, `/context set <size>`, auto-compaction. |
 | **Memory & Knowledge** | Multi-tier rules (`AGENTS.md`, `MEMORY.md`), episodic search, local RAG. | `/memory show`, `/session search`, `/rag load <name>`. |
 | **Tool Ecosystem** | Shell execution, file editing, and external MCP servers. | `~/.ollama-agent/mcp.json`, `/mcp reload`, `/skill list`. |
-| **LLM Backend** | Native Ollama inference, context auto-detection, reasoning capture. | `/model set <name>`, `/effort set <level>`, `/params set <k> <v>`. |
+| **LLM Backend** | Native Ollama inference, context auto-detection, API-driven reasoning controls. | `/model set <name>`, `/effort [<level>]`, `/params set <k> <v>`. |
 | **Storage Layer** | SQLite session persistence (`history.db`) and Qdrant vector storage. | `~/.ollama-agent/history.db`, `~/.ollama-agent/rag/`. |
 
 ---

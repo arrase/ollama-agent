@@ -2,7 +2,6 @@
   "Ollama Agent - AI agent to interact with local models": "Ollama Agent - Agente de IA para interagir com modelos locais",
   "Specify the AI model to use": "Especificar o modelo de IA a utilizar",
   "Non-interactive mode, provide a prompt directly from the command line": "Modo não interativo, forneça um prompt diretamente pela linha de comando",
-  "Set reasoning effort level (low, medium, high, xhigh, disabled, hide, enabled)": "Definir nível de esforço de raciocínio (low, medium, high, xhigh, disabled, hide, enabled)",
   "Set tool-call timeout in seconds (includes shell middleware and built-in tools)": "Definir tempo limite de chamada de ferramenta em segundos (inclui middleware de shell e ferramentas integradas)",
   "Load a RAG database for the session": "Carregar um banco de dados RAG para a sessão",
   "Allow virtual filesystem traversal to OS directories": "Permitir navegação no sistema de arquivos virtual para diretórios do SO",
@@ -15,7 +14,6 @@
   "Task title": "Título da tarefa",
   "Task prompt text (use quotes; REPL supports multiline)": "Texto do prompt da tarefa (use aspas; o REPL suporta várias linhas)",
   "Model to save with the task": "Modelo a salvar com a tarefa",
-  "Reasoning effort to save with the task (low, medium, high, xhigh, disabled, hide, enabled)": "Esforço de raciocínio a salvar com a tarefa (low, medium, high, xhigh, disabled, hide, enabled)",
   "Overwrite task if it already exists": "Sobrescrever tarefa se já existir",
   "Execute a saved task": "Executar uma tarefa salva",
   "Task ID or prefix to execute": "ID ou prefixo da tarefa a executar",
@@ -156,7 +154,6 @@
   "Cannot verify model capabilities: {exc}": "Não foi possível verificar as capacidades do modelo: {exc}",
   "Switched from {current} to {model_name}\nConversation preserved. Continue chatting.": "Mudou de {current} para {model_name}\nConversa preservada. Continue conversando.",
   "Failed to switch to model '{model_name}': {exc}": "Falha ao alternar para o modelo '{model_name}': {exc}",
-  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)": "Esforço de raciocínio atual: {effort} (modelo: {model})\nUso: /effort <nível> (ex.: low, medium, high, disabled, hide, enabled)",
   "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}": "Esforço de raciocínio inválido '{effort}'. Valores permitidos: {valid_list}",
   "Already using reasoning effort '{norm_effort}'.": "Já está usando o esforço de raciocínio '{norm_effort}'.",
   "Switched reasoning effort from {current} to {norm_effort}\nConversation preserved. Continue chatting.": "Esforço de raciocínio alterado de {current} para {norm_effort}\nConversa preservada. Continue conversando.",
@@ -455,5 +452,11 @@
   "Expected mapping for inputs in Task": "Esperava-se mapeamento para inputs em Task",
   "Invalid input definition for '{name}'": "Definição de entrada inválida para '{name}'",
   "MCP server '{name}': 'command' must be a non-empty string": "Servidor MCP '{name}': 'command' deve ser uma string não vazia",
-  "MCP server '{name}': 'url' must be a non-empty string": "Servidor MCP '{name}': 'url' deve ser uma string não vazia"
+  "MCP server '{name}': 'url' must be a non-empty string": "Servidor MCP '{name}': 'url' deve ser uma string não vazia",
+  "Set reasoning effort level supported by the model, or 'default'": "Definir nível de esforço de raciocínio suportado pelo modelo, ou 'default'",
+  "Reasoning effort to save with the task (e.g. default, low, high, max, false)": "Esforço de raciocínio a salvar com a tarefa (ex.: default, low, high, max, false)",
+  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "Esforço de raciocínio atual: {effort} (modelo: {model})\nUso: /effort <nível> | default",
+  "Model thinking controls: {values} (default: {default})": "Controles de pensamento do modelo: {values} (padrão: {default})",
+  "(model default)": "(padrão do modelo)",
+  "(default)": "(padrão)"
 }

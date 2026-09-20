@@ -13,11 +13,11 @@ from rich.table import Table
 
 from ..agent import AgentRuntime
 from ..core import (
-    ALLOWED_REASONING_EFFORTS,
     ModelCapabilityError,
     ModelContextWindowError,
     model_supports_tools,
 )
+from ..core.models import get_model_thinking_config
 from ..i18n import _
 from ..settings import Settings, save_settings
 
@@ -135,14 +135,32 @@ def show_effort(console: Console, runtime: AgentRuntime) -> None:
     """Print the current reasoning effort and model."""
     effort = runtime.settings.model.reasoning_effort
     model = runtime.settings.model.name
+    thinking_cfg = get_model_thinking_config(runtime.model.show_info) if runtime.model else None
+
+    effort_display = effort
+    if thinking_cfg:
+        default = thinking_cfg.get("default")
+        if effort == "default" and default is not None:
+            effort_display = f"{effort} (effective: {default})"
+
     console.print(
         _(
             "Current reasoning effort: {effort} (model: {model})\n"
-            "Usage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)",
-            effort=effort,
+            "Usage: /effort <level> | default",
+            effort=effort_display,
             model=model,
         )
     )
+    if thinking_cfg:
+        values = thinking_cfg.get("values", [])
+        default = thinking_cfg.get("default")
+        console.print(
+            _(
+                "Model thinking controls: {values} (default: {default})",
+                values=values,
+                default=default,
+            )
+        )
 
 
 async def set_effort(
@@ -152,16 +170,50 @@ async def set_effort(
     runtime: AgentRuntime,
 ) -> str | None:
     """Switch reasoning effort level, returning the new effort level."""
-    norm_effort = effort.lower().strip()
-    if norm_effort not in ALLOWED_REASONING_EFFORTS:
-        valid_list = ", ".join(ALLOWED_REASONING_EFFORTS)
-        err_msg = _(
-            "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}",
-            effort=effort,
-            valid_list=valid_list,
-        )
-        console.print(f"[red]{err_msg}[/red]")
+    norm_effort = effort.strip()
+    if not norm_effort:
+        console.print(f"[red]{_('{name} cannot be empty.', name='Reasoning effort')}[/red]")
         return None
+
+    thinking_cfg = get_model_thinking_config(runtime.model.show_info) if runtime.model else None
+    if norm_effort.lower() == "default":
+        norm_effort = "default"
+    elif thinking_cfg and "values" in thinking_cfg:
+        values = thinking_cfg["values"]
+        matched_val = None
+        effort_lower = norm_effort.lower()
+        has_bool_support = any(isinstance(v, bool) for v in values)
+
+        if effort_lower in ("false", "0", "disabled", "off"):
+            if any(v is False for v in values):
+                matched_val = "false"
+            else:
+                warn_msg = _(
+                    "Model '{model}' is a thinking-only model. reasoning_effort='disabled' is not supported; thinking will remain enabled.",
+                    model=runtime.settings.model.name,
+                )
+                console.print(f"[yellow]{warn_msg}[/yellow]")
+                return None
+        elif effort_lower in ("true", "1", "enabled", "on"):
+            if has_bool_support:
+                matched_val = "true"
+            else:
+                matched_val = str(thinking_cfg.get("default", "default"))
+        else:
+            for v in values:
+                if str(v).lower() == effort_lower:
+                    matched_val = str(v)
+                    break
+
+        if matched_val is None:
+            err_msg = _(
+                "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}",
+                effort=effort,
+                valid_list=", ".join(str(v) for v in values),
+            )
+            console.print(f"[red]{err_msg}[/red]")
+            return None
+        norm_effort = matched_val
 
     current = runtime.settings.model.reasoning_effort
     if norm_effort == current:

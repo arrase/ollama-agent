@@ -2,7 +2,6 @@
   "Ollama Agent - AI agent to interact with local models": "ओलामा एजेंट - स्थानीय मॉडलों के साथ इंटरैक्ट करने के लिए एआई एजेंट",
   "Specify the AI model to use": "उपयोग करने के लिए एआई मॉडल निर्दिष्ट करें",
   "Non-interactive mode, provide a prompt directly from the command line": "गैर-इंटरैक्टिव मोड, कमांड लाइन से सीधे प्रॉम्प्ट प्रदान करें",
-  "Set reasoning effort level (low, medium, high, xhigh, disabled, hide, enabled)": "रीज़निंग प्रयास स्तर सेट करें (low, medium, high, xhigh, disabled, hide, enabled)",
   "Set tool-call timeout in seconds (includes shell middleware and built-in tools)": "टूल-कॉल टाइमआउट सेकंड में सेट करें (शैल मिडलवेयर और अंतर्निहित टूल शामिल हैं)",
   "Load a RAG database for the session": "सत्र के लिए RAG डेटाबेस लोड करें",
   "Allow virtual filesystem traversal to OS directories": "ओएस डायरेक्टरीज़ में वर्चुअल फाइलसिस्टम ट्रैवर्सल की अनुमति दें",
@@ -15,7 +14,6 @@
   "Task title": "कार्य शीर्षक",
   "Task prompt text (use quotes; REPL supports multiline)": "कार्य प्रॉम्प्ट टेक्स्ट (उद्धरण चिह्नों का उपयोग करें; REPL बहु-पंक्ति का समर्थन करता है)",
   "Model to save with the task": "कार्य के साथ सहेजने के लिए मॉडल",
-  "Reasoning effort to save with the task (low, medium, high, xhigh, disabled, hide, enabled)": "कार्य के साथ सहेजने के लिए रीज़निंग प्रयास (low, medium, high, xhigh, disabled, hide, enabled)",
   "Overwrite task if it already exists": "यदि कार्य पहले से मौजूद है तो उसे अधिलेखित करें",
   "Execute a saved task": "सहेजे गए कार्य को निष्पादित करें",
   "Task ID or prefix to execute": "निष्पादित करने के लिए कार्य आईडी या उपसर्ग",
@@ -156,7 +154,6 @@
   "Cannot verify model capabilities: {exc}": "मॉडल क्षमताओं को सत्यापित नहीं किया जा सकता: {exc}",
   "Switched from {current} to {model_name}\nConversation preserved. Continue chatting.": "{current} से {model_name} पर स्विच किया गया\nवार्तालाप सुरक्षित है। चैट जारी रखें।",
   "Failed to switch to model '{model_name}': {exc}": "मॉडल '{model_name}' पर स्विच करने में विफल: {exc}",
-  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)": "वर्तमान रीज़निंग प्रयास: {effort} (मॉडल: {model})\nउपयोग: /effort <level> (उदा. low, medium, high, disabled, hide, enabled)",
   "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}": "अमान्य रीज़निंग प्रयास '{effort}'। अनुमत मान: {valid_list}",
   "Already using reasoning effort '{norm_effort}'.": "पहले से ही रीज़निंग प्रयास '{norm_effort}' का उपयोग कर रहे हैं।",
   "Switched reasoning effort from {current} to {norm_effort}\nConversation preserved. Continue chatting.": "रीज़निंग प्रयास को {current} से {norm_effort} में बदला गया\nवार्तालाप सुरक्षित है। चैट जारी रखें।",
@@ -455,5 +452,11 @@
   "Expected mapping for inputs in Task": "Task में inputs के लिए मैपिंग अपेक्षित थी",
   "Invalid input definition for '{name}'": "'{name}' के लिए अमान्य इनपुट परिभाषा",
   "MCP server '{name}': 'command' must be a non-empty string": "MCP सर्वर '{name}': 'command' एक गैर-खाली स्ट्रिंग होनी चाहिए",
-  "MCP server '{name}': 'url' must be a non-empty string": "MCP सर्वर '{name}': 'url' एक गैर-खाली स्ट्रिंग होनी चाहिए"
+  "MCP server '{name}': 'url' must be a non-empty string": "MCP सर्वर '{name}': 'url' एक गैर-खाली स्ट्रिंग होनी चाहिए",
+  "Set reasoning effort level supported by the model, or 'default'": "मॉडल द्वारा समर्थित रीज़निंग प्रयास स्तर सेट करें, या 'default'",
+  "Reasoning effort to save with the task (e.g. default, low, high, max, false)": "कार्य के साथ सहेजने के लिए रीज़निंग प्रयास (उदा. default, low, high, max, false)",
+  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "वर्तमान रीज़निंग प्रयास: {effort} (मॉडल: {model})\nउपयोग: /effort <level> | default",
+  "Model thinking controls: {values} (default: {default})": "मॉडल थिंकिंग नियंत्रण: {values} (डिफ़ॉल्ट: {default})",
+  "(model default)": "(मॉडल डिफ़ॉल्ट)",
+  "(default)": "(डिफ़ॉल्ट)"
 }

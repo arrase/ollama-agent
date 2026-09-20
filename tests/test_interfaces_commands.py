@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from rich.console import Console
 
+from ollama_agent.agent.agent import AgentRuntime
 from ollama_agent.agent.episodic_memory import HistoryError
 from ollama_agent.core.models import ModelCapabilityError
 from ollama_agent.interfaces.cli import handle_cli_commands
@@ -199,9 +200,18 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         self.assertIn("medium", out)
         self.assertIn("llama3.2:3b", out)
 
+    async def test_set_effort_empty(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+
+        res = await set_effort(console, "   ", runtime=runtime)
+        self.assertIsNone(res)
+        self.assertIn("cannot be empty", console.export_text())
+
     async def test_set_effort_invalid(self) -> None:
         console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
+        runtime.model.show_info = MagicMock(thinking={"values": ["low", "medium", "high"], "default": "medium"})
         runtime.settings.model.reasoning_effort = "medium"
 
         res = await set_effort(console, "super_extreme", runtime=runtime)
@@ -211,6 +221,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
     async def test_set_effort_same(self) -> None:
         console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
+        runtime.model.show_info = MagicMock(thinking={"values": ["low", "medium", "high"], "default": "medium"})
         runtime.settings.model.reasoning_effort = "high"
 
         res = await set_effort(console, "high", runtime=runtime)
@@ -220,6 +231,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
     async def test_set_effort_success(self) -> None:
         console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
+        runtime.model.show_info = MagicMock(thinking={"values": ["low", "medium", "high"], "default": "medium"})
         runtime.settings.model.reasoning_effort = "medium"
         runtime.set_reasoning_effort = AsyncMock()
 
@@ -227,6 +239,71 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(res, "high")
         runtime.set_reasoning_effort.assert_awaited_once_with("high")
         self.assertIn("Switched reasoning effort", console.export_text())
+
+    def test_show_effort_with_real_runtime(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = AgentRuntime()
+        runtime.settings.model.reasoning_effort = "default"
+        runtime.settings.model.name = "llama3.2:3b"
+
+        show_effort(console, runtime)
+        out = console.export_text()
+        self.assertIn("Current reasoning effort", out)
+        self.assertIn("default", out)
+        self.assertIn("llama3.2:3b", out)
+
+    async def test_set_effort_default(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.model.show_info = MagicMock(thinking={"values": ["low", "high", "max"], "default": "max"})
+        runtime.settings.model.reasoning_effort = "high"
+        runtime.set_reasoning_effort = AsyncMock()
+
+        res = await set_effort(console, "default", runtime=runtime)
+        self.assertEqual(res, "default")
+        runtime.set_reasoning_effort.assert_awaited_once_with("default")
+        self.assertIn("Switched reasoning effort", console.export_text())
+
+    async def test_set_effort_boolean_aliases(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.model.show_info = MagicMock(thinking={"values": [False, True], "default": True})
+        runtime.settings.model.reasoning_effort = "true"
+        runtime.set_reasoning_effort = AsyncMock()
+
+        res = await set_effort(console, "disabled", runtime=runtime)
+        self.assertEqual(res, "false")
+        runtime.set_reasoning_effort.assert_awaited_once_with("false")
+
+    def test_show_effort_with_thinking_config_default(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.settings.model.reasoning_effort = "default"
+        runtime.settings.model.name = "qwen3.8:27b"
+        runtime.model.show_info = MagicMock(thinking={"values": ["low", "high", "max"], "default": "max"})
+
+        show_effort(console, runtime)
+        out = console.export_text()
+        self.assertIn("Current reasoning effort: default (effective: max)", out)
+        self.assertIn("Model thinking controls: ['low', 'high', 'max'] (default: max)", out)
+
+    async def test_set_effort_boolean_aliases_non_bool_model(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.model.show_info = MagicMock(thinking={"values": ["low", "high", "max"], "default": "max"})
+        runtime.settings.model.name = "qwen3.8:27b"
+        runtime.settings.model.reasoning_effort = "low"
+        runtime.set_reasoning_effort = AsyncMock()
+
+        res_enabled = await set_effort(console, "enabled", runtime=runtime)
+        self.assertEqual(res_enabled, "max")
+        runtime.set_reasoning_effort.assert_awaited_once_with("max")
+
+        runtime.set_reasoning_effort.reset_mock()
+        res_disabled = await set_effort(console, "disabled", runtime=runtime)
+        self.assertIsNone(res_disabled)
+        self.assertIn("thinking-only model", console.export_text())
+        runtime.set_reasoning_effort.assert_not_called()
 
     def test_show_context_window(self) -> None:
         console = Console(file=io.StringIO(), record=True)

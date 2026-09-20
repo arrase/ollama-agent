@@ -6,8 +6,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ollama_agent.core.common import (
-    ALLOWED_REASONING_EFFORTS,
     DEFAULT_REASONING_EFFORT,
+    ReasoningEffortValue,
     atomic_write_text,
     extract_text,
     validate_identifier,
@@ -70,11 +70,8 @@ class TestCommonUtilities(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validate_identifier(invalid_name)
 
-    def test_allowed_reasoning_efforts_contains_defaults(self) -> None:
-        self.assertIn(DEFAULT_REASONING_EFFORT, ALLOWED_REASONING_EFFORTS)
-        self.assertIn("high", ALLOWED_REASONING_EFFORTS)
-        self.assertIn("xhigh", ALLOWED_REASONING_EFFORTS)
-        self.assertIn("low", ALLOWED_REASONING_EFFORTS)
+    def test_default_reasoning_effort(self) -> None:
+        self.assertEqual(DEFAULT_REASONING_EFFORT, "default")
 
     def test_atomic_write_text_success(self) -> None:
         with tempfile.TemporaryDirectory() as td:

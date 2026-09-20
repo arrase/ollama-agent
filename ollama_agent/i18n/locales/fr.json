@@ -2,7 +2,6 @@
   "Ollama Agent - AI agent to interact with local models": "Ollama Agent - Agent d'IA pour interagir avec des modèles locaux",
   "Specify the AI model to use": "Spécifier le modèle d'IA à utiliser",
   "Non-interactive mode, provide a prompt directly from the command line": "Mode non interactif, fournir une invite directement depuis la ligne de commande",
-  "Set reasoning effort level (low, medium, high, xhigh, disabled, hide, enabled)": "Définir le niveau d'effort de raisonnement (low, medium, high, xhigh, disabled, hide, enabled)",
   "Set tool-call timeout in seconds (includes shell middleware and built-in tools)": "Définir le délai d'expiration des appels d'outils en secondes (inclut le middleware shell et les outils intégrés)",
   "Load a RAG database for the session": "Charger une base de données RAG pour la session",
   "Allow virtual filesystem traversal to OS directories": "Autoriser la traversée du système de fichiers virtuel vers les répertoires de l'OS",
@@ -15,7 +14,6 @@
   "Task title": "Titre de la tâche",
   "Task prompt text (use quotes; REPL supports multiline)": "Texte de l'invite de tâche (utiliser des guillemets ; le REPL supporte le multiligne)",
   "Model to save with the task": "Modèle à enregistrer avec la tâche",
-  "Reasoning effort to save with the task (low, medium, high, xhigh, disabled, hide, enabled)": "Effort de raisonnement à enregistrer avec la tâche (low, medium, high, xhigh, disabled, hide, enabled)",
   "Overwrite task if it already exists": "Écraser la tâche si elle existe déjà",
   "Execute a saved task": "Exécuter une tâche enregistrée",
   "Task ID or prefix to execute": "ID ou préfixe de la tâche à exécuter",
@@ -156,7 +154,6 @@
   "Cannot verify model capabilities: {exc}": "Impossible de vérifier les capacités du modèle : {exc}",
   "Switched from {current} to {model_name}\nConversation preserved. Continue chatting.": "Passage de {current} à {model_name}\nConversation conservée. Continuez à discuter.",
   "Failed to switch to model '{model_name}': {exc}": "Échec du basculement vers le modèle '{model_name}' : {exc}",
-  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)": "Effort de raisonnement actuel : {effort} (modèle : {model})\nUtilisation : /effort <niveau> (ex. low, medium, high, disabled, hide, enabled)",
   "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}": "Effort de raisonnement invalide '{effort}'. Valeurs autorisées : {valid_list}",
   "Already using reasoning effort '{norm_effort}'.": "L'effort de raisonnement '{norm_effort}' est déjà utilisé.",
   "Switched reasoning effort from {current} to {norm_effort}\nConversation preserved. Continue chatting.": "Effort de raisonnement basculé de {current} à {norm_effort}\nConversation conservée. Continuez à discuter.",
@@ -455,5 +452,11 @@
   "Expected mapping for inputs in Task": "Mapping attendu pour inputs dans Task",
   "Invalid input definition for '{name}'": "Définition d'entrée non valide pour '{name}'",
   "MCP server '{name}': 'command' must be a non-empty string": "Serveur MCP '{name}' : 'command' doit être une chaîne non vide",
-  "MCP server '{name}': 'url' must be a non-empty string": "Serveur MCP '{name}' : 'url' doit être une chaîne non vide"
+  "MCP server '{name}': 'url' must be a non-empty string": "Serveur MCP '{name}' : 'url' doit être une chaîne non vide",
+  "Set reasoning effort level supported by the model, or 'default'": "Définir le niveau d'effort de raisonnement pris en charge par le modèle, ou 'default'",
+  "Reasoning effort to save with the task (e.g. default, low, high, max, false)": "Effort de raisonnement à enregistrer avec la tâche (ex. default, low, high, max, false)",
+  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "Effort de raisonnement actuel : {effort} (modèle : {model})\nUtilisation : /effort <niveau> | default",
+  "Model thinking controls: {values} (default: {default})": "Contrôles de réflexion du modèle : {values} (par défaut : {default})",
+  "(model default)": "(par défaut du modèle)",
+  "(default)": "(par défaut)"
 }
