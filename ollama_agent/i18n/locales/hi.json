@@ -458,5 +458,6 @@
   "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "वर्तमान रीज़निंग प्रयास: {effort} (मॉडल: {model})\nउपयोग: /effort <level> | default",
   "Model thinking controls: {values} (default: {default})": "मॉडल थिंकिंग नियंत्रण: {values} (डिफ़ॉल्ट: {default})",
   "(model default)": "(मॉडल डिफ़ॉल्ट)",
-  "(default)": "(डिफ़ॉल्ट)"
+  "(default)": "(डिफ़ॉल्ट)",
+  "Ollama version {version} is lower than required {min_version}. Please update your Ollama installation.": "Ollama संस्करण {version} आवश्यक संस्करण {min_version} से कम है। कृपया अपना Ollama इंस्टॉलेशन अपडेट करें।"
 }

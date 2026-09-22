@@ -8,7 +8,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from rich.console import Console
 
-from ollama_agent.core import ModelCapabilityError, ModelContextWindowError
+from ollama_agent.core import (
+    ModelCapabilityError,
+    ModelContextWindowError,
+    OllamaVersionError,
+)
 from ollama_agent.i18n import set_locale
 from ollama_agent.interfaces.cli import create_argument_parser, handle_cli_commands
 from ollama_agent.interfaces.dispatch import (
@@ -264,12 +268,14 @@ class TestDispatchAndCLI(unittest.TestCase):
             patch("sys.argv", ["ollama-agent", "-m", "qwen3:32b", "-e", "high", "--builtin-tool-timeout", "40"]),
             patch("ollama_agent.main.set_locale", return_value="en"),
             patch("ollama_agent.main.load_settings", return_value=mock_settings),
+            patch("ollama_agent.main.check_ollama_version", return_value="0.34.3") as mock_check_version,
             patch("ollama_agent.main.ensure_model_configured", return_value="qwen3:32b") as mock_ensure,
             patch("ollama_agent.main.AgentRuntime") as mock_runtime_cls,
             patch("ollama_agent.main.OllamaREPL") as mock_repl_cls,
             patch("asyncio.run") as mock_asyncio_run,
         ):
             main()
+            mock_check_version.assert_called_once_with(mock_settings.model.base_url)
             mock_ensure.assert_called_once_with(mock_settings)
             self.assertEqual(mock_settings.model.name, "qwen3:32b")
             self.assertEqual(mock_settings.model.reasoning_effort, "high")
@@ -284,10 +290,12 @@ class TestDispatchAndCLI(unittest.TestCase):
             patch("sys.argv", ["ollama-agent", "-p", "hello world"]),
             patch("ollama_agent.main.set_locale", return_value="en"),
             patch("ollama_agent.main.load_settings", return_value=mock_settings),
+            patch("ollama_agent.main.check_ollama_version", return_value="0.34.3") as mock_check_version,
             patch("ollama_agent.main.ensure_model_configured", return_value="qwen3:32b") as mock_ensure,
             patch("ollama_agent.main.run_prompt_session") as mock_prompt_session,
         ):
             main()
+            mock_check_version.assert_called_once_with(mock_settings.model.base_url)
             mock_ensure.assert_called_once_with(mock_settings)
             mock_prompt_session.assert_called_once()
 
@@ -297,6 +305,7 @@ class TestDispatchAndCLI(unittest.TestCase):
             patch("ollama_agent.main.set_locale", return_value="en"),
             patch("ollama_agent.main.Console"),
             patch("ollama_agent.main.load_settings", return_value=Settings()),
+            patch("ollama_agent.main.check_ollama_version", return_value="0.34.3"),
             patch("ollama_agent.main.ensure_model_configured", side_effect=ModelCapabilityError("Model unsupported")),
         ):
             with self.assertRaises(SystemExit) as cm:
@@ -309,12 +318,52 @@ class TestDispatchAndCLI(unittest.TestCase):
             patch("ollama_agent.main.set_locale", return_value="en"),
             patch("ollama_agent.main.Console"),
             patch("ollama_agent.main.load_settings", return_value=Settings()),
+            patch("ollama_agent.main.check_ollama_version", return_value="0.34.3"),
             patch("ollama_agent.main.ensure_model_configured", return_value="qwen3:32b"),
             patch("ollama_agent.main.AgentRuntime", side_effect=ModelContextWindowError("Invalid context window")),
         ):
             with self.assertRaises(SystemExit) as cm:
                 main()
             self.assertEqual(cm.exception.code, 1)
+
+    def test_main_ollama_version_too_low_exits(self) -> None:
+        mock_console = MagicMock()
+        err_msg = "Ollama version 0.33.0 is lower than required 0.34.3. Please update your Ollama installation."
+        with (
+            patch("sys.argv", ["ollama-agent"]),
+            patch("ollama_agent.main.set_locale", return_value="en"),
+            patch("ollama_agent.main.Console", return_value=mock_console),
+            patch("ollama_agent.main.load_settings", return_value=Settings()),
+            patch("ollama_agent.main.check_ollama_version", side_effect=OllamaVersionError(err_msg)),
+            patch("ollama_agent.main.ensure_model_configured") as mock_ensure,
+        ):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 1)
+            mock_ensure.assert_not_called()
+            mock_console.print.assert_called_once()
+            printed = mock_console.print.call_args[0][0]
+            self.assertIn("0.33.0", printed)
+            self.assertIn("0.34.3", printed)
+
+    def test_main_ollama_connection_error_exits(self) -> None:
+        mock_console = MagicMock()
+        with (
+            patch("sys.argv", ["ollama-agent"]),
+            patch("ollama_agent.main.set_locale", return_value="en"),
+            patch("ollama_agent.main.Console", return_value=mock_console),
+            patch("ollama_agent.main.load_settings", return_value=Settings()),
+            patch(
+                "ollama_agent.main.check_ollama_version",
+                side_effect=ModelCapabilityError("Could not connect to Ollama at 'http://localhost:11434': Connection refused"),
+            ),
+            patch("ollama_agent.main.ensure_model_configured") as mock_ensure,
+        ):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 1)
+            mock_ensure.assert_not_called()
+            mock_console.print.assert_called_once()
 
     def test_cli_rag_add_file_and_directory(self) -> None:
         parser = create_argument_parser()

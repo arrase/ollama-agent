@@ -458,5 +458,6 @@
   "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "当前推理强度：{effort} (模型：{model})\n用法：/effort <级别> | default",
   "Model thinking controls: {values} (default: {default})": "模型思考控制：{values} (默认：{default})",
   "(model default)": "(模型默认)",
-  "(default)": "(默认)"
+  "(default)": "(默认)",
+  "Ollama version {version} is lower than required {min_version}. Please update your Ollama installation.": "Ollama 版本 {version} 低于所需版本 {min_version}。请更新您的 Ollama 安装。"
 }

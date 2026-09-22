@@ -458,5 +458,6 @@
   "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "Esfuerzo de razonamiento actual: {effort} (modelo: {model})\nUso: /effort <nivel> | default",
   "Model thinking controls: {values} (default: {default})": "Controles de pensamiento del modelo: {values} (por defecto: {default})",
   "(model default)": "(por defecto del modelo)",
-  "(default)": "(por defecto)"
+  "(default)": "(por defecto)",
+  "Ollama version {version} is lower than required {min_version}. Please update your Ollama installation.": "La versión de Ollama {version} es inferior a la requerida {min_version}. Por favor, actualiza tu instalación de Ollama."
 }

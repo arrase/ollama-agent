@@ -458,5 +458,6 @@
   "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "Geçerli akıl yürütme düzeyi: {effort} (model: {model})\nKullanım: /effort <düzey> | default",
   "Model thinking controls: {values} (default: {default})": "Model düşünme kontrolleri: {values} (varsayılan: {default})",
   "(model default)": "(model varsayılanı)",
-  "(default)": "(varsayılan)"
+  "(default)": "(varsayılan)",
+  "Ollama version {version} is lower than required {min_version}. Please update your Ollama installation.": "Ollama sürümü {version} gerekli {min_version} sürümünden daha düşük. Lütfen Ollama kurulumunuzu güncelleyin."
 }

@@ -458,5 +458,6 @@
   "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "현재 추론 강도: {effort} (모델: {model})\n사용법: /effort <수준> | default",
   "Model thinking controls: {values} (default: {default})": "모델 사고 제어: {values} (기본값: {default})",
   "(model default)": "(모델 기본값)",
-  "(default)": "(기본값)"
+  "(default)": "(기본값)",
+  "Ollama version {version} is lower than required {min_version}. Please update your Ollama installation.": "Ollama 버전 {version}이(가) 필요한 버전 {min_version}보다 낮습니다. Ollama 설치를 업데이트해 주세요."
 }

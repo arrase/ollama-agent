@@ -458,5 +458,6 @@
   "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "مستوى الاستدلال الحالي: {effort} (النموذج: {model})\nالاستخدام: /effort <المستوى> | default",
   "Model thinking controls: {values} (default: {default})": "عناصر التحكم في تفكير النموذج: {values} (الافتراضي: {default})",
   "(model default)": "(افتراضي النموذج)",
-  "(default)": "(افتراضي)"
+  "(default)": "(افتراضي)",
+  "Ollama version {version} is lower than required {min_version}. Please update your Ollama installation.": "إصدار Ollama {version} أقل من الإصدار المطلوب {min_version}. يرجى تحديث تثبيت Ollama الخاص بك."
 }

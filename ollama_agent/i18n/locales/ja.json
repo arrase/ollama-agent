@@ -458,5 +458,6 @@
   "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "現在の思考レベル: {effort} (モデル: {model})\n使用法: /effort <レベル> | default",
   "Model thinking controls: {values} (default: {default})": "モデルの思考制御: {values} (デフォルト: {default})",
   "(model default)": "(モデルデフォルト)",
-  "(default)": "(デフォルト)"
+  "(default)": "(デフォルト)",
+  "Ollama version {version} is lower than required {min_version}. Please update your Ollama installation.": "Ollama のバージョン {version} は必要なバージョン {min_version} より低いです。Ollama のインストールを更新してください。"
 }

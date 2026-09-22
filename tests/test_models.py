@@ -1,21 +1,26 @@
 from __future__ import annotations
 
+import httpx
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from ollama_agent.core.common import DEFAULT_REASONING_EFFORT
 from ollama_agent.core.models import (
+    MIN_OLLAMA_VERSION,
     ExtendedShowResponse,
     ModelCapabilityError,
     ModelContextWindowError,
+    OllamaVersionError,
     _get_model_info,
     _model_context_length,
     _parse_modelfile_param,
     _parse_num_ctx,
+    check_ollama_version,
     create_ollama_chat_model,
     ensure_model_supports_tools,
     get_model_capabilities,
     get_model_thinking_config,
+    get_ollama_version,
     model_supports_thinking,
     model_supports_tools,
     resolve_context_window,
@@ -488,6 +493,68 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(model.presence_penalty)
         self.assertIsNone(model.repeat_penalty)
         self.assertEqual(model.effective_params, {})
+
+    @patch("httpx.get")
+    def test_get_ollama_version_success(self, mock_get: MagicMock) -> None:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"version": "0.34.3"}
+        mock_get.return_value = mock_response
+
+        version = get_ollama_version("http://localhost:11434")
+        self.assertEqual(version, "0.34.3")
+        mock_get.assert_called_once_with("http://localhost:11434/api/version", timeout=5.0)
+
+    @patch("httpx.get")
+    def test_get_ollama_version_connect_error(self, mock_get: MagicMock) -> None:
+        mock_get.side_effect = httpx.ConnectError("Connection refused")
+        with self.assertRaises(ModelCapabilityError) as cm:
+            get_ollama_version("http://localhost:11434")
+        self.assertIn("Could not connect to Ollama", str(cm.exception))
+
+    @patch("httpx.get")
+    def test_get_ollama_version_http_error(self, mock_get: MagicMock) -> None:
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "500 Internal Server Error", request=MagicMock(), response=mock_response
+        )
+        mock_get.return_value = mock_response
+
+        with self.assertRaises(ModelCapabilityError) as cm:
+            get_ollama_version("http://localhost:11434")
+        self.assertIn("Could not connect to Ollama", str(cm.exception))
+
+    @patch("ollama_agent.core.models.get_ollama_version", return_value="0.34.3")
+    def test_check_ollama_version_equal(self, mock_get_ver: MagicMock) -> None:
+        version = check_ollama_version("http://localhost:11434")
+        self.assertEqual(version, "0.34.3")
+        mock_get_ver.assert_called_once_with("http://localhost:11434")
+
+    @patch("ollama_agent.core.models.get_ollama_version", return_value="0.35.0")
+    def test_check_ollama_version_higher(self, mock_get_ver: MagicMock) -> None:
+        version = check_ollama_version("http://localhost:11434")
+        self.assertEqual(version, "0.35.0")
+
+    @patch("ollama_agent.core.models.get_ollama_version", return_value="0.34.2")
+    def test_check_ollama_version_lower_raises(self, mock_get_ver: MagicMock) -> None:
+        with self.assertRaises(OllamaVersionError) as cm:
+            check_ollama_version("http://localhost:11434")
+        self.assertIn("0.34.2", str(cm.exception))
+        self.assertIn("0.34.3", str(cm.exception))
+
+    @patch("ollama_agent.core.models.get_ollama_version", return_value="0.10.0")
+    def test_check_ollama_version_much_lower_raises(self, mock_get_ver: MagicMock) -> None:
+        with self.assertRaises(OllamaVersionError) as cm:
+            check_ollama_version("http://localhost:11434")
+        self.assertIn("0.10.0", str(cm.exception))
+        self.assertIn("0.34.3", str(cm.exception))
+
+    @patch("ollama_agent.core.models.get_ollama_version", return_value="0.40.0")
+    def test_check_ollama_version_custom_min(self, mock_get_ver: MagicMock) -> None:
+        version = check_ollama_version("http://localhost:11434", min_version="0.40.0")
+        self.assertEqual(version, "0.40.0")
+
+        with self.assertRaises(OllamaVersionError):
+            check_ollama_version("http://localhost:11434", min_version="0.41.0")
 
 
 if __name__ == "__main__":

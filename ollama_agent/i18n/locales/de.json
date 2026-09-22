@@ -458,5 +458,6 @@
   "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "Aktueller Denkaufwand: {effort} (Modell: {model})\nVerwendung: /effort <Stufe> | default",
   "Model thinking controls: {values} (default: {default})": "Denksteuerungen des Modells: {values} (Standard: {default})",
   "(model default)": "(Modellstandard)",
-  "(default)": "(Standard)"
+  "(default)": "(Standard)",
+  "Ollama version {version} is lower than required {min_version}. Please update your Ollama installation.": "Die Ollama-Version {version} ist niedriger als die erforderliche Version {min_version}. Bitte aktualisieren Sie Ihre Ollama-Installation."
 }

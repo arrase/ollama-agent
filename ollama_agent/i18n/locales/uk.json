@@ -458,5 +458,6 @@
   "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "Поточний рівень міркувань: {effort} (модель: {model})\nВикористання: /effort <рівень> | default",
   "Model thinking controls: {values} (default: {default})": "Елементи керування мисленням моделі: {values} (за замовчуванням: {default})",
   "(model default)": "(за замовчуванням моделі)",
-  "(default)": "(за замовчуванням)"
+  "(default)": "(за замовчуванням)",
+  "Ollama version {version} is lower than required {min_version}. Please update your Ollama installation.": "Версія Ollama {version} нижча за потрібну {min_version}. Будь ласка, оновіть встановлення Ollama."
 }

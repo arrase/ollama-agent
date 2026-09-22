@@ -458,5 +458,6 @@
   "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "Huidige redeneringsinspanning: {effort} (model: {model})\nGebruik: /effort <niveau> | default",
   "Model thinking controls: {values} (default: {default})": "Denkbesturingselementen van het model: {values} (standaard: {default})",
   "(model default)": "(modelstandaard)",
-  "(default)": "(standaard)"
+  "(default)": "(standaard)",
+  "Ollama version {version} is lower than required {min_version}. Please update your Ollama installation.": "Ollama-versie {version} is lager dan de vereiste versie {min_version}. Werk uw Ollama-installatie bij."
 }

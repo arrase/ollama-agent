@@ -6,9 +6,11 @@ import logging
 import re
 from typing import Any, Callable
 
+import httpx
 import ollama
 from langchain_ollama import ChatOllama
 from ollama import ShowResponse
+from packaging.version import parse as parse_version
 from pydantic import Field
 
 from ..i18n import _
@@ -18,6 +20,8 @@ from .common import (
 )
 
 _log = logging.getLogger(__name__)
+
+MIN_OLLAMA_VERSION = "0.34.3"
 
 
 class ExtendedShowResponse(ShowResponse):
@@ -32,6 +36,45 @@ class ModelCapabilityError(RuntimeError):
 
 class ModelContextWindowError(RuntimeError):
     """Raised when the context window for a model cannot be resolved."""
+
+
+class OllamaVersionError(ModelCapabilityError):
+    """Raised when the Ollama server version is lower than the minimum required version."""
+
+
+def get_ollama_version(base_url: str) -> str:
+    """Fetch the Ollama server version string from the /api/version endpoint."""
+    url = f"{base_url.rstrip('/')}/api/version"
+    try:
+        response = httpx.get(url, timeout=5.0)
+        response.raise_for_status()
+        data = response.json()
+        return str(data["version"])
+    except (httpx.HTTPError, OSError) as exc:
+        raise ModelCapabilityError(
+            _("Could not connect to Ollama at '{base_url}': {exc}", base_url=base_url, exc=exc)
+        ) from exc
+
+
+def check_ollama_version(
+    base_url: str,
+    min_version: str = MIN_OLLAMA_VERSION,
+) -> str:
+    """Check that the Ollama server version meets the minimum requirement.
+
+    Returns the detected Ollama version string if valid.
+    Raises OllamaVersionError if the version is lower than min_version.
+    """
+    version_str = get_ollama_version(base_url)
+    if parse_version(version_str) < parse_version(min_version):
+        raise OllamaVersionError(
+            _(
+                "Ollama version {version} is lower than required {min_version}. Please update your Ollama installation.",
+                version=version_str,
+                min_version=min_version,
+            )
+        )
+    return version_str
 
 
 async def _show_model(model: str, base_url: str) -> ExtendedShowResponse:
