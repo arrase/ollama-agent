@@ -32,11 +32,12 @@ async def _mcp_stdio_client(server: Any, errlog: Any = None) -> Any:
     if errlog is not None and errlog is not sys.stderr:
         async with _orig_stdio_client(server, errlog=errlog) as streams:
             yield streams
-    else:
-        MCP_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with MCP_LOG_PATH.open("a", encoding="utf-8") as f:
-            async with _orig_stdio_client(server, errlog=f) as streams:
-                yield streams
+        return
+
+    MCP_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with MCP_LOG_PATH.open("a", encoding="utf-8") as f:
+        async with _orig_stdio_client(server, errlog=f) as streams:
+            yield streams
 
 
 mcp.client.stdio.stdio_client = _mcp_stdio_client
@@ -52,12 +53,11 @@ def _resolve_env(env: dict[str, str], server_name: str) -> dict[str, str]:
 
     Raises MCPConfigError when a required environment variable is missing.
     """
-    if not env:
-        return {}
-
     def _replace(match: re.Match[str]) -> str:
         var = match.group(1) or match.group(2)
-        if var not in os.environ:
+        try:
+            return os.environ[var]
+        except KeyError:
             raise MCPConfigError(
                 _(
                     "MCP server '{name}': missing environment variable '{var}'",
@@ -65,7 +65,6 @@ def _resolve_env(env: dict[str, str], server_name: str) -> dict[str, str]:
                     var=var,
                 )
             )
-        return os.environ[var]
 
     return {key: _ENV_RE.sub(_replace, str(value)) for key, value in env.items()}
 
@@ -80,7 +79,9 @@ def _build_mcp_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, An
         command = cfg["command"]
         if not isinstance(command, str) or not command.strip():
             raise MCPConfigError(_("MCP server '{name}': 'command' must be a non-empty string", name=server_name))
-        args = cfg["args"] if "args" in cfg else []
+        args = []
+        if "args" in cfg:
+            args = cfg["args"]
         if not isinstance(args, list):
             raise MCPConfigError(_("MCP server '{name}': 'args' must be a list", name=server_name))
         out: dict[str, Any] = {
@@ -91,12 +92,9 @@ def _build_mcp_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, An
         if "cwd" in cfg:
             out["cwd"] = cfg["cwd"]
         if "env" in cfg:
-            env = cfg["env"]
-            if not isinstance(env, dict):
+            if not isinstance(cfg["env"], dict):
                 raise MCPConfigError(_("MCP server '{name}': 'env' must be an object", name=server_name))
-            resolved = _resolve_env(env, server_name)
-            if resolved:
-                out["env"] = resolved
+            out["env"] = _resolve_env(cfg["env"], server_name)
         return out
 
     if "url" in cfg:
@@ -135,16 +133,10 @@ async def _read_main_config() -> dict[str, dict[str, Any]]:
     """
     try:
         raw_json = await asyncio.to_thread(MCP_PATH.read_text, encoding="utf-8")
+        data = json.loads(raw_json)
     except FileNotFoundError:
         return {}
-    except OSError as exc:
-        raise MCPConfigError(
-            _("Failed to load MCP config {config_path}: {exc}", config_path=MCP_PATH, exc=exc)
-        ) from exc
-
-    try:
-        data = json.loads(raw_json)
-    except json.JSONDecodeError as exc:
+    except (OSError, json.JSONDecodeError) as exc:
         raise MCPConfigError(
             _("Failed to load MCP config {config_path}: {exc}", config_path=MCP_PATH, exc=exc)
         ) from exc
@@ -180,9 +172,6 @@ async def _connect_and_load(name: str, conn: dict[str, Any]) -> list[Any]:
 
 async def _load_tools_from_connections(connections: dict[str, dict[str, Any]]) -> list[Any]:
     """Connect to multiple MCP servers concurrently and return all discovered tools."""
-    if not connections:
-        return []
-
     tasks: list[asyncio.Task[list[Any]]] = []
     try:
         async with asyncio.TaskGroup() as tg:
@@ -222,9 +211,6 @@ async def load_subagent_mcp_tools(
 
     Raises MCPConfigError when any server entry is malformed or fails to connect.
     """
-    if not mcp_servers:
-        return []
-
     seen_names: set[str] = set()
     connections: dict[str, dict[str, Any]] = {}
     for srv in mcp_servers:

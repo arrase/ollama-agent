@@ -99,6 +99,20 @@ class TestCommonUtilities(unittest.TestCase):
             tmp_files = list(Path(td).glob("*.tmp"))
             self.assertEqual(tmp_files, [])
 
+    def test_atomic_write_text_cleans_up_temp_file_on_encoding_error(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "encoding_error.txt"
+            with self.assertRaises(UnicodeEncodeError):
+                atomic_write_text(target, "café con leche", encoding="ascii")
+            self.assertFalse(target.exists())
+            tmp_files = list(Path(td).glob("*.tmp"))
+            self.assertEqual(tmp_files, [])
+
+    def test_extract_text_filters_empty_and_none(self) -> None:
+        self.assertEqual(extract_text(["hello", "", None, "world"]), "hello world")
+        self.assertEqual(extract_text([{"text": "foo"}, {"text": ""}, {"text": "bar"}]), "foo bar")
+
 
 if __name__ == "__main__":
     unittest.main()
+

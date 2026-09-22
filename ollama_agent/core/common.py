@@ -10,7 +10,6 @@ from typing import Any, TypedDict
 
 from ..i18n import _
 
-# Reasoning effort type alias
 ReasoningEffortValue = str
 DEFAULT_REASONING_EFFORT: ReasoningEffortValue = "default"
 
@@ -26,17 +25,16 @@ class RAGToolResult(TypedDict, total=False):
 
 def extract_text(content: Any, *, sep: str = " ") -> str:
     """Convert agent payload content into plain text."""
-    if content is None:
-        return ""
     if isinstance(content, str):
         return content
+    if content is None:
+        return ""
     if isinstance(content, (list, tuple)):
-        return sep.join(filter(None, (extract_text(c, sep=sep) for c in content))).strip()
+        return sep.join(filter(None, (extract_text(item, sep=sep) for item in content))).strip()
     if isinstance(content, dict):
-        if "text" in content:
-            return extract_text(content["text"], sep=sep)
-        if "content" in content:
-            return extract_text(content["content"], sep=sep)
+        for key in ("text", "content"):
+            if key in content:
+                return extract_text(content[key], sep=sep)
         raise TypeError("Unsupported dict content for extract_text: missing 'text' or 'content' key")
     raise TypeError(f"Unsupported content shape for extract_text: {type(content).__name__}")
 

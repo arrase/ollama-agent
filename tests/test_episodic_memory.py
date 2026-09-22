@@ -16,6 +16,7 @@ from ollama_agent.agent.builtin_tools import (
     set_tool_timeout,
 )
 from ollama_agent.agent.episodic_memory import (
+    format_iso_timestamp,
     format_past_conversations_context,
     load_past_conversations,
     load_past_user_prompts,
@@ -254,6 +255,62 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(ValueError):
             set_tool_timeout(-10)
+
+    def test_format_iso_timestamp(self) -> None:
+        # Naive timestamp should not shift timezone
+        self.assertEqual(format_iso_timestamp("2026-08-20T10:00:00"), "2026-08-20 10:00 UTC")
+        # Timezone-aware timestamp should be converted to UTC
+        self.assertEqual(format_iso_timestamp("2026-08-20T12:00:00+02:00"), "2026-08-20 10:00 UTC")
+
+    def test_load_with_scalar_message(self) -> None:
+        # Seed DB with a single BaseMessage scalar (not inside a list)
+        conn = sqlite3.connect(str(self.db_path))
+        cur = conn.cursor()
+        cur.execute(
+            """CREATE TABLE checkpoints (
+                thread_id TEXT,
+                checkpoint_ns TEXT DEFAULT '',
+                checkpoint_id TEXT,
+                type TEXT,
+                checkpoint BLOB,
+                metadata BLOB
+            );"""
+        )
+        cur.execute(
+            """CREATE TABLE writes (
+                thread_id TEXT,
+                checkpoint_ns TEXT DEFAULT '',
+                checkpoint_id TEXT,
+                task_id TEXT,
+                idx INTEGER,
+                channel TEXT,
+                type TEXT,
+                value BLOB
+            );"""
+        )
+        t_chk = {"ts": "2026-08-20T10:00:00"}
+        chk_typ, chk_val = self.serializer.dumps_typed(t_chk)
+        cur.execute(
+            "INSERT INTO checkpoints (thread_id, checkpoint_id, type, checkpoint) VALUES (?, ?, ?, ?)",
+            ("thread-scalar", "cp-scalar", chk_typ, chk_val),
+        )
+        # Dump scalar message instead of list
+        scalar_msg = HumanMessage(content="Scalar prompt question")
+        typ, val = self.serializer.dumps_typed(scalar_msg)
+        cur.execute(
+            "INSERT INTO writes (thread_id, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("thread-scalar", "cp-scalar", "task-scalar", 0, "messages", typ, val),
+        )
+        conn.commit()
+        conn.close()
+
+        prompts = load_past_user_prompts(self.db_path)
+        self.assertEqual(prompts, ["Scalar prompt question"])
+
+        convs = load_past_conversations(self.db_path)
+        self.assertIn("thread-scalar", convs)
+        self.assertEqual(len(convs["thread-scalar"]["messages"]), 1)
+        self.assertEqual(convs["thread-scalar"]["messages"][0].content, "Scalar prompt question")
 
 
 if __name__ == "__main__":

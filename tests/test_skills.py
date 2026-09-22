@@ -84,6 +84,14 @@ class TestSkillsManager(unittest.TestCase):
         with self.assertRaises(ValueError):
             _read_skill(skill_dir)
 
+        (skill_dir / "SKILL.md").write_text("---\nname: ''\ndescription: valid\n---\nbody", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            _read_skill(skill_dir)
+
+        (skill_dir / "SKILL.md").write_text("---\nname: valid\ndescription: '   '\n---\nbody", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            _read_skill(skill_dir)
+
     def test_find_matches_prefix(self) -> None:
         self.mgr.create("py", name="Python Base", description="Base tool", instructions="Run py")
         self.mgr.create("py-lint", name="Python Linter", description="Lints code", instructions="Run ruff")
@@ -172,6 +180,12 @@ class TestSkillsManager(unittest.TestCase):
         mgr_with_builtin = SkillManager(self.skills_dir, builtin_skills_dir=BUILTIN_SKILLS_DIR)
         with self.assertRaises(ValueError):
             mgr_with_builtin.delete("skill-creator")
+
+    def test_builtin_skills_dir_nonexistent_does_not_raise(self) -> None:
+        nonexistent = self.skills_dir / "does_not_exist_builtin"
+        mgr = SkillManager(self.skills_dir, builtin_skills_dir=nonexistent)
+        skills = mgr.list_all()
+        self.assertEqual(skills, [])
 
 
 if __name__ == "__main__":

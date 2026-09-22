@@ -112,6 +112,12 @@ class TestI18nLocaleManagement(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unsupported language: unsupported_lang"):
             set_locale("unsupported_lang")
 
+    def test_set_locale_none_and_default(self) -> None:
+        with patch("ollama_agent.i18n.detect_system_language", return_value="es"):
+            self.assertEqual(set_locale(None), "es")
+            self.assertEqual(get_locale(), "es")
+            self.assertEqual(set_locale(), "es")
+
     def test_get_locale(self) -> None:
         set_locale("en")
         self.assertEqual(get_locale(), "en")

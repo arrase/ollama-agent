@@ -52,6 +52,26 @@ class TestStreamingParsers(unittest.TestCase):
         self.assertEqual(streaming_reasoning("just plain string"), "")
         self.assertEqual(streaming_reasoning(None), "")
 
+    def test_streaming_text_edge_cases(self) -> None:
+        self.assertEqual(streaming_text(None), "")
+        self.assertEqual(streaming_text(123), "")
+        self.assertEqual(streaming_text(["foo", "bar"]), "")
+        self.assertEqual(streaming_text([{"text": "foo"}]), "")
+        self.assertEqual(streaming_text([{"type": "text"}]), "")
+        self.assertEqual(streaming_text({"type": "text"}), "")
+        self.assertEqual(streaming_text({"other": "value"}), "")
+
+    def test_streaming_reasoning_edge_cases(self) -> None:
+        self.assertEqual(streaming_reasoning(None, None), "")
+        self.assertEqual(streaming_reasoning("", None), "")
+        self.assertEqual(streaming_reasoning(None, {"reasoning_content": 123}), "")
+        self.assertEqual(streaming_reasoning(None, {"reasoning_content": "step 1"}), "step 1")
+        self.assertEqual(streaming_reasoning([123, "not_dict"], None), "")
+        self.assertEqual(streaming_reasoning([{"type": "reasoning"}], None), "")
+        self.assertEqual(streaming_reasoning([{"type": "reasoning", "summary": "not_list"}], None), "")
+        self.assertEqual(streaming_reasoning([{"type": "reasoning", "summary": [{"type": "summary_text"}]}], None), "")
+        self.assertEqual(streaming_reasoning([{"type": "reasoning", "summary": ["not_dict"]}], None), "")
+
     def test_think_tag_parser_chunk_splits(self) -> None:
         parser = ThinkTagParser()
         deltas1 = parser.feed("Hello <th")
@@ -94,6 +114,17 @@ class TestStreamingParsers(unittest.TestCase):
         parser.feed("Trailing text <th")
         flushed = parser.flush()
         self.assertEqual(flushed, [{"type": "text_delta", "content": "<th"}])
+
+    def test_think_tag_parser_process_chunk_empty_text(self) -> None:
+        parser = ThinkTagParser()
+        chunk_empty = MagicMock(type="ai", content="", additional_kwargs={})
+        self.assertEqual(parser.process_chunk(chunk_empty), [])
+
+        chunk_none = MagicMock(type="ai", content=None, additional_kwargs=None)
+        self.assertEqual(parser.process_chunk(chunk_none), [])
+
+        chunk_tool = MagicMock(type="tool", content="call", additional_kwargs={})
+        self.assertEqual(parser.process_chunk(chunk_tool), [])
 
 
 if __name__ == "__main__":

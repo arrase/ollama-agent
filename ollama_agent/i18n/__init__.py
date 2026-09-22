@@ -33,66 +33,52 @@ _translations: dict[str, str] = {}
 
 
 def _normalize_lang(raw: str) -> str:
-    """Normalize language string to lowercase language code (e.g. 'es_ES.UTF-8' -> 'es')."""
     clean = raw.strip().split(".")[0].split("@")[0]
     return clean.split("_")[0].split("-")[0].lower()
 
 
-def detect_system_language() -> str:
-    """Detect the system language code, falling back to DEFAULT_LOCALE."""
+def _system_locale_candidates() -> list[str]:
+    candidates = []
     for var in ("LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"):
-        val = os.environ.get(var, "").strip()
-        if val:
-            for part in val.split(":"):
-                if part.strip():
-                    norm = _normalize_lang(part)
-                    if norm in SUPPORTED_LOCALES:
-                        return norm
-
+        if var in os.environ:
+            candidates.extend(os.environ[var].split(":"))
     loc = locale.getlocale()[0]
     if loc:
-        norm = _normalize_lang(loc)
-        if norm in SUPPORTED_LOCALES:
-            return norm
+        candidates.append(loc)
+    return candidates
 
+
+def detect_system_language() -> str:
+    for item in _system_locale_candidates():
+        code = _normalize_lang(item)
+        if code in SUPPORTED_LOCALES:
+            return code
     return DEFAULT_LOCALE
 
 
-def _load_translations(lang: str) -> dict[str, str]:
-    """Load translation mapping for a given language code."""
-    if lang == DEFAULT_LOCALE:
-        return {}
-    data = resources.files(__name__).joinpath("locales", f"{lang}.json").read_text(encoding="utf-8")
-    return json.loads(data)
-
-
 def set_locale(lang: str | None = None) -> str:
-    """Set the active application locale and load its translations."""
     global _current_locale, _translations
-    if not lang:
-        target = detect_system_language()
-    else:
-        norm = _normalize_lang(lang)
-        if norm not in SUPPORTED_LOCALES:
-            raise ValueError(f"Unsupported language: {lang}")
-        target = norm
+    target = _normalize_lang(lang) if lang else detect_system_language()
+    if target not in SUPPORTED_LOCALES:
+        raise ValueError(f"Unsupported language: {lang}")
 
     _current_locale = target
-    _translations = _load_translations(target)
+    _translations = {}
+    if target != DEFAULT_LOCALE:
+        data = resources.files(__name__).joinpath("locales", f"{target}.json").read_text(encoding="utf-8")
+        _translations = json.loads(data)
     return _current_locale
 
 
 def get_locale() -> str:
-    """Return the active application locale code."""
     return _current_locale
 
 
 def get_text(message: str, **kwargs: Any) -> str:
-    """Translate a message string with optional format arguments."""
-    template = _translations.get(message, message)
+    text = _translations[message] if message in _translations else message
     if kwargs:
-        return template.format(**kwargs)
-    return template
+        return text.format(**kwargs)
+    return text
 
 
 _ = get_text

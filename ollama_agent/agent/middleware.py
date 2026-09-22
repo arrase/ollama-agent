@@ -21,22 +21,21 @@ from .builtin_tools import get_tool_timeout
 
 async def _stream_tool_events(request: Any, handler: Any) -> Any:
     """Emit tool_call / tool_output events and enforce tool timeout."""
-    runtime = request.runtime
-    tool_name = request.tool_call["name"]
-    tool_call_id = request.tool_call["id"]
+    tool_call = request.tool_call
+    tool_name = tool_call["name"]
+    tool_call_id = tool_call["id"]
     agent_name = None
-
-    args = request.tool_call.get("args")
-    if args and tool_name == "task":
-        agent_name = args.get("name")
-    meta = request.tool_call.get("metadata")
-    if meta and not agent_name:
-        agent_name = meta.get("lc_agent_name")
+    if tool_name == "task":
+        args = tool_call.get("args") or {}
+        agent_name = args.get("subagent_type") or args.get("name")
+    if not agent_name:
+        metadata = tool_call.get("metadata") or {}
+        agent_name = metadata.get("lc_agent_name")
 
     event: dict[str, Any] = {"type": "tool_call", "name": tool_name}
     if agent_name:
         event["agent_name"] = agent_name
-    runtime.stream_writer(event)
+    request.runtime.stream_writer(event)
 
     timeout_s = get_tool_timeout()
     try:
@@ -49,12 +48,11 @@ async def _stream_tool_events(request: Any, handler: Any) -> Any:
             status="error",
         )
 
-    content = result.content if hasattr(result, "content") else result
-    content_str = str(content)
-    out_event: dict[str, Any] = {"type": "tool_output", "output_len": len(content_str)}
+    content = getattr(result, "content", result)
+    out_event: dict[str, Any] = {"type": "tool_output", "output_len": len(str(content))}
     if agent_name:
         out_event["agent_name"] = agent_name
-    runtime.stream_writer(out_event)
+    request.runtime.stream_writer(out_event)
     return result
 
 

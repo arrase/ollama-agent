@@ -305,6 +305,30 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         self.assertIn("thinking-only model", console.export_text())
         runtime.set_reasoning_effort.assert_not_called()
 
+    async def test_set_effort_values_none_handled_safely(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.model.show_info = MagicMock(thinking={"values": None, "default": "low"})
+        runtime.settings.model.name = "custom:model"
+        runtime.settings.model.reasoning_effort = "high"
+        runtime.set_reasoning_effort = AsyncMock()
+
+        res = await set_effort(console, "low", runtime=runtime)
+        self.assertEqual(res, "low")
+        runtime.set_reasoning_effort.assert_awaited_once_with("low")
+
+    async def test_set_effort_missing_default_key_enabled(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.model.show_info = MagicMock(thinking={"values": ["low", "high"]})
+        runtime.settings.model.name = "custom:model"
+        runtime.settings.model.reasoning_effort = "low"
+        runtime.set_reasoning_effort = AsyncMock()
+
+        res = await set_effort(console, "enabled", runtime=runtime)
+        self.assertEqual(res, "default")
+        runtime.set_reasoning_effort.assert_awaited_once_with("default")
+
     def test_show_context_window(self) -> None:
         console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
@@ -760,6 +784,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         console = Console(file=io.StringIO(), record=True)
         with (
             patch("ollama_agent.interfaces.model_commands._list_models", AsyncMock(return_value=[mock_m1, mock_m2])),
+            patch("ollama_agent.interfaces.model_commands.model_supports_tools", AsyncMock(return_value=True)),
             patch("ollama_agent.interfaces.model_commands.save_settings") as mock_save,
         ):
             inputs = iter(["1"])
@@ -780,6 +805,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         console = Console(file=io.StringIO(), record=True)
         with (
             patch("ollama_agent.interfaces.model_commands._list_models", AsyncMock(return_value=[mock_m1, mock_m2])),
+            patch("ollama_agent.interfaces.model_commands.model_supports_tools", AsyncMock(return_value=True)),
             patch("ollama_agent.interfaces.model_commands.save_settings") as mock_save,
         ):
             inputs = iter(["invalid_name", "ornith-1.5:9b"])
@@ -790,6 +816,44 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             out = console.export_text()
             self.assertIn("No model is currently configured", out)
             self.assertIn("Invalid selection", out)
+
+    def test_ensure_model_configured_warns_on_model_without_tools(self) -> None:
+        settings = Settings()
+        settings.model.name = ""
+        mock_m1 = MagicMock(model="simple-llm:7b", size=1024**3 * 4)
+
+        console = Console(file=io.StringIO(), record=True)
+        with (
+            patch("ollama_agent.interfaces.model_commands._list_models", AsyncMock(return_value=[mock_m1])),
+            patch("ollama_agent.interfaces.model_commands.model_supports_tools", AsyncMock(return_value=False)),
+            patch("ollama_agent.interfaces.model_commands.save_settings") as mock_save,
+        ):
+            inputs = iter(["1"])
+            res = ensure_model_configured(settings, console=console, input_func=lambda _: next(inputs))
+            self.assertEqual(res, "simple-llm:7b")
+            self.assertEqual(settings.model.name, "simple-llm:7b")
+            mock_save.assert_called_once_with(settings)
+            out = console.export_text()
+            self.assertIn("✗", out)
+            self.assertIn("does not support tools", out)
+
+    def test_ensure_model_configured_shows_tool_checkmark(self) -> None:
+        settings = Settings()
+        settings.model.name = ""
+        mock_m1 = MagicMock(model="tool-llm:7b", size=1024**3 * 4)
+
+        console = Console(file=io.StringIO(), record=True)
+        with (
+            patch("ollama_agent.interfaces.model_commands._list_models", AsyncMock(return_value=[mock_m1])),
+            patch("ollama_agent.interfaces.model_commands.model_supports_tools", AsyncMock(return_value=True)),
+            patch("ollama_agent.interfaces.model_commands.save_settings") as mock_save,
+        ):
+            inputs = iter(["1"])
+            res = ensure_model_configured(settings, console=console, input_func=lambda _: next(inputs))
+            self.assertEqual(res, "tool-llm:7b")
+            out = console.export_text()
+            self.assertIn("✓", out)
+            self.assertNotIn("does not support tools", out)
 
     def test_ensure_model_configured_no_models_raises(self) -> None:
         settings = Settings()

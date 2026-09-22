@@ -94,6 +94,64 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         out_event = mock_runtime.stream_writer.call_args_list[1][0][0]
         self.assertEqual(out_event["agent_name"], "researcher")
 
+    async def test_stream_tool_events_task_subagent_type(self) -> None:
+        mock_runtime = MagicMock()
+
+        async def dummy_handler(req: Any) -> Any:
+            return "simple string result"
+
+        req = ToolCallRequest(
+            tool_call={
+                "name": "task",
+                "args": {"subagent_type": "analyst"},
+                "id": "call-2b",
+            },
+            tool=None,
+            state={},
+            runtime=mock_runtime,
+        )
+
+        with patch("ollama_agent.agent.middleware.get_tool_timeout", return_value=5):
+            res = await _stream_tool_events(req, dummy_handler)
+
+        self.assertEqual(res, "simple string result")
+        call_event = mock_runtime.stream_writer.call_args_list[0][0][0]
+        self.assertEqual(call_event["agent_name"], "analyst")
+        out_event = mock_runtime.stream_writer.call_args_list[1][0][0]
+        self.assertEqual(out_event["agent_name"], "analyst")
+        self.assertEqual(out_event["output_len"], len("simple string result"))
+
+    async def test_stream_tool_events_task_fallback_to_metadata(self) -> None:
+        mock_runtime = MagicMock()
+
+        class DummyCommand:
+            def __str__(self) -> str:
+                return "command_payload"
+
+        async def dummy_handler(req: Any) -> Any:
+            return DummyCommand()
+
+        req = ToolCallRequest(
+            tool_call={
+                "name": "task",
+                "args": {},
+                "id": "call-2c",
+                "metadata": {"lc_agent_name": "fallback_subagent"},
+            },
+            tool=None,
+            state={},
+            runtime=mock_runtime,
+        )
+
+        with patch("ollama_agent.agent.middleware.get_tool_timeout", return_value=5):
+            await _stream_tool_events(req, dummy_handler)
+
+        call_event = mock_runtime.stream_writer.call_args_list[0][0][0]
+        self.assertEqual(call_event["agent_name"], "fallback_subagent")
+        out_event = mock_runtime.stream_writer.call_args_list[1][0][0]
+        self.assertEqual(out_event["agent_name"], "fallback_subagent")
+        self.assertEqual(out_event["output_len"], len("command_payload"))
+
     async def test_stream_tool_events_timeout_returns_tool_message(self) -> None:
         async def slow_handler(req: Any) -> Any:
             await asyncio.sleep(0.5)

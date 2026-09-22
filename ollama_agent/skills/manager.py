@@ -29,15 +29,15 @@ class SkillInfo:
     content: str
 
 
-def _find_skill_file(skill_dir: Path) -> Path | None:
+def _find_skill_file(skill_dir: Path) -> Path:
     """Find SKILL.md (or skill.md) inside skill_dir."""
-    if not skill_dir.is_dir():
-        return None
-    if (skill_dir / "SKILL.md").is_file():
-        return skill_dir / "SKILL.md"
-    if (skill_dir / "skill.md").is_file():
-        return skill_dir / "skill.md"
-    return None
+    upper = skill_dir / "SKILL.md"
+    if upper.is_file():
+        return upper
+    lower = skill_dir / "skill.md"
+    if lower.is_file():
+        return lower
+    raise ValueError(_("Missing SKILL.md: {path}", path=skill_dir))
 
 
 def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
@@ -49,7 +49,7 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     if first_line_end == -1 or stripped[:first_line_end].strip() != "---":
         return {}, text
     match = _FRONTMATTER_CLOSE.search(stripped, first_line_end + 1)
-    if match is None:
+    if not match:
         raise ValueError(_("Unclosed YAML frontmatter"))
     yaml_str = stripped[first_line_end + 1 : match.start()]
     try:
@@ -64,15 +64,17 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
 def _read_skill(skill_dir: Path) -> SkillInfo:
     """Read and parse the SKILL.md inside *skill_dir*."""
     skill_file = _find_skill_file(skill_dir)
-    if skill_file is None:
-        raise ValueError(_("Missing SKILL.md: {path}", path=skill_dir))
     if skill_file.stat().st_size > _MAX_SKILL_SIZE:
         raise ValueError(_("SKILL.md exceeds 10 MB: {path}", path=skill_file))
     raw = skill_file.read_text(encoding="utf-8")
     meta, _body = _parse_frontmatter(raw)
-    if "name" not in meta or "description" not in meta or not meta["name"] or not meta["description"]:
+    if "name" not in meta or "description" not in meta:
         raise ValueError(_("Skill frontmatter must define non-empty 'name' and 'description': {path}", path=skill_file))
-    return SkillInfo(name=str(meta["name"]), description=str(meta["description"]), content=raw)
+    name = str(meta["name"]).strip()
+    description = str(meta["description"]).strip()
+    if not name or not description:
+        raise ValueError(_("Skill frontmatter must define non-empty 'name' and 'description': {path}", path=skill_file))
+    return SkillInfo(name=name, description=description, content=raw)
 
 
 class SkillManager(BaseFileStoreManager[SkillInfo]):
@@ -86,7 +88,7 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
         builtin_skills_dir: Path | None = BUILTIN_SKILLS_DIR,
     ) -> None:
         super().__init__(skills_dir)
-        self.builtin_dir = builtin_skills_dir.resolve() if builtin_skills_dir is not None else None
+        self.builtin_dir = builtin_skills_dir.resolve() if builtin_skills_dir else None
 
     @staticmethod
     def validate_skill_id(skill_id: str) -> str:
@@ -96,10 +98,10 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
     def _collect_skills(self, prefix: str = "") -> dict[str, SkillInfo]:
         """Collect all skills matching *prefix*, allowing user skills to override built-ins."""
         skills: dict[str, SkillInfo] = {}
-        search_dirs = [d for d in (self.builtin_dir, self.base_dir) if d is not None and d.is_dir()]
+        search_dirs = [d for d in (self.builtin_dir, self.base_dir) if d and d.is_dir()]
         for directory in search_dirs:
             for d in directory.iterdir():
-                if d.is_dir() and d.name.startswith(prefix) and _find_skill_file(d) is not None:
+                if d.is_dir() and d.name.startswith(prefix) and ((d / "SKILL.md").is_file() or (d / "skill.md").is_file()):
                     skills[d.name] = _read_skill(d)
         return skills
 
@@ -109,7 +111,7 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
         user_dir = self._path(valid_id)
         if user_dir.is_dir():
             return _read_skill(user_dir)
-        if self.builtin_dir is not None and (self.builtin_dir / valid_id).is_dir():
+        if self.builtin_dir and (self.builtin_dir / valid_id).is_dir():
             return _read_skill(self.builtin_dir / valid_id)
         raise FileNotFoundError(str(user_dir))
 
@@ -159,6 +161,6 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
         if user_dir.is_dir():
             shutil.rmtree(user_dir)
             return
-        if self.builtin_dir is not None and (self.builtin_dir / valid_id).is_dir():
+        if self.builtin_dir and (self.builtin_dir / valid_id).is_dir():
             raise ValueError(_("Built-in skills cannot be deleted: {name}", name=valid_id))
         raise FileNotFoundError(str(user_dir))
