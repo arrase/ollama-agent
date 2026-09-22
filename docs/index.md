@@ -78,7 +78,7 @@ ollama-agent -m "qwen2.5-coder:14b" -e high -y -p "Audit src/auth.py for securit
 !!! tip "Common CLI Flags at a Glance"
     * `-p, --prompt`: Run in non-interactive single-shot mode and exit when done.
     * `-m, --model`: Select any installed Ollama model for the session.
-    * `-e, --effort`: Set reasoning effort (`low`, `medium`, `high`, `xhigh`, `disabled`).
+    * `-e, --effort`: Set reasoning effort (dynamically matched to model-supported values, e.g. `low`, `high`, `max`, `default`).
     * `-y, --yolo`: Enable YOLO mode (runs tools autonomously without approval prompts).
     * `-s, --stealth`: Run in-memory without saving conversation history to disk.
 
@@ -94,7 +94,7 @@ Most agentic frameworks treat Ollama as a generic OpenAI-compatible proxy. This 
 | **Context Window (`num_ctx`)** | Defaults to Ollama's 2,048-token limit, causing premature amnesia. | **Auto-detects maximum context** directly from model metadata (or up to 128k+). |
 | **Model Hyperparameters** | Forces hardcoded defaults (`temp=0.7`), ignoring creator recommendations. | **Auto-discovers creator settings** from Modelfiles (`top_k`, `min_p`, `repeat_penalty`). |
 | **Token Accuracy** | Relies on inaccurate `tiktoken` approximations designed for GPT models. | **Server-native token counting** reads exact evaluation metrics from Ollama. |
-| **Reasoning Traces** | Leaks raw `<think>` tokens into conversation text or fails to parse them. | **Architecture-aware thinking**: translates effort into clean, collapsible UI blocks. |
+| **Reasoning Traces** | Leaks raw `<think>` tokens into conversation text or fails to parse them. | **API-driven thinking controls**: queries `/api/show` for supported effort levels and defaults, rendering traces into clean collapsible UI blocks. |
 | **Safety Controls** | All-or-nothing execution without fine-grained user confirmation. | **Human-in-the-Loop approval** before file edits or shell runs, with one-flag YOLO toggle. |
 
 ---
@@ -235,7 +235,7 @@ ollama-agent -p "Read the JSON on my clipboard and convert it into a typed Pydan
 | :--- | :--- | :--- | :--- |
 | `--prompt <text>` | `-p` | *None* | Runs in non-interactive mode with the given prompt and exits. |
 | `--model <name>` | `-m` | `settings.yaml` | Name of the local Ollama model to use for the session. |
-| `--effort <level>` | `-e` | `medium` | Reasoning effort: `low`, `medium`, `high`, `xhigh`, `disabled`. |
+| `--effort <level>` | `-e` | `default` | Reasoning effort (dynamically matched to model-supported values, e.g. `low`, `high`, `max`, `default`). |
 | `--num-ctx <int\|max>`| `-c` | `10000` | Context window size in tokens, or `max` for model capacity. |
 | `--yolo` | `-y` | `False` | Autonomous mode: bypasses all tool approval prompts. |
 | `--stealth` | `-s` | `False` | Ephemeral mode: does not persist chat history to SQLite. |

@@ -282,6 +282,14 @@ class TestTaskManager(unittest.TestCase):
             with self.assertRaises(ValueError):
                 task.render({"value": invalid})
 
+    def test_coerce_number_invalid_string_raises_localized_domain_error(self) -> None:
+        inp = TaskInput(type="number")
+        with self.assertRaises(ValueError) as ctx:
+            inp.coerce("val_input", "abc")
+        self.assertIn("Invalid number value for input 'val_input': abc", str(ctx.exception))
+        self.assertEqual(inp.coerce("val_input", "42"), 42)
+        self.assertEqual(inp.coerce("val_input", "3.14"), 3.14)
+
     def test_render_type_coercion_string(self) -> None:
         task = Task(
             title="StrTest",

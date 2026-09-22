@@ -9,7 +9,7 @@ import inspect
 from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager
 from ..agent.episodic_memory import HistoryError
-from ..core import ALLOWED_REASONING_EFFORTS, DEFAULT_REASONING_EFFORT
+from ..core import DEFAULT_REASONING_EFFORT
 from ..i18n import SUPPORTED_LOCALES, _
 from ..mcp import MCPConfigError
 from ..rag import RAGContext, RAGError, RAGManager, load_rag_database
@@ -32,8 +32,7 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         "-e",
         "--effort",
         type=str,
-        choices=list(ALLOWED_REASONING_EFFORTS),
-        help=_("Set reasoning effort level (low, medium, high, xhigh, disabled, hide, enabled)"),
+        help=_("Set reasoning effort level supported by the model, or 'default'"),
     )
     parser.add_argument(
         "-c",
@@ -127,10 +126,9 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         "-e",
         "--task-effort",
         type=str,
-        choices=list(ALLOWED_REASONING_EFFORTS),
         default=DEFAULT_REASONING_EFFORT,
         required=False,
-        help=_("Reasoning effort to save with the task (low, medium, high, xhigh, disabled, hide, enabled)"),
+        help=_("Reasoning effort to save with the task (e.g. default, low, high, max, false)"),
     )
     task_create.add_argument("--force", action="store_true", help=_("Overwrite task if it already exists"))
 

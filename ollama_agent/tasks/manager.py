@@ -30,43 +30,37 @@ class TaskInput:
     required: bool = False
     type: str = "string"  # "string", "boolean", "number"
 
-
-def _coerce_value(name: str, val: Any, expected_type: str) -> Any:
-    if val is None:
-        return None
-    if expected_type == "boolean":
-        if isinstance(val, bool):
-            return val
-        if isinstance(val, str):
-            norm = val.strip().lower()
-            if norm in ("true", "1", "yes"):
-                return True
-            if norm in ("false", "0", "no"):
-                return False
-        elif isinstance(val, (int, float)):
-            if val in (1, 1.0):
-                return True
-            if val in (0, 0.0):
-                return False
-        raise ValueError(_("Invalid boolean value for input '{name}': {val}", name=name, val=val))
-    if expected_type == "number":
-        if isinstance(val, str):
-            val_str = val.strip()
-            try:
-                return int(val_str)
-            except ValueError:
+    def coerce(self, name: str, val: Any) -> Any:
+        """Coerce an input value to the expected type."""
+        if self.type == "boolean":
+            if isinstance(val, bool):
+                return val
+            if isinstance(val, str):
+                norm = val.strip().lower()
+                if norm in ("true", "1", "yes"):
+                    return True
+                if norm in ("false", "0", "no"):
+                    return False
+            if isinstance(val, (int, float)) and val in (0, 1):
+                return bool(val)
+            raise ValueError(_("Invalid boolean value for input '{name}': {val}", name=name, val=val))
+        if self.type == "number":
+            if isinstance(val, bool):
+                raise ValueError(_("Invalid number value for input '{name}': {val}", name=name, val=val))
+            if isinstance(val, (int, float)):
+                return val
+            if isinstance(val, str):
                 try:
-                    return float(val_str)
+                    return int(val)
                 except ValueError:
-                    pass
-        elif isinstance(val, (int, float)) and not isinstance(val, bool):
-            return val
-        raise ValueError(_("Invalid number value for input '{name}': {val}", name=name, val=val))
-    if expected_type == "string":
-        if isinstance(val, str):
-            return val
-        return str(val)
-    raise ValueError(_("Unsupported input type '{type}' for input '{name}'", type=expected_type, name=name))
+                    try:
+                        return float(val)
+                    except ValueError:
+                        pass
+            raise ValueError(_("Invalid number value for input '{name}': {val}", name=name, val=val))
+        if self.type == "string":
+            return str(val)
+        raise ValueError(_("Unsupported input type '{type}' for input '{name}'", type=self.type, name=name))
 
 
 @dataclass(slots=True)
@@ -76,7 +70,7 @@ class Task:
     title: str
     prompt: str
     model: str
-    reasoning_effort: ReasoningEffortValue = field(default=DEFAULT_REASONING_EFFORT)
+    reasoning_effort: ReasoningEffortValue = DEFAULT_REASONING_EFFORT
     inputs: dict[str, TaskInput] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -88,13 +82,14 @@ class Task:
             raise ValueError(_("Expected mapping for Task, got {type_name}", type_name=type(d).__name__))
         inputs: dict[str, TaskInput] = {}
         if "inputs" in d:
-            if not isinstance(d["inputs"], dict):
+            raw_inputs = d["inputs"]
+            if not isinstance(raw_inputs, dict):
                 raise ValueError(_("Expected mapping for inputs in Task"))
-            for name, input_data in d["inputs"].items():
-                if isinstance(input_data, TaskInput):
-                    inputs[name] = input_data
-                elif isinstance(input_data, dict):
-                    inputs[name] = TaskInput(**input_data)
+            for name, inp in raw_inputs.items():
+                if isinstance(inp, TaskInput):
+                    inputs[name] = inp
+                elif isinstance(inp, dict):
+                    inputs[name] = TaskInput(**inp)
                 else:
                     raise ValueError(_("Invalid input definition for '{name}'", name=name))
         return cls(
@@ -107,17 +102,16 @@ class Task:
 
     def render(self, variables: dict[str, Any] | None = None) -> str:
         """Render the task prompt template using provided variables."""
-        merged_vars: dict[str, Any] = dict(variables) if variables else {}
-
+        context = dict(variables) if variables else {}
         for name, inp in self.inputs.items():
-            if name not in merged_vars and inp.default is not None:
-                merged_vars[name] = inp.default
-            if inp.required and (name not in merged_vars or merged_vars[name] is None):
-                raise ValueError(_("Missing required input: {name}", name=name))
-            if name in merged_vars:
-                merged_vars[name] = _coerce_value(name, merged_vars[name], inp.type)
-
-        return render_prompt_template(self.prompt, merged_vars)
+            if name not in context and inp.default is not None:
+                context[name] = inp.default
+            if name not in context or context[name] is None:
+                if inp.required:
+                    raise ValueError(_("Missing required input: {name}", name=name))
+            else:
+                context[name] = inp.coerce(name, context[name])
+        return render_prompt_template(self.prompt, context)
 
 
 class TaskManager(BaseFileStoreManager[Task]):

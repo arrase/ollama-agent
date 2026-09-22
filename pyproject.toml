@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ollama-agent"
-version = "0.10.4"
+version = "0.10.6"
 description = "AI agent to interact with local language models through Ollama"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -23,6 +23,8 @@ dependencies = [
     "qdrant-client==1.19.1",
     "rich==15.0.0",
     "jinja2==3.1.6",
+    "httpx>=0.28.0",
+    "packaging>=24.0.0",
 ]
 
 [project.scripts]

@@ -2,7 +2,6 @@
   "Ollama Agent - AI agent to interact with local models": "Ollama Agent - 与本地大语言模型交互的 AI 智能体",
   "Specify the AI model to use": "指定要使用的 AI 模型",
   "Non-interactive mode, provide a prompt directly from the command line": "非交互模式，直接从命令行提供提示词",
-  "Set reasoning effort level (low, medium, high, xhigh, disabled, hide, enabled)": "设置推理思考强度级别 (low, medium, high, xhigh, disabled, hide, enabled)",
   "Set tool-call timeout in seconds (includes shell middleware and built-in tools)": "设置工具调用超时时间（秒，包括 shell 中间件和内置工具）",
   "Load a RAG database for the session": "为会话加载 RAG 知识库",
   "Allow virtual filesystem traversal to OS directories": "允许虚拟文件系统遍历到操作系统目录",
@@ -15,7 +14,6 @@
   "Task title": "任务标题",
   "Task prompt text (use quotes; REPL supports multiline)": "任务提示词文本（使用引号；REPL 支持多行）",
   "Model to save with the task": "随任务保存的模型",
-  "Reasoning effort to save with the task (low, medium, high, xhigh, disabled, hide, enabled)": "随任务保存的推理强度 (low, medium, high, xhigh, disabled, hide, enabled)",
   "Overwrite task if it already exists": "如果任务已存在则覆盖",
   "Execute a saved task": "执行已保存的任务",
   "Task ID or prefix to execute": "要执行的任务 ID 或前缀",
@@ -156,7 +154,6 @@
   "Cannot verify model capabilities: {exc}": "无法验证模型能力：{exc}",
   "Switched from {current} to {model_name}\nConversation preserved. Continue chatting.": "已从 {current} 切换到 {model_name}\n对话已保留，可继续交流。",
   "Failed to switch to model '{model_name}': {exc}": "切换到模型 '{model_name}' 失败：{exc}",
-  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)": "当前推理强度：{effort} (模型：{model})\n用法：/effort <级别> (例如 low, medium, high, disabled, hide, enabled)",
   "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}": "无效的推理强度 '{effort}'。允许的值：{valid_list}",
   "Already using reasoning effort '{norm_effort}'.": "已在使用推理强度 '{norm_effort}'。",
   "Switched reasoning effort from {current} to {norm_effort}\nConversation preserved. Continue chatting.": "推理强度已从 {current} 切换为 {norm_effort}\n对话已保留，可继续交流。",
@@ -455,5 +452,12 @@
   "Expected mapping for inputs in Task": "Task 中的 inputs 预期为映射",
   "Invalid input definition for '{name}'": "'{name}' 的输入定义无效",
   "MCP server '{name}': 'command' must be a non-empty string": "MCP 服务器 '{name}': 'command' 必须是非空字符串",
-  "MCP server '{name}': 'url' must be a non-empty string": "MCP 服务器 '{name}': 'url' 必须是非空字符串"
+  "MCP server '{name}': 'url' must be a non-empty string": "MCP 服务器 '{name}': 'url' 必须是非空字符串",
+  "Set reasoning effort level supported by the model, or 'default'": "设置模型支持的推理思考强度级别，或 'default'",
+  "Reasoning effort to save with the task (e.g. default, low, high, max, false)": "随任务保存的推理强度 (例如 default, low, high, max, false)",
+  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "当前推理强度：{effort} (模型：{model})\n用法：/effort <级别> | default",
+  "Model thinking controls: {values} (default: {default})": "模型思考控制：{values} (默认：{default})",
+  "(model default)": "(模型默认)",
+  "(default)": "(默认)",
+  "Ollama version {version} is lower than required {min_version}. Please update your Ollama installation.": "Ollama 版本 {version} 低于所需版本 {min_version}。请更新您的 Ollama 安装。"
 }

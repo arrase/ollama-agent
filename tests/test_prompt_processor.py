@@ -3,9 +3,12 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
+from unittest.mock import patch
 
 from ollama_agent.core.prompt_processor import (
     ContextLimitExceededError,
+    FileTooLargeError,
     PromptProcessingError,
     classify_multimodal_file,
     is_binary_file,
@@ -303,6 +306,73 @@ class TestPromptProcessor(unittest.TestCase):
                 )
             self.assertIn("Access to path outside working directory is not allowed", str(ctx.exception))
 
+    def test_process_prompt_mentions_preserves_parent_and_current_dir_mentions(self) -> None:
+        sub = self.base_path / "sub"
+        sub.mkdir()
+        (self.base_path / "root.txt").write_text("root file", encoding="utf-8")
+
+        prompt = f"Check @{sub}/.. please"
+        processed, _, warnings = process_prompt_mentions(prompt, base_dir=self.base_path)
+        self.assertIn("root file", processed)
+        self.assertEqual(warnings, [])
+
+        prompt_colon = f"Check @{sub}/..: please"
+        processed_colon, _, _ = process_prompt_mentions(prompt_colon, base_dir=self.base_path)
+        self.assertIn("root file", processed_colon)
+
+        (sub / "subfile.txt").write_text("sub file", encoding="utf-8")
+        prompt_dot = f"Check @{sub}/. please"
+        processed_dot, _, _ = process_prompt_mentions(prompt_dot, base_dir=self.base_path)
+        self.assertIn("sub file", processed_dot)
+
+    def test_resolve_context_files_raises_file_too_large_before_total_size(self) -> None:
+        file = self.base_path / "big.txt"
+        file.write_text("x" * 500, encoding="utf-8")
+
+        with self.assertRaises(FileTooLargeError):
+            resolve_context_files(file, max_file_size=100, max_total_size=200)
+
+    def test_resolve_context_files_attachment_concrete_mime_types(self) -> None:
+        pdf = self.base_path / "doc.pdf"
+        pdf.write_bytes(b"%PDF-1.5 test")
+        png = self.base_path / "image.png"
+        png.write_bytes(b"\x89PNG test")
+
+        ctx_pdf = resolve_context_files(pdf)
+        self.assertEqual(ctx_pdf.attachments[0]["mime_type"], "application/pdf")
+
+        ctx_png = resolve_context_files(png)
+        self.assertEqual(ctx_png.attachments[0]["mime_type"], "image/png")
+
+    def test_resolve_context_files_attachment_mime_fallback(self) -> None:
+        png = self.base_path / "image.png"
+        png.write_bytes(b"\x89PNG test")
+        with patch("ollama_agent.core.prompt_processor.get_file_type", return_value=None):
+            ctx = resolve_context_files(png)
+            self.assertEqual(ctx.attachments[0]["mime_type"], "image/png")
+
+    def test_resolve_context_files_directory_handles_unreadable_file(self) -> None:
+        folder = self.base_path / "unreadable_folder"
+        folder.mkdir()
+        ok_file = folder / "ok.txt"
+        ok_file.write_text("ok content", encoding="utf-8")
+        bad_file = folder / "bad.txt"
+        bad_file.write_text("bad content", encoding="utf-8")
+
+        original_read_text = Path.read_text
+
+        def mock_read_text(self_path: Path, *args: Any, **kwargs: Any) -> str:
+            if self_path == bad_file:
+                raise OSError("Simulated I/O error")
+            return original_read_text(self_path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", side_effect=mock_read_text, autospec=True):
+            context = resolve_context_files(folder)
+            self.assertIn(ok_file, context.text_contents)
+            self.assertNotIn(bad_file, context.text_contents)
+            self.assertTrue(any("Simulated I/O error" in w for w in context.warnings))
+
 
 if __name__ == "__main__":
     unittest.main()
+

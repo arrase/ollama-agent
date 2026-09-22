@@ -121,6 +121,37 @@ class TestClipboard(unittest.TestCase):
                 copy_to_system_clipboard("hello windows")
             mock_memmove.assert_not_called()
         mock_k32.GlobalFree.assert_called_once_with(12345)
+        mock_u32.CloseClipboard.assert_called_once()
+
+    @patch("sys.platform", "win32")
+    @patch("ctypes.windll", create=True)
+    def test_copy_win32_open_clipboard_failure_raises(self, mock_windll: MagicMock) -> None:
+        mock_u32 = MagicMock()
+        mock_k32 = MagicMock()
+        mock_windll.user32 = mock_u32
+        mock_windll.kernel32 = mock_k32
+        mock_u32.OpenClipboard.return_value = 0
+
+        with self.assertRaises(ClipboardError):
+            copy_to_system_clipboard("hello windows")
+        mock_u32.CloseClipboard.assert_not_called()
+
+    @patch("sys.platform", "win32")
+    @patch("ctypes.windll", create=True)
+    def test_copy_win32_memmove_exception_unlocks_and_closes(self, mock_windll: MagicMock) -> None:
+        mock_u32 = MagicMock()
+        mock_k32 = MagicMock()
+        mock_windll.user32 = mock_u32
+        mock_windll.kernel32 = mock_k32
+        mock_u32.OpenClipboard.return_value = 1
+        mock_k32.GlobalAlloc.return_value = 12345
+        mock_k32.GlobalLock.return_value = 67890
+
+        with patch("ctypes.memmove", side_effect=RuntimeError("memmove crash")):
+            with self.assertRaises(RuntimeError):
+                copy_to_system_clipboard("hello windows")
+        mock_k32.GlobalUnlock.assert_called_once_with(12345)
+        mock_u32.CloseClipboard.assert_called_once()
 
     @patch("sys.platform", "win32")
     @patch("ctypes.windll", create=True)
@@ -172,6 +203,59 @@ class TestClipboard(unittest.TestCase):
             get_system_clipboard()
         mock_u32.CloseClipboard.assert_called_once()
 
+    @patch("sys.platform", "win32")
+    @patch("ctypes.windll", create=True)
+    def test_get_clipboard_win32_open_clipboard_failure_raises(self, mock_windll: MagicMock) -> None:
+        mock_u32 = MagicMock()
+        mock_k32 = MagicMock()
+        mock_windll.user32 = mock_u32
+        mock_windll.kernel32 = mock_k32
+        mock_u32.OpenClipboard.return_value = 0
+
+        with self.assertRaises(ClipboardError):
+            get_system_clipboard()
+        mock_u32.CloseClipboard.assert_not_called()
+
+    @patch("sys.platform", "win32")
+    @patch("ctypes.windll", create=True)
+    def test_get_clipboard_win32_read_exception_unlocks_and_closes(self, mock_windll: MagicMock) -> None:
+        mock_u32 = MagicMock()
+        mock_k32 = MagicMock()
+        mock_windll.user32 = mock_u32
+        mock_windll.kernel32 = mock_k32
+        mock_u32.OpenClipboard.return_value = 1
+        mock_u32.GetClipboardData.return_value = 12345
+        mock_k32.GlobalLock.return_value = 67890
+
+        with patch("ctypes.c_wchar_p", side_effect=RuntimeError("wchar crash")):
+            with self.assertRaises(RuntimeError):
+                get_system_clipboard()
+        mock_k32.GlobalUnlock.assert_called_once_with(12345)
+        mock_u32.CloseClipboard.assert_called_once()
+
+    @patch("sys.platform", "linux")
+    @patch("shutil.which", side_effect=lambda cmd: "/usr/bin/wl-copy" if cmd == "wl-copy" else None)
+    @patch.dict("os.environ", {"WAYLAND_SOCKET": "wayland-socket-1"}, clear=True)
+    @patch("subprocess.run", return_value=_proc())
+    def test_copy_linux_wayland_socket(self, mock_run: MagicMock, mock_which: MagicMock) -> None:
+        copy_to_system_clipboard("hello wayland socket")
+        mock_run.assert_called_once()
+        args, kwargs = mock_run.call_args
+        self.assertEqual(args[0], ["wl-copy"])
+        self.assertEqual(kwargs["input"], b"hello wayland socket")
+
+    @patch("sys.platform", "linux")
+    @patch("shutil.which", side_effect=lambda cmd: "/usr/bin/wl-paste" if cmd == "wl-paste" else None)
+    @patch.dict("os.environ", {"WAYLAND_SOCKET": "wayland-socket-1"}, clear=True)
+    @patch("subprocess.run", return_value=_proc(stdout="wayland socket paste"))
+    def test_paste_linux_wayland_socket(self, mock_run: MagicMock, mock_which: MagicMock) -> None:
+        res = get_system_clipboard()
+        self.assertEqual(res, "wayland socket paste")
+        mock_run.assert_called_once()
+        args, kwargs = mock_run.call_args
+        self.assertEqual(args[0], ["wl-paste", "--no-newline"])
+        self.assertEqual(kwargs["errors"], "replace")
+
     @patch("sys.platform", "darwin")
     @patch("subprocess.run")
     def test_get_clipboard_darwin(self, mock_run: MagicMock) -> None:
@@ -182,6 +266,7 @@ class TestClipboard(unittest.TestCase):
         args, kwargs = mock_run.call_args
         self.assertEqual(args[0], ["pbpaste"])
         self.assertEqual(kwargs["encoding"], "utf-8")
+        self.assertEqual(kwargs["errors"], "replace")
 
     @patch("sys.platform", "darwin")
     @patch("subprocess.run", return_value=_proc(returncode=1, stderr="boom"))

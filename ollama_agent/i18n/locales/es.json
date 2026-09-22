@@ -2,7 +2,6 @@
   "Ollama Agent - AI agent to interact with local models": "Ollama Agent - Agente de IA para interactuar con modelos locales",
   "Specify the AI model to use": "Especificar el modelo de IA a utilizar",
   "Non-interactive mode, provide a prompt directly from the command line": "Modo no interactivo, proporcionar un prompt directamente desde la línea de comandos",
-  "Set reasoning effort level (low, medium, high, xhigh, disabled, hide, enabled)": "Establecer nivel de esfuerzo de razonamiento (low, medium, high, xhigh, disabled, hide, enabled)",
   "Set tool-call timeout in seconds (includes shell middleware and built-in tools)": "Establecer tiempo de espera de llamada a herramienta en segundos (incluye middleware de shell y herramientas integradas)",
   "Load a RAG database for the session": "Cargar una base de datos RAG para la sesión",
   "Allow virtual filesystem traversal to OS directories": "Permitir recorrido del sistema de archivos virtual a directorios del SO",
@@ -15,7 +14,6 @@
   "Task title": "Título de la tarea",
   "Task prompt text (use quotes; REPL supports multiline)": "Texto del prompt de la tarea (usar comillas; el REPL admite multilínea)",
   "Model to save with the task": "Modelo a guardar con la tarea",
-  "Reasoning effort to save with the task (low, medium, high, xhigh, disabled, hide, enabled)": "Esfuerzo de razonamiento a guardar con la tarea (low, medium, high, xhigh, disabled, hide, enabled)",
   "Overwrite task if it already exists": "Sobrescribir la tarea si ya existe",
   "Execute a saved task": "Ejecutar una tarea guardada",
   "Task ID or prefix to execute": "ID o prefijo de la tarea a ejecutar",
@@ -156,7 +154,6 @@
   "Cannot verify model capabilities: {exc}": "No se pueden verificar las capacidades del modelo: {exc}",
   "Switched from {current} to {model_name}\nConversation preserved. Continue chatting.": "Cambiado de {current} a {model_name}\nConversación conservada. Continúa chateando.",
   "Failed to switch to model '{model_name}': {exc}": "Error al cambiar al modelo '{model_name}': {exc}",
-  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)": "Esfuerzo de razonamiento actual: {effort} (modelo: {model})\nUso: /effort <nivel> (ej. low, medium, high, disabled, hide, enabled)",
   "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}": "Esfuerzo de razonamiento inválido '{effort}'. Valores permitidos: {valid_list}",
   "Already using reasoning effort '{norm_effort}'.": "Ya estás usando el esfuerzo de razonamiento '{norm_effort}'.",
   "Switched reasoning effort from {current} to {norm_effort}\nConversation preserved. Continue chatting.": "Cambiado el esfuerzo de razonamiento de {current} a {norm_effort}\nConversación conservada. Continúa chateando.",
@@ -455,5 +452,12 @@
   "Expected mapping for inputs in Task": "Se esperaba un mapeo para inputs en Task",
   "Invalid input definition for '{name}'": "Definición de entrada no válida para '{name}'",
   "MCP server '{name}': 'command' must be a non-empty string": "Servidor MCP '{name}': 'command' debe ser una cadena no vacía",
-  "MCP server '{name}': 'url' must be a non-empty string": "Servidor MCP '{name}': 'url' debe ser una cadena no vacía"
+  "MCP server '{name}': 'url' must be a non-empty string": "Servidor MCP '{name}': 'url' debe ser una cadena no vacía",
+  "Set reasoning effort level supported by the model, or 'default'": "Establecer nivel de esfuerzo de razonamiento soportado por el modelo, o 'default'",
+  "Reasoning effort to save with the task (e.g. default, low, high, max, false)": "Esfuerzo de razonamiento a guardar con la tarea (ej. default, low, high, max, false)",
+  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "Esfuerzo de razonamiento actual: {effort} (modelo: {model})\nUso: /effort <nivel> | default",
+  "Model thinking controls: {values} (default: {default})": "Controles de pensamiento del modelo: {values} (por defecto: {default})",
+  "(model default)": "(por defecto del modelo)",
+  "(default)": "(por defecto)",
+  "Ollama version {version} is lower than required {min_version}. Please update your Ollama installation.": "La versión de Ollama {version} es inferior a la requerida {min_version}. Por favor, actualiza tu instalación de Ollama."
 }

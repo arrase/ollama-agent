@@ -9,7 +9,7 @@ from rich.console import Console
 
 from .agent import AgentRuntime
 from .agent.builtin_tools import set_tool_timeout
-from .core import ModelCapabilityError, ModelContextWindowError
+from .core import ModelCapabilityError, ModelContextWindowError, OllamaVersionError, check_ollama_version
 from .i18n import SUPPORTED_LOCALES, _, set_locale
 from .interfaces.cli import create_argument_parser, handle_subcommand, run_prompt_session
 from .interfaces.model_commands import ensure_model_configured
@@ -83,6 +83,7 @@ def main() -> None:
             handle_subcommand(args, settings)
             return
 
+        check_ollama_version(settings.model.base_url)
         ensure_model_configured(settings)
 
         if args.prompt:
@@ -101,7 +102,7 @@ def main() -> None:
         asyncio.run(repl.run())
     except KeyboardInterrupt:
         raise SystemExit(130) from None
-    except (ModelCapabilityError, ModelContextWindowError) as exc:
+    except (ModelCapabilityError, ModelContextWindowError, OllamaVersionError) as exc:
         console = Console()
         console.print(f"[red]{_('Error: {exc}', exc=exc)}[/red]")
         raise SystemExit(1) from None

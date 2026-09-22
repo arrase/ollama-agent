@@ -2,7 +2,6 @@
   "Ollama Agent - AI agent to interact with local models": "Ollama Agent - Yerel modellerle etkileşim kurmak için yapay zekâ ajanı",
   "Specify the AI model to use": "Kullanılacak yapay zekâ modelini belirtin",
   "Non-interactive mode, provide a prompt directly from the command line": "Etkileşimsiz mod, istemi doğrudan komut satırından sağlayın",
-  "Set reasoning effort level (low, medium, high, xhigh, disabled, hide, enabled)": "Akıl yürütme düzeyini ayarlayın (low, medium, high, xhigh, disabled, hide, enabled)",
   "Set tool-call timeout in seconds (includes shell middleware and built-in tools)": "Araç çağrısı zaman aşımını saniye cinsinden ayarlayın (kabuk ara katmanı ve yerleşik araçları içerir)",
   "Load a RAG database for the session": "Oturum için bir RAG veritabanı yükleyin",
   "Allow virtual filesystem traversal to OS directories": "Sanal dosya sisteminin işletim sistemi dizinlerine geçişine izin verin",
@@ -15,7 +14,6 @@
   "Task title": "Görev başlığı",
   "Task prompt text (use quotes; REPL supports multiline)": "Görev istem metni (tırnak kullanın; REPL çok satırı destekler)",
   "Model to save with the task": "Görevle birlikte kaydedilecek model",
-  "Reasoning effort to save with the task (low, medium, high, xhigh, disabled, hide, enabled)": "Görevle birlikte kaydedilecek akıl yürütme düzeyi (low, medium, high, xhigh, disabled, hide, enabled)",
   "Overwrite task if it already exists": "Görev zaten varsa üzerine yaz",
   "Execute a saved task": "Kaydedilmiş bir görevi yürüt",
   "Task ID or prefix to execute": "Yürütülecek görev kimliği veya öneki",
@@ -156,7 +154,6 @@
   "Cannot verify model capabilities: {exc}": "Model yetenekleri doğrulanamıyor: {exc}",
   "Switched from {current} to {model_name}\nConversation preserved. Continue chatting.": "{current} modelinden {model_name} modeline geçildi.\nKonuşma korundu. Sohbete devam edin.",
   "Failed to switch to model '{model_name}': {exc}": "'{model_name}' modeline geçilemedi: {exc}",
-  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)": "Geçerli akıl yürütme düzeyi: {effort} (model: {model})\nKullanım: /effort <düzey> (örn. low, medium, high, disabled, hide, enabled)",
   "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}": "Geçersiz akıl yürütme düzeyi '{effort}'. İzin verilen değerler: {valid_list}",
   "Already using reasoning effort '{norm_effort}'.": "Zaten '{norm_effort}' akıl yürütme düzeyi kullanılıyor.",
   "Switched reasoning effort from {current} to {norm_effort}\nConversation preserved. Continue chatting.": "Akıl yürütme düzeyi {current} düzeyinden {norm_effort} düzeyine geçirildi.\nKonuşma korundu. Sohbete devam edin.",
@@ -455,5 +452,12 @@
   "Expected mapping for inputs in Task": "Task içindeki inputs için eşleme bekleniyordu",
   "Invalid input definition for '{name}'": "'{name}' için geçersiz giriş tanımı",
   "MCP server '{name}': 'command' must be a non-empty string": "MCP sunucusu '{name}': 'command' boş olmayan bir dize olmalıdır",
-  "MCP server '{name}': 'url' must be a non-empty string": "MCP sunucusu '{name}': 'url' boş olmayan bir dize olmalıdır"
+  "MCP server '{name}': 'url' must be a non-empty string": "MCP sunucusu '{name}': 'url' boş olmayan bir dize olmalıdır",
+  "Set reasoning effort level supported by the model, or 'default'": "Model tarafından desteklenen akıl yürütme düzeyini ayarlayın veya 'default'",
+  "Reasoning effort to save with the task (e.g. default, low, high, max, false)": "Görevle birlikte kaydedilecek akıl yürütme düzeyi (örn. default, low, high, max, false)",
+  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "Geçerli akıl yürütme düzeyi: {effort} (model: {model})\nKullanım: /effort <düzey> | default",
+  "Model thinking controls: {values} (default: {default})": "Model düşünme kontrolleri: {values} (varsayılan: {default})",
+  "(model default)": "(model varsayılanı)",
+  "(default)": "(varsayılan)",
+  "Ollama version {version} is lower than required {min_version}. Please update your Ollama installation.": "Ollama sürümü {version} gerekli {min_version} sürümünden daha düşük. Lütfen Ollama kurulumunuzu güncelleyin."
 }

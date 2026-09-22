@@ -155,7 +155,7 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
             model="gemma4:26b",
         )
         task = self.mgr.get("default-effort-task")
-        self.assertEqual(task.reasoning_effort, "medium")
+        self.assertEqual(task.reasoning_effort, "default")
 
     def test_tasks_context_default_settings(self) -> None:
         self.assertIsInstance(self.ctx.settings, Settings)

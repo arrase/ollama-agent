@@ -19,6 +19,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
 
 from ..core import (
+    OllamaChatModel,
     PromptProcessingError,
     create_ollama_chat_model,
     ensure_model_supports_tools,
@@ -87,6 +88,7 @@ class AgentRuntime:
     last_context_tokens: int = field(default=0, init=False)
     effective_context_window: int = field(default=0, init=False)
     effective_model_params: dict[str, tuple[Any, str]] = field(default_factory=dict, init=False)
+    model: OllamaChatModel | None = field(default=None, init=False, repr=False)
     graph: Any = field(default=None, init=False, repr=False)
     _instructions: str = field(default="", init=False)
     _checkpointer: AsyncSqliteSaver | None = field(default=None, init=False, repr=False)
@@ -134,6 +136,7 @@ class AgentRuntime:
             show_info=model.show_info,
         )
 
+        self.model = model
         self.effective_context_window = model.num_ctx
         self.effective_model_params = model.effective_params
 
@@ -262,7 +265,7 @@ class AgentRuntime:
         """Stream agent events for the given prompt."""
         graph, thread, config = await self._ensure_graph(thread_id)
         set_active_thread_id(thread)
-        hide_reasoning = self.settings.model.reasoning_effort in ("hide", "disabled")
+        hide_reasoning = self.settings.model.reasoning_effort in ("hide", "disabled", "false", "0", "off")
 
         inputs: dict[str, Any] | Command
         if isinstance(prompt, Command):
@@ -365,3 +368,5 @@ class AgentRuntime:
         self._checkpointer_stack = contextlib.AsyncExitStack()
         self._checkpointer = None
         self._memory_checkpointer = None
+        self.model = None
+        self.graph = None

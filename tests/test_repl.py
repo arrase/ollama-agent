@@ -8,6 +8,7 @@ from rich.console import Console
 
 from ollama_agent.interfaces.repl import (
     IMMEDIATE_COMMANDS,
+    OllamaAgentApp,
     OllamaREPL,
     _is_immediate_command,
     _list_models_sync,
@@ -140,3 +141,26 @@ class TestTUIComponentsUnit(unittest.TestCase):
         header = AgentHeader(repl)
         header.update_header()
         self.assertIn("8.2k/16.4k", str(header.render()))
+
+
+class TestREPLEffortCompletions(unittest.TestCase):
+    """Unit tests for /effort slash command completions."""
+
+    def test_effort_slash_completions(self) -> None:
+        runtime = MagicMock()
+        runtime.model.show_info = MagicMock(thinking={"values": ["low", "high", "max"], "default": "max"})
+        repl = OllamaREPL(runtime=runtime)
+        app = OllamaAgentApp(repl)
+
+        comps = app._slash_completions("/effort ")
+        comp_map = {cmd: text.plain for cmd, text in comps}
+
+        self.assertIn("/effort default", comp_map)
+        self.assertIn("(model default)", comp_map["/effort default"])
+
+        self.assertIn("/effort max", comp_map)
+        self.assertIn("(default)", comp_map["/effort max"])
+
+        self.assertIn("/effort low", comp_map)
+        self.assertIn("/effort high", comp_map)
+

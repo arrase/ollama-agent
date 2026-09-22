@@ -13,11 +13,11 @@ from rich.table import Table
 
 from ..agent import AgentRuntime
 from ..core import (
-    ALLOWED_REASONING_EFFORTS,
     ModelCapabilityError,
     ModelContextWindowError,
     model_supports_tools,
 )
+from ..core.models import get_model_thinking_config
 from ..i18n import _
 from ..settings import Settings, save_settings
 
@@ -39,6 +39,14 @@ async def _list_models(base_url: str) -> list[Any]:
     return list(response.models)
 
 
+async def _tool_icon(model_name: str, base_url: str) -> str:
+    try:
+        supported = await model_supports_tools(model_name, base_url)
+        return "[green]✓[/green]" if supported else "[red]✗[/red]"
+    except ModelCapabilityError:
+        return "[yellow]?[/yellow]"
+
+
 async def list_models(
     console: Console,
     current_model: str,
@@ -51,23 +59,13 @@ async def list_models(
             console.print(f"[yellow]{_('No models found in Ollama.')}[/yellow]")
             return
 
-        valid_models = [m for m in models if m.model]
+        tool_icons = await asyncio.gather(*(_tool_icon(m.model, base_url) for m in models))
 
-        async def get_tool_icon(model_name: str) -> str:
-            try:
-                supported = await model_supports_tools(model_name, base_url)
-                return "[green]✓[/green]" if supported else "[red]✗[/red]"
-            except ModelCapabilityError:
-                return "[yellow]?[/yellow]"
-
-        tool_icons = await asyncio.gather(*(get_tool_icon(m.model) for m in valid_models))
-
-        console.print(f"[bold]{_('Available Models:')}[/bold]\n[dim]─" + "─" * 59 + "[/dim]")
-        for item, tool_icon in zip(valid_models, tool_icons, strict=True):
-            name = item.model
-            marker = f" [green]◀ {_('current')}[/green]" if name == current_model else ""
+        console.print(f"[bold]{_('Available Models:')}[/bold]\n[dim]{'─' * 60}[/dim]")
+        for item, tool_icon in zip(models, tool_icons, strict=True):
+            marker = f" [green]◀ {_('current')}[/green]" if item.model == current_model else ""
             size_str = f"{(item.size / (1024**3)):.1f}GB" if item.size else ""
-            console.print(f"  {tool_icon} [cyan]{name}[/cyan] {size_str}{marker}")
+            console.print(f"  {tool_icon} [cyan]{item.model}[/cyan] {size_str}{marker}")
         legend_str = _("supports tools | Use /model set <model> to switch")
         console.print(f"[dim]{'─' * 60}[/dim]\n[dim]✓ = {legend_str}[/dim]")
     except (ollama.ResponseError, OSError) as exc:
@@ -82,8 +80,8 @@ async def set_model(
     runtime: AgentRuntime,
 ) -> str | None:
     """Switch to model_name, returning the new model name."""
+    base_url = runtime.settings.model.base_url
     try:
-        base_url = runtime.settings.model.base_url
         available = {model.model for model in await _list_models(base_url)}
         if model_name not in available:
             not_found_msg = _(
@@ -135,14 +133,28 @@ def show_effort(console: Console, runtime: AgentRuntime) -> None:
     """Print the current reasoning effort and model."""
     effort = runtime.settings.model.reasoning_effort
     model = runtime.settings.model.name
+    thinking_cfg = get_model_thinking_config(runtime.model.show_info) if runtime.model else None
+
+    effort_display = effort
+    if thinking_cfg and effort == "default" and "default" in thinking_cfg:
+        effort_display = f"{effort} (effective: {thinking_cfg['default']})"
+
     console.print(
         _(
             "Current reasoning effort: {effort} (model: {model})\n"
-            "Usage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)",
-            effort=effort,
+            "Usage: /effort <level> | default",
+            effort=effort_display,
             model=model,
         )
     )
+    if thinking_cfg and "values" in thinking_cfg and "default" in thinking_cfg:
+        console.print(
+            _(
+                "Model thinking controls: {values} (default: {default})",
+                values=thinking_cfg["values"],
+                default=thinking_cfg["default"],
+            )
+        )
 
 
 async def set_effort(
@@ -152,16 +164,48 @@ async def set_effort(
     runtime: AgentRuntime,
 ) -> str | None:
     """Switch reasoning effort level, returning the new effort level."""
-    norm_effort = effort.lower().strip()
-    if norm_effort not in ALLOWED_REASONING_EFFORTS:
-        valid_list = ", ".join(ALLOWED_REASONING_EFFORTS)
-        err_msg = _(
-            "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}",
-            effort=effort,
-            valid_list=valid_list,
-        )
-        console.print(f"[red]{err_msg}[/red]")
+    norm_effort = effort.strip()
+    if not norm_effort:
+        console.print(f"[red]{_('{name} cannot be empty.', name='Reasoning effort')}[/red]")
         return None
+
+    thinking_cfg = get_model_thinking_config(runtime.model.show_info) if runtime.model else None
+    if norm_effort.lower() == "default":
+        norm_effort = "default"
+    elif thinking_cfg and thinking_cfg.get("values"):
+        values = thinking_cfg["values"]
+        effort_lower = norm_effort.lower()
+        has_bool_support = any(isinstance(v, bool) for v in values)
+        if effort_lower in ("false", "0", "disabled", "off"):
+            if any(v is False for v in values):
+                norm_effort = "false"
+            else:
+                warn_msg = _(
+                    "Model '{model}' is a thinking-only model. reasoning_effort='disabled' is not supported; thinking will remain enabled.",
+                    model=runtime.settings.model.name,
+                )
+                console.print(f"[yellow]{warn_msg}[/yellow]")
+                return None
+        elif effort_lower in ("true", "1", "enabled", "on"):
+            if has_bool_support:
+                norm_effort = "true"
+            elif "default" in thinking_cfg:
+                norm_effort = str(thinking_cfg["default"])
+            else:
+                norm_effort = "default"
+        else:
+            for v in values:
+                if str(v).lower() == effort_lower:
+                    norm_effort = str(v)
+                    break
+            else:
+                err_msg = _(
+                    "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}",
+                    effort=effort,
+                    valid_list=", ".join(str(v) for v in values),
+                )
+                console.print(f"[red]{err_msg}[/red]")
+                return None
 
     current = runtime.settings.model.reasoning_effort
     if norm_effort == current:
@@ -286,7 +330,7 @@ def show_model_params(console: Console, runtime: AgentRuntime) -> None:
     }
 
     for name, (val, source) in params.items():
-        src_label = source_labels.get(source, source)
+        src_label = source_labels[source] if source in source_labels else source
         table.add_row(name, str(val), src_label)
 
     console.print(table)
@@ -343,8 +387,7 @@ def ensure_model_configured(
     """Ensure the configured model is available in Ollama, or prompt the user to choose one."""
     base_url = settings.model.base_url
     try:
-        models = asyncio.run(_list_models(base_url))
-        available_models = [m for m in models if m.model]
+        available_models = asyncio.run(_list_models(base_url))
     except (httpx.HTTPError, ollama.ResponseError, OSError) as exc:
         raise ModelCapabilityError(
             _("Could not connect to Ollama at '{base_url}': {exc}", base_url=base_url, exc=exc)
@@ -368,17 +411,26 @@ def ensure_model_configured(
             save_settings(settings)
             return settings.model.name
 
-    out = console or Console()
+    if console is None:
+        console = Console()
+
     if configured:
         not_avail_msg = _("Configured model '{configured}' is not available in Ollama.", configured=configured)
-        out.print(f"[yellow]{not_avail_msg}[/yellow]")
+        console.print(f"[yellow]{not_avail_msg}[/yellow]")
     else:
-        out.print(f"[yellow]{_('No model is currently configured in settings.')}[/yellow]")
+        console.print(f"[yellow]{_('No model is currently configured in settings.')}[/yellow]")
 
-    out.print(f"[bold]{_('Available Ollama models:')}[/bold]")
+    async def _fetch_tool_icons() -> list[str]:
+        return await asyncio.gather(*(_tool_icon(m.model, base_url) for m in available_models))
+
+    tool_icons = asyncio.run(_fetch_tool_icons())
+    icons_by_model = {m.model: icon for m, icon in zip(available_models, tool_icons, strict=True)}
+
+    console.print(f"[bold]{_('Available Ollama models:')}[/bold]")
     for i, item in enumerate(available_models, start=1):
+        icon = icons_by_model[item.model]
         size_str = f" ({item.size / (1024**3):.1f} GB)" if item.size else ""
-        out.print(f"  [cyan]{i})[/cyan] [bold]{item.model}[/bold]{size_str}")
+        console.print(f"  [cyan]{i})[/cyan] {icon} [bold]{item.model}[/bold]{size_str}")
 
     while True:
         try:
@@ -387,28 +439,32 @@ def ensure_model_configured(
             raise SystemExit(1) from None
         if not choice:
             continue
-        if choice.isdigit():
-            idx = int(choice) - 1
-            if 0 <= idx < len(available_models):
-                selected = available_models[idx].model
+        if choice.isdigit() and 1 <= int(choice) <= len(available_models):
+            selected = available_models[int(choice) - 1].model
+            break
+        for m in available_models:
+            if m.model == choice or m.model == f"{choice}:latest":
+                selected = m.model
                 break
         else:
-            matched = next(
-                (m.model for m in available_models if m.model == choice or m.model == f"{choice}:latest"),
-                None,
+            invalid_sel = _(
+                "Invalid selection '{choice}'. Please enter a number between 1 and {count} or a model name.",
+                choice=choice,
+                count=len(available_models),
             )
-            if matched is not None:
-                selected = matched
-                break
-        invalid_sel = _(
-            "Invalid selection '{choice}'. Please enter a number between 1 and {count} or a model name.",
-            choice=choice,
-            count=len(available_models),
+            console.print(f"[red]{invalid_sel}[/red]")
+            continue
+        break
+
+    if icons_by_model.get(selected) == "[red]✗[/red]":
+        warn_msg = _(
+            "Model '{model_name}' does not support tools.\nThe agent requires tool support.",
+            model_name=selected,
         )
-        out.print(f"[red]{invalid_sel}[/red]")
+        console.print(f"[yellow]{warn_msg}[/yellow]")
 
     settings.model.name = selected
     save_settings(settings)
     saved_msg = _("Selected model '{selected}' saved to configuration.", selected=selected)
-    out.print(f"[green]✓ {saved_msg}[/green]\n")
+    console.print(f"[green]✓ {saved_msg}[/green]\n")
     return selected

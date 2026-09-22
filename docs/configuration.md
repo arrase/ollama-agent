@@ -93,8 +93,9 @@ model:
   context_window: 10000
 
   # Default reasoning effort for thinking models:
-  # Options: low, medium, high, xhigh, disabled, hide, enabled
-  reasoning_effort: "medium"
+  # "default" automatically uses the model's advertised default level from /api/show.
+  # Can also be set to an explicit level supported by the model (e.g. low, high, max) or boolean.
+  reasoning_effort: "default"
 
   # Optional sampling parameter overrides.
   # Leave commented out or unset (null) to automatically inherit recommended values
@@ -211,7 +212,7 @@ The following table details every configuration key available in `settings.yaml`
 | **`model.name`** | `string` | `""` *(interactive)* | Installed Ollama model tag (must support tool calling). If empty, an interactive picker is displayed on startup. |
 | **`model.base_url`** | `string` | `http://localhost:11434` | Ollama server HTTP endpoint. Point to an IP address or hostname to use a remote GPU server. |
 | **`model.context_window`** | `int \| string` | `10000` | Context token limit (`num_ctx`). Set to a positive integer or `"max"` to automatically detect model capability. |
-| **`model.reasoning_effort`** | `string` | `medium` | Default reasoning depth for thinking models (`low`, `medium`, `high`, `xhigh`, `disabled`, `hide`, `enabled`). |
+| **`model.reasoning_effort`** | `string` | `default` | Default reasoning depth for thinking models (`default`, or model-supported levels such as `low`, `high`, `max`, `true`/`false`). |
 | **`model.temperature`** | `float \| null` | `null` *(dynamic)* | Controls generation randomness (0.0 = deterministic, 1.0+ = creative). Resolves from Modelfile if unset. |
 | **`model.top_p`** | `float \| null` | `null` *(dynamic)* | Nucleus sampling probability threshold (0.0 to 1.0). Resolves from Modelfile if unset. |
 | **`model.top_k`** | `int \| null` | `null` *(dynamic)* | Restricts next token candidate pool to top K tokens. Resolves from Modelfile if unset. |
@@ -356,31 +357,41 @@ In the interactive REPL, switch your context window at any time using:
 
 ---
 
-## Reasoning Effort Levels & Model Mappings
+## Reasoning Effort & Dynamic Thinking Controls
 
-For reasoning and "thinking" models, the `--effort` CLI flag and `model.reasoning_effort` setting govern how deeply the model thinks before returning answers.
+For reasoning and "thinking" models, the `--effort` CLI flag and `model.reasoning_effort` setting govern how deeply the model reasons before returning answers.
 
-Ollama Agent standardizes effort across different model architectures into a clean set of user levels:
+### API as the Single Source of Truth
 
-| Reasoning Effort | Qwen 3.8 Series | DeepSeek R1 Series | Gemma 4 Series | GPT-OSS Series | General Thinking Models |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **`high`** | Thorough reasoning (`"high"`) | High reasoning depth | Full reasoning trace | Deep reasoning depth | High reasoning depth |
-| **`medium`** *(default)* | Balanced reasoning (`"medium"`) | Balanced reasoning | Balanced reasoning | Balanced reasoning | Balanced reasoning |
-| **`low`** | Fast, concise reasoning (`"low"`) | Concise reasoning | Brief reasoning trace | Brief reasoning | Brief reasoning |
-| **`xhigh`** | Maximum depth (`"high"`) | Maximum depth | Maximum depth | Maximum depth | Maximum depth |
-| **`enabled`** | Enables thinking traces | Enables thinking traces | Enables thinking traces | Enables thinking traces | Enables thinking traces |
-| **`disabled`** | Disables thinking (`false`) | Disables thinking (`false`) | Disables thinking (`false`) | *Cannot disable; stays enabled* | Disables thinking (`false`) |
-| **`hide`** | Generates trace, suppresses in UI | Generates trace, suppresses in UI | Generates trace, suppresses in UI | Generates trace, suppresses in UI | Generates trace, suppresses in UI |
+Rather than maintaining hardcoded models or artificial effort mappings, Ollama Agent relies directly on the Ollama API. When inspecting a model via `POST /api/show`, Ollama advertises the model's supported thinking values and default:
 
-!!! note "The Difference Between `hide` and `collapse_thinking: true`"
-    * **`reasoning_effort: hide`**: Tells Ollama to execute thinking internally, but Ollama Agent's streaming parser discards reasoning deltas so no thinking text is emitted or visible in the terminal.
-    * **`runtime.collapse_thinking: true`**: Full thinking traces are received and preserved, but rendered inside a tidy collapsed card in the terminal. You can click or expand it whenever you want to inspect how the model arrived at its conclusion.
+```json
+{
+  "thinking": {
+    "values": ["low", "high", "max"],
+    "default": "max"
+  }
+}
+```
+
+Ollama Agent dynamically queries this metadata at runtime:
+
+- **`reasoning_effort: "default"` (Default)**: Automatically adopts whichever default thinking level is advertised by the active model (`thinking.default`). When you switch models, Ollama Agent seamlessly adjusts to that model's default without configuration changes.
+- **Explicit Levels**: Pass any value advertised in the active model's `thinking.values` (such as `low`, `high`, `max`, or boolean toggles `true` / `false` / `disabled`).
+- **Dynamic REPL Autocompletion**: Typing `/effort <Tab>` in the REPL automatically inspects the active model and autocompletes with its exact supported levels, indicating the default.
+- **Thinking-Only Models**: For models where thinking is mandatory (where `False` is not included in `thinking.values`), attempting to disable reasoning will log a warning and safely fall back to the model's advertised default.
+
+### Collapsing Traces in the Terminal
+
+To keep thinking traces tidy without cluttering the chat stream:
+
+* **`runtime.collapse_thinking: true` (Default)**: Full thinking traces are received and preserved, but rendered inside a compact, collapsible card in the terminal. You can expand it anytime to inspect the chain of thought.
 
 You can set reasoning effort globally in `settings.yaml`:
 
 ```yaml
 model:
-  reasoning_effort: "high"
+  reasoning_effort: "default"
 ```
 
 Or pass it per-command with `-e` / `--effort`:
@@ -532,7 +543,7 @@ Offloads computation to a dedicated GPU rig on your home or office network:
 
 ```yaml
 model:
-  name: "qwen2.5-coder:32b"
+  name: "qwen3.8:27b"
   base_url: "http://192.168.1.150:11434"
   context_window: "max"
   reasoning_effort: "high"

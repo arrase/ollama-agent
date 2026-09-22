@@ -495,3 +495,23 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             async with _mcp_stdio_client(server_dummy, errlog=custom_stream) as streams:
                 self.assertEqual(streams, ("read_stream", "write_stream"))
             self.assertEqual(captured_errlog, custom_stream)
+
+    async def test_mcp_stdio_client_preserves_falsy_custom_errlog(self) -> None:
+        class FalsyStream(io.StringIO):
+            def __bool__(self) -> bool:
+                return False
+
+        custom_stream = FalsyStream()
+        captured_errlog = None
+
+        @asynccontextmanager
+        async def fake_orig_stdio(server, errlog=None):
+            nonlocal captured_errlog
+            captured_errlog = errlog
+            yield ("read_stream", "write_stream")
+
+        with patch("ollama_agent.mcp.loader._orig_stdio_client", fake_orig_stdio):
+            server_dummy = MagicMock()
+            async with _mcp_stdio_client(server_dummy, errlog=custom_stream) as streams:
+                self.assertEqual(streams, ("read_stream", "write_stream"))
+            self.assertEqual(captured_errlog, custom_stream)

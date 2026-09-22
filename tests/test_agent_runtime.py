@@ -94,6 +94,64 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         out_event = mock_runtime.stream_writer.call_args_list[1][0][0]
         self.assertEqual(out_event["agent_name"], "researcher")
 
+    async def test_stream_tool_events_task_subagent_type(self) -> None:
+        mock_runtime = MagicMock()
+
+        async def dummy_handler(req: Any) -> Any:
+            return "simple string result"
+
+        req = ToolCallRequest(
+            tool_call={
+                "name": "task",
+                "args": {"subagent_type": "analyst"},
+                "id": "call-2b",
+            },
+            tool=None,
+            state={},
+            runtime=mock_runtime,
+        )
+
+        with patch("ollama_agent.agent.middleware.get_tool_timeout", return_value=5):
+            res = await _stream_tool_events(req, dummy_handler)
+
+        self.assertEqual(res, "simple string result")
+        call_event = mock_runtime.stream_writer.call_args_list[0][0][0]
+        self.assertEqual(call_event["agent_name"], "analyst")
+        out_event = mock_runtime.stream_writer.call_args_list[1][0][0]
+        self.assertEqual(out_event["agent_name"], "analyst")
+        self.assertEqual(out_event["output_len"], len("simple string result"))
+
+    async def test_stream_tool_events_task_fallback_to_metadata(self) -> None:
+        mock_runtime = MagicMock()
+
+        class DummyCommand:
+            def __str__(self) -> str:
+                return "command_payload"
+
+        async def dummy_handler(req: Any) -> Any:
+            return DummyCommand()
+
+        req = ToolCallRequest(
+            tool_call={
+                "name": "task",
+                "args": {},
+                "id": "call-2c",
+                "metadata": {"lc_agent_name": "fallback_subagent"},
+            },
+            tool=None,
+            state={},
+            runtime=mock_runtime,
+        )
+
+        with patch("ollama_agent.agent.middleware.get_tool_timeout", return_value=5):
+            await _stream_tool_events(req, dummy_handler)
+
+        call_event = mock_runtime.stream_writer.call_args_list[0][0][0]
+        self.assertEqual(call_event["agent_name"], "fallback_subagent")
+        out_event = mock_runtime.stream_writer.call_args_list[1][0][0]
+        self.assertEqual(out_event["agent_name"], "fallback_subagent")
+        self.assertEqual(out_event["output_len"], len("command_payload"))
+
     async def test_stream_tool_events_timeout_returns_tool_message(self) -> None:
         async def slow_handler(req: Any) -> Any:
             await asyncio.sleep(0.5)
@@ -235,7 +293,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             self.assertIn("high", effort_msg)
 
             with self.assertRaises(ValueError):
-                await runtime.set_reasoning_effort("invalid_effort")
+                await runtime.set_reasoning_effort("")
 
         await runtime.aclose()
 
@@ -372,6 +430,46 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(events), 2)
         self.assertEqual(events[0], {"type": "tool_call", "name": "test_tool"})
         self.assertEqual(events[1], {"type": "text_delta", "content": "Hello response"})
+
+    async def test_agent_runtime_run_streamed_hide_reasoning(self) -> None:
+        for effort, expected_hidden in [
+            ("hide", True),
+            ("disabled", True),
+            ("false", True),
+            ("0", True),
+            ("off", True),
+            ("high", False),
+            ("default", False),
+            ("low", False),
+        ]:
+            settings = Settings()
+            settings.model.reasoning_effort = effort
+            runtime = AgentRuntime(settings=settings)
+
+            captured_hide: list[bool] = []
+
+            class DummyParser:
+                def process_chunk(self, chunk: Any, hide_reasoning: bool = False) -> list[Any]:
+                    captured_hide.append(hide_reasoning)
+                    return []
+
+                def flush(self, hide_reasoning: bool = False) -> list[Any]:
+                    return []
+
+            mock_graph = MagicMock()
+
+            async def mock_astream(*args: Any, **kwargs: Any):
+                yield "messages", (MagicMock(response_metadata={}),)
+
+            mock_graph.astream = mock_astream
+            mock_graph.aget_state = AsyncMock(return_value=MagicMock(interrupts=[]))
+            runtime.graph = mock_graph
+
+            with patch("ollama_agent.agent.agent.ThinkTagParser", DummyParser):
+                async for _ in runtime.run_streamed("Test"):
+                    pass
+
+            self.assertEqual(captured_hide, [expected_hidden], f"Failed for effort={effort}")
 
     async def test_agent_runtime_run_streamed_interrupt(self) -> None:
         settings = Settings()

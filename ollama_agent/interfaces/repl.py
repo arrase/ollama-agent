@@ -28,6 +28,7 @@ from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager, set_tool_timeout
 from ..agent.episodic_memory import HistoryError
 from ..core.common import extract_text
+from ..core.models import get_model_thinking_config
 from ..i18n import _
 from ..rag import RAGContext, RAGManager, load_rag_database
 from ..skills import SkillsContext
@@ -477,6 +478,35 @@ class OllamaAgentApp(App):
             ]
 
         root_cmd = parts[0]
+        if root_cmd == "/effort" and num_parts == 2:
+            sub_token = parts[1].lower()
+            thinking_cfg = (
+                get_model_thinking_config(self.repl.runtime.model.show_info)
+                if self.repl.runtime.model
+                else None
+            )
+            results = []
+            if "default".startswith(sub_token):
+                results.append(
+                    (
+                        f"{root_cmd} default",
+                        Text.from_markup(f"[bold #38bdf8]default     [/bold #38bdf8] [dim #8b949e]{_('(model default)')}[/dim #8b949e]"),
+                    )
+                )
+            if thinking_cfg and "values" in thinking_cfg:
+                default = thinking_cfg.get("default")
+                for v in thinking_cfg["values"]:
+                    v_str = "false" if v is False else "true" if v is True else str(v)
+                    if v_str.lower().startswith(sub_token):
+                        def_label = _("(default)") if v == default else ""
+                        results.append(
+                            (
+                                f"{root_cmd} {v_str}",
+                                Text.from_markup(f"[bold #38bdf8]{v_str:<12}[/bold #38bdf8] [dim #8b949e]{def_label}[/dim #8b949e]"),
+                            )
+                        )
+            return results
+
         if root_cmd not in subcommands:
             return []
 

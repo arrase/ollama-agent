@@ -2,7 +2,6 @@
   "Ollama Agent - AI agent to interact with local models": "Ollama Agent - agent AI do interakcji z lokalnymi modelami",
   "Specify the AI model to use": "Określ model AI do użycia",
   "Non-interactive mode, provide a prompt directly from the command line": "Tryb nieinteraktywny, podaj prompt bezpośrednio z wiersza poleceń",
-  "Set reasoning effort level (low, medium, high, xhigh, disabled, hide, enabled)": "Ustaw poziom rozumowania (low, medium, high, xhigh, disabled, hide, enabled)",
   "Set tool-call timeout in seconds (includes shell middleware and built-in tools)": "Ustaw limit czasu wywołań narzędzi w sekundach (obejmuje middleware powłoki i narzędzia wbudowane)",
   "Load a RAG database for the session": "Wczytaj bazę danych RAG dla sesji",
   "Allow virtual filesystem traversal to OS directories": "Zezwól na przechodzenie z wirtualnego systemu plików do katalogów systemu operacyjnego",
@@ -15,7 +14,6 @@
   "Task title": "Tytuł zadania",
   "Task prompt text (use quotes; REPL supports multiline)": "Tekst promptu zadania (użyj cudzysłowów; REPL obsługuje wiele linii)",
   "Model to save with the task": "Model do zapisania wraz z zadaniem",
-  "Reasoning effort to save with the task (low, medium, high, xhigh, disabled, hide, enabled)": "Poziom rozumowania do zapisania wraz z zadaniem (low, medium, high, xhigh, disabled, hide, enabled)",
   "Overwrite task if it already exists": "Nadpisz zadanie, jeśli już istnieje",
   "Execute a saved task": "Wykonaj zapisane zadanie",
   "Task ID or prefix to execute": "ID lub prefiks zadania do wykonania",
@@ -156,7 +154,6 @@
   "Cannot verify model capabilities: {exc}": "Nie można zweryfikować możliwości modelu: {exc}",
   "Switched from {current} to {model_name}\nConversation preserved. Continue chatting.": "Przełączono z {current} na {model_name}\nRozmowa zachowana. Kontynuuj czat.",
   "Failed to switch to model '{model_name}': {exc}": "Nie udało się przełączyć na model '{model_name}': {exc}",
-  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)": "Bieżący poziom rozumowania: {effort} (model: {model})\nUżycie: /effort <poziom> (np. low, medium, high, disabled, hide, enabled)",
   "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}": "Nieprawidłowy poziom rozumowania '{effort}'. Dozwolone wartości: {valid_list}",
   "Already using reasoning effort '{norm_effort}'.": "Już używasz poziomu rozumowania '{norm_effort}'.",
   "Switched reasoning effort from {current} to {norm_effort}\nConversation preserved. Continue chatting.": "Zmieniono poziom rozumowania z {current} na {norm_effort}\nRozmowa zachowana. Kontynuuj czat.",
@@ -455,5 +452,12 @@
   "Expected mapping for inputs in Task": "Oczekiwano mapowania dla inputs w Task",
   "Invalid input definition for '{name}'": "Nieprawidłowa definicja danych wejściowych dla '{name}'",
   "MCP server '{name}': 'command' must be a non-empty string": "Serwer MCP '{name}': 'command' musi być niepustym ciągiem znaków",
-  "MCP server '{name}': 'url' must be a non-empty string": "Serwer MCP '{name}': 'url' musi być niepustym ciągiem znaków"
+  "MCP server '{name}': 'url' must be a non-empty string": "Serwer MCP '{name}': 'url' musi być niepustym ciągiem znaków",
+  "Set reasoning effort level supported by the model, or 'default'": "Ustaw poziom rozumowania obsługiwany przez model lub 'default'",
+  "Reasoning effort to save with the task (e.g. default, low, high, max, false)": "Poziom rozumowania do zapisania wraz z zadaniem (np. default, low, high, max, false)",
+  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "Bieżący poziom rozumowania: {effort} (model: {model})\nUżycie: /effort <poziom> | default",
+  "Model thinking controls: {values} (default: {default})": "Elementy sterujące myśleniem modelu: {values} (domyślnie: {default})",
+  "(model default)": "(domyślne modelu)",
+  "(default)": "(domyślnie)",
+  "Ollama version {version} is lower than required {min_version}. Please update your Ollama installation.": "Wersja Ollama {version} jest niższa niż wymagana {min_version}. Zaktualizuj swoją instalację Ollama."
 }

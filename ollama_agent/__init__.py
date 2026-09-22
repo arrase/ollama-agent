@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-__version__ = "0.10.4"
+__version__ = "0.10.6"
 
 from .core import (
-    ALLOWED_REASONING_EFFORTS,
     DEFAULT_REASONING_EFFORT,
     ModelCapabilityError,
     ReasoningEffortValue,
@@ -13,7 +12,6 @@ from .core import (
 from .settings import Settings, load_settings
 
 __all__ = [
-    "ALLOWED_REASONING_EFFORTS",
     "DEFAULT_REASONING_EFFORT",
     "ModelCapabilityError",
     "ReasoningEffortValue",

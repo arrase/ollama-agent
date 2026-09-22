@@ -1,7 +1,6 @@
 """Core module with types, models and shared utilities."""
 
 from .common import (
-    ALLOWED_REASONING_EFFORTS,
     DEFAULT_REASONING_EFFORT,
     RAGToolResult,
     ReasoningEffortValue,
@@ -10,13 +9,17 @@ from .common import (
     validate_identifier,
 )
 from .models import (
+    MIN_OLLAMA_VERSION,
     ModelCapabilityError,
     ModelContextWindowError,
     OllamaChatModel,
+    OllamaVersionError,
+    check_ollama_version,
     create_ollama_chat_model,
     ensure_model_supports_tools,
     get_model_capabilities,
     get_model_creation_kwargs,
+    get_ollama_version,
     model_supports_thinking,
     model_supports_tools,
     resolve_context_window,
@@ -38,19 +41,22 @@ from .resource_manager import (
 
 __all__ = [
     # Types
-    "ALLOWED_REASONING_EFFORTS",
     "BaseFileStoreManager",
     "DEFAULT_REASONING_EFFORT",
     "RAGToolResult",
     "ReasoningEffortValue",
     # Models
+    "MIN_OLLAMA_VERSION",
     "ModelCapabilityError",
     "ModelContextWindowError",
     "OllamaChatModel",
+    "OllamaVersionError",
+    "check_ollama_version",
     "create_ollama_chat_model",
     "ensure_model_supports_tools",
     "get_model_capabilities",
     "get_model_creation_kwargs",
+    "get_ollama_version",
     "model_supports_tools",
     "model_supports_thinking",
     "resolve_context_window",

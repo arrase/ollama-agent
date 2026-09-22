@@ -92,6 +92,14 @@ class TestStreamingSystem(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Network failure", out)
         self.assertIn("Slow connection", out)
 
+    def test_console_streaming_renderer_agent_prefix(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        renderer = ConsoleStreamingRenderer(console=console)
+        self.assertEqual(renderer._agent_prefix({"agent_name": "worker"}), "[worker] ")
+        self.assertEqual(renderer._agent_prefix({"agent_name": ""}), "")
+        self.assertEqual(renderer._agent_prefix({"agent_name": None}), "")
+        self.assertEqual(renderer._agent_prefix({}), "")
+
     async def test_stream_agent_events_pipeline(self) -> None:
         mock_runtime = MagicMock()
 

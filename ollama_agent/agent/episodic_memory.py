@@ -60,9 +60,8 @@ def load_past_user_prompts(db_path: Path = HISTORY_DB_PATH) -> list[str]:
             cursor.execute("SELECT type, value FROM writes WHERE channel = 'messages' ORDER BY rowid ASC")
             for typ, val in cursor.fetchall():
                 msgs = _serializer.loads_typed((typ, val))
-                if not isinstance(msgs, list):
-                    msgs = [msgs]
-                for msg in msgs:
+                msg_list = msgs if isinstance(msgs, list) else [msgs]
+                for msg in msg_list:
                     if msg.type in ("human", "user"):
                         text = extract_text(msg.content).strip()
                         if text and text not in seen:
@@ -95,8 +94,7 @@ def load_past_conversations(
                 if exclude_thread_id and tid.startswith(exclude_thread_id):
                     continue
                 c = _serializer.loads_typed((typ, chk))
-                if isinstance(c, dict) and "ts" in c:
-                    thread_timestamps[tid] = str(c["ts"])
+                thread_timestamps[tid] = str(c["ts"])
 
             cursor.execute("SELECT thread_id, type, value FROM writes WHERE channel = 'messages' ORDER BY rowid ASC")
             for tid, typ, val in cursor.fetchall():
@@ -112,14 +110,13 @@ def load_past_conversations(
 
     conversations: dict[str, dict[str, Any]] = {}
     for tid, msgs in thread_messages.items():
-        if tid not in thread_timestamps:
-            continue
-        raw_ts = thread_timestamps[tid]
-        conversations[tid] = {
-            "timestamp": raw_ts,
-            "formatted_date": format_iso_timestamp(raw_ts),
-            "messages": msgs,
-        }
+        if tid in thread_timestamps:
+            raw_ts = thread_timestamps[tid]
+            conversations[tid] = {
+                "timestamp": raw_ts,
+                "formatted_date": format_iso_timestamp(raw_ts),
+                "messages": msgs,
+            }
 
     return conversations
 
@@ -137,60 +134,38 @@ def search_past_conversations_in_db(
     limit: int = 3,
 ) -> list[dict[str, Any]]:
     """Search messages across past conversation sessions matching query keywords."""
-    clean_query = query.strip()
-    if not clean_query:
+    terms = [t.lower() for t in query.split()]
+    if not terms:
         return []
 
     conversations = load_past_conversations(db_path, exclude_thread_id=exclude_thread_id)
-    if not conversations:
-        return []
-
-    terms = [t.lower() for t in clean_query.split() if t]
     scored_results: list[dict[str, Any]] = []
 
     for tid, data in conversations.items():
         msgs = data["messages"]
         raw_ts = data["timestamp"]
         formatted_date = data["formatted_date"]
-        if not msgs:
-            continue
+
+        dialogue: list[tuple[str, str]] = []
+        for msg in msgs:
+            if msg.type in ("human", "ai", "user", "assistant"):
+                text = extract_text(msg.content).strip()
+                if text:
+                    dialogue.append((msg.type, text))
 
         snippets: list[str] = []
-        match_count = 0
-        total_chars = 0
-        snippets_full = False
+        match_count = sum(formatted_date.lower().count(t) for t in terms)
 
-        match_count += sum(formatted_date.lower().count(t) for t in terms)
-
-        for msg in msgs:
-            role = msg.type
-            if role not in ("human", "ai", "user", "assistant"):
-                continue
-
-            text = extract_text(msg.content).strip()
-            if not text:
-                continue
-
+        for role, text in dialogue:
             term_hits = sum(text.lower().count(t) for t in terms)
             if term_hits > 0:
                 match_count += term_hits
-                if not snippets_full:
-                    snippet = _format_snippet(role, text)
-                    snippets.append(snippet)
-                    total_chars += len(snippet)
-                    if total_chars > 1200:
-                        snippets_full = True
+                if len(snippets) < 4:
+                    snippets.append(_format_snippet(role, text))
 
         if match_count > 0:
             if not snippets:
-                for msg in msgs:
-                    role = msg.type
-                    if role in ("human", "ai", "user", "assistant"):
-                        text = extract_text(msg.content).strip()
-                        if text:
-                            snippets.append(_format_snippet(role, text))
-                            if len(snippets) >= 2:
-                                break
+                snippets = [_format_snippet(r, t) for r, t in dialogue[:2]]
 
             scored_results.append(
                 {

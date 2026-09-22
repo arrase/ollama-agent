@@ -2,7 +2,6 @@
   "Ollama Agent - AI agent to interact with local models": "Ollama Agent - وكيل ذكاء اصطناعي للتفاعل مع النماذج المحلية",
   "Specify the AI model to use": "حدّد نموذج الذكاء الاصطناعي المطلوب استخدامه",
   "Non-interactive mode, provide a prompt directly from the command line": "وضع غير تفاعلي، قدّم المطالبة مباشرة من سطر الأوامر",
-  "Set reasoning effort level (low, medium, high, xhigh, disabled, hide, enabled)": "عيّن مستوى الاستدلال (low, medium, high, xhigh, disabled, hide, enabled)",
   "Set tool-call timeout in seconds (includes shell middleware and built-in tools)": "عيّن مهلة استدعاء الأداة بالثواني (يشمل وسيط الصدفة والأدوات المدمجة)",
   "Load a RAG database for the session": "حمّل قاعدة بيانات RAG للجلسة",
   "Allow virtual filesystem traversal to OS directories": "اسمح بعبور نظام الملفات الافتراضي إلى مجلدات نظام التشغيل",
@@ -15,7 +14,6 @@
   "Task title": "عنوان المهمة",
   "Task prompt text (use quotes; REPL supports multiline)": "نص مطالبة المهمة (استخدم علامات الاقتباس؛ يدعم REPL الأسطر المتعددة)",
   "Model to save with the task": "النموذج المراد حفظه مع المهمة",
-  "Reasoning effort to save with the task (low, medium, high, xhigh, disabled, hide, enabled)": "مستوى الاستدلال المراد حفظه مع المهمة (low, medium, high, xhigh, disabled, hide, enabled)",
   "Overwrite task if it already exists": "اكتب فوق المهمة إن كانت موجودة بالفعل",
   "Execute a saved task": "نفّذ مهمة محفوظة",
   "Task ID or prefix to execute": "مُعرّف المهمة أو بادئتها للتنفيذ",
@@ -156,7 +154,6 @@
   "Cannot verify model capabilities: {exc}": "لا يمكن التحقق من قدرات النموذج: {exc}",
   "Switched from {current} to {model_name}\nConversation preserved. Continue chatting.": "تم التبديل من {current} إلى {model_name}\nحُفظت المحادثة. تابع الدردشة.",
   "Failed to switch to model '{model_name}': {exc}": "فشل التبديل إلى النموذج '{model_name}': {exc}",
-  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> (e.g. low, medium, high, disabled, hide, enabled)": "مستوى الاستدلال الحالي: {effort} (النموذج: {model})\nالاستخدام: /effort <المستوى> (مثال: low, medium, high, disabled, hide, enabled)",
   "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}": "مستوى استدلال غير صالح '{effort}'. القيم المسموحة: {valid_list}",
   "Already using reasoning effort '{norm_effort}'.": "تستخدم مستوى الاستدلال '{norm_effort}' بالفعل.",
   "Switched reasoning effort from {current} to {norm_effort}\nConversation preserved. Continue chatting.": "تم تبديل مستوى الاستدلال من {current} إلى {norm_effort}\nحُفظت المحادثة. تابع الدردشة.",
@@ -455,5 +452,12 @@
   "Expected mapping for inputs in Task": "تم توقع تخطيط (mapping) للمدخلات في Task",
   "Invalid input definition for '{name}'": "تعريف إدخال غير صالح لـ '{name}'",
   "MCP server '{name}': 'command' must be a non-empty string": "خادم MCP '{name}': يجب أن يكون 'command' سلسلة غير فارغة",
-  "MCP server '{name}': 'url' must be a non-empty string": "خادم MCP '{name}': يجب أن يكون 'url' سلسلة غير فارغة"
+  "MCP server '{name}': 'url' must be a non-empty string": "خادم MCP '{name}': يجب أن يكون 'url' سلسلة غير فارغة",
+  "Set reasoning effort level supported by the model, or 'default'": "تعيين مستوى الاستدلال المدعوم من النموذج، أو 'default'",
+  "Reasoning effort to save with the task (e.g. default, low, high, max, false)": "مستوى الاستدلال المراد حفظه مع المهمة (مثال: default, low, high, max, false)",
+  "Current reasoning effort: {effort} (model: {model})\nUsage: /effort <level> | default": "مستوى الاستدلال الحالي: {effort} (النموذج: {model})\nالاستخدام: /effort <المستوى> | default",
+  "Model thinking controls: {values} (default: {default})": "عناصر التحكم في تفكير النموذج: {values} (الافتراضي: {default})",
+  "(model default)": "(افتراضي النموذج)",
+  "(default)": "(افتراضي)",
+  "Ollama version {version} is lower than required {min_version}. Please update your Ollama installation.": "إصدار Ollama {version} أقل من الإصدار المطلوب {min_version}. يرجى تحديث تثبيت Ollama الخاص بك."
 }

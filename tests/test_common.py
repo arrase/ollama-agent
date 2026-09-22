@@ -6,8 +6,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ollama_agent.core.common import (
-    ALLOWED_REASONING_EFFORTS,
     DEFAULT_REASONING_EFFORT,
+    ReasoningEffortValue,
     atomic_write_text,
     extract_text,
     validate_identifier,
@@ -70,11 +70,8 @@ class TestCommonUtilities(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validate_identifier(invalid_name)
 
-    def test_allowed_reasoning_efforts_contains_defaults(self) -> None:
-        self.assertIn(DEFAULT_REASONING_EFFORT, ALLOWED_REASONING_EFFORTS)
-        self.assertIn("high", ALLOWED_REASONING_EFFORTS)
-        self.assertIn("xhigh", ALLOWED_REASONING_EFFORTS)
-        self.assertIn("low", ALLOWED_REASONING_EFFORTS)
+    def test_default_reasoning_effort(self) -> None:
+        self.assertEqual(DEFAULT_REASONING_EFFORT, "default")
 
     def test_atomic_write_text_success(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -102,6 +99,20 @@ class TestCommonUtilities(unittest.TestCase):
             tmp_files = list(Path(td).glob("*.tmp"))
             self.assertEqual(tmp_files, [])
 
+    def test_atomic_write_text_cleans_up_temp_file_on_encoding_error(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "encoding_error.txt"
+            with self.assertRaises(UnicodeEncodeError):
+                atomic_write_text(target, "café con leche", encoding="ascii")
+            self.assertFalse(target.exists())
+            tmp_files = list(Path(td).glob("*.tmp"))
+            self.assertEqual(tmp_files, [])
+
+    def test_extract_text_filters_empty_and_none(self) -> None:
+        self.assertEqual(extract_text(["hello", "", None, "world"]), "hello world")
+        self.assertEqual(extract_text([{"text": "foo"}, {"text": ""}, {"text": "bar"}]), "foo bar")
+
 
 if __name__ == "__main__":
     unittest.main()
+

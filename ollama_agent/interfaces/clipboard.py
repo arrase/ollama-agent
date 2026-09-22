@@ -36,10 +36,6 @@ def _configure_win32_clipboard(u32: Any, k32: Any) -> None:
     k32.GlobalFree.restype = ctypes.c_void_p
 
 
-if sys.platform == "win32":
-    _configure_win32_clipboard(ctypes.windll.user32, ctypes.windll.kernel32)
-
-
 def _get_linux_copy_cmd() -> list[str]:
     """Detect available Linux clipboard copy command."""
     if (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("WAYLAND_SOCKET")) and shutil.which("wl-copy"):
@@ -70,7 +66,6 @@ def _copy_via_command(cmd: list[str], text: str) -> None:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             timeout=3.0,
-            check=False,
         )
     except (subprocess.SubprocessError, OSError) as exc:
         raise ClipboardError(f"'{cmd[0]}' failed: {exc}") from exc
@@ -87,13 +82,54 @@ def _paste_via_command(cmd: list[str]) -> str:
             encoding="utf-8",
             errors="replace",
             timeout=3.0,
-            check=False,
         )
     except (subprocess.SubprocessError, OSError) as exc:
         raise ClipboardError(f"'{cmd[0]}' failed: {exc}") from exc
     if proc.returncode != 0:
         raise ClipboardError(f"'{cmd[0]}' exited with code {proc.returncode}: {proc.stderr.strip()}")
     return proc.stdout
+
+
+def _copy_win32(text: str) -> None:
+    u32, k32 = ctypes.windll.user32, ctypes.windll.kernel32
+    _configure_win32_clipboard(u32, k32)
+    if not u32.OpenClipboard(None):
+        raise ClipboardError("Could not open the Windows clipboard")
+    try:
+        u32.EmptyClipboard()
+        encoded = text.encode("utf-16-le") + b"\x00\x00"
+        h_mem = k32.GlobalAlloc(0x0042, len(encoded))
+        if not (p_mem := k32.GlobalLock(h_mem)):
+            k32.GlobalFree(h_mem)
+            raise ClipboardError("GlobalLock failed while copying to the clipboard")
+        try:
+            ctypes.memmove(p_mem, encoded, len(encoded))
+        finally:
+            k32.GlobalUnlock(h_mem)
+        if not u32.SetClipboardData(13, h_mem):
+            k32.GlobalFree(h_mem)
+            raise ClipboardError("SetClipboardData failed while copying to the clipboard")
+    finally:
+        u32.CloseClipboard()
+
+
+def _paste_win32() -> str:
+    u32, k32 = ctypes.windll.user32, ctypes.windll.kernel32
+    _configure_win32_clipboard(u32, k32)
+    if not u32.OpenClipboard(None):
+        raise ClipboardError("Could not open the Windows clipboard")
+    try:
+        if not (h_mem := u32.GetClipboardData(13)):
+            raise ClipboardError("GetClipboardData failed while reading the clipboard")
+        if not (p_mem := k32.GlobalLock(h_mem)):
+            raise ClipboardError("GlobalLock failed while reading the clipboard")
+        try:
+            text = ctypes.c_wchar_p(p_mem).value
+        finally:
+            k32.GlobalUnlock(h_mem)
+        return text
+    finally:
+        u32.CloseClipboard()
 
 
 def copy_to_system_clipboard(text: str) -> None:
@@ -107,27 +143,7 @@ def copy_to_system_clipboard(text: str) -> None:
     elif sys.platform.startswith(("linux", "freebsd", "openbsd")):
         _copy_via_command(_get_linux_copy_cmd(), text)
     elif sys.platform == "win32":
-        u32 = ctypes.windll.user32
-        k32 = ctypes.windll.kernel32
-        if not u32.OpenClipboard(None):
-            raise ClipboardError("Could not open the Windows clipboard")
-        try:
-            u32.EmptyClipboard()
-            encoded = text.encode("utf-16-le") + b"\x00\x00"
-            h_mem = k32.GlobalAlloc(0x0042, len(encoded))  # GMEM_MOVEABLE | GMEM_ZEROINIT
-            if not h_mem:
-                raise ClipboardError("GlobalAlloc failed while copying to the clipboard")
-            p_mem = k32.GlobalLock(h_mem)
-            if not p_mem:
-                k32.GlobalFree(h_mem)
-                raise ClipboardError("GlobalLock failed while copying to the clipboard")
-            ctypes.memmove(p_mem, encoded, len(encoded))
-            k32.GlobalUnlock(h_mem)
-            if not u32.SetClipboardData(13, h_mem):  # CF_UNICODETEXT
-                k32.GlobalFree(h_mem)
-                raise ClipboardError("SetClipboardData failed while copying to the clipboard")
-        finally:
-            u32.CloseClipboard()
+        _copy_win32(text)
     else:
         raise ClipboardError(f"Unsupported platform: {sys.platform}")
 
@@ -143,22 +159,6 @@ def get_system_clipboard() -> str:
     elif sys.platform.startswith(("linux", "freebsd", "openbsd")):
         return _paste_via_command(_get_linux_paste_cmd())
     elif sys.platform == "win32":
-        u32 = ctypes.windll.user32
-        k32 = ctypes.windll.kernel32
-        if not u32.OpenClipboard(None):
-            raise ClipboardError("Could not open the Windows clipboard")
-        try:
-            h_mem = u32.GetClipboardData(13)  # CF_UNICODETEXT
-            if not h_mem:
-                raise ClipboardError("GetClipboardData failed while reading the clipboard")
-            p_mem = k32.GlobalLock(h_mem)
-            if not p_mem:
-                raise ClipboardError("GlobalLock failed while reading the clipboard")
-            try:
-                return ctypes.c_wchar_p(p_mem).value
-            finally:
-                k32.GlobalUnlock(h_mem)
-        finally:
-            u32.CloseClipboard()
+        return _paste_win32()
     else:
         raise ClipboardError(f"Unsupported platform: {sys.platform}")
