@@ -43,3 +43,6 @@ Thumbs.db
 # Test files
 /test_*.py
 site/
+
+# SonarQube
+.scannerwork/
