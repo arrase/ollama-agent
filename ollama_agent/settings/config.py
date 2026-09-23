@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Self, TypeVar
 
 import yaml  # type: ignore[import-untyped]
-from jinja2 import Environment, StrictUndefined
+from jinja2 import Environment, StrictUndefined, select_autoescape
 
 from ..core import DEFAULT_REASONING_EFFORT, atomic_write_text
 from ..i18n import _
@@ -235,7 +235,12 @@ def save_settings(settings: Settings, settings_path: Path = SETTINGS_PATH) -> No
 
 def render_prompt_template(template_str: str, context: dict[str, Any]) -> str:
     """Render a Jinja2 template string with the provided context dictionary."""
-    env = Environment(undefined=StrictUndefined, trim_blocks=True, lstrip_blocks=True)
+    env = Environment(
+        autoescape=select_autoescape(["html", "xml"]),
+        undefined=StrictUndefined,
+        trim_blocks=True,
+        lstrip_blocks=True,
+    )
     template = env.from_string(template_str)
     return template.render(context)
 
