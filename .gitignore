@@ -42,6 +42,11 @@ Thumbs.db
 **/.antigravitycli
 # Test files
 /test_*.py
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
 site/
 
 # SonarQube

@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 from ollama_agent.core.common import (
     DEFAULT_REASONING_EFFORT,
-    ReasoningEffortValue,
     atomic_write_text,
     extract_text,
     validate_identifier,

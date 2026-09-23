@@ -959,7 +959,7 @@ class OllamaAgentApp(App):
             target_id = positional[0]
             var_args = positional[1:]
             try:
-                _, t = self.repl._task_ctx.resolve_task(target_id)
+                task_id, t = self.repl._task_ctx.resolve_task(target_id)
                 variables = parse_var_assignments(var_args)
                 rendered_prompt = t.render(variables)
             except (TaskError, ValueError, TemplateError) as exc:

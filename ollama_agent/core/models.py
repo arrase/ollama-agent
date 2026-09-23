@@ -15,7 +15,6 @@ from pydantic import Field
 
 from ..i18n import _
 from .common import (
-    DEFAULT_REASONING_EFFORT,
     ReasoningEffortValue,
 )
 

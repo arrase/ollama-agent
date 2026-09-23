@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from ollama_agent.core.common import DEFAULT_REASONING_EFFORT
 from ollama_agent.core.models import (
-    MIN_OLLAMA_VERSION,
     ExtendedShowResponse,
     ModelCapabilityError,
     ModelContextWindowError,

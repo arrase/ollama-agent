@@ -854,6 +854,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             out = console.export_text()
             self.assertIn("✓", out)
             self.assertNotIn("does not support tools", out)
+            mock_save.assert_called_once()
 
     def test_ensure_model_configured_no_models_raises(self) -> None:
         settings = Settings()
@@ -870,3 +871,107 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ModelCapabilityError) as cm:
                 ensure_model_configured(settings)
             self.assertIn("Could not connect to Ollama", str(cm.exception))
+
+    def test_repl_subcommands_error_and_edge_cases(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        handlers = build_repl_handlers(
+            **_repl_handler_kwargs(
+                console=console,
+                get_runtime=lambda: runtime,
+            )
+        )
+
+        handlers["/mcp"](["unknown_sub"])
+        self.assertIn("Unknown mcp subcommand", console.export_text())
+
+        handlers["/model"](["set"])
+        self.assertIn("Usage: /model", console.export_text())
+
+        handlers["/model"](["arg1", "arg2", "arg3"])
+        self.assertIn("Usage: /model", console.export_text())
+
+        handlers["/effort"](["set"])
+        self.assertIn("Usage: /effort", console.export_text())
+
+        handlers["/effort"](["arg1", "arg2", "arg3"])
+        self.assertIn("Usage: /effort", console.export_text())
+
+        handlers["/context"](["set"])
+        self.assertIn("Usage: /context", console.export_text())
+
+        handlers["/context"](["arg1", "arg2", "arg3"])
+        self.assertIn("Usage: /context", console.export_text())
+
+        handlers["/params"](["set", "temperature"])
+        self.assertIn("Usage: /params", console.export_text())
+
+        handlers["/params"](["unknown"])
+        self.assertIn("Usage: /params", console.export_text())
+
+        handlers["/task"](["delete"])
+        self.assertIn("Usage: /task delete", console.export_text())
+
+        handlers["/skill"](["show"])
+        self.assertIn("Usage: /skill show", console.export_text())
+
+        handlers["/skill"](["delete"])
+        self.assertIn("Usage: /skill delete", console.export_text())
+
+        handlers["/session"](["search"])
+        self.assertIn("Usage: /session search", console.export_text())
+
+        handlers["/session"](["delete"])
+        self.assertIn("Usage: /session delete", console.export_text())
+
+    async def test_repl_rag_subcommands(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        handlers = build_repl_handlers(
+            **_repl_handler_kwargs(
+                console=console,
+                get_runtime=lambda: runtime,
+            )
+        )
+
+        handlers["/rag"](["create"])
+        self.assertIn("Usage: /rag create", console.export_text())
+
+        handlers["/rag"](["delete"])
+        self.assertIn("Usage: /rag delete", console.export_text())
+
+        handlers["/rag"](["load"])
+        self.assertIn("Usage: /rag load", console.export_text())
+
+        handlers["/rag"](["add"])
+        self.assertIn("Usage: /rag add", console.export_text())
+
+        handlers["/rag"](["unknown_sub"])
+        self.assertIn("Unknown rag subcommand", console.export_text())
+
+        with (
+            patch("ollama_agent.interfaces.dispatch.create_rag_database") as mock_create,
+            patch("ollama_agent.interfaces.dispatch.delete_rag_database") as mock_delete,
+            patch("ollama_agent.interfaces.dispatch.load_rag_database") as mock_load,
+            patch("ollama_agent.interfaces.dispatch.unload_rag_database") as mock_unload,
+            patch("ollama_agent.interfaces.dispatch.add_rag_file", AsyncMock()) as mock_add_file,
+            patch("ollama_agent.interfaces.dispatch.add_rag_directory", AsyncMock()) as mock_add_dir,
+        ):
+            handlers["/rag"](["create", "my_db"])
+            mock_create.assert_called_once()
+
+            handlers["/rag"](["delete", "my_db"])
+            mock_delete.assert_called_once()
+            runtime.reload.assert_called()
+
+            handlers["/rag"](["load", "my_db"])
+            mock_load.assert_called_once()
+
+            handlers["/rag"](["unload"])
+            mock_unload.assert_called_once()
+
+            await safe_call(handlers["/rag"], ["add", "my_file.txt"], console=console)
+            mock_add_file.assert_awaited_once()
+
+            await safe_call(handlers["/rag"], ["add", "my_folder", "--dir"], console=console)
+            mock_add_dir.assert_awaited_once()
