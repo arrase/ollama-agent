@@ -21,6 +21,38 @@ from ..settings.config import render_prompt_template
 from ..settings.paths import TASKS_DIR
 
 
+def _coerce_boolean(name: str, val: Any) -> bool:
+    """Coerce an input value to bool or raise ValueError."""
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, str):
+        norm = val.strip().lower()
+        if norm in ("true", "1", "yes"):
+            return True
+        if norm in ("false", "0", "no"):
+            return False
+    if isinstance(val, (int, float)) and val in (0, 1):
+        return bool(val)
+    raise ValueError(_("Invalid boolean value for input '{name}': {val}", name=name, val=val))
+
+
+def _coerce_number(name: str, val: Any) -> int | float:
+    """Coerce an input value to int or float, or raise ValueError."""
+    if isinstance(val, bool):
+        raise ValueError(_("Invalid number value for input '{name}': {val}", name=name, val=val))
+    if isinstance(val, (int, float)):
+        return val
+    if isinstance(val, str):
+        try:
+            return int(val)
+        except ValueError:
+            try:
+                return float(val)
+            except ValueError:
+                pass
+    raise ValueError(_("Invalid number value for input '{name}': {val}", name=name, val=val))
+
+
 @dataclass(slots=True)
 class TaskInput:
     """Input definition for parameterized task templates."""
@@ -33,31 +65,9 @@ class TaskInput:
     def coerce(self, name: str, val: Any) -> Any:
         """Coerce an input value to the expected type."""
         if self.type == "boolean":
-            if isinstance(val, bool):
-                return val
-            if isinstance(val, str):
-                norm = val.strip().lower()
-                if norm in ("true", "1", "yes"):
-                    return True
-                if norm in ("false", "0", "no"):
-                    return False
-            if isinstance(val, (int, float)) and val in (0, 1):
-                return bool(val)
-            raise ValueError(_("Invalid boolean value for input '{name}': {val}", name=name, val=val))
+            return _coerce_boolean(name, val)
         if self.type == "number":
-            if isinstance(val, bool):
-                raise ValueError(_("Invalid number value for input '{name}': {val}", name=name, val=val))
-            if isinstance(val, (int, float)):
-                return val
-            if isinstance(val, str):
-                try:
-                    return int(val)
-                except ValueError:
-                    try:
-                        return float(val)
-                    except ValueError:
-                        pass
-            raise ValueError(_("Invalid number value for input '{name}': {val}", name=name, val=val))
+            return _coerce_number(name, val)
         if self.type == "string":
             return str(val)
         raise ValueError(_("Unsupported input type '{type}' for input '{name}'", type=self.type, name=name))

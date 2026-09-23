@@ -163,7 +163,7 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
 
         # Search for FastAPI
         results = search_past_conversations_in_db("fastapi docker", db_path=self.db_path)
-        self.assertTrue(len(results) >= 1)
+        self.assertGreaterEqual(len(results), 1)
         self.assertEqual(results[0]["thread_id"], "thread-100")
         self.assertIn("FastAPI", results[0]["snippets"][0])
         self.assertIn("2026-08-20", results[0]["formatted_date"])

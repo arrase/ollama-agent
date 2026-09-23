@@ -37,6 +37,14 @@ def streaming_reasoning(content: Any, additional_kwargs: dict[str, Any] | None =
     )
 
 
+def _buffer_partial_tag(tag: str, text: str) -> tuple[str, str]:
+    """Split text into remaining content and trailing partial tag prefix."""
+    for k in range(len(tag) - 1, 0, -1):
+        if text.endswith(tag[:k]):
+            return text[:-k], tag[:k]
+    return text, ""
+
+
 class ThinkTagParser:
     """Parser tracking <think> and </think> tags in streaming text."""
 
@@ -60,11 +68,7 @@ class ThinkTagParser:
             self.in_think = not self.in_think
 
         tag = "</think>" if self.in_think else "<think>"
-        for k in range(len(tag) - 1, 0, -1):
-            if text.endswith(tag[:k]):
-                self._buffer = tag[:k]
-                text = text[:-k]
-                break
+        text, self._buffer = _buffer_partial_tag(tag, text)
 
         if text:
             deltas.append(("reasoning" if self.in_think else "text", text))

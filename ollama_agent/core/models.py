@@ -227,6 +227,54 @@ async def resolve_context_window(
     )
 
 
+def _resolve_thinking_from_cfg(
+    thinking_cfg: dict[str, Any],
+    effort_clean: str,
+    is_default: bool,
+    model: str,
+    warn_callback: Callable[[str], None],
+) -> bool | str | None:
+    values: list[Any] = thinking_cfg.get("values") or []
+    default: Any = thinking_cfg.get("default")
+
+    if is_default:
+        return default
+
+    effort_lower = effort_clean.lower()
+    is_off = effort_lower in ("false", "0", "disabled", "off")
+    is_on = effort_lower in ("true", "1", "enabled", "on")
+
+    for v in values:
+        if v is False and is_off:
+            return False
+        if v is True and is_on:
+            return True
+        if not isinstance(v, bool) and str(v).lower() == effort_lower:
+            return v
+
+    if is_on:
+        return default
+
+    if is_off:
+        warn_callback(
+            _(
+                "Model '{model}' is a thinking-only model. reasoning_effort='disabled' is not supported; "
+                "thinking will remain enabled.",
+                model=model,
+            )
+        )
+        return default
+
+    warn_callback(
+        _(
+            "Invalid reasoning effort '{effort}'. Allowed values are: {allowed}",
+            effort=effort_clean,
+            allowed=", ".join(str(v) for v in values),
+        )
+    )
+    return default
+
+
 async def resolve_ollama_reasoning(
     model: str,
     effort: Any,
@@ -243,43 +291,7 @@ async def resolve_ollama_reasoning(
     is_default = not effort_clean or effort_clean.lower() == "default"
 
     if thinking_cfg is not None:
-        values: list[Any] = thinking_cfg.get("values") or []
-        default: Any = thinking_cfg.get("default")
-
-        if is_default:
-            return default
-
-        effort_lower = effort_clean.lower()
-        for v in values:
-            if isinstance(v, bool):
-                if effort_lower in ("false", "0", "disabled", "off") and not v:
-                    return False
-                if effort_lower in ("true", "1", "enabled", "on") and v:
-                    return True
-            elif str(v).lower() == effort_lower:
-                return v
-
-        if effort_lower in ("true", "1", "enabled", "on"):
-            return default
-
-        if effort_lower in ("false", "0", "disabled", "off"):
-            warn_callback(
-                _(
-                    "Model '{model}' is a thinking-only model. reasoning_effort='disabled' is not supported; "
-                    "thinking will remain enabled.",
-                    model=model,
-                )
-            )
-            return default
-
-        warn_callback(
-            _(
-                "Invalid reasoning effort '{effort}'. Allowed values are: {allowed}",
-                effort=effort,
-                allowed=", ".join(str(v) for v in values),
-            )
-        )
-        return default
+        return _resolve_thinking_from_cfg(thinking_cfg, effort_clean, is_default, model, warn_callback)
 
     if not await model_supports_thinking(model, base_url, show_info=response):
         return None
@@ -292,6 +304,24 @@ async def resolve_ollama_reasoning(
     if effort_lower in ("true", "1", "enabled", "on"):
         return True
     return effort_clean
+
+
+def _find_param_in_modelfile(
+    param: str,
+    meta_sources: list[str],
+    is_int: bool,
+    warn_callback: Callable[[str], None],
+) -> Any | None:
+    for text in meta_sources:
+        raw = _parse_modelfile_param(text, param)
+        if raw is None and param == "repeat_penalty":
+            raw = _parse_modelfile_param(text, "repetition_penalty")
+        if raw is not None:
+            try:
+                return int(raw) if is_int else float(raw)
+            except ValueError:
+                warn_callback(_("Ignoring invalid value '{raw}' for parameter '{param}'.", raw=raw, param=param))
+    return None
 
 
 async def resolve_model_parameters(
@@ -328,18 +358,7 @@ async def resolve_model_parameters(
             resolved[param] = (int(user_val) if is_int else float(user_val), "user")
             continue
 
-        found_val: Any = None
-        for text in meta_sources:
-            raw = _parse_modelfile_param(text, param)
-            if raw is None and param == "repeat_penalty":
-                raw = _parse_modelfile_param(text, "repetition_penalty")
-            if raw is not None:
-                try:
-                    found_val = int(raw) if is_int else float(raw)
-                    break
-                except ValueError:
-                    warn_callback(_("Ignoring invalid value '{raw}' for parameter '{param}'.", raw=raw, param=param))
-
+        found_val = _find_param_in_modelfile(param, meta_sources, is_int, warn_callback)
         if found_val is not None:
             resolved[param] = (found_val, "modelfile")
 

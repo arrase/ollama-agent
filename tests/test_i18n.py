@@ -374,14 +374,24 @@ class TestCatalogCompleteness(unittest.TestCase):
         for py_file in pkg_dir.rglob("*.py"):
             with open(py_file, "r", encoding="utf-8") as f:
                 tree = ast.parse(f.read(), filename=str(py_file))
+            module_constants: dict[str, str] = {}
+            for stmt in tree.body:
+                if isinstance(stmt, ast.Assign):
+                    for target in stmt.targets:
+                        if isinstance(target, ast.Name) and isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str):
+                            module_constants[target.id] = stmt.value.value
             for node in ast.walk(tree):
                 if isinstance(node, ast.Call):
                     func = node.func
                     if (isinstance(func, ast.Name) and func.id == "_") or (
                         isinstance(func, ast.Attribute) and func.attr == "_"
                     ):
-                        if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
-                            extracted_strings.add(node.args[0].value)
+                        if node.args:
+                            first_arg = node.args[0]
+                            if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, str):
+                                extracted_strings.add(first_arg.value)
+                            elif isinstance(first_arg, ast.Name) and first_arg.id in module_constants:
+                                extracted_strings.add(module_constants[first_arg.id])
 
         for loc in [loc_code for loc_code in SUPPORTED_LOCALES if loc_code != "en"]:
             loc_file = locales_dir / f"{loc}.json"

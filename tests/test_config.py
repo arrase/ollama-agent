@@ -185,7 +185,7 @@ class TestConfigManagement(unittest.TestCase):
         instructions_file = Path(self.temp_dir.name) / "instructions.md"
         content = load_instructions(instructions_file)
         self.assertTrue(instructions_file.exists())
-        self.assertTrue(len(content) > 0)
+        self.assertGreater(len(content), 0)
         self.assertIn("CORE OBJECTIVE", content)
         self.assertIn("MEMORY GUIDELINES", content)
         self.assertIn("runtime.allow_traversal", content)

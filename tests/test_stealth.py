@@ -27,9 +27,9 @@ class TestStealthMode(unittest.IsolatedAsyncioTestCase):
 
         runtime_stealth = AgentRuntime(stealth_mode=True)
         self.assertTrue(runtime_stealth.stealth_mode)
-        mem_checkpointer = await runtime_stealth._get_memory_checkpointer()
+        mem_checkpointer = runtime_stealth._get_memory_checkpointer()
         self.assertIsInstance(mem_checkpointer, MemorySaver)
-        self.assertIs(await runtime_stealth._get_memory_checkpointer(), mem_checkpointer)
+        self.assertIs(runtime_stealth._get_memory_checkpointer(), mem_checkpointer)
 
     async def test_handle_stealth_command_toggle_and_values(self) -> None:
         out = io.StringIO()

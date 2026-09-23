@@ -50,6 +50,9 @@ _MIME_FALLBACKS: dict[str, str] = {
 }
 
 
+_FILE_TOO_LARGE_MSG = "File too large: {file_path} ({file_size} bytes, limit is {max_file_size} bytes)"
+
+
 def classify_multimodal_file(file_path: Path) -> str | None:
     """Classify file into image, video, audio, or file, or None for text."""
     suffix = file_path.suffix.lower()
@@ -79,8 +82,7 @@ def read_file_content(file_path: Path, max_file_size: int = 1024 * 1024) -> str:
     size = file_path.stat().st_size
     if size > max_file_size:
         raise FileTooLargeError(
-            _("File too large: {file_path} ({file_size} bytes, limit is {max_file_size} bytes)",
-              file_path=file_path, file_size=size, max_file_size=max_file_size)
+            _(_FILE_TOO_LARGE_MSG, file_path=file_path, file_size=size, max_file_size=max_file_size)
         )
     if is_binary_file(file_path):
         raise PromptProcessingError(_("Cannot read binary file as text: {file_path}", file_path=file_path))
@@ -92,49 +94,76 @@ def read_binary_file_b64(file_path: Path, max_file_size: int = 1024 * 1024) -> s
     size = file_path.stat().st_size
     if size > max_file_size:
         raise FileTooLargeError(
-            _("File too large: {file_path} ({file_size} bytes, limit is {max_file_size} bytes)",
-              file_path=file_path, file_size=size, max_file_size=max_file_size)
+            _(_FILE_TOO_LARGE_MSG, file_path=file_path, file_size=size, max_file_size=max_file_size)
         )
     return base64.b64encode(file_path.read_bytes()).decode("utf-8")
 
 
-def resolve_context_files(
+def _resolve_single_file(
     target_path: Path,
-    max_file_size: int = 1024 * 1024,
-    max_files: int = 100,
-    max_total_size: int = 10 * 1024 * 1024,
-    *,
-    initial_count: int = 0,
-    initial_size: int = 0,
+    max_file_size: int,
+    max_files: int,
+    max_total_size: int,
+    initial_count: int,
+    initial_size: int,
 ) -> ResolvedContext:
-    """Resolve a target file or directory into context data."""
-    if not target_path.exists():
-        raise PromptProcessingError(_("Path is neither a file nor a directory: {file_path}", file_path=target_path))
-
-    if target_path.is_file():
-        if initial_count >= max_files:
-            raise ContextLimitExceededError(_("Mentions limit exceeded: max {max_files} files.", max_files=max_files))
-        size = target_path.stat().st_size
-        if size > max_file_size:
-            raise FileTooLargeError(
-                _(
-                    "File too large: {file_path} ({file_size} bytes, limit is {max_file_size} bytes)",
-                    file_path=target_path,
-                    file_size=size,
-                    max_file_size=max_file_size,
-                )
+    """Resolve a single file into context data."""
+    if initial_count >= max_files:
+        raise ContextLimitExceededError(_("Mentions limit exceeded: max {max_files} files.", max_files=max_files))
+    size = target_path.stat().st_size
+    if size > max_file_size:
+        raise FileTooLargeError(
+            _(
+                _FILE_TOO_LARGE_MSG,
+                file_path=target_path,
+                file_size=size,
+                max_file_size=max_file_size,
             )
-        if initial_size + size > max_total_size:
-            raise ContextLimitExceededError(
-                _("Total context size limit of {max_total_size} bytes exceeded.", max_total_size=max_total_size)
-            )
-        kind = classify_multimodal_file(target_path)
-        if kind:
-            b64_data = read_binary_file_b64(target_path, max_file_size)
-            mime = get_file_type(target_path) or _MIME_FALLBACKS.get(kind, "application/octet-stream")
-            return ResolvedContext({}, [{"type": kind, "base64": b64_data, "mime_type": mime}], {target_path: kind}, [], size)
-        return ResolvedContext({target_path: read_file_content(target_path, max_file_size)}, [], {}, [], size)
+        )
+    if initial_size + size > max_total_size:
+        raise ContextLimitExceededError(
+            _("Total context size limit of {max_total_size} bytes exceeded.", max_total_size=max_total_size)
+        )
+    kind = classify_multimodal_file(target_path)
+    if kind:
+        b64_data = read_binary_file_b64(target_path, max_file_size)
+        mime = get_file_type(target_path) or _MIME_FALLBACKS.get(kind, "application/octet-stream")
+        return ResolvedContext({}, [{"type": kind, "base64": b64_data, "mime_type": mime}], {target_path: kind}, [], size)
+    return ResolvedContext({target_path: read_file_content(target_path, max_file_size)}, [], {}, [], size)
 
+
+def _append_dir_file_content(
+    file_path: Path,
+    max_file_size: int,
+    text_contents: dict[Path, str],
+    attachments: list[dict[str, Any]],
+    classifications: dict[Path, str],
+    warnings: list[str],
+) -> bool:
+    """Classify and append file content to text_contents or attachments. Returns True if appended."""
+    kind = classify_multimodal_file(file_path)
+    if kind:
+        classifications[file_path] = kind
+        b64_data = read_binary_file_b64(file_path, max_file_size)
+        mime = get_file_type(file_path) or _MIME_FALLBACKS.get(kind, "application/octet-stream")
+        attachments.append({"type": kind, "base64": b64_data, "mime_type": mime})
+        return True
+    if is_binary_file(file_path):
+        warnings.append(_("Cannot read binary file as text: {file_path}", file_path=file_path))
+        return False
+    text_contents[file_path] = file_path.read_text(encoding="utf-8", errors="replace")
+    return True
+
+
+def _resolve_directory(
+    target_path: Path,
+    max_file_size: int,
+    max_files: int,
+    max_total_size: int,
+    initial_count: int,
+    initial_size: int,
+) -> ResolvedContext:
+    """Resolve files in a directory into context data."""
     text_contents: dict[Path, str] = {}
     attachments: list[dict[str, Any]] = []
     classifications: dict[Path, str] = {}
@@ -154,7 +183,7 @@ def resolve_context_files(
             if size > max_file_size:
                 warnings.append(
                     _(
-                        "File too large: {file_path} ({file_size} bytes, limit is {max_file_size} bytes)",
+                        _FILE_TOO_LARGE_MSG,
                         file_path=file_path,
                         file_size=size,
                         max_file_size=max_file_size,
@@ -166,23 +195,91 @@ def resolve_context_files(
                 warnings.append(_("Total context size limit of {max_total_size} bytes exceeded.", max_total_size=max_total_size))
                 break
 
-            kind = classify_multimodal_file(file_path)
-            if kind:
-                classifications[file_path] = kind
-                b64_data = read_binary_file_b64(file_path, max_file_size)
-                mime = get_file_type(file_path) or _MIME_FALLBACKS.get(kind, "application/octet-stream")
-                attachments.append({"type": kind, "base64": b64_data, "mime_type": mime})
-            elif is_binary_file(file_path):
-                warnings.append(_("Cannot read binary file as text: {file_path}", file_path=file_path))
-                continue
-            else:
-                text_contents[file_path] = file_path.read_text(encoding="utf-8", errors="replace")
-
-            resolved_size += size
+            if _append_dir_file_content(file_path, max_file_size, text_contents, attachments, classifications, warnings):
+                resolved_size += size
         except (OSError, UnicodeDecodeError, PromptProcessingError) as exc:
             warnings.append(str(exc))
 
     return ResolvedContext(text_contents, attachments, classifications, list(dict.fromkeys(warnings)), resolved_size)
+
+
+def resolve_context_files(
+    target_path: Path,
+    max_file_size: int = 1024 * 1024,
+    max_files: int = 100,
+    max_total_size: int = 10 * 1024 * 1024,
+    *,
+    initial_count: int = 0,
+    initial_size: int = 0,
+) -> ResolvedContext:
+    """Resolve a target file or directory into context data."""
+    if not target_path.exists():
+        raise PromptProcessingError(_("Path is neither a file nor a directory: {file_path}", file_path=target_path))
+
+    if target_path.is_file():
+        return _resolve_single_file(
+            target_path,
+            max_file_size=max_file_size,
+            max_files=max_files,
+            max_total_size=max_total_size,
+            initial_count=initial_count,
+            initial_size=initial_size,
+        )
+
+    return _resolve_directory(
+        target_path,
+        max_file_size=max_file_size,
+        max_files=max_files,
+        max_total_size=max_total_size,
+        initial_count=initial_count,
+        initial_size=initial_size,
+    )
+
+
+def _extract_mention_path(match: re.Match[str]) -> tuple[str, int, bool]:
+    """Extract path string, handling unquoted punctuation stripping, and end index."""
+    q1, q2, unquoted = match.groups()
+    if q1 is not None:
+        return q1, match.end(), True
+    if q2 is not None:
+        return q2, match.end(), True
+
+    path_str = unquoted
+    end = match.end()
+    while path_str and path_str[-1] in ".,?:;!":
+        if (
+            path_str in (".", "..")
+            or path_str.endswith(("/..", "\\..", "/.", "\\."))
+            or bool(re.match(r"^[a-zA-Z]:$", path_str))
+        ):
+            break
+        path_str = path_str[:-1]
+        end -= 1
+    return path_str, end, False
+
+
+def _resolve_mention_target(
+    path_str: str,
+    resolved_base: Path,
+    allow_traversal: bool,
+    is_quoted: bool,
+) -> Path | None:
+    """Resolve mention target path string to an existing Path or None."""
+    if not path_str:
+        return None
+
+    target = url2pathname(unquote(urlparse(path_str).path)) if path_str.startswith(("file://", "file:")) else path_str
+    path = (resolved_base / Path(target).expanduser()).resolve()
+
+    if not allow_traversal and not path.is_relative_to(resolved_base):
+        raise PromptProcessingError(_("Access to path outside working directory is not allowed: '{path_str}'", path_str=path_str))
+
+    if not path.exists():
+        if is_quoted or "/" in path_str or "\\" in path_str or path_str.startswith(("./", "../")):
+            raise PromptProcessingError(_("File or directory not found: '{path_str}'", path_str=path_str))
+        return None
+
+    return path
 
 
 def process_prompt_mentions(
@@ -208,37 +305,9 @@ def process_prompt_mentions(
     total_size = 0
 
     for match in pattern.finditer(prompt):
-        q1, q2, unquoted = match.groups()
-        if q1 is not None:
-            path_str, end, is_quoted = q1, match.end(), True
-        elif q2 is not None:
-            path_str, end, is_quoted = q2, match.end(), True
-        else:
-            path_str = unquoted
-            end = match.end()
-            is_quoted = False
-            while path_str and path_str[-1] in ".,?:;!":
-                if (
-                    path_str in (".", "..")
-                    or path_str.endswith(("/..", "\\..", "/.", "\\."))
-                    or bool(re.match(r"^[a-zA-Z]:$", path_str))
-                ):
-                    break
-                path_str = path_str[:-1]
-                end -= 1
-
-        if not path_str:
-            continue
-
-        target = url2pathname(unquote(urlparse(path_str).path)) if path_str.startswith(("file://", "file:")) else path_str
-        path = (resolved_base / Path(target).expanduser()).resolve()
-
-        if not allow_traversal and not path.is_relative_to(resolved_base):
-            raise PromptProcessingError(_("Access to path outside working directory is not allowed: '{path_str}'", path_str=path_str))
-
-        if not path.exists():
-            if is_quoted or "/" in path_str or "\\" in path_str or path_str.startswith(("./", "../")):
-                raise PromptProcessingError(_("File or directory not found: '{path_str}'", path_str=path_str))
+        path_str, end, is_quoted = _extract_mention_path(match)
+        path = _resolve_mention_target(path_str, resolved_base, allow_traversal, is_quoted)
+        if path is None:
             continue
 
         if path.is_file():

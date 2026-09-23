@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import warnings
+from typing import Any
 
 from langchain_core._api.deprecation import LangChainPendingDeprecationWarning
 from rich.console import Console
@@ -14,7 +15,7 @@ from .i18n import SUPPORTED_LOCALES, _, set_locale
 from .interfaces.cli import create_argument_parser, handle_subcommand, run_prompt_session
 from .interfaces.model_commands import ensure_model_configured
 from .interfaces.repl import OllamaREPL
-from .settings import load_settings, reset_config
+from .settings import Settings, load_settings, reset_config
 
 # Silence only the known third-party noise, not all deprecations.
 warnings.filterwarnings(
@@ -26,16 +27,29 @@ warnings.filterwarnings(
 
 def _extract_early_language(argv: list[str]) -> str | None:
     """Extract language code from CLI arguments if present and supported."""
+    flags = ("-l", "--lang", "--language")
     for i, arg in enumerate(argv):
-        if arg in ("-l", "--lang", "--language"):
-            if i + 1 < len(argv) and argv[i + 1] in SUPPORTED_LOCALES:
-                return argv[i + 1]
-        for prefix in ("-l=", "--lang=", "--language="):
-            if arg.startswith(prefix):
-                val = arg[len(prefix) :]
-                if val in SUPPORTED_LOCALES:
-                    return val
+        flag, eq, val = arg.partition("=")
+        if eq:
+            if flag in flags and val in SUPPORTED_LOCALES:
+                return val
+        elif arg in flags and i + 1 < len(argv) and argv[i + 1] in SUPPORTED_LOCALES:
+            return argv[i + 1]
     return None
+
+
+def _apply_cli_overrides(settings: Settings, args: Any) -> None:
+    """Apply CLI arguments to settings."""
+    if args.model:
+        settings.model.name = args.model
+    if args.effort:
+        settings.model.reasoning_effort = args.effort
+    if args.num_ctx:
+        settings.model.context_window = int(args.num_ctx) if args.num_ctx.isdigit() else args.num_ctx
+    if args.builtin_tool_timeout is not None:
+        settings.runtime.builtin_tool_timeout = args.builtin_tool_timeout
+    if args.allow_traversal is not None:
+        settings.runtime.allow_traversal = args.allow_traversal
 
 
 def main() -> None:
@@ -64,17 +78,7 @@ def main() -> None:
     elif settings.runtime.language:
         set_locale(settings.runtime.language)
 
-    # Apply CLI overrides
-    if args.model:
-        settings.model.name = args.model
-    if args.effort:
-        settings.model.reasoning_effort = args.effort
-    if args.num_ctx:
-        settings.model.context_window = int(args.num_ctx) if args.num_ctx.isdigit() else args.num_ctx
-    if args.builtin_tool_timeout is not None:
-        settings.runtime.builtin_tool_timeout = args.builtin_tool_timeout
-    if args.allow_traversal is not None:
-        settings.runtime.allow_traversal = args.allow_traversal
+    _apply_cli_overrides(settings, args)
 
     set_tool_timeout(settings.runtime.builtin_tool_timeout)
 

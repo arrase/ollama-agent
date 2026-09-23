@@ -157,6 +157,50 @@ def show_effort(console: Console, runtime: AgentRuntime) -> None:
         )
 
 
+def _validate_and_normalize_effort(
+    norm_effort: str,
+    thinking_cfg: dict[str, Any] | None,
+    model_name: str,
+    console: Console,
+) -> str | None:
+    if norm_effort.lower() == "default":
+        return "default"
+    if not (thinking_cfg and thinking_cfg.get("values")):
+        return norm_effort
+
+    values = thinking_cfg["values"]
+    effort_lower = norm_effort.lower()
+    has_bool_support = any(isinstance(v, bool) for v in values)
+    if effort_lower in ("false", "0", "disabled", "off"):
+        if any(v is False for v in values):
+            return "false"
+        warn_msg = _(
+            "Model '{model}' is a thinking-only model. reasoning_effort='disabled' is not supported; thinking will remain enabled.",
+            model=model_name,
+        )
+        console.print(f"[yellow]{warn_msg}[/yellow]")
+        return None
+
+    if effort_lower in ("true", "1", "enabled", "on"):
+        if has_bool_support:
+            return "true"
+        if "default" in thinking_cfg:
+            return str(thinking_cfg["default"])
+        return "default"
+
+    for v in values:
+        if str(v).lower() == effort_lower:
+            return str(v)
+
+    err_msg = _(
+        "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}",
+        effort=norm_effort,
+        valid_list=", ".join(str(v) for v in values),
+    )
+    console.print(f"[red]{err_msg}[/red]")
+    return None
+
+
 async def set_effort(
     console: Console,
     effort: str,
@@ -170,42 +214,12 @@ async def set_effort(
         return None
 
     thinking_cfg = get_model_thinking_config(runtime.model.show_info) if runtime.model else None
-    if norm_effort.lower() == "default":
-        norm_effort = "default"
-    elif thinking_cfg and thinking_cfg.get("values"):
-        values = thinking_cfg["values"]
-        effort_lower = norm_effort.lower()
-        has_bool_support = any(isinstance(v, bool) for v in values)
-        if effort_lower in ("false", "0", "disabled", "off"):
-            if any(v is False for v in values):
-                norm_effort = "false"
-            else:
-                warn_msg = _(
-                    "Model '{model}' is a thinking-only model. reasoning_effort='disabled' is not supported; thinking will remain enabled.",
-                    model=runtime.settings.model.name,
-                )
-                console.print(f"[yellow]{warn_msg}[/yellow]")
-                return None
-        elif effort_lower in ("true", "1", "enabled", "on"):
-            if has_bool_support:
-                norm_effort = "true"
-            elif "default" in thinking_cfg:
-                norm_effort = str(thinking_cfg["default"])
-            else:
-                norm_effort = "default"
-        else:
-            for v in values:
-                if str(v).lower() == effort_lower:
-                    norm_effort = str(v)
-                    break
-            else:
-                err_msg = _(
-                    "Invalid reasoning effort '{effort}'. Allowed values: {valid_list}",
-                    effort=effort,
-                    valid_list=", ".join(str(v) for v in values),
-                )
-                console.print(f"[red]{err_msg}[/red]")
-                return None
+    validated = _validate_and_normalize_effort(
+        norm_effort, thinking_cfg, runtime.settings.model.name, console
+    )
+    if validated is None:
+        return None
+    norm_effort = validated
 
     current = runtime.settings.model.reasoning_effort
     if norm_effort == current:
@@ -379,6 +393,54 @@ async def set_model_param(
     console.print(f"[green]✓ {success_msg}[/green]")
 
 
+def _prompt_user_select_model(
+    available_models: list[Any],
+    base_url: str,
+    console: Console,
+    input_func: Callable[[str], str],
+) -> str:
+    async def _fetch_tool_icons() -> list[str]:
+        return await asyncio.gather(*(_tool_icon(m.model, base_url) for m in available_models))
+
+    tool_icons = asyncio.run(_fetch_tool_icons())
+    icons_by_model = {m.model: icon for m, icon in zip(available_models, tool_icons, strict=True)}
+
+    console.print(f"[bold]{_('Available Ollama models:')}[/bold]")
+    for i, item in enumerate(available_models, start=1):
+        icon = icons_by_model[item.model]
+        size_str = f" ({item.size / (1024**3):.1f} GB)" if item.size else ""
+        console.print(f"  [cyan]{i})[/cyan] {icon} [bold]{item.model}[/bold]{size_str}")
+
+    while True:
+        try:
+            choice = input_func(_("Select a model [1-{count}]: ", count=len(available_models))).strip()
+        except (KeyboardInterrupt, EOFError):
+            raise SystemExit(1) from None
+        if not choice:
+            continue
+        if choice.isdigit() and 1 <= int(choice) <= len(available_models):
+            selected = available_models[int(choice) - 1].model
+            break
+        selected = next((m.model for m in available_models if m.model in (choice, f"{choice}:latest")), None)
+        if selected:
+            break
+        invalid_sel = _(
+            "Invalid selection '{choice}'. Please enter a number between 1 and {count} or a model name.",
+            choice=choice,
+            count=len(available_models),
+        )
+        console.print(f"[red]{invalid_sel}[/red]")
+
+    if icons_by_model.get(selected) == "[red]✗[/red]":
+        warn_msg = _(
+            "Model '{model_name}' does not support tools.\nThe agent requires tool support.",
+            model_name=selected,
+        )
+        console.print(f"[yellow]{warn_msg}[/yellow]")
+
+    return selected
+
+
 def ensure_model_configured(
     settings: Settings,
     console: Console | None = None,
@@ -420,48 +482,7 @@ def ensure_model_configured(
     else:
         console.print(f"[yellow]{_('No model is currently configured in settings.')}[/yellow]")
 
-    async def _fetch_tool_icons() -> list[str]:
-        return await asyncio.gather(*(_tool_icon(m.model, base_url) for m in available_models))
-
-    tool_icons = asyncio.run(_fetch_tool_icons())
-    icons_by_model = {m.model: icon for m, icon in zip(available_models, tool_icons, strict=True)}
-
-    console.print(f"[bold]{_('Available Ollama models:')}[/bold]")
-    for i, item in enumerate(available_models, start=1):
-        icon = icons_by_model[item.model]
-        size_str = f" ({item.size / (1024**3):.1f} GB)" if item.size else ""
-        console.print(f"  [cyan]{i})[/cyan] {icon} [bold]{item.model}[/bold]{size_str}")
-
-    while True:
-        try:
-            choice = input_func(_("Select a model [1-{count}]: ", count=len(available_models))).strip()
-        except (KeyboardInterrupt, EOFError):
-            raise SystemExit(1) from None
-        if not choice:
-            continue
-        if choice.isdigit() and 1 <= int(choice) <= len(available_models):
-            selected = available_models[int(choice) - 1].model
-            break
-        for m in available_models:
-            if m.model == choice or m.model == f"{choice}:latest":
-                selected = m.model
-                break
-        else:
-            invalid_sel = _(
-                "Invalid selection '{choice}'. Please enter a number between 1 and {count} or a model name.",
-                choice=choice,
-                count=len(available_models),
-            )
-            console.print(f"[red]{invalid_sel}[/red]")
-            continue
-        break
-
-    if icons_by_model.get(selected) == "[red]✗[/red]":
-        warn_msg = _(
-            "Model '{model_name}' does not support tools.\nThe agent requires tool support.",
-            model_name=selected,
-        )
-        console.print(f"[yellow]{warn_msg}[/yellow]")
+    selected = _prompt_user_select_model(available_models, base_url, console, input_func)
 
     settings.model.name = selected
     save_settings(settings)

@@ -129,12 +129,15 @@ class TestDispatchAndCLI(unittest.TestCase):
     def test_build_cli_handlers_requires_settings(self) -> None:
         parser = create_argument_parser()
         args = parser.parse_args(["task", "list"])
+        task_ctx = TasksContext(console=_console())
+        rag_ctx = RAGContext(rag_manager=RAGManager(RAGSettings()), console=_console())
+        skills_ctx = SkillsContext(console=_console())
         with self.assertRaises(TypeError):
             build_cli_handlers(
                 args,
-                task_ctx=TasksContext(console=_console()),
-                rag_ctx=RAGContext(rag_manager=RAGManager(RAGSettings()), console=_console()),
-                skills_ctx=SkillsContext(console=_console()),
+                task_ctx=task_ctx,
+                rag_ctx=rag_ctx,
+                skills_ctx=skills_ctx,
             )
 
     def test_argument_parser_agents_subcommand(self) -> None:
@@ -432,12 +435,13 @@ class TestDispatchAndCLI(unittest.TestCase):
     def test_handle_cli_commands_task_run_validation_error(self) -> None:
         parser = create_argument_parser()
         args = parser.parse_args(["task", "run", "my-task", "invalid_var"])
+        settings = Settings()
         with (
             patch("sys.stdout", new_callable=io.StringIO),
             patch("sys.stderr", new_callable=io.StringIO),
         ):
             with self.assertRaises(SystemExit) as cm:
-                handle_cli_commands(args, Settings())
+                handle_cli_commands(args, settings)
             self.assertEqual(cm.exception.code, 1)
 
     def test_extract_early_language(self) -> None:

@@ -61,7 +61,7 @@ class TestPromptProcessor(unittest.TestCase):
         file.write_bytes(b"\x89PNG\r\n\x1a\n")
         b64 = read_binary_file_b64(file)
         self.assertIsInstance(b64, str)
-        self.assertTrue(len(b64) > 0)
+        self.assertGreater(len(b64), 0)
 
     def test_resolve_context_files_text_file(self) -> None:
         file = self.base_path / "notes.md"
@@ -172,7 +172,7 @@ class TestPromptProcessor(unittest.TestCase):
         self.assertIn("print('world')", processed)
 
     def test_get_file_type_typescript_classified_as_text(self) -> None:
-        self.assertEqual(classify_multimodal_file(Path("index.ts")), None)
+        self.assertIsNone(classify_multimodal_file(Path("index.ts")))
 
     def test_process_prompt_mentions_with_file_uri(self) -> None:
         file = self.base_path / "service.py"

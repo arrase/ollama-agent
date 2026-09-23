@@ -35,8 +35,6 @@ class MCPServerStatus:
 async def check_mcp_server(
     name: str,
     cfg: dict[str, Any],
-    *,
-    timeout: float = DEFAULT_MCP_TIMEOUT,
 ) -> MCPServerStatus:
     """Connect to an MCP server and probe available tools."""
     try:
@@ -48,7 +46,7 @@ async def check_mcp_server(
     target = f"{conn['command']} {' '.join(conn['args'])}".strip() if "command" in conn else conn["url"]
 
     try:
-        async with asyncio.timeout(timeout):
+        async with asyncio.timeout(DEFAULT_MCP_TIMEOUT):
             client = MultiServerMCPClient({name: conn})  # type: ignore[dict-item,arg-type]
             tools = await client.get_tools()
     except TimeoutError:
@@ -58,7 +56,7 @@ async def check_mcp_server(
             target=target,
             status="failed",
             tools=[],
-            error=_("Connection timed out ({timeout}s)", timeout=int(timeout)),
+            error=_("Connection timed out ({timeout}s)", timeout=int(DEFAULT_MCP_TIMEOUT)),
         )
     except Exception as exc:
         return MCPServerStatus(name=name, transport=transport, target=target, status="failed", tools=[], error=str(exc))

@@ -69,6 +69,55 @@ def _resolve_env(env: dict[str, str], server_name: str) -> dict[str, str]:
     return {key: _ENV_RE.sub(_replace, str(value)) for key, value in env.items()}
 
 
+def _build_stdio_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, Any]:
+    command = cfg["command"]
+    if not isinstance(command, str) or not command.strip():
+        raise MCPConfigError(_("MCP server '{name}': 'command' must be a non-empty string", name=server_name))
+    args = []
+    if "args" in cfg:
+        args = cfg["args"]
+    if not isinstance(args, list):
+        raise MCPConfigError(_("MCP server '{name}': 'args' must be a list", name=server_name))
+    out: dict[str, Any] = {
+        "transport": "stdio",
+        "command": command,
+        "args": args,
+    }
+    if "cwd" in cfg:
+        out["cwd"] = cfg["cwd"]
+    if "env" in cfg:
+        if not isinstance(cfg["env"], dict):
+            raise MCPConfigError(_("MCP server '{name}': 'env' must be an object", name=server_name))
+        out["env"] = _resolve_env(cfg["env"], server_name)
+    return out
+
+
+def _build_url_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, Any]:
+    url = cfg["url"]
+    if not isinstance(url, str) or not url.strip():
+        raise MCPConfigError(_("MCP server '{name}': 'url' must be a non-empty string", name=server_name))
+    if "transport" in cfg:
+        transport = cfg["transport"]
+    elif "type" in cfg:
+        transport = cfg["type"]
+    else:
+        transport = "http"
+
+    if transport not in _KNOWN_TRANSPORTS:
+        raise MCPConfigError(
+            _(
+                "MCP server '{name}': unsupported transport '{transport}'",
+                name=server_name,
+                transport=transport,
+            )
+        )
+    out = {"transport": transport, "url": url}
+    for k in ("headers", "timeout", "sse_read_timeout", "session_kwargs"):
+        if k in cfg:
+            out[k] = cfg[k]
+    return out
+
+
 def _build_mcp_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, Any]:
     """Build a MultiServerMCPClient connection dict from a server config.
 
@@ -76,52 +125,9 @@ def _build_mcp_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, An
     unsupported transport.
     """
     if "command" in cfg:
-        command = cfg["command"]
-        if not isinstance(command, str) or not command.strip():
-            raise MCPConfigError(_("MCP server '{name}': 'command' must be a non-empty string", name=server_name))
-        args = []
-        if "args" in cfg:
-            args = cfg["args"]
-        if not isinstance(args, list):
-            raise MCPConfigError(_("MCP server '{name}': 'args' must be a list", name=server_name))
-        out: dict[str, Any] = {
-            "transport": "stdio",
-            "command": command,
-            "args": args,
-        }
-        if "cwd" in cfg:
-            out["cwd"] = cfg["cwd"]
-        if "env" in cfg:
-            if not isinstance(cfg["env"], dict):
-                raise MCPConfigError(_("MCP server '{name}': 'env' must be an object", name=server_name))
-            out["env"] = _resolve_env(cfg["env"], server_name)
-        return out
-
+        return _build_stdio_connection(server_name, cfg)
     if "url" in cfg:
-        url = cfg["url"]
-        if not isinstance(url, str) or not url.strip():
-            raise MCPConfigError(_("MCP server '{name}': 'url' must be a non-empty string", name=server_name))
-        if "transport" in cfg:
-            transport = cfg["transport"]
-        elif "type" in cfg:
-            transport = cfg["type"]
-        else:
-            transport = "http"
-
-        if transport not in _KNOWN_TRANSPORTS:
-            raise MCPConfigError(
-                _(
-                    "MCP server '{name}': unsupported transport '{transport}'",
-                    name=server_name,
-                    transport=transport,
-                )
-            )
-        out = {"transport": transport, "url": url}
-        for k in ("headers", "timeout", "sse_read_timeout", "session_kwargs"):
-            if k in cfg:
-                out[k] = cfg[k]
-        return out
-
+        return _build_url_connection(server_name, cfg)
     raise MCPConfigError(_("MCP server '{name}': requires either 'command' or 'url'", name=server_name))
 
 

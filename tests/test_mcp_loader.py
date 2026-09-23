@@ -351,7 +351,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         mock_client.get_tools = AsyncMock(side_effect=TimeoutError())
 
         with patch("ollama_agent.mcp.commands.MultiServerMCPClient", return_value=mock_client):
-            status = await check_mcp_server("slow-server", cfg, timeout=1.0)
+            status = await check_mcp_server("slow-server", cfg)
             self.assertEqual(status.name, "slow-server")
             self.assertEqual(status.status, "failed")
             self.assertEqual(status.transport, "http")
@@ -378,10 +378,11 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             tmp.write("{invalid-json")
             tmp_path = Path(tmp.name)
 
+        settings = Settings()
         try:
             with patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path):
                 with self.assertRaises(MCPConfigError):
-                    await list_mcp_servers(console, settings=Settings())
+                    await list_mcp_servers(console, settings=settings)
         finally:
             tmp_path.unlink(missing_ok=True)
 

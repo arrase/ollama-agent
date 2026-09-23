@@ -122,13 +122,12 @@ class AgentRuntime:
             model_settings=self.settings.model,
             should_interrupt_tool=should_interrupt_tool,
         )
-        checkpointer_coro = self._get_memory_checkpointer() if self.stealth_mode else self._sqlite_checkpointer()
+        checkpointer = self._get_memory_checkpointer() if self.stealth_mode else await self._sqlite_checkpointer()
 
-        model, mcp_tools, subagents, checkpointer = await asyncio.gather(
+        model, mcp_tools, subagents = await asyncio.gather(
             model_coro,
             mcp_coro,
             subagents_coro,
-            checkpointer_coro,
         )
         await ensure_model_supports_tools(
             ms.name,
@@ -231,7 +230,7 @@ class AgentRuntime:
 
         return create_deep_agent(**kwargs)
 
-    async def _get_memory_checkpointer(self) -> MemorySaver:
+    def _get_memory_checkpointer(self) -> MemorySaver:
         if self._memory_checkpointer is None:
             self._memory_checkpointer = MemorySaver()
         return self._memory_checkpointer
@@ -256,6 +255,38 @@ class AgentRuntime:
     # Public API
     # -------------------------------------------------------------------
 
+    def _prepare_stream_inputs(
+        self,
+        prompt: str | Command,
+    ) -> tuple[dict[str, Any] | Command, str | None]:
+        if isinstance(prompt, Command):
+            return prompt, None
+
+        try:
+            mentions_cfg = self.settings.mentions
+            processed_prompt, attachments, mention_warnings = process_prompt_mentions(
+                prompt,
+                max_file_size=mentions_cfg.max_file_size,
+                max_files=mentions_cfg.max_files,
+                max_total_size=mentions_cfg.max_total_size,
+                allow_traversal=self.settings.runtime.allow_traversal,
+            )
+        except PromptProcessingError as exc:
+            return {}, str(exc)
+
+        for warning in mention_warnings:
+            _log.warning(warning)
+
+        if attachments:
+            user_msg = {
+                "role": "user",
+                "content": [{"type": "text", "text": processed_prompt}] + attachments,
+            }
+        else:
+            user_msg = {"role": "user", "content": processed_prompt}
+
+        return {"messages": [user_msg]}, None
+
     async def run_streamed(
         self,
         prompt: str | Command,
@@ -267,37 +298,10 @@ class AgentRuntime:
         set_active_thread_id(thread)
         hide_reasoning = self.settings.model.reasoning_effort in ("hide", "disabled", "false", "0", "off")
 
-        inputs: dict[str, Any] | Command
-        if isinstance(prompt, Command):
-            inputs = prompt
-        else:
-            # 1. Process prompt mentions
-            try:
-                mentions_cfg = self.settings.mentions
-                processed_prompt, attachments, mention_warnings = process_prompt_mentions(
-                    prompt,
-                    max_file_size=mentions_cfg.max_file_size,
-                    max_files=mentions_cfg.max_files,
-                    max_total_size=mentions_cfg.max_total_size,
-                    allow_traversal=self.settings.runtime.allow_traversal,
-                )
-            except PromptProcessingError as exc:
-                yield {"type": "error", "content": str(exc)}
-                return
-
-            for warning in mention_warnings:
-                _log.warning(warning)
-
-            # 2. Construct user message (multimodal vs text-only)
-            if attachments:
-                user_msg = {
-                    "role": "user",
-                    "content": [{"type": "text", "text": processed_prompt}] + attachments,
-                }
-            else:
-                user_msg = {"role": "user", "content": processed_prompt}
-
-            inputs = {"messages": [user_msg]}
+        inputs, error = self._prepare_stream_inputs(prompt)
+        if error:
+            yield {"type": "error", "content": error}
+            return
 
         parser = ThinkTagParser()
         async for mode, event in graph.astream(

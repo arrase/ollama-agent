@@ -72,6 +72,31 @@ def load_past_user_prompts(db_path: Path = HISTORY_DB_PATH) -> list[str]:
     return prompts
 
 
+def _read_history_checkpoints(cursor: sqlite3.Cursor, exclude_thread_id: str) -> dict[str, str]:
+    thread_timestamps: dict[str, str] = {}
+    cursor.execute("SELECT thread_id, type, checkpoint FROM checkpoints ORDER BY rowid ASC")
+    for tid, typ, chk in cursor.fetchall():
+        if exclude_thread_id and tid.startswith(exclude_thread_id):
+            continue
+        c = _serializer.loads_typed((typ, chk))
+        thread_timestamps[tid] = str(c["ts"])
+    return thread_timestamps
+
+
+def _read_history_messages(cursor: sqlite3.Cursor, exclude_thread_id: str) -> defaultdict[str, list[Any]]:
+    thread_messages: defaultdict[str, list[Any]] = defaultdict(list)
+    cursor.execute("SELECT thread_id, type, value FROM writes WHERE channel = 'messages' ORDER BY rowid ASC")
+    for tid, typ, val in cursor.fetchall():
+        if exclude_thread_id and tid.startswith(exclude_thread_id):
+            continue
+        msgs = _serializer.loads_typed((typ, val))
+        if isinstance(msgs, list):
+            thread_messages[tid].extend(msgs)
+        else:
+            thread_messages[tid].append(msgs)
+    return thread_messages
+
+
 def load_past_conversations(
     db_path: Path = HISTORY_DB_PATH,
     exclude_thread_id: str = "",
@@ -83,28 +108,11 @@ def load_past_conversations(
     if not db_path.exists():
         return {}
 
-    thread_timestamps: dict[str, str] = {}
-    thread_messages: defaultdict[str, list[Any]] = defaultdict(list)
-
     try:
         with connect_history(db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT thread_id, type, checkpoint FROM checkpoints ORDER BY rowid ASC")
-            for tid, typ, chk in cursor.fetchall():
-                if exclude_thread_id and tid.startswith(exclude_thread_id):
-                    continue
-                c = _serializer.loads_typed((typ, chk))
-                thread_timestamps[tid] = str(c["ts"])
-
-            cursor.execute("SELECT thread_id, type, value FROM writes WHERE channel = 'messages' ORDER BY rowid ASC")
-            for tid, typ, val in cursor.fetchall():
-                if exclude_thread_id and tid.startswith(exclude_thread_id):
-                    continue
-                msgs = _serializer.loads_typed((typ, val))
-                if isinstance(msgs, list):
-                    thread_messages[tid].extend(msgs)
-                else:
-                    thread_messages[tid].append(msgs)
+            thread_timestamps = _read_history_checkpoints(cursor, exclude_thread_id)
+            thread_messages = _read_history_messages(cursor, exclude_thread_id)
     except (sqlite3.Error, OSError) as e:
         raise HistoryError(_("Failed to read history database {db_path}: {e}", db_path=db_path, e=e)) from e
 
@@ -127,6 +135,33 @@ def _format_snippet(role: str, text: str) -> str:
     return f"[{role_label}]: {truncated}"
 
 
+def _score_conversation(data: dict[str, Any], terms: list[str]) -> tuple[int, list[str]]:
+    msgs = data["messages"]
+    formatted_date = data["formatted_date"]
+
+    dialogue: list[tuple[str, str]] = []
+    for msg in msgs:
+        if msg.type in ("human", "ai", "user", "assistant"):
+            text = extract_text(msg.content).strip()
+            if text:
+                dialogue.append((msg.type, text))
+
+    snippets: list[str] = []
+    match_count = sum(formatted_date.lower().count(t) for t in terms)
+
+    for role, text in dialogue:
+        term_hits = sum(text.lower().count(t) for t in terms)
+        if term_hits > 0:
+            match_count += term_hits
+            if len(snippets) < 4:
+                snippets.append(_format_snippet(role, text))
+
+    if match_count > 0 and not snippets:
+        snippets = [_format_snippet(r, t) for r, t in dialogue[:2]]
+
+    return match_count, snippets
+
+
 def search_past_conversations_in_db(
     query: str,
     db_path: Path = HISTORY_DB_PATH,
@@ -142,39 +177,16 @@ def search_past_conversations_in_db(
     scored_results: list[dict[str, Any]] = []
 
     for tid, data in conversations.items():
-        msgs = data["messages"]
-        raw_ts = data["timestamp"]
-        formatted_date = data["formatted_date"]
-
-        dialogue: list[tuple[str, str]] = []
-        for msg in msgs:
-            if msg.type in ("human", "ai", "user", "assistant"):
-                text = extract_text(msg.content).strip()
-                if text:
-                    dialogue.append((msg.type, text))
-
-        snippets: list[str] = []
-        match_count = sum(formatted_date.lower().count(t) for t in terms)
-
-        for role, text in dialogue:
-            term_hits = sum(text.lower().count(t) for t in terms)
-            if term_hits > 0:
-                match_count += term_hits
-                if len(snippets) < 4:
-                    snippets.append(_format_snippet(role, text))
-
+        match_count, snippets = _score_conversation(data, terms)
         if match_count > 0:
-            if not snippets:
-                snippets = [_format_snippet(r, t) for r, t in dialogue[:2]]
-
             scored_results.append(
                 {
                     "thread_id": tid,
                     "score": match_count,
-                    "timestamp": raw_ts,
-                    "formatted_date": formatted_date,
+                    "timestamp": data["timestamp"],
+                    "formatted_date": data["formatted_date"],
                     "snippets": snippets,
-                    "total_messages": len(msgs),
+                    "total_messages": len(data["messages"]),
                 }
             )
 
