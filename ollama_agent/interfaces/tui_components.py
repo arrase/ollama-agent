@@ -29,6 +29,33 @@ _log = logging.getLogger(__name__)
 # ─── Header ──────────────────────────────────────────────────────────────────
 
 
+def _format_context_info(tokens: float, eff_ctx: Any, ms_context_window: Any) -> str:
+    num_ctx = 0
+    if isinstance(eff_ctx, int) and eff_ctx > 0:
+        num_ctx = eff_ctx
+    elif str(ms_context_window).isdigit():
+        num_ctx = int(ms_context_window)
+
+    if num_ctx <= 0:
+        return ""
+
+    pct = int((tokens / num_ctx) * 100)
+    if pct > 90:
+        color = "#f87171"
+    elif pct > 75:
+        color = "#fbbf24"
+    else:
+        color = "#38bdf8"
+
+    tok_str = f"{tokens / 1000:.1f}k" if tokens >= 1000 else str(int(tokens))
+    ctx_str = f"{num_ctx / 1000:.1f}k" if num_ctx >= 1000 else str(int(num_ctx))
+    ctx_label = _("Context:")
+    return (
+        f"  [#30363d]│[/]  [bold #8b949e]{ctx_label}[/bold #8b949e] "
+        f"[bold {color}]{tok_str}/{ctx_str} ({pct}%)[/bold {color}]"
+    )
+
+
 class AgentHeader(Static):
     """Dynamic TUI Header displaying agent status information."""
 
@@ -44,24 +71,7 @@ class AgentHeader(Static):
         ms = self.repl.runtime.settings.model
         tokens = self.repl.runtime.last_context_tokens
         eff_ctx = self.repl.runtime.effective_context_window
-        num_ctx = (
-            eff_ctx
-            if (isinstance(eff_ctx, int) and eff_ctx > 0)
-            else (int(ms.context_window) if str(ms.context_window).isdigit() else 0)
-        )
-
-        if num_ctx > 0:
-            pct = int((tokens / num_ctx) * 100)
-            color = "#f87171" if pct > 90 else "#fbbf24" if pct > 75 else "#38bdf8"
-            tok_str = f"{tokens / 1000:.1f}k" if tokens >= 1000 else str(int(tokens))
-            ctx_str = f"{num_ctx / 1000:.1f}k" if num_ctx >= 1000 else str(int(num_ctx))
-            ctx_label = _("Context:")
-            ctx_info = (
-                f"  [#30363d]│[/]  [bold #8b949e]{ctx_label}[/bold #8b949e] "
-                f"[bold {color}]{tok_str}/{ctx_str} ({pct}%)[/bold {color}]"
-            )
-        else:
-            ctx_info = ""
+        ctx_info = _format_context_info(tokens, eff_ctx, ms.context_window)
 
         rag_ctx = self.repl._rag_ctx
         rag_db = rag_ctx.rag_manager.current_database if rag_ctx else None
@@ -286,89 +296,93 @@ class ReplInput(TextArea):
             self.input = input_widget
             self.value = value
 
-    def _handle_autocomplete_key(self, event: events.Key, app: Any, autolist: OptionList) -> bool:
-        if not autolist.display or autolist.option_count == 0:
-            return False
-
-        if event.key == "down":
-            event.stop()
-            event.prevent_default()
+    def _navigate_autocomplete(self, key: str, autolist: OptionList) -> None:
+        if key == "down":
             if autolist.highlighted is None:
                 autolist.highlighted = 0
             elif autolist.highlighted < autolist.option_count - 1:
                 autolist.highlighted += 1
-            return True
-        elif event.key == "up":
+        elif key == "up" and autolist.highlighted is not None and autolist.highlighted > 0:
+            autolist.highlighted -= 1
+
+    def _handle_autocomplete_key(self, event: events.Key, app: Any, autolist: OptionList) -> bool:
+        if not autolist.display or autolist.option_count == 0:
+            return False
+
+        if event.key in ("down", "up"):
             event.stop()
             event.prevent_default()
-            if autolist.highlighted is not None and autolist.highlighted > 0:
-                autolist.highlighted -= 1
+            self._navigate_autocomplete(event.key, autolist)
             return True
-        elif event.key == "tab":
+        if event.key == "tab":
             event.stop()
             event.prevent_default()
             if autolist.highlighted is not None:
                 app.accept_completion(autolist.highlighted)
             return True
-        elif event.key == "escape":
+        if event.key == "escape":
             event.stop()
             event.prevent_default()
             app.hide_autocomplete()
             return True
-        elif event.key == "enter":
-            if autolist.highlighted is not None:
+        if event.key == "enter" and autolist.highlighted is not None:
+            event.stop()
+            event.prevent_default()
+            app.accept_completion(autolist.highlighted)
+            return True
+        return False
+
+    def _handle_history_up(self, event: events.Key) -> bool:
+        if self.document.line_count > 1:
+            row, col = self.cursor_location
+            if row > 0:
+                return False
+            if col > 0:
+                self.action_cursor_line_start()
                 event.stop()
                 event.prevent_default()
-                app.accept_completion(autolist.highlighted)
                 return True
-            return False
-        return False
+        event.stop()
+        event.prevent_default()
+        if self._history:
+            if self._history_index == len(self._history):
+                self._temp_input = self.text
+            if self._history_index > 0:
+                self._history_index -= 1
+                self.text = self._history[self._history_index]
+                self.action_cursor_line_end()
+                self._update_height()
+        return True
+
+    def _handle_history_down(self, event: events.Key) -> bool:
+        if self.document.line_count > 1:
+            row, col = self.cursor_location
+            last_row = self.document.line_count - 1
+            if row < last_row:
+                return False
+            last_line_len = len(self.document.get_line(last_row))
+            if col < last_line_len:
+                self.action_cursor_line_end()
+                event.stop()
+                event.prevent_default()
+                return True
+        event.stop()
+        event.prevent_default()
+        if self._history and self._history_index < len(self._history):
+            self._history_index += 1
+            if self._history_index == len(self._history):
+                self.text = self._temp_input
+            else:
+                self.text = self._history[self._history_index]
+            self.action_cursor_line_end()
+            self._update_height()
+        return True
 
     def _handle_history_key(self, event: events.Key) -> bool:
         if event.key == "up":
-            if self.document.line_count > 1:
-                row, col = self.cursor_location
-                if row > 0:
-                    return False
-                if col > 0:
-                    self.action_cursor_line_start()
-                    event.stop()
-                    event.prevent_default()
-                    return True
-            event.stop()
-            event.prevent_default()
-            if self._history:
-                if self._history_index == len(self._history):
-                    self._temp_input = self.text
-                if self._history_index > 0:
-                    self._history_index -= 1
-                    self.text = self._history[self._history_index]
-                    self.action_cursor_line_end()
-                    self._update_height()
-            return True
-        elif event.key == "down":
-            if self.document.line_count > 1:
-                row, col = self.cursor_location
-                last_row = self.document.line_count - 1
-                if row < last_row:
-                    return False
-                last_line_len = len(self.document.get_line(last_row))
-                if col < last_line_len:
-                    self.action_cursor_line_end()
-                    event.stop()
-                    event.prevent_default()
-                    return True
-            event.stop()
-            event.prevent_default()
-            if self._history and self._history_index < len(self._history):
-                self._history_index += 1
-                if self._history_index == len(self._history):
-                    self.text = self._temp_input
-                else:
-                    self.text = self._history[self._history_index]
-                self.action_cursor_line_end()
-                self._update_height()
-            return True
+            return self._handle_history_up(event)
+        if event.key == "down":
+            return self._handle_history_down(event)
         return False
 
     def on_key(self, event: events.Key) -> None:
@@ -559,6 +573,13 @@ class ToolApprovalWidget(Container):
     """Inline widget prompting the user for approval of sensitive tool calls."""
 
     BUTTON_IDS = ["approve-btn", "reject-btn", "allow-btn", "cancel-btn"]
+    DECISION_KEYS = {
+        "y": "approve-btn",
+        "n": "reject-btn",
+        "a": "allow-btn",
+        "c": "cancel-btn",
+        "escape": "cancel-btn",
+    }
 
     def __init__(
         self,
@@ -601,37 +622,37 @@ class ToolApprovalWidget(Container):
         event.stop()
         self._handle_decision(event.button.id)
 
+    def _cycle_button_focus(self, forward: bool) -> None:
+        focused = self.app.focused
+        current_id = focused.id if focused and focused.id in self.BUTTON_IDS else None
+        if forward:
+            idx = self.BUTTON_IDS.index(current_id) if current_id else -1
+            target_id = self.BUTTON_IDS[(idx + 1) % len(self.BUTTON_IDS)]
+        else:
+            idx = self.BUTTON_IDS.index(current_id) if current_id else 0
+            target_id = self.BUTTON_IDS[(idx - 1) % len(self.BUTTON_IDS)]
+        self.query_one(f"#{target_id}", Button).focus()
+
     def on_key(self, event: events.Key) -> None:
         key = event.key.lower()
-        if key == "y":
+        if key in self.DECISION_KEYS:
             event.stop()
-            self._handle_decision("approve-btn")
-        elif key == "n":
-            event.stop()
-            self._handle_decision("reject-btn")
-        elif key == "a":
-            event.stop()
-            self._handle_decision("allow-btn")
-        elif key in ("c", "escape"):
-            event.stop()
-            self._handle_decision("cancel-btn")
-        elif key in ("left", "up", "shift+tab"):
+            self._handle_decision(self.DECISION_KEYS[key])
+            return
+
+        if key in ("left", "up", "shift+tab"):
             event.stop()
             event.prevent_default()
-            focused = self.app.focused
-            current_id = focused.id if focused and focused.id in self.BUTTON_IDS else None
-            idx = self.BUTTON_IDS.index(current_id) if current_id else 0
-            prev_id = self.BUTTON_IDS[(idx - 1) % len(self.BUTTON_IDS)]
-            self.query_one(f"#{prev_id}", Button).focus()
-        elif key in ("right", "down", "tab"):
+            self._cycle_button_focus(forward=False)
+            return
+
+        if key in ("right", "down", "tab"):
             event.stop()
             event.prevent_default()
-            focused = self.app.focused
-            current_id = focused.id if focused and focused.id in self.BUTTON_IDS else None
-            idx = self.BUTTON_IDS.index(current_id) if current_id else -1
-            next_id = self.BUTTON_IDS[(idx + 1) % len(self.BUTTON_IDS)]
-            self.query_one(f"#{next_id}", Button).focus()
-        elif key in ("enter", "space"):
+            self._cycle_button_focus(forward=True)
+            return
+
+        if key in ("enter", "space"):
             focused = self.app.focused
             decision = focused.id if focused and focused.id in self.BUTTON_IDS else "approve-btn"
             event.stop()

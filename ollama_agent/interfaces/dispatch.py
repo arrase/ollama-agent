@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import inspect
+from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 from rich.console import Console
@@ -154,22 +155,212 @@ def build_cli_handlers(
     }
 
 
+@dataclass(slots=True)
+class REPLEnvironment:
+    task_ctx: TasksContext
+    skills_ctx: SkillsContext
+    get_rag_ctx: Callable[[], RAGContext]
+    console: Console
+    current_model: Callable[[], str]
+    base_url: Callable[[], str]
+    switch_model: Callable[[str], Awaitable[None]]
+    handle_yolo: Callable[[list[str]], object]
+    handle_stealth: Callable[[list[str]], object]
+    handle_queue: Callable[[list[str]], object]
+    get_runtime: Callable[[], Any]
+    current_thread_id: Callable[[], str]
+    switch_effort: Callable[[str], Awaitable[None]]
+    switch_context_window: Callable[[str], Awaitable[None]]
+
+    def handle_agents(self, args: list[str]) -> object:
+        if not args or args[0] == "list":
+            return list_subagents(self.console, settings=self.get_runtime().settings)
+        err_msg = _("Unknown agents subcommand '{sub}'. Usage: /agents [list]", sub=args[0])
+        self.console.print(f"[red]{err_msg}[/red]")
+        return None
+
+    def handle_mcp(self, args: list[str]) -> object:
+        if not args or args[0] in ("list", "status"):
+            return list_mcp_servers(self.console, settings=self.get_runtime().settings)
+        if args[0] == "reload":
+            return reload_mcp_servers(self.console, runtime=self.get_runtime())
+        err_msg = _("Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]", sub=args[0])
+        self.console.print(f"[red]{err_msg}[/red]")
+        return None
+
+    def handle_model(self, args: list[str]) -> object:
+        if not args or args[0] == "list":
+            return list_models(self.console, self.current_model(), self.base_url())
+        if args[0] in ("set", "use", "switch"):
+            if len(args) > 1:
+                return self.switch_model(args[1])
+            self.console.print(f"[red]{_('Usage: /model [list | set <model>]')}[/red]")
+            return None
+        if len(args) == 1:
+            return self.switch_model(args[0])
+        self.console.print(f"[red]{_('Usage: /model [list | set <model>]')}[/red]")
+        return None
+
+    def handle_effort(self, args: list[str]) -> object:
+        if not args:
+            show_effort(self.console, self.get_runtime())
+            return None
+        if args[0] in ("set", "use", "switch"):
+            if len(args) == 2:
+                return self.switch_effort(args[1])
+            self.console.print(f"[red]{_('Usage: /effort [set <level>]')}[/red]")
+            return None
+        if len(args) == 1:
+            return self.switch_effort(args[0])
+        self.console.print(f"[red]{_('Usage: /effort [set <level>]')}[/red]")
+        return None
+
+    def handle_context(self, args: list[str]) -> object:
+        if not args:
+            show_context_window(self.console, self.get_runtime())
+            return None
+        if args[0] in ("set", "use", "switch"):
+            if len(args) == 2:
+                return self.switch_context_window(args[1])
+            self.console.print(f"[red]{_('Usage: /context [set <size>]')}[/red]")
+            return None
+        if len(args) == 1:
+            return self.switch_context_window(args[0])
+        self.console.print(f"[red]{_('Usage: /context [set <size>]')}[/red]")
+        return None
+
+    def handle_params(self, args: list[str]) -> object:
+        if not args or args[0] == "list":
+            show_model_params(self.console, self.get_runtime())
+            return None
+        if args[0] == "set":
+            if len(args) < 3:
+                self.console.print(
+                    f"[red]{_('Usage: /params set <parameter> <value>')}[/red]\n"
+                    f"[dim]{_('Example: /params set temperature 0.7')}[/dim]"
+                )
+                return None
+            return set_model_param(self.console, args[1], args[2], runtime=self.get_runtime())
+        self.console.print(f"[red]{_('Usage: /params [list | set <parameter> <value>]')}[/red]")
+        return None
+
+    def handle_task(self, args: list[str]) -> object:
+        if not args or args[0] == "list":
+            list_tasks(self.task_ctx)
+            return None
+        sub = args[0]
+        if sub == "delete":
+            if len(args) < 2:
+                self.console.print(f"[red]{_('Usage: /task delete <id>')}[/red]")
+                return None
+            delete_task(self.task_ctx, args[1])
+            return None
+        err_msg = _("Unknown task subcommand '{sub}'. Usage: /task [list | delete <id>]", sub=sub)
+        self.console.print(f"[red]{err_msg}[/red]")
+        return None
+
+    def handle_skill(self, args: list[str]) -> object:
+        if not args or args[0] == "list":
+            list_skills(self.skills_ctx)
+            return None
+        sub = args[0]
+        if sub == "show":
+            if len(args) < 2:
+                self.console.print(f"[red]{_('Usage: /skill show <id>')}[/red]")
+                return None
+            show_skill(self.skills_ctx, args[1])
+            return None
+        if sub == "delete":
+            if len(args) < 2:
+                self.console.print(f"[red]{_('Usage: /skill delete <id>')}[/red]")
+                return None
+            delete_skill(self.skills_ctx, args[1])
+            return None
+        err_msg = _("Unknown skill subcommand '{sub}'. Usage: /skill [list | show <id> | delete <id>]", sub=sub)
+        self.console.print(f"[red]{err_msg}[/red]")
+        return None
+
+    def _handle_rag_add(self, sub_args: list[str]) -> object:
+        is_dir = "--dir" in sub_args
+        paths = [a for a in sub_args if a != "--dir"]
+        if not paths:
+            self.console.print(f"[red]{_('Usage: /rag add <path> [--dir]')}[/red]")
+            return None
+        target_path = " ".join(paths).strip("\"'")
+        if is_dir:
+            return add_rag_directory(self.get_rag_ctx(), target_path)
+        return add_rag_file(self.get_rag_ctx(), target_path)
+
+    def handle_rag(self, args: list[str]) -> object:
+        if not args or args[0] == "status":
+            show_rag_status(self.get_rag_ctx())
+            return None
+        sub = args[0]
+        if sub == "list":
+            list_rag_databases(self.get_rag_ctx())
+            return None
+        if sub == "create":
+            if len(args) < 2:
+                self.console.print(f"[red]{_('Usage: /rag create <name>')}[/red]")
+                return None
+            create_rag_database(self.get_rag_ctx(), args[1])
+            return None
+        if sub == "delete":
+            if len(args) < 2:
+                self.console.print(f"[red]{_('Usage: /rag delete <name>')}[/red]")
+                return None
+            delete_rag_database(self.get_rag_ctx(), args[1])
+            return self.get_runtime().reload()
+        if sub == "load":
+            if len(args) < 2:
+                self.console.print(f"[red]{_('Usage: /rag load <name>')}[/red]")
+                return None
+            load_rag_database(self.get_rag_ctx(), args[1])
+            return self.get_runtime().reload()
+        if sub == "unload":
+            unload_rag_database(self.get_rag_ctx())
+            return self.get_runtime().reload()
+        if sub == "add":
+            return self._handle_rag_add(args[1:])
+        err_msg = _(
+            "Unknown rag subcommand '{sub}'. Usage: /rag [status | list | create | delete | load | unload | add]",
+            sub=sub,
+        )
+        self.console.print(f"[red]{err_msg}[/red]")
+        return None
+
+    def handle_session(self, args: list[str]) -> object:
+        if not args or args[0] == "list":
+            list_sessions(self.console, current_thread_id=self.current_thread_id())
+            return None
+        sub = args[0]
+        if sub == "search":
+            if len(args) < 2:
+                self.console.print(f"[red]{_('Usage: /session search <query>')}[/red]")
+                return None
+            search_sessions(
+                self.console,
+                " ".join(args[1:]),
+                current_thread_id=self.current_thread_id(),
+            )
+            return None
+        if sub == "delete":
+            if len(args) < 2:
+                self.console.print(f"[red]{_('Usage: /session delete <session_id>')}[/red]")
+                return None
+            delete_session(self.console, args[1])
+            return None
+        err_msg = _(
+            "Unknown session subcommand '{sub}'. Usage: /session [list | search <query> | delete <id>]",
+            sub=sub,
+        )
+        self.console.print(f"[red]{err_msg}[/red]")
+        return None
+
+
 def build_repl_handlers(
-    *,
-    task_ctx: TasksContext,
-    skills_ctx: SkillsContext,
-    get_rag_ctx: Callable[[], RAGContext],
-    console: Console,
-    current_model: Callable[[], str],
-    base_url: Callable[[], str],
-    switch_model: Callable[[str], Awaitable[None]],
-    handle_yolo: Callable[[list[str]], object],
-    handle_stealth: Callable[[list[str]], object],
-    handle_queue: Callable[[list[str]], object],
-    get_runtime: Callable[[], Any],
-    current_thread_id: Callable[[], str],
-    switch_effort: Callable[[str], Awaitable[None]],
-    switch_context_window: Callable[[str], Awaitable[None]],
+    env: REPLEnvironment | None = None,
+    **kwargs: Any,
 ) -> dict[str, REPLHandler]:
     """Build the REPL command registry for unified slash commands.
 
@@ -177,201 +368,21 @@ def build_repl_handlers(
     (/exit, /quit, /clear, /new, /session new|resume|switch|export,
     /task create|run and /skill create are handled by OllamaAgentApp).
     """
+    if env is None:
+        env = REPLEnvironment(**kwargs)
 
-    def handle_agents(args: list[str]) -> object:
-        if not args or args[0] == "list":
-            return list_subagents(console, settings=get_runtime().settings)
-        err_msg = _("Unknown agents subcommand '{sub}'. Usage: /agents [list]", sub=args[0])
-        console.print(f"[red]{err_msg}[/red]")
-        return None
-
-    def handle_mcp(args: list[str]) -> object:
-        if not args or args[0] in ("list", "status"):
-            return list_mcp_servers(console, settings=get_runtime().settings)
-        if args[0] == "reload":
-            return reload_mcp_servers(console, runtime=get_runtime())
-        err_msg = _("Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]", sub=args[0])
-        console.print(f"[red]{err_msg}[/red]")
-        return None
-
-    def handle_model(args: list[str]) -> object:
-        if not args or args[0] == "list":
-            return list_models(console, current_model(), base_url())
-        if args[0] in ("set", "use", "switch"):
-            if len(args) > 1:
-                return switch_model(args[1])
-            console.print(f"[red]{_('Usage: /model [list | set <model>]')}[/red]")
-            return None
-        if len(args) == 1:
-            return switch_model(args[0])
-        console.print(f"[red]{_('Usage: /model [list | set <model>]')}[/red]")
-        return None
-
-    def handle_effort(args: list[str]) -> object:
-        if not args:
-            show_effort(console, get_runtime())
-            return None
-        if args[0] in ("set", "use", "switch"):
-            if len(args) == 2:
-                return switch_effort(args[1])
-            console.print(f"[red]{_('Usage: /effort [set <level>]')}[/red]")
-            return None
-        if len(args) == 1:
-            return switch_effort(args[0])
-        console.print(f"[red]{_('Usage: /effort [set <level>]')}[/red]")
-        return None
-
-    def handle_context(args: list[str]) -> object:
-        if not args:
-            show_context_window(console, get_runtime())
-            return None
-        if args[0] in ("set", "use", "switch"):
-            if len(args) == 2:
-                return switch_context_window(args[1])
-            console.print(f"[red]{_('Usage: /context [set <size>]')}[/red]")
-            return None
-        if len(args) == 1:
-            return switch_context_window(args[0])
-        console.print(f"[red]{_('Usage: /context [set <size>]')}[/red]")
-        return None
-
-    def handle_params(args: list[str]) -> object:
-        if not args or args[0] == "list":
-            show_model_params(console, get_runtime())
-            return None
-        if args[0] == "set":
-            if len(args) < 3:
-                console.print(
-                    f"[red]{_('Usage: /params set <parameter> <value>')}[/red]\n"
-                    f"[dim]{_('Example: /params set temperature 0.7')}[/dim]"
-                )
-                return None
-            return set_model_param(console, args[1], args[2], runtime=get_runtime())
-        console.print(f"[red]{_('Usage: /params [list | set <parameter> <value>]')}[/red]")
-        return None
-
-    def handle_task(args: list[str]) -> object:
-        if not args or args[0] == "list":
-            list_tasks(task_ctx)
-            return None
-        sub = args[0]
-        if sub == "delete":
-            if len(args) < 2:
-                console.print(f"[red]{_('Usage: /task delete <id>')}[/red]")
-                return None
-            delete_task(task_ctx, args[1])
-            return None
-        err_msg = _("Unknown task subcommand '{sub}'. Usage: /task [list | delete <id>]", sub=sub)
-        console.print(f"[red]{err_msg}[/red]")
-        return None
-
-    def handle_skill(args: list[str]) -> object:
-        if not args or args[0] == "list":
-            list_skills(skills_ctx)
-            return None
-        sub = args[0]
-        if sub == "show":
-            if len(args) < 2:
-                console.print(f"[red]{_('Usage: /skill show <id>')}[/red]")
-                return None
-            show_skill(skills_ctx, args[1])
-            return None
-        if sub == "delete":
-            if len(args) < 2:
-                console.print(f"[red]{_('Usage: /skill delete <id>')}[/red]")
-                return None
-            delete_skill(skills_ctx, args[1])
-            return None
-        err_msg = _("Unknown skill subcommand '{sub}'. Usage: /skill [list | show <id> | delete <id>]", sub=sub)
-        console.print(f"[red]{err_msg}[/red]")
-        return None
-
-    def handle_rag(args: list[str]) -> object:
-        if not args or args[0] == "status":
-            show_rag_status(get_rag_ctx())
-            return None
-        sub = args[0]
-        if sub == "list":
-            list_rag_databases(get_rag_ctx())
-            return None
-        if sub == "create":
-            if len(args) < 2:
-                console.print(f"[red]{_('Usage: /rag create <name>')}[/red]")
-                return None
-            create_rag_database(get_rag_ctx(), args[1])
-            return None
-        if sub == "delete":
-            if len(args) < 2:
-                console.print(f"[red]{_('Usage: /rag delete <name>')}[/red]")
-                return None
-            delete_rag_database(get_rag_ctx(), args[1])
-            return get_runtime().reload()
-        if sub == "load":
-            if len(args) < 2:
-                console.print(f"[red]{_('Usage: /rag load <name>')}[/red]")
-                return None
-            load_rag_database(get_rag_ctx(), args[1])
-            return get_runtime().reload()
-        if sub == "unload":
-            unload_rag_database(get_rag_ctx())
-            return get_runtime().reload()
-        if sub == "add":
-            sub_args = args[1:]
-            is_dir = "--dir" in sub_args
-            paths = [a for a in sub_args if a != "--dir"]
-            if not paths:
-                console.print(f"[red]{_('Usage: /rag add <path> [--dir]')}[/red]")
-                return None
-            target_path = " ".join(paths).strip("\"'")
-            return add_rag_directory(get_rag_ctx(), target_path) if is_dir else add_rag_file(get_rag_ctx(), target_path)
-        err_msg = _(
-            "Unknown rag subcommand '{sub}'. Usage: /rag [status | list | create | delete | load | unload | add]",
-            sub=sub,
-        )
-        console.print(f"[red]{err_msg}[/red]")
-        return None
-
-    def handle_session(args: list[str]) -> object:
-        if not args or args[0] == "list":
-            list_sessions(console, current_thread_id=current_thread_id())
-            return None
-        sub = args[0]
-        if sub == "search":
-            if len(args) < 2:
-                console.print(f"[red]{_('Usage: /session search <query>')}[/red]")
-                return None
-            search_sessions(
-                console,
-                " ".join(args[1:]),
-                current_thread_id=current_thread_id(),
-            )
-            return None
-        if sub == "delete":
-            if len(args) < 2:
-                console.print(f"[red]{_('Usage: /session delete <session_id>')}[/red]")
-                return None
-            delete_session(console, args[1])
-            return None
-        err_msg = _(
-            "Unknown session subcommand '{sub}'. Usage: /session [list | search <query> | delete <id>]",
-            sub=sub,
-        )
-        console.print(f"[red]{err_msg}[/red]")
-        return None
-
-    cmds: dict[str, REPLHandler] = {
-        "/queue": handle_queue,
-        "/yolo": handle_yolo,
-        "/stealth": handle_stealth,
-        "/session": handle_session,
-        "/model": handle_model,
-        "/effort": handle_effort,
-        "/context": handle_context,
-        "/params": handle_params,
-        "/task": handle_task,
-        "/skill": handle_skill,
-        "/rag": handle_rag,
-        "/mcp": handle_mcp,
-        "/agents": handle_agents,
+    return {
+        "/queue": env.handle_queue,
+        "/yolo": env.handle_yolo,
+        "/stealth": env.handle_stealth,
+        "/session": env.handle_session,
+        "/model": env.handle_model,
+        "/effort": env.handle_effort,
+        "/context": env.handle_context,
+        "/params": env.handle_params,
+        "/task": env.handle_task,
+        "/skill": env.handle_skill,
+        "/rag": env.handle_rag,
+        "/mcp": env.handle_mcp,
+        "/agents": env.handle_agents,
     }
-    return cmds

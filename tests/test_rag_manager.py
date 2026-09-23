@@ -69,7 +69,7 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
     def test_chunk_text_long_paragraphs(self) -> None:
         text = "Sentence 1. Sentence 2. Sentence 3. Sentence 4. Sentence 5. Sentence 6."
         chunks = self.manager._chunk_text(text)
-        self.assertTrue(len(chunks) >= 1)
+        self.assertGreaterEqual(len(chunks), 1)
 
     def test_read_file_encodings(self) -> None:
         # UTF-8

@@ -139,21 +139,21 @@ class TestSkillsManager(unittest.TestCase):
         self.assertIsNotNone(sc)
         assert sc is not None
         self.assertEqual(sc.name, "skill-creator")
-        self.assertTrue(len(sc.description) > 0)
+        self.assertGreater(len(sc.description), 0)
         self.assertIn("SKILL.md", sc.content)
 
         tc = _read_skill(BUILTIN_SKILLS_DIR / "task-creator")
         self.assertIsNotNone(tc)
         assert tc is not None
         self.assertEqual(tc.name, "task-creator")
-        self.assertTrue(len(tc.description) > 0)
+        self.assertGreater(len(tc.description), 0)
         self.assertIn("task_id", tc.content)
 
         mc = _read_skill(BUILTIN_SKILLS_DIR / "mcp-configurator")
         self.assertIsNotNone(mc)
         assert mc is not None
         self.assertEqual(mc.name, "mcp-configurator")
-        self.assertTrue(len(mc.description) > 0)
+        self.assertGreater(len(mc.description), 0)
         self.assertIn("mcp.json", mc.content)
 
     def test_builtin_skills_loading_and_override(self) -> None:

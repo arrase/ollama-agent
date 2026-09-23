@@ -16,6 +16,7 @@ from ..settings.paths import BUILTIN_SKILLS_DIR, SKILLS_DIR
 
 # Maximum SKILL.md size (10 MB) as per spec.
 _MAX_SKILL_SIZE = 10 * 1024 * 1024
+_SKILL_FILENAME = "SKILL.md"
 
 _FRONTMATTER_CLOSE = re.compile(r"^---\s*$", re.MULTILINE)
 
@@ -31,7 +32,7 @@ class SkillInfo:
 
 def _find_skill_file(skill_dir: Path) -> Path:
     """Find SKILL.md (or skill.md) inside skill_dir."""
-    upper = skill_dir / "SKILL.md"
+    upper = skill_dir / _SKILL_FILENAME
     if upper.is_file():
         return upper
     lower = skill_dir / "skill.md"
@@ -101,7 +102,7 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
         search_dirs = [d for d in (self.builtin_dir, self.base_dir) if d and d.is_dir()]
         for directory in search_dirs:
             for d in directory.iterdir():
-                if d.is_dir() and d.name.startswith(prefix) and ((d / "SKILL.md").is_file() or (d / "skill.md").is_file()):
+                if d.is_dir() and d.name.startswith(prefix) and ((d / _SKILL_FILENAME).is_file() or (d / "skill.md").is_file()):
                     skills[d.name] = _read_skill(d)
         return skills
 
@@ -151,7 +152,7 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
         ).strip()
 
         content = f"---\n{frontmatter}\n---\n\n# {clean_name}\n\n{clean_inst}\n"
-        (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
+        (skill_dir / _SKILL_FILENAME).write_text(content, encoding="utf-8")
         return skill_id
 
     def delete(self, item_id: str) -> None:

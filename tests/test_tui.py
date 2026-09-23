@@ -617,7 +617,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock._rag_ctx = None
         repl_mock.runtime.yolo_mode = False
 
-        async def _handle_new_session(args: list[str]) -> None:
+        def _handle_new_session() -> None:
             pass
 
         repl_mock._handle_new_session = _handle_new_session
@@ -642,7 +642,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             with patch("ollama_agent.interfaces.repl.new_session", return_value="newsess12345678"):
 
-                async def _handle_new(args: list[str], _tid: str = "newsess12345678") -> None:
+                def _handle_new(_tid: str = "newsess12345678") -> None:
                     repl_mock.runtime.thread_id = _tid
 
                 repl_mock._handle_new_session = _handle_new
@@ -656,7 +656,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             with patch("ollama_agent.interfaces.repl.new_session", return_value="newsess87654321"):
 
-                async def _handle_new2(args: list[str], _tid: str = "newsess87654321") -> None:
+                def _handle_new2(_tid: str = "newsess87654321") -> None:
                     repl_mock.runtime.thread_id = _tid
 
                 repl_mock._handle_new_session = _handle_new2

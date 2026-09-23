@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from ..agent import AgentRuntime
 
 _serializer = JsonPlusSerializer()
+_SESSION_NOT_FOUND_MSG = "Session '{target_id}' not found."
 
 
 def is_current(thread_id: str, current_thread_id: str) -> bool:
@@ -154,7 +155,7 @@ def resume_session(
             )
             console.print(f"[red]{ambiguous_msg}[/red]")
         else:
-            not_found_msg = _("Session '{target_id}' not found.", target_id=target_id)
+            not_found_msg = _(_SESSION_NOT_FOUND_MSG, target_id=target_id)
             console.print(f"[red]{not_found_msg}[/red]")
         return None
 
@@ -172,7 +173,7 @@ def delete_session(
     sessions = get_available_sessions(db_path)
     resolved = resolve_session_id(target_id, sessions)
     if resolved is None:
-        not_found_msg = _("Session '{target_id}' not found.", target_id=target_id)
+        not_found_msg = _(_SESSION_NOT_FOUND_MSG, target_id=target_id)
         console.print(f"[red]{not_found_msg}[/red]")
         return False
 
@@ -191,29 +192,7 @@ def delete_session(
         return False
 
 
-async def export_session(
-    console: Console,
-    runtime: AgentRuntime,
-    target_id: str,
-    output_path: str | None = None,
-    db_path: Path = HISTORY_DB_PATH,
-) -> Path | None:
-    """Export conversation messages from a session to a Markdown file."""
-    sessions = get_available_sessions(db_path)
-    resolved = resolve_session_id(target_id, sessions)
-    if resolved is None:
-        not_found_msg = _("Session '{target_id}' not found.", target_id=target_id)
-        console.print(f"[red]{not_found_msg}[/red]")
-        return None
-
-    messages = await runtime.get_thread_messages(resolved)
-
-    if not messages:
-        no_msgs = _("No messages found for session '{resolved}'.", resolved=resolved)
-        console.print(f"[yellow]{no_msgs}[/yellow]")
-        return None
-
-    export_title = _("Session Export: {resolved}", resolved=resolved)
+def _format_exported_messages(messages: list[Any], export_title: str) -> list[str]:
     user_label = _("User")
     asst_label = _("Assistant")
 
@@ -244,6 +223,34 @@ async def export_session(
             name = msg.name
             tool_hdr = _("Tool: {name}", name=name)
             lines.extend([f"### ⚙ {tool_hdr}", "```", content, "```", ""])
+
+    return lines
+
+
+async def export_session(
+    console: Console,
+    runtime: AgentRuntime,
+    target_id: str,
+    output_path: str | None = None,
+    db_path: Path = HISTORY_DB_PATH,
+) -> Path | None:
+    """Export conversation messages from a session to a Markdown file."""
+    sessions = get_available_sessions(db_path)
+    resolved = resolve_session_id(target_id, sessions)
+    if resolved is None:
+        not_found_msg = _(_SESSION_NOT_FOUND_MSG, target_id=target_id)
+        console.print(f"[red]{not_found_msg}[/red]")
+        return None
+
+    messages = await runtime.get_thread_messages(resolved)
+
+    if not messages:
+        no_msgs = _("No messages found for session '{resolved}'.", resolved=resolved)
+        console.print(f"[yellow]{no_msgs}[/yellow]")
+        return None
+
+    export_title = _("Session Export: {resolved}", resolved=resolved)
+    lines = _format_exported_messages(messages, export_title)
 
     target_file = Path(output_path).expanduser().resolve() if output_path else Path.cwd() / f"session_{resolved[:8]}.md"
     target_file.parent.mkdir(parents=True, exist_ok=True)

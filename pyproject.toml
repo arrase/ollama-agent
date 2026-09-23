@@ -17,6 +17,7 @@ dependencies = [
     "langgraph-checkpoint-sqlite==3.1.1",
     "aiosqlite==0.22.1",
     "langchain-mcp-adapters==0.3.2",
+    "langchain-text-splitters==1.1.2",
     "PyYAML==6.0.3",
     "ollama==0.6.2",
     "textual==8.2.8",
@@ -41,6 +42,7 @@ include = ["ollama_agent*"]
 [tool.setuptools.package-data]
 ollama_agent = [
     "settings/prompts/*.md",
+    "interfaces/*.tcss",
     "interfaces/*.css",
     "i18n/locales/*.json",
     "skills/builtin/**",

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import ollama
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
@@ -409,33 +410,8 @@ class RAGManager:
                 )
             )
 
-        if len(text) <= chunk_size:
-            return [text]
-
-        chunks = []
-        start = 0
-
-        while start < len(text):
-            end = start + chunk_size
-
-            # If not at the end of text, try to find a good break point
-            if end < len(text):
-                # Look for paragraph break, then line break, then sentence, then word
-                for sep in ["\n\n", "\n", ". ", " "]:
-                    pos = text.rfind(sep, start, end)
-                    if pos != -1 and pos > start + (chunk_size // 2):
-                        end = pos + len(sep)
-                        break
-
-            chunk = text[start:end].strip()
-            if chunk:
-                chunks.append(chunk)
-
-            # Move start forward, accounting for overlap
-            next_start = end - overlap
-            start = next_start if next_start > start else end
-
-        return chunks
+        splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=overlap)
+        return splitter.split_text(text)
 
     def _read_file(
         self,
