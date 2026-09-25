@@ -13,18 +13,18 @@ from rich import box
 from rich.console import Console
 from rich.table import Table
 
-from ..agent.episodic_memory import (
+from ...agent.episodic_memory import (
     HistoryError,
     connect_history,
     format_iso_timestamp,
     search_past_conversations_in_db,
 )
-from ..core.common import extract_text
-from ..i18n import _
-from ..settings.paths import HISTORY_DB_PATH
+from ...core.common import extract_text
+from ...i18n import _
+from ...settings.paths import HISTORY_DB_PATH
 
 if TYPE_CHECKING:
-    from ..agent import AgentRuntime
+    from ...agent import AgentRuntime
 
 _serializer = JsonPlusSerializer()
 _SESSION_NOT_FOUND_MSG = "Session '{target_id}' not found."

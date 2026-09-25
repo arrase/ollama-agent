@@ -10,12 +10,9 @@ from rich.console import Console
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.types import Command
 
-from ollama_agent.interfaces.repl import (
-    OllamaAgentApp,
-    OllamaREPL,
-    _is_immediate_command,
-)
-from ollama_agent.interfaces.tui_components import (
+from ollama_agent.interfaces.tui import OllamaAgentApp, OllamaREPL
+from ollama_agent.interfaces.tui.commands import _is_immediate_command
+from ollama_agent.interfaces.tui.widgets import (
     AgentFooter,
     AgentResponse,
     PromptQueueWidget,
@@ -409,7 +406,7 @@ class TestQueueDrainingBehavior(unittest.IsolatedAsyncioTestCase):
                 if isinstance(prompt, str):
                     streamed_prompts.append(prompt)
 
-            with patch("ollama_agent.interfaces.repl.stream_agent_events", side_effect=fake_stream_events):
+            with patch("ollama_agent.interfaces.tui.app.stream_agent_events", side_effect=fake_stream_events):
                 app._process_next_in_queue()
                 await pilot.pause()
 
@@ -524,7 +521,7 @@ class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
 
             agent_msg = AgentResponse()
 
-            with patch("ollama_agent.interfaces.repl.stream_agent_events", side_effect=asyncio.CancelledError()):
+            with patch("ollama_agent.interfaces.tui.app.stream_agent_events", side_effect=asyncio.CancelledError()):
                 with self.assertRaises(asyncio.CancelledError):
                     await app._run_stream("Trigger prompt", chat_scroll, agent_msg)
 
@@ -586,7 +583,7 @@ class TestToolApprovalModalAndQueue(unittest.IsolatedAsyncioTestCase):
             mock_state.interrupts = [mock_interrupt]
             runtime.graph.aget_state = AsyncMock(return_value=mock_state)
 
-            with patch("ollama_agent.interfaces.repl.stream_agent_events", new_callable=AsyncMock):
+            with patch("ollama_agent.interfaces.tui.app.stream_agent_events", new_callable=AsyncMock):
                 await app._run_stream("Read file prompt", chat_scroll, agent_msg)
 
             self.assertTrue(app._is_approval_pending)
@@ -633,7 +630,7 @@ class TestToolApprovalModalAndQueue(unittest.IsolatedAsyncioTestCase):
             ) -> None:
                 processed_calls.append(prompt)
 
-            with patch("ollama_agent.interfaces.repl.stream_agent_events", side_effect=fake_stream_events):
+            with patch("ollama_agent.interfaces.tui.app.stream_agent_events", side_effect=fake_stream_events):
                 await app._handle_approval_decision([{"type": "approve"}], chat_scroll, agent_msg)
                 await pilot.pause()
 
@@ -840,8 +837,8 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
                     streamed.append(prompt)
 
             with (
-                patch("ollama_agent.interfaces.repl.new_session", return_value="sess_new_999"),
-                patch("ollama_agent.interfaces.repl.stream_agent_events", side_effect=fake_stream_events),
+                patch("ollama_agent.interfaces.tui.repl.new_session", return_value="sess_new_999"),
+                patch("ollama_agent.interfaces.tui.app.stream_agent_events", side_effect=fake_stream_events),
             ):
                 app._process_next_in_queue()
                 await pilot.pause()
@@ -877,8 +874,8 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
                     streamed.append(prompt)
 
             with (
-                patch("ollama_agent.interfaces.repl.resume_session", return_value="sess_target_123"),
-                patch("ollama_agent.interfaces.repl.stream_agent_events", side_effect=fake_stream_events),
+                patch("ollama_agent.interfaces.tui.commands.resume_session", return_value="sess_target_123"),
+                patch("ollama_agent.interfaces.tui.app.stream_agent_events", side_effect=fake_stream_events),
             ):
                 app._process_next_in_queue()
                 await pilot.pause()
@@ -912,8 +909,8 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
                     streamed.append(prompt)
 
             with (
-                patch("ollama_agent.interfaces.repl.resume_session", return_value=None),
-                patch("ollama_agent.interfaces.repl.stream_agent_events", side_effect=fake_stream_events),
+                patch("ollama_agent.interfaces.tui.commands.resume_session", return_value=None),
+                patch("ollama_agent.interfaces.tui.app.stream_agent_events", side_effect=fake_stream_events),
             ):
                 app._process_next_in_queue()
                 await pilot.pause()
@@ -940,8 +937,8 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
                             streamed.append(prompt)
 
                     with (
-                        patch("ollama_agent.interfaces.repl.new_session", return_value="sess_alias_001"),
-                        patch("ollama_agent.interfaces.repl.stream_agent_events", side_effect=fake_stream_events),
+                        patch("ollama_agent.interfaces.tui.repl.new_session", return_value="sess_alias_001"),
+                        patch("ollama_agent.interfaces.tui.app.stream_agent_events", side_effect=fake_stream_events),
                     ):
                         app._process_next_in_queue()
                         await pilot.pause()

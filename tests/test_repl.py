@@ -6,14 +6,13 @@ from unittest.mock import MagicMock, patch
 
 from rich.console import Console
 
-from ollama_agent.interfaces.repl import (
+from ollama_agent.interfaces.tui import OllamaAgentApp, OllamaREPL
+from ollama_agent.interfaces.tui.commands import (
     IMMEDIATE_COMMANDS,
-    OllamaAgentApp,
-    OllamaREPL,
     _is_immediate_command,
-    _list_models_sync,
 )
-from ollama_agent.interfaces.tui_components import AgentHeader, PromptQueueWidget, SystemOutputWidget
+from ollama_agent.interfaces.tui.completion import _list_models_sync
+from ollama_agent.interfaces.tui.widgets import AgentHeader, PromptQueueWidget, SystemOutputWidget
 
 
 class TestREPLImmediateCommands(unittest.TestCase):

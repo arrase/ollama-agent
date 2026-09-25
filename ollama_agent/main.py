@@ -13,8 +13,8 @@ from .agent.builtin_tools import set_tool_timeout
 from .core import ModelCapabilityError, ModelContextWindowError, OllamaVersionError, check_ollama_version
 from .i18n import SUPPORTED_LOCALES, _, set_locale
 from .interfaces.cli import create_argument_parser, handle_subcommand, run_prompt_session
-from .interfaces.model_commands import ensure_model_configured
-from .interfaces.repl import OllamaREPL
+from .interfaces.commands.models import ensure_model_configured
+from .interfaces.tui import OllamaREPL
 from .settings import Settings, load_settings, reset_config
 
 # Silence only the known third-party noise, not all deprecations.

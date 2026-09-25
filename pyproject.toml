@@ -52,6 +52,8 @@ ollama_agent = [
     "settings/prompts/*.md",
     "interfaces/*.tcss",
     "interfaces/*.css",
+    "interfaces/**/*.tcss",
+    "interfaces/**/*.css",
     "i18n/locales/*.json",
     "skills/builtin/**",
 ]
