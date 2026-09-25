@@ -45,6 +45,7 @@ Thumbs.db
 .coverage
 .coverage.*
 coverage.xml
+ruff-report.json
 htmlcov/
 .pytest_cache/
 site/
