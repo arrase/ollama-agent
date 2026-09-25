@@ -35,6 +35,10 @@ jobs:
         run: |
           ruff check . --output-format json --output-file ruff-report.json --exit-zero
 
+      - name: Run Mypy
+        run: |
+          mypy ollama_agent/ --show-column-numbers --show-error-codes --ignore-missing-imports > mypy-report.txt || true
+
       - name: Run tests with coverage
         run: |
           pytest --cov=ollama_agent --cov-report=xml:coverage.xml --cov-report=term
