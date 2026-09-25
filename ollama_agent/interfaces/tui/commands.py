@@ -207,7 +207,7 @@ async def _handle_slash_task(app: OllamaAgentApp, cmd_line: str, args: list[str]
         target_id = positional[0]
         var_args = positional[1:]
         try:
-            task_id, t = app.repl._task_ctx.resolve_task(target_id)
+            t = app.repl._task_ctx.resolve_task(target_id)[1]
             variables = parse_var_assignments(var_args)
             rendered_prompt = t.render(variables)
         except (TaskError, ValueError, TemplateError) as exc:
