@@ -11,13 +11,10 @@ from textual.widgets import OptionList
 from rich.console import Console
 
 from ollama_agent.agent.episodic_memory import HistoryError
-from ollama_agent.interfaces.repl import (
-    OllamaAgentApp,
-    OllamaREPL,
-    _TUIStreamingRenderer,
-    _is_immediate_command,
-)
-from ollama_agent.interfaces.tui_components import (
+from ollama_agent.interfaces.tui import OllamaAgentApp, OllamaREPL
+from ollama_agent.interfaces.tui.commands import _is_immediate_command
+from ollama_agent.interfaces.tui.renderer import _TUIStreamingRenderer
+from ollama_agent.interfaces.tui.widgets import (
     AgentFooter,
     AgentHeader,
     AgentResponse,
@@ -228,7 +225,7 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
                 self.query_one("#autocomplete-list", OptionList).display = False
 
         app = InputApp()
-        with patch("ollama_agent.interfaces.tui_components.load_past_user_prompts", return_value=[]):
+        with patch("ollama_agent.interfaces.tui.widgets.input.load_past_user_prompts", return_value=[]):
             async with app.run_test() as pilot:
                 await pilot.pause()
                 inp = app.query_one(ReplInput)
@@ -560,7 +557,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
 
             # 5. Level 2: Dynamic Session IDs for /session resume
             with patch(
-                "ollama_agent.interfaces.repl.get_available_sessions",
+                "ollama_agent.interfaces.tui.app.get_available_sessions",
                 return_value=[{"thread_id": "session-12345678", "steps": 5}],
             ):
                 app.update_autocomplete("/session resume ")
@@ -577,7 +574,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             # 7. Level 2: Dynamic Models for /model set
             mock_m1 = MagicMock(model="llama3.2:latest", size=4 * 1024**3)
             mock_m2 = MagicMock(model="mistral:latest", size=5 * 1024**3)
-            with patch("ollama_agent.interfaces.repl._list_models_sync", return_value=[mock_m1, mock_m2]):
+            with patch("ollama_agent.interfaces.tui.app._list_models_sync", return_value=[mock_m1, mock_m2]):
                 app.update_autocomplete("/model set ")
                 self.assertTrue(autolist.display)
                 self.assertEqual(autolist.option_count, 2)
@@ -587,7 +584,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
                 app.accept_completion(0)
                 self.assertEqual(inp.text, "/model set llama3.2:latest ")
 
-            with patch("ollama_agent.interfaces.repl._list_models_sync", side_effect=OSError("Connection refused")):
+            with patch("ollama_agent.interfaces.tui.app._list_models_sync", side_effect=OSError("Connection refused")):
                 app.update_autocomplete("/model set ")
                 self.assertFalse(autolist.display)
                 self.assertEqual(autolist.option_count, 0)
@@ -640,7 +637,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             chat_scroll = app.query_one("#chat-scroll")
             await chat_scroll.mount(UserMessage("clear me"))
             await pilot.pause()
-            with patch("ollama_agent.interfaces.repl.new_session", return_value="newsess12345678"):
+            with patch("ollama_agent.interfaces.tui.repl.new_session", return_value="newsess12345678"):
 
                 def _handle_new(_tid: str = "newsess12345678") -> None:
                     repl_mock.runtime.thread_id = _tid
@@ -654,7 +651,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             # 1b. /new
             await chat_scroll.mount(UserMessage("new me"))
             await pilot.pause()
-            with patch("ollama_agent.interfaces.repl.new_session", return_value="newsess87654321"):
+            with patch("ollama_agent.interfaces.tui.repl.new_session", return_value="newsess87654321"):
 
                 def _handle_new2(_tid: str = "newsess87654321") -> None:
                     repl_mock.runtime.thread_id = _tid
@@ -682,7 +679,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             repl_mock.runtime.get_thread_messages = AsyncMock(return_value=[human_msg, ai_msg])
             repl_mock.runtime.count_effective_tokens = AsyncMock(return_value=42)
 
-            with patch("ollama_agent.interfaces.repl.resume_session", return_value="sess12345678"):
+            with patch("ollama_agent.interfaces.tui.commands.resume_session", return_value="sess12345678"):
                 await app._run_slash_command("/session resume sess12345678")
                 await pilot.pause()
                 self.assertEqual(len(list(chat_scroll.query(UserMessage))), 1)
@@ -730,7 +727,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         async with app.run_test() as pilot:
             with (
                 patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream,
-                patch("ollama_agent.interfaces.repl.apply_task_settings") as mock_apply,
+                patch("ollama_agent.interfaces.tui.commands.apply_task_settings") as mock_apply,
             ):
                 await app._run_slash_command("/task run my-task -y")
                 await pilot.pause()
@@ -1218,7 +1215,7 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
         app = OllamaAgentApp(repl)
 
         with (
-            patch("ollama_agent.interfaces.tui_components.load_past_user_prompts", side_effect=HistoryError("Corrupt DB")),
+            patch("ollama_agent.interfaces.tui.widgets.input.load_past_user_prompts", side_effect=HistoryError("Corrupt DB")),
             patch.object(app, "show_system_notice") as mock_notice,
         ):
             async with app.run_test() as pilot:

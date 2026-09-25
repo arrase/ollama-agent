@@ -15,7 +15,7 @@ from ollama_agent.core import (
 )
 from ollama_agent.i18n import set_locale
 from ollama_agent.interfaces.cli import create_argument_parser, handle_cli_commands
-from ollama_agent.interfaces.dispatch import (
+from ollama_agent.interfaces.commands.dispatch import (
     build_cli_handlers,
     build_repl_handlers,
 )
@@ -376,9 +376,9 @@ class TestDispatchAndCLI(unittest.TestCase):
         mock_add_dir = AsyncMock()
 
         with (
-            patch("ollama_agent.interfaces.dispatch.load_rag_database", mock_load),
-            patch("ollama_agent.interfaces.dispatch.add_rag_file", mock_add_file),
-            patch("ollama_agent.interfaces.dispatch.add_rag_directory", mock_add_dir),
+            patch("ollama_agent.interfaces.commands.dispatch.load_rag_database", mock_load),
+            patch("ollama_agent.interfaces.commands.dispatch.add_rag_file", mock_add_file),
+            patch("ollama_agent.interfaces.commands.dispatch.add_rag_directory", mock_add_dir),
         ):
             handlers = _build_cli_handlers(args_file)
             asyncio.run(handlers[("rag", "add")]())
@@ -392,9 +392,9 @@ class TestDispatchAndCLI(unittest.TestCase):
 
         args_dir = parser.parse_args(["rag", "add", "docs_db", "./docs", "--dir"])
         with (
-            patch("ollama_agent.interfaces.dispatch.load_rag_database", mock_load),
-            patch("ollama_agent.interfaces.dispatch.add_rag_file", mock_add_file),
-            patch("ollama_agent.interfaces.dispatch.add_rag_directory", mock_add_dir),
+            patch("ollama_agent.interfaces.commands.dispatch.load_rag_database", mock_load),
+            patch("ollama_agent.interfaces.commands.dispatch.add_rag_file", mock_add_file),
+            patch("ollama_agent.interfaces.commands.dispatch.add_rag_directory", mock_add_dir),
         ):
             handlers = _build_cli_handlers(args_dir)
             asyncio.run(handlers[("rag", "add")]())
@@ -407,8 +407,8 @@ class TestDispatchAndCLI(unittest.TestCase):
         args = parser.parse_args(["session", "export", "sess-123", "-o", "export.md"])
 
         with (
-            patch("ollama_agent.interfaces.dispatch.AgentRuntime") as mock_runtime_cls,
-            patch("ollama_agent.interfaces.dispatch.export_session", AsyncMock()) as mock_export,
+            patch("ollama_agent.interfaces.commands.dispatch.AgentRuntime") as mock_runtime_cls,
+            patch("ollama_agent.interfaces.commands.dispatch.export_session", AsyncMock()) as mock_export,
         ):
             mock_runtime = MagicMock()
             mock_runtime.__aenter__ = AsyncMock(return_value=mock_runtime)
@@ -423,7 +423,7 @@ class TestDispatchAndCLI(unittest.TestCase):
         parser = create_argument_parser()
         args = parser.parse_args(["task", "run", "my-task", "file=app.py", "--var", "mode=fast", "-y"])
 
-        with patch("ollama_agent.interfaces.dispatch.run_task", AsyncMock()) as mock_run_task:
+        with patch("ollama_agent.interfaces.commands.dispatch.run_task", AsyncMock()) as mock_run_task:
             handlers = _build_cli_handlers(args)
             asyncio.run(handlers[("task", "run")]())
             mock_run_task.assert_awaited_once()

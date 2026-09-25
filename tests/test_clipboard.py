@@ -11,8 +11,8 @@ from ollama_agent.interfaces.clipboard import (
     copy_to_system_clipboard,
     get_system_clipboard,
 )
-from ollama_agent.interfaces.repl import OllamaAgentApp, OllamaREPL
-from ollama_agent.interfaces.tui_components import UserMessage
+from ollama_agent.interfaces.tui import OllamaAgentApp, OllamaREPL
+from ollama_agent.interfaces.tui.widgets import UserMessage
 
 
 def _proc(returncode: int = 0, stdout: str = "", stderr: str = "") -> MagicMock:
@@ -299,7 +299,7 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
 
         app = OllamaAgentApp(repl_mock)
-        with patch("ollama_agent.interfaces.repl.copy_to_system_clipboard") as mock_sys_copy:
+        with patch("ollama_agent.interfaces.tui.app.copy_to_system_clipboard") as mock_sys_copy:
             async with app.run_test():
                 app.copy_to_clipboard("test copy content")
                 mock_sys_copy.assert_called_once_with("test copy content")
@@ -314,7 +314,7 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
 
         app = OllamaAgentApp(repl_mock)
-        with patch("ollama_agent.interfaces.repl.copy_to_system_clipboard") as mock_sys_copy:
+        with patch("ollama_agent.interfaces.tui.app.copy_to_system_clipboard") as mock_sys_copy:
             async with app.run_test() as pilot:
                 chat_scroll = app.query_one("#chat-scroll")
                 msg = UserMessage("Selectable text here")
@@ -336,7 +336,7 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
 
         app = OllamaAgentApp(repl_mock)
-        with patch("ollama_agent.interfaces.repl.copy_to_system_clipboard") as mock_sys_copy:
+        with patch("ollama_agent.interfaces.tui.app.copy_to_system_clipboard") as mock_sys_copy:
             async with app.run_test() as pilot:
                 chat_scroll = app.query_one("#chat-scroll")
                 msg = UserMessage("Copy action message")
@@ -359,7 +359,7 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
 
         app = OllamaAgentApp(repl_mock)
         with (
-            patch("ollama_agent.interfaces.repl.copy_to_system_clipboard", side_effect=ClipboardError("no xclip")),
+            patch("ollama_agent.interfaces.tui.app.copy_to_system_clipboard", side_effect=ClipboardError("no xclip")),
             patch.object(OllamaAgentApp, "notify") as mock_notify,
         ):
             async with app.run_test():

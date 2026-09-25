@@ -17,7 +17,7 @@ from ..settings import Settings
 from ..skills import SkillError, SkillManager, SkillsContext
 from ..streaming import run_non_interactive
 from ..tasks.commands import TaskError, TasksContext
-from .dispatch import build_cli_handlers
+from .commands.dispatch import build_cli_handlers
 
 
 def _add_common_args(parser: argparse.ArgumentParser) -> None:

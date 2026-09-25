@@ -12,7 +12,7 @@ from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from rich.console import Console
 
 from ollama_agent.agent.episodic_memory import HistoryError
-from ollama_agent.interfaces.session_commands import (
+from ollama_agent.interfaces.commands.sessions import (
     delete_session,
     export_session,
     get_available_sessions,

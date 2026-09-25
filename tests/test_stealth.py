@@ -8,14 +8,13 @@ from rich.console import Console
 from langgraph.checkpoint.memory import MemorySaver
 
 from ollama_agent.agent import AgentRuntime
-from ollama_agent.interfaces.repl import (
-    OllamaAgentApp,
-    OllamaREPL,
+from ollama_agent.interfaces.tui import OllamaAgentApp, OllamaREPL
+from ollama_agent.interfaces.tui.commands import _is_immediate_command
+from ollama_agent.interfaces.tui.completion import (
     _get_root_commands,
     _get_subcommands,
-    _is_immediate_command,
 )
-from ollama_agent.interfaces.tui_components import AgentHeader
+from ollama_agent.interfaces.tui.widgets import AgentHeader
 
 
 class TestStealthMode(unittest.IsolatedAsyncioTestCase):

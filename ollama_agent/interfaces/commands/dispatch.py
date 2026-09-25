@@ -9,11 +9,11 @@ from typing import Any, Awaitable, Callable
 
 from rich.console import Console
 
-from ..agent import AgentRuntime, list_subagents
-from ..agent.episodic_memory import HistoryError
-from ..i18n import _
-from ..mcp import MCPConfigError, list_mcp_servers, reload_mcp_servers
-from ..rag import (
+from ...agent import AgentRuntime, list_subagents
+from ...agent.episodic_memory import HistoryError
+from ...i18n import _
+from ...mcp import MCPConfigError, list_mcp_servers, reload_mcp_servers
+from ...rag import (
     RAGContext,
     RAGError,
     add_rag_directory,
@@ -25,9 +25,9 @@ from ..rag import (
     show_rag_status,
     unload_rag_database,
 )
-from ..settings import Settings
-from ..skills import SkillError, SkillsContext, create_skill, delete_skill, list_skills, show_skill
-from ..tasks import (
+from ...settings import Settings
+from ...skills import SkillError, SkillsContext, create_skill, delete_skill, list_skills, show_skill
+from ...tasks import (
     TaskError,
     TasksContext,
     create_task,
@@ -36,14 +36,14 @@ from ..tasks import (
     parse_var_assignments,
     run_task,
 )
-from .model_commands import (
-    list_models,
+from .models import list_models
+from .params import (
     set_model_param,
     show_context_window,
     show_effort,
     show_model_params,
 )
-from .session_commands import (
+from .sessions import (
     delete_session,
     export_session,
     list_sessions,
