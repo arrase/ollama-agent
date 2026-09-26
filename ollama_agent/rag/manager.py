@@ -133,8 +133,9 @@ class RAGManager:
             is_active = path.name == self._current_db
             chunks = None
             if is_active:
+                client = self._ensure_loaded()
                 try:
-                    info = self._client.get_collection(self.COLLECTION_NAME)
+                    info = client.get_collection(self.COLLECTION_NAME)
                     chunks = info.points_count
                 except Exception as e:
                     raise RAGError(_("Failed to get collection info: {e}", e=e)) from e
@@ -335,16 +336,21 @@ class RAGManager:
         except Exception as e:
             raise RAGError(_("Failed to query vector database: {e}", e=e)) from e
 
-        return [
-            {
-                "content": hit.payload["content"],
-                "source": hit.payload["source"],
-                "filename": hit.payload["filename"],
-                "score": hit.score,
-                "chunk_index": hit.payload["chunk_index"],
-            }
-            for hit in response.points
-        ]
+        results = []
+        for hit in response.points:
+            payload = hit.payload
+            if payload is None:
+                raise RAGError("Missing payload in search result")
+            results.append(
+                {
+                    "content": payload["content"],
+                    "source": payload["source"],
+                    "filename": payload["filename"],
+                    "score": hit.score,
+                    "chunk_index": payload["chunk_index"],
+                }
+            )
+        return results
 
     async def _get_embedding(self, text: str) -> list[float]:
         """Generate embedding for text using Ollama."""

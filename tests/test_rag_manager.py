@@ -208,6 +208,12 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(RAGError):
                     await self.manager.search("LangGraph", top_k=0)
 
+                # payload is None raises RAGError
+                mock_hit_none = MagicMock(payload=None, score=0.5)
+                mock_client.query_points.return_value = MagicMock(points=[mock_hit_none])
+                with self.assertRaises(RAGError):
+                    await self.manager.search("LangGraph")
+
     async def test_add_file_rejects_unsupported_extension(self) -> None:
         doc = self.rag_dir / "data.xyz"
         doc.write_text("content", encoding="utf-8")

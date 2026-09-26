@@ -61,8 +61,9 @@ _log = logging.getLogger(__name__)
 def _prepare_instructions(settings: Settings) -> str:
     base_instructions = load_instructions()
     rag_mgr = get_rag_manager()
-    rag_active = bool(rag_mgr and rag_mgr.current_database)
-    rag_db_name = rag_mgr.current_database if rag_active else ""
+    current_db = rag_mgr.current_database if rag_mgr is not None else None
+    rag_active = current_db is not None
+    rag_db_name = current_db if current_db is not None else ""
     context = {
         "settings": settings,
         "runtime": settings.runtime,

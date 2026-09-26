@@ -174,7 +174,8 @@ class REPLEnvironment:
 
     def handle_agents(self, args: list[str]) -> object:
         if not args or args[0] == "list":
-            return list_subagents(self.console, settings=self.get_runtime().settings)
+            list_subagents(self.console, settings=self.get_runtime().settings)
+            return None
         err_msg = _("Unknown agents subcommand '{sub}'. Usage: /agents [list]", sub=args[0])
         self.console.print(f"[red]{err_msg}[/red]")
         return None

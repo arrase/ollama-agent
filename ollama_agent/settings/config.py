@@ -6,7 +6,7 @@ import os
 from dataclasses import asdict, dataclass, field, fields
 from importlib import resources
 from pathlib import Path
-from typing import Any, Self, TypeVar
+from typing import Any, Self, TypeVar, cast
 
 import yaml  # type: ignore[import-untyped]
 from jinja2 import Environment, StrictUndefined, select_autoescape
@@ -175,7 +175,7 @@ def _dataclass_from_dict(cls: type[T], raw: Any) -> T:
         raise ValueError(
             _("Expected mapping for '{name}', got {type_name}", name=cls.__name__, type_name=type(raw).__name__)
         )
-    valid = {f.name for f in fields(cls)}
+    valid = {f.name for f in fields(cast(Any, cls))}
     unknown = set(raw) - valid
     if unknown:
         raise ValueError(_("Unknown setting keys: {keys}", keys=sorted(unknown)))

@@ -91,7 +91,7 @@ def _paste_via_command(cmd: list[str]) -> str:
 
 
 def _copy_win32(text: str) -> None:
-    u32, k32 = ctypes.windll.user32, ctypes.windll.kernel32
+    u32, k32 = ctypes.windll.user32, ctypes.windll.kernel32  # type: ignore[attr-defined]
     _configure_win32_clipboard(u32, k32)
     if not u32.OpenClipboard(None):
         raise ClipboardError("Could not open the Windows clipboard")
@@ -114,7 +114,7 @@ def _copy_win32(text: str) -> None:
 
 
 def _paste_win32() -> str:
-    u32, k32 = ctypes.windll.user32, ctypes.windll.kernel32
+    u32, k32 = ctypes.windll.user32, ctypes.windll.kernel32  # type: ignore[attr-defined]
     _configure_win32_clipboard(u32, k32)
     if not u32.OpenClipboard(None):
         raise ClipboardError("Could not open the Windows clipboard")
@@ -127,6 +127,8 @@ def _paste_win32() -> str:
             text = ctypes.c_wchar_p(p_mem).value
         finally:
             k32.GlobalUnlock(h_mem)
+        if text is None:
+            raise ClipboardError("Failed to decode text from clipboard")
         return text
     finally:
         u32.CloseClipboard()

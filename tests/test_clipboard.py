@@ -191,6 +191,25 @@ class TestClipboard(unittest.TestCase):
 
     @patch("sys.platform", "win32")
     @patch("ctypes.windll", create=True)
+    def test_get_clipboard_win32_none_text_raises(self, mock_windll: MagicMock) -> None:
+        mock_u32 = MagicMock()
+        mock_k32 = MagicMock()
+        mock_windll.user32 = mock_u32
+        mock_windll.kernel32 = mock_k32
+        mock_u32.OpenClipboard.return_value = 1
+        mock_u32.GetClipboardData.return_value = 12345
+        mock_k32.GlobalLock.return_value = 67890
+
+        with patch("ctypes.c_wchar_p") as mock_wchar:
+            mock_wchar.return_value.value = None
+            with self.assertRaises(ClipboardError) as ctx:
+                get_system_clipboard()
+            self.assertIn("Failed to decode text from clipboard", str(ctx.exception))
+        mock_k32.GlobalUnlock.assert_called_once_with(12345)
+        mock_u32.CloseClipboard.assert_called_once()
+
+    @patch("sys.platform", "win32")
+    @patch("ctypes.windll", create=True)
     def test_get_clipboard_win32_failure_raises(self, mock_windll: MagicMock) -> None:
         mock_u32 = MagicMock()
         mock_k32 = MagicMock()

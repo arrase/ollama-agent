@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from textual import events
 from textual.message import Message
@@ -12,6 +12,9 @@ from textual.widgets import OptionList, TextArea
 
 from ....agent.episodic_memory import HistoryError, load_past_user_prompts
 from ....i18n import _
+
+if TYPE_CHECKING:
+    from ..app import OllamaAgentApp
 
 _log = logging.getLogger(__name__)
 
@@ -56,7 +59,8 @@ class ReplInput(TextArea):
             db_entries = await asyncio.to_thread(load_past_user_prompts)
         except HistoryError as exc:
             _log.warning("Prompt history unavailable: %s", exc)
-            self.app.show_system_notice(f"[yellow]⚠ {_('Prompt history unavailable: {exc}', exc=exc)}[/yellow]")
+            app = cast("OllamaAgentApp", self.app)
+            app.show_system_notice(f"[yellow]⚠ {_('Prompt history unavailable: {exc}', exc=exc)}[/yellow]")
             db_entries = []
         self._history = list(db_entries)
         self._history_index = len(self._history)

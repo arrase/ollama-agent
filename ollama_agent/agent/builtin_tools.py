@@ -52,6 +52,8 @@ def get_active_thread_id() -> str:
 async def rag_search(query: str, top_k: int | None = None) -> RAGToolResult:
     """Search the loaded RAG database for relevant document chunks."""
     mgr = get_rag_manager()
+    if mgr is None:
+        raise AttributeError("RAG manager is not initialized")
     try:
         results = await mgr.search(query, top_k)
         context_parts: list[str] = []

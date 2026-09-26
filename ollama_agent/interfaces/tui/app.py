@@ -80,6 +80,9 @@ class OllamaAgentApp(App):
 
     CSS_PATH = Path(__file__).parent / "repl.tcss"
 
+    _is_generating: bool
+    _is_approval_pending: bool
+
     def action_cancel_generation(self) -> None:
         sys_out = self.query_one(SystemOutputWidget)
         if sys_out.display:
