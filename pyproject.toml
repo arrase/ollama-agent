@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "deepagents==0.7.14",
-    "langchain==1.4.0",
+    "langchain==1.4.2",
     "langchain-core==1.6.3",
     "langchain-ollama==1.1.0",
     "langgraph==1.2.11",
