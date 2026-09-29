@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import inspect
+import logging
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 from rich.console import Console
+from rich.markup import escape
 
 from ...agent import AgentRuntime, list_subagents
 from ...agent.episodic_memory import HistoryError
@@ -53,6 +55,8 @@ from .sessions import (
 CLIHandler = Callable[[], Any]
 REPLHandler = Callable[[list[str]], object]
 
+_log = logging.getLogger(__name__)
+
 
 async def safe_call(
     fn: Callable[..., Any],
@@ -64,14 +68,19 @@ async def safe_call(
 
     Domain errors (SkillError, TaskError, RAGError, HistoryError, MCPConfigError)
     carry the full user-facing message and are reported here exactly once;
-    raisers print nothing themselves.
+    raisers print nothing themselves. Unexpected errors are also reported rather
+    than propagated: a slash command must never take the TUI down with a traceback.
     """
     try:
         result = fn(*args, **kwargs)
         if inspect.isawaitable(result):
             await result
     except (SkillError, TaskError, RAGError, HistoryError, MCPConfigError) as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
+    # A command must never crash the caller.
+    except Exception as exc:  # noqa: BLE001
+        _log.exception("Unhandled error in command %r", getattr(fn, "__name__", fn))
+        console.print(f"[red]{escape(_('Command failed: {exc}', exc=exc))}[/red]")
 
 
 async def _cli_export_session(
@@ -167,17 +176,36 @@ class REPLEnvironment:
     handle_yolo: Callable[[list[str]], object]
     handle_stealth: Callable[[list[str]], object]
     handle_queue: Callable[[list[str]], object]
-    get_runtime: Callable[[], Any]
+    get_runtime: Callable[[], AgentRuntime]
     current_thread_id: Callable[[], str]
     switch_effort: Callable[[str], Awaitable[None]]
     switch_context_window: Callable[[str], Awaitable[None]]
+
+    # ── Argument-parsing helpers ─────────────────────────────────────────
+    # Every handler follows the same "missing argument" / "unknown subcommand"
+    # shape; centralising it keeps user-supplied text escaped exactly once.
+
+    def _require_arg(self, args: list[str], index: int, usage: str) -> str | None:
+        """Return ``args[index]`` or report *usage* (a full "Usage: ..." line) when absent."""
+        if len(args) <= index:
+            self.console.print(f"[red]{escape(usage)}[/red]")
+            return None
+        return args[index]
+
+    def _unknown_subcommand(self, message: str) -> None:
+        """Report an unrecognised subcommand, escaping the user-supplied token in *message*."""
+        self.console.print(f"[red]{escape(message)}[/red]")
+
+    def _usage(self, usage: str) -> None:
+        self.console.print(f"[red]{escape(usage)}[/red]")
+
+    # ── Handlers ─────────────────────────────────────────────────────────
 
     def handle_agents(self, args: list[str]) -> object:
         if not args or args[0] == "list":
             list_subagents(self.console, settings=self.get_runtime().settings)
             return None
-        err_msg = _("Unknown agents subcommand '{sub}'. Usage: /agents [list]", sub=args[0])
-        self.console.print(f"[red]{err_msg}[/red]")
+        self._unknown_subcommand(_("Unknown agents subcommand '{sub}'. Usage: /agents [list]", sub=args[0]))
         return None
 
     def handle_mcp(self, args: list[str]) -> object:
@@ -185,49 +213,45 @@ class REPLEnvironment:
             return list_mcp_servers(self.console, settings=self.get_runtime().settings)
         if args[0] == "reload":
             return reload_mcp_servers(self.console, runtime=self.get_runtime())
-        err_msg = _("Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]", sub=args[0])
-        self.console.print(f"[red]{err_msg}[/red]")
+        self._unknown_subcommand(_("Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]", sub=args[0]))
         return None
 
     def handle_model(self, args: list[str]) -> object:
+        usage = _("Usage: /model [list | set <model>]")
         if not args or args[0] == "list":
             return list_models(self.console, self.current_model(), self.base_url())
         if args[0] in ("set", "use", "switch"):
-            if len(args) > 1:
-                return self.switch_model(args[1])
-            self.console.print(f"[red]{_('Usage: /model [list | set <model>]')}[/red]")
-            return None
+            model = self._require_arg(args, 1, usage)
+            return self.switch_model(model) if model is not None else None
         if len(args) == 1:
             return self.switch_model(args[0])
-        self.console.print(f"[red]{_('Usage: /model [list | set <model>]')}[/red]")
+        self._usage(usage)
         return None
 
     def handle_effort(self, args: list[str]) -> object:
+        usage = _("Usage: /effort [set <level>]")
         if not args:
             show_effort(self.console, self.get_runtime())
             return None
         if args[0] in ("set", "use", "switch"):
-            if len(args) == 2:
-                return self.switch_effort(args[1])
-            self.console.print(f"[red]{_('Usage: /effort [set <level>]')}[/red]")
-            return None
+            level = self._require_arg(args, 1, usage)
+            return self.switch_effort(level) if level is not None else None
         if len(args) == 1:
             return self.switch_effort(args[0])
-        self.console.print(f"[red]{_('Usage: /effort [set <level>]')}[/red]")
+        self._usage(usage)
         return None
 
     def handle_context(self, args: list[str]) -> object:
+        usage = _("Usage: /context [set <size>]")
         if not args:
             show_context_window(self.console, self.get_runtime())
             return None
         if args[0] in ("set", "use", "switch"):
-            if len(args) == 2:
-                return self.switch_context_window(args[1])
-            self.console.print(f"[red]{_('Usage: /context [set <size>]')}[/red]")
-            return None
+            size = self._require_arg(args, 1, usage)
+            return self.switch_context_window(size) if size is not None else None
         if len(args) == 1:
             return self.switch_context_window(args[0])
-        self.console.print(f"[red]{_('Usage: /context [set <size>]')}[/red]")
+        self._usage(usage)
         return None
 
     def handle_params(self, args: list[str]) -> object:
@@ -237,57 +261,56 @@ class REPLEnvironment:
         if args[0] == "set":
             if len(args) < 3:
                 self.console.print(
-                    f"[red]{_('Usage: /params set <parameter> <value>')}[/red]\n"
-                    f"[dim]{_('Example: /params set temperature 0.7')}[/dim]"
+                    f"[red]{escape(_('Usage: /params set <parameter> <value>'))}[/red]\n"
+                    f"[dim]{escape(_('Example: /params set temperature 0.7'))}[/dim]"
                 )
                 return None
             return set_model_param(self.console, args[1], args[2], runtime=self.get_runtime())
-        self.console.print(f"[red]{_('Usage: /params [list | set <parameter> <value>]')}[/red]")
+        self._usage(_("Usage: /params [list | set <parameter> <value>]"))
         return None
 
     def handle_task(self, args: list[str]) -> object:
         if not args or args[0] == "list":
             list_tasks(self.task_ctx)
             return None
-        sub = args[0]
-        if sub == "delete":
-            if len(args) < 2:
-                self.console.print(f"[red]{_('Usage: /task delete <id>')}[/red]")
-                return None
-            delete_task(self.task_ctx, args[1])
+        if args[0] == "delete":
+            task_id = self._require_arg(args, 1, _("Usage: /task delete <id>"))
+            if task_id is not None:
+                delete_task(self.task_ctx, task_id)
             return None
-        err_msg = _("Unknown task subcommand '{sub}'. Usage: /task [list | delete <id>]", sub=sub)
-        self.console.print(f"[red]{err_msg}[/red]")
+        self._unknown_subcommand(_("Unknown task subcommand '{sub}'. Usage: /task [list | delete <id>]", sub=args[0]))
         return None
 
     def handle_skill(self, args: list[str]) -> object:
         if not args or args[0] == "list":
             list_skills(self.skills_ctx)
             return None
-        sub = args[0]
-        if sub == "show":
-            if len(args) < 2:
-                self.console.print(f"[red]{_('Usage: /skill show <id>')}[/red]")
+        if args[0] in ("show", "delete"):
+            action = args[0]
+            usage = _("Usage: /skill show <id>") if action == "show" else _("Usage: /skill delete <id>")
+            skill_id = self._require_arg(args, 1, usage)
+            if skill_id is None:
                 return None
-            show_skill(self.skills_ctx, args[1])
+            if action == "show":
+                show_skill(self.skills_ctx, skill_id)
+            else:
+                delete_skill(self.skills_ctx, skill_id)
             return None
-        if sub == "delete":
-            if len(args) < 2:
-                self.console.print(f"[red]{_('Usage: /skill delete <id>')}[/red]")
-                return None
-            delete_skill(self.skills_ctx, args[1])
-            return None
-        err_msg = _("Unknown skill subcommand '{sub}'. Usage: /skill [list | show <id> | delete <id>]", sub=sub)
-        self.console.print(f"[red]{err_msg}[/red]")
+        self._unknown_subcommand(
+            _("Unknown skill subcommand '{sub}'. Usage: /skill [list | show <id> | delete <id>]", sub=args[0])
+        )
         return None
 
     def _handle_rag_add(self, sub_args: list[str]) -> object:
+        # "--dir" is accepted in leading or trailing position (as documented by the
+        # usage string). Quote-stripping the joined path is deliberately avoided so a
+        # path containing quotes is passed through verbatim.
         is_dir = "--dir" in sub_args
         paths = [a for a in sub_args if a != "--dir"]
         if not paths:
-            self.console.print(f"[red]{_('Usage: /rag add <path> [--dir]')}[/red]")
+            self._usage(_("Usage: /rag add <path> [--dir]"))
             return None
-        target_path = " ".join(paths).strip("\"'")
+        target_path = " ".join(paths)
         if is_dir:
             return add_rag_directory(self.get_rag_ctx(), target_path)
         return add_rag_file(self.get_rag_ctx(), target_path)
@@ -301,33 +324,33 @@ class REPLEnvironment:
             list_rag_databases(self.get_rag_ctx())
             return None
         if sub == "create":
-            if len(args) < 2:
-                self.console.print(f"[red]{_('Usage: /rag create <name>')}[/red]")
-                return None
-            create_rag_database(self.get_rag_ctx(), args[1])
+            name = self._require_arg(args, 1, _("Usage: /rag create <name>"))
+            if name is not None:
+                create_rag_database(self.get_rag_ctx(), name)
             return None
         if sub == "delete":
-            if len(args) < 2:
-                self.console.print(f"[red]{_('Usage: /rag delete <name>')}[/red]")
+            name = self._require_arg(args, 1, _("Usage: /rag delete <name>"))
+            if name is None:
                 return None
-            delete_rag_database(self.get_rag_ctx(), args[1])
+            delete_rag_database(self.get_rag_ctx(), name)
             return self.get_runtime().reload()
         if sub == "load":
-            if len(args) < 2:
-                self.console.print(f"[red]{_('Usage: /rag load <name>')}[/red]")
+            name = self._require_arg(args, 1, _("Usage: /rag load <name>"))
+            if name is None:
                 return None
-            load_rag_database(self.get_rag_ctx(), args[1])
+            load_rag_database(self.get_rag_ctx(), name)
             return self.get_runtime().reload()
         if sub == "unload":
             unload_rag_database(self.get_rag_ctx())
             return self.get_runtime().reload()
         if sub == "add":
             return self._handle_rag_add(args[1:])
-        err_msg = _(
-            "Unknown rag subcommand '{sub}'. Usage: /rag [status | list | create | delete | load | unload | add]",
-            sub=sub,
+        self._unknown_subcommand(
+            _(
+                "Unknown rag subcommand '{sub}'. Usage: /rag [status | list | create | delete | load | unload | add]",
+                sub=sub,
+            )
         )
-        self.console.print(f"[red]{err_msg}[/red]")
         return None
 
     def handle_session(self, args: list[str]) -> object:
@@ -337,7 +360,7 @@ class REPLEnvironment:
         sub = args[0]
         if sub == "search":
             if len(args) < 2:
-                self.console.print(f"[red]{_('Usage: /session search <query>')}[/red]")
+                self._usage(_("Usage: /session search <query>"))
                 return None
             search_sessions(
                 self.console,
@@ -346,32 +369,23 @@ class REPLEnvironment:
             )
             return None
         if sub == "delete":
-            if len(args) < 2:
-                self.console.print(f"[red]{_('Usage: /session delete <session_id>')}[/red]")
-                return None
-            delete_session(self.console, args[1])
+            session_id = self._require_arg(args, 1, _("Usage: /session delete <session_id>"))
+            if session_id is not None:
+                delete_session(self.console, session_id)
             return None
-        err_msg = _(
-            "Unknown session subcommand '{sub}'. Usage: /session [list | search <query> | delete <id>]",
-            sub=sub,
+        self._unknown_subcommand(
+            _("Unknown session subcommand '{sub}'. Usage: /session [list | search <query> | delete <id>]", sub=sub)
         )
-        self.console.print(f"[red]{err_msg}[/red]")
         return None
 
 
-def build_repl_handlers(
-    env: REPLEnvironment | None = None,
-    **kwargs: Any,
-) -> dict[str, REPLHandler]:
+def build_repl_handlers(env: REPLEnvironment) -> dict[str, REPLHandler]:
     """Build the REPL command registry for unified slash commands.
 
     Only commands not intercepted inline by the TUI app are registered
     (/exit, /quit, /clear, /new, /session new|resume|switch|export,
     /task create|run and /skill create are handled by OllamaAgentApp).
     """
-    if env is None:
-        env = REPLEnvironment(**kwargs)
-
     return {
         "/queue": env.handle_queue,
         "/yolo": env.handle_yolo,

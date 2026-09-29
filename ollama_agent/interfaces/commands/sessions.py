@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from rich import box
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from ...agent.episodic_memory import (
@@ -253,15 +254,17 @@ async def export_session(
     lines = _format_exported_messages(messages, export_title)
 
     target_file = Path(output_path).expanduser().resolve() if output_path else Path.cwd() / f"session_{resolved[:8]}.md"
-    target_file.parent.mkdir(parents=True, exist_ok=True)
     try:
+        # mkdir must be inside the handler: a path whose parent cannot be created
+        # raises OSError/PermissionError rather than propagating to the TUI.
+        target_file.parent.mkdir(parents=True, exist_ok=True)
         target_file.write_text("\n".join(lines), encoding="utf-8")
         exported_msg = _("Session exported to: {target_file}", target_file=target_file)
-        console.print(f"[green]✓ {exported_msg}[/green]")
+        console.print(f"[green]✓ {escape(exported_msg)}[/green]")
         return target_file
     except OSError as exc:
-        failed_export = _("Failed to export session: {exc}", exc=exc)
-        console.print(f"[red]{failed_export}[/red]")
+        failed_export = _("Failed to export session to {target_file}: {exc}", target_file=target_file, exc=exc)
+        console.print(f"[red]{escape(failed_export)}[/red]")
         return None
 
 

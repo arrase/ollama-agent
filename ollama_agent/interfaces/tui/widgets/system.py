@@ -10,6 +10,7 @@ from rich.markup import escape
 from rich.text import Text
 from textual.widgets import Static
 
+from ....core import shorten
 from ....i18n import _
 
 
@@ -29,10 +30,7 @@ class PromptQueueWidget(Static):
         lines = [header]
 
         for i, item in enumerate(islice(queue, 3), 1):
-            text = item.replace("\n", " ")
-            if len(text) > 60:
-                text = text[:57] + "..."
-            lines.append(f"  [dim]#{i}[/dim] {escape(text)}")
+            lines.append(f"  [dim]#{i}[/dim] {escape(shorten(item))}")
 
         if count > 3:
             remaining = count - 3

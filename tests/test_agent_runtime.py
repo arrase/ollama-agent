@@ -150,7 +150,9 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call_event["agent_name"], "fallback_subagent")
         out_event = mock_runtime.stream_writer.call_args_list[1][0][0]
         self.assertEqual(out_event["agent_name"], "fallback_subagent")
-        self.assertEqual(out_event["output_len"], len("command_payload"))
+        # A Command carries no "content", so its reported length is 0 rather than the
+        # length of its repr.
+        self.assertEqual(out_event["output_len"], 0)
 
     async def test_stream_tool_events_timeout_returns_tool_message(self) -> None:
         async def slow_handler(req: Any) -> Any:
@@ -228,7 +230,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
 
     async def test_rag_search_uninitialized(self) -> None:
         set_rag_manager(None)
-        with self.assertRaises(AttributeError):
+        with self.assertRaises(RAGNotLoadedError):
             await rag_search.ainvoke({"query": "test"})
 
     async def test_rag_search_no_db_loaded(self) -> None:

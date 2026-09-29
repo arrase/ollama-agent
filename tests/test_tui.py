@@ -27,12 +27,14 @@ from ollama_agent.interfaces.tui.widgets import (
     UserMessage,
 )
 
+from conftest import make_mock_repl, make_mock_runtime
+
 
 class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
     """Unit tests for modern minimalist TUI components and widgets."""
 
     def setUp(self) -> None:
-        self.repl_mock = MagicMock()
+        self.repl_mock = make_mock_repl()
         self.repl_mock.runtime.settings.model.name = "qwen2.5-coder:32b"
         self.repl_mock.runtime.settings.model.reasoning_effort = "high"
         self.repl_mock.runtime.settings.runtime.collapse_thinking = True
@@ -390,7 +392,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
     """Headless integration tests for OllamaAgentApp."""
 
     async def test_app_composition_and_yolo_toggle(self) -> None:
-        repl_mock = MagicMock()
+        repl_mock = make_mock_repl()
         repl_mock.runtime.settings.model.name = "gemma4:26b"
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
         repl_mock._rag_ctx = None
@@ -420,7 +422,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(input_container.has_class("yolo-mode"))
 
     async def test_autocomplete_trigger(self) -> None:
-        repl_mock = MagicMock()
+        repl_mock = make_mock_repl()
         repl_mock.runtime.settings.model.name = "gemma4:26b"
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
         repl_mock._rag_ctx = None
@@ -452,7 +454,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(autolist.display)
 
     async def test_accept_completion_slash_command(self) -> None:
-        repl_mock = MagicMock()
+        repl_mock = make_mock_repl()
         repl_mock.runtime.settings.model.name = "gemma4:26b"
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
         repl_mock._rag_ctx = None
@@ -472,7 +474,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(inp.text, "/model ")
 
     async def test_autocomplete_subcommands_and_entities(self) -> None:
-        repl_mock = MagicMock()
+        repl_mock = make_mock_repl()
         repl_mock.runtime.settings.model.name = "gemma4:26b"
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
         repl_mock._rag_ctx = None
@@ -590,7 +592,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(autolist.option_count, 0)
 
     async def test_accept_completion_file_mention(self) -> None:
-        repl_mock = MagicMock()
+        repl_mock = make_mock_repl()
         repl_mock.runtime.settings.model.name = "gemma4:26b"
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
         repl_mock._rag_ctx = None
@@ -607,7 +609,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(inp.text, "Look at @src/main.py ")
 
     async def test_run_slash_commands_dispatch(self) -> None:
-        repl_mock = MagicMock()
+        repl_mock = make_mock_repl()
         repl_mock.console = Console(file=io.StringIO())
         repl_mock.runtime.settings.model.name = "gemma4:26b"
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
@@ -710,7 +712,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("git-commit-helper", prompt_arg)
 
     async def test_task_run_restores_runtime_settings(self) -> None:
-        repl_mock = MagicMock()
+        repl_mock = make_mock_repl()
         repl_mock.console = Console(file=io.StringIO())
         repl_mock.runtime.settings.model.name = "chat-model"
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
@@ -744,7 +746,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(repl_mock.runtime.reload.await_count, 2)
 
     async def test_task_run_with_variables_in_repl(self) -> None:
-        repl_mock = MagicMock()
+        repl_mock = make_mock_repl()
         repl_mock.console = Console(file=io.StringIO())
         repl_mock.runtime.settings.model.name = "chat-model"
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
@@ -768,7 +770,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(mock_stream.call_args[0][0], "Rendered: file=src/app.py mode=strict")
 
     async def test_task_run_invalid_var_in_repl_shows_notice(self) -> None:
-        repl_mock = MagicMock()
+        repl_mock = make_mock_repl()
         repl_mock.console = Console(file=io.StringIO())
         repl_mock.runtime.settings.model.name = "chat-model"
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
@@ -794,7 +796,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             self.assertIn("invalid_var", mock_notice.call_args[0][0])
 
     async def test_task_run_template_error_in_repl_shows_notice(self) -> None:
-        repl_mock = MagicMock()
+        repl_mock = make_mock_repl()
         repl_mock.console = Console(file=io.StringIO())
         repl_mock.runtime.settings.model.name = "chat-model"
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
@@ -821,7 +823,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Missing required input: file", mock_notice.call_args[0][0])
 
     async def test_tui_streaming_renderer_events(self) -> None:
-        repl_mock = MagicMock()
+        repl_mock = make_mock_repl()
         repl_mock.runtime.settings.model.name = "gemma4:26b"
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
         repl_mock._rag_ctx = None
@@ -877,16 +879,24 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
         repl._handle_yolo_cmd(["on"])
         self.assertTrue(runtime_mock.yolo_mode)
 
-    async def test_repl_cleanup_unloads_rag(self) -> None:
-        runtime_mock = MagicMock()
-        runtime_mock.aclose = AsyncMock()
+    async def test_repl_cleanup_closes_rag_and_runtime(self) -> None:
+        runtime_mock = make_mock_runtime(aclose=AsyncMock())
         repl = OllamaREPL(runtime=runtime_mock)
 
         rag_ctx_mock = MagicMock()
+        rag_ctx_mock.rag_manager.aclose = AsyncMock()
         repl._rag_ctx = rag_ctx_mock
 
         await repl.cleanup()
-        rag_ctx_mock.rag_manager.unload.assert_called_once()
+        rag_ctx_mock.rag_manager.aclose.assert_awaited_once()
+        runtime_mock.aclose.assert_awaited_once()
+
+    async def test_repl_cleanup_without_rag_still_closes_runtime(self) -> None:
+        runtime_mock = make_mock_runtime(aclose=AsyncMock())
+        repl = OllamaREPL(runtime=runtime_mock)
+        repl._rag_ctx = None
+
+        await repl.cleanup()
         runtime_mock.aclose.assert_awaited_once()
 
     def test_is_immediate_command(self) -> None:
@@ -1210,7 +1220,7 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
             self.assertGreaterEqual(q.outer_size.height, 7)
 
     async def test_repl_input_load_history_handles_history_error(self) -> None:
-        runtime_mock = MagicMock()
+        runtime_mock = make_mock_runtime()
         repl = OllamaREPL(runtime=runtime_mock)
         app = OllamaAgentApp(repl)
 

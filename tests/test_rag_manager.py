@@ -265,19 +265,19 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(RAGError):
             await self.manager.add_directory(str(f1))
 
-        # Batch failure during add_directory: embeddings raise immediately (Fail Fast)
+        # Batch failure during add_directory is isolated per file and reported in counts
         with patch.object(RAGManager, "_get_embeddings", AsyncMock(side_effect=RAGError("Ollama connection failed"))):
-            with self.assertRaises(RAGError):
-                await self.manager.add_directory(str(sub_dir))
+            results = await self.manager.add_directory(str(sub_dir))
+        self.assertGreaterEqual(results["failed"], 1)
 
         # Unloaded database error
         self.manager.unload()
         with self.assertRaises(RAGNotLoadedError):
             await self.manager.add_file(str(f1))
 
-    def test_delete_source_points(self) -> None:
+    async def test_delete_source_points(self) -> None:
         mock_client = MagicMock()
-        self.manager._delete_source_points(mock_client, "/path/to/file.py")
+        await self.manager._delete_source_points(mock_client, "/path/to/file.py")
         mock_client.delete.assert_called_once()
 
     async def test_get_embeddings_batching(self) -> None:
@@ -296,6 +296,7 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.manager._ollama_client.embed.call_count, 3)
 
     async def test_add_directory_partial_failure(self) -> None:
+        """One bad file must be counted as failed, not abort the whole batch."""
         sub_dir = self.rag_dir / "partial_dir"
         sub_dir.mkdir()
         f1 = sub_dir / "file1.md"
@@ -307,15 +308,31 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
         self.manager._client = mock_client
         self.manager._current_db = "partial_db"
 
-        # file1 fails embedding: fail fast and propagate exception immediately
         async def mock_embed(texts: list[str], batch_size: int = 100) -> list[list[float]]:
             if "Doc 1" in texts[0]:
                 raise RAGError("Embed failed for doc 1")
             return [[0.1, 0.2, 0.3, 0.4]] * len(texts)
 
         with patch.object(RAGManager, "_get_embeddings", side_effect=mock_embed):
-            with self.assertRaises(RAGError):
-                await self.manager.add_directory(str(sub_dir))
+            results = await self.manager.add_directory(str(sub_dir))
+
+        self.assertEqual(results["failed"], 1)
+        self.assertEqual(results["added"], 1)
+
+    async def test_add_directory_counts_empty_files_as_skipped(self) -> None:
+        sub_dir = self.rag_dir / "empty_dir"
+        sub_dir.mkdir()
+        (sub_dir / "blank.md").write_text("   \n", encoding="utf-8")
+        (sub_dir / "real.md").write_text("# Real", encoding="utf-8")
+
+        self.manager._client = MagicMock()
+        self.manager._current_db = "empty_db"
+
+        with patch.object(RAGManager, "_get_embeddings", AsyncMock(return_value=[[0.1, 0.2, 0.3, 0.4]])):
+            results = await self.manager.add_directory(str(sub_dir))
+
+        self.assertEqual(results["skipped"], 1)
+        self.assertEqual(results["added"], 1)
 
 
 if __name__ == "__main__":

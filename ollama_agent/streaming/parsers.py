@@ -84,23 +84,27 @@ class ThinkTagParser:
         return []
 
     def process_chunk(self, chunk: AIMessageChunk, hide_reasoning: bool = False) -> list[dict[str, Any]]:
-        """Convert incoming chunk into delta events."""
+        """Convert incoming chunk into delta events.
+
+        A single chunk may carry *both* ``reasoning_content`` and ``content`` (Ollama
+        emits them together for interleaved-thinking models), so the two must be
+        emitted independently instead of returning early on reasoning.
+        """
         if chunk.type == "tool":
             return []
 
+        events: list[dict[str, Any]] = []
+
         reasoning = streaming_reasoning(chunk.content, chunk.additional_kwargs)
-        if reasoning:
-            if hide_reasoning:
-                return []
-            return [{"type": "reasoning_delta", "content": reasoning}]
+        if reasoning and not hide_reasoning:
+            events.append({"type": "reasoning_delta", "content": reasoning})
 
         text = streaming_text(chunk.content)
-        if not text:
-            return []
+        if text:
+            events.extend(
+                {"type": f"{kind}_delta", "content": delta}
+                for kind, delta in self.feed(text)
+                if not (hide_reasoning and kind == "reasoning")
+            )
 
-        deltas = self.feed(text)
-        return [
-            {"type": f"{kind}_delta", "content": delta}
-            for kind, delta in deltas
-            if not (hide_reasoning and kind == "reasoning")
-        ]
+        return events

@@ -14,17 +14,19 @@ from ollama_agent.core import (
     OllamaVersionError,
 )
 from ollama_agent.i18n import set_locale
-from ollama_agent.interfaces.cli import create_argument_parser, handle_cli_commands
+from ollama_agent.interfaces.cli import create_argument_parser, handle_subcommand
 from ollama_agent.interfaces.commands.dispatch import (
     build_cli_handlers,
     build_repl_handlers,
 )
-from ollama_agent.main import _extract_early_language, main
+from ollama_agent.main import _apply_cli_overrides, _extract_early_language, main
 from ollama_agent.rag.commands import RAGContext
 from ollama_agent.rag import RAGManager
 from ollama_agent.settings import RAGSettings, Settings
 from ollama_agent.skills.commands import SkillsContext
 from ollama_agent.tasks.commands import TasksContext
+
+from conftest import make_repl_environment
 
 
 def _console() -> Console:
@@ -51,7 +53,7 @@ class TestDispatchAndCLI(unittest.TestCase):
         )
         self.assertEqual(args.model, "llama3:8b")
         self.assertEqual(args.effort, "high")
-        self.assertEqual(args.num_ctx, "16384")
+        self.assertEqual(args.num_ctx, 16384)
         self.assertTrue(args.yolo)
         self.assertTrue(args.stealth)
         self.assertEqual(args.prompt, "hello")
@@ -60,9 +62,18 @@ class TestDispatchAndCLI(unittest.TestCase):
     def test_argument_parser_num_ctx(self) -> None:
         parser = create_argument_parser()
         args1 = parser.parse_args(["--num-ctx", "32768"])
-        self.assertEqual(args1.num_ctx, "32768")
+        self.assertEqual(args1.num_ctx, 32768)
         args2 = parser.parse_args(["-c", "max"])
         self.assertEqual(args2.num_ctx, "max")
+
+    def test_argument_parser_rejects_invalid_numeric_args(self) -> None:
+        """Garbage for -c/-t must be an argparse error, not a later traceback."""
+        parser = create_argument_parser()
+        with patch("sys.stderr", new_callable=io.StringIO):
+            for argv in (["-c", "invalid"], ["-c", "-5"], ["-c", "0"], ["-t", "0"], ["-t", "abc"]):
+                with self.subTest(argv=argv), self.assertRaises(SystemExit) as ctx:
+                    parser.parse_args(argv)
+                self.assertEqual(ctx.exception.code, 2)
 
     def test_argument_parser_runtime_flags(self) -> None:
         parser = create_argument_parser()
@@ -147,25 +158,7 @@ class TestDispatchAndCLI(unittest.TestCase):
         self.assertEqual(args.subcommand, "list")
 
     def test_build_repl_handlers_registry(self) -> None:
-        async def dummy_async_str(_: str) -> None:
-            pass
-
-        handlers = build_repl_handlers(
-            task_ctx=TasksContext(console=_console()),
-            skills_ctx=SkillsContext(console=_console()),
-            get_rag_ctx=lambda: RAGContext(rag_manager=RAGManager(RAGSettings()), console=_console()),
-            console=_console(),
-            current_model=lambda: "gemma4:26b",
-            base_url=lambda: "http://localhost:11434",
-            switch_model=dummy_async_str,
-            handle_yolo=lambda _: None,
-            handle_stealth=lambda _: None,
-            handle_queue=lambda _: None,
-            get_runtime=lambda: MagicMock(),
-            current_thread_id=lambda: "",
-            switch_effort=dummy_async_str,
-            switch_context_window=dummy_async_str,
-        )
+        handlers = build_repl_handlers(make_repl_environment())
 
         self.assertNotIn("/help", handlers)
         self.assertNotIn("/exit", handlers)
@@ -188,27 +181,9 @@ class TestDispatchAndCLI(unittest.TestCase):
         self.assertIn("/agents", handlers)
 
     def test_build_repl_handlers_intercepted_subcommands_removed(self) -> None:
-        async def dummy_async(_: object) -> None:
-            pass
-
         out = io.StringIO()
         console = Console(file=out)
-        handlers = build_repl_handlers(
-            task_ctx=TasksContext(console=_console()),
-            skills_ctx=SkillsContext(console=_console()),
-            get_rag_ctx=lambda: RAGContext(rag_manager=RAGManager(RAGSettings()), console=_console()),
-            console=console,
-            current_model=lambda: "gemma4:26b",
-            base_url=lambda: "http://localhost:11434",
-            switch_model=dummy_async,
-            handle_yolo=lambda _: None,
-            handle_stealth=lambda _: None,
-            handle_queue=lambda _: None,
-            get_runtime=lambda: MagicMock(),
-            current_thread_id=lambda: "",
-            switch_effort=dummy_async,
-            switch_context_window=dummy_async,
-        )
+        handlers = build_repl_handlers(make_repl_environment(console=console))
 
         # Inline-intercepted branches are gone from the registry handlers.
         task_handler = handlers["/task"]
@@ -315,9 +290,42 @@ class TestDispatchAndCLI(unittest.TestCase):
                 main()
             self.assertEqual(cm.exception.code, 1)
 
+    def test_apply_cli_overrides_propagates_every_flag(self) -> None:
+        """Every CLI flag must reach the settings object, not just be parsed."""
+        parser = create_argument_parser()
+        settings = Settings()
+        _apply_cli_overrides(
+            settings,
+            parser.parse_args(
+                [
+                    "-m", "llama3:8b",
+                    "-e", "high",
+                    "-c", "16384",
+                    "-t", "42",
+                    "--allow-traversal",
+                ]
+            ),
+        )
+        self.assertEqual(settings.model.name, "llama3:8b")
+        self.assertEqual(settings.model.reasoning_effort, "high")
+        self.assertEqual(settings.model.context_window, 16384)
+        self.assertEqual(settings.runtime.builtin_tool_timeout, 42)
+        self.assertTrue(settings.runtime.allow_traversal)
+
+    def test_apply_cli_overrides_num_ctx_max_and_traversal_off(self) -> None:
+        parser = create_argument_parser()
+        settings = Settings()
+        _apply_cli_overrides(settings, parser.parse_args(["-c", "max"]))
+        self.assertEqual(settings.model.context_window, "max")
+
+        settings2 = Settings()
+        settings2.runtime.allow_traversal = True
+        _apply_cli_overrides(settings2, parser.parse_args(["--no-allow-traversal"]))
+        self.assertFalse(settings2.runtime.allow_traversal)
+
     def test_main_context_window_error_exits(self) -> None:
         with (
-            patch("sys.argv", ["ollama-agent", "-c", "invalid"]),
+            patch("sys.argv", ["ollama-agent"]),
             patch("ollama_agent.main.set_locale", return_value="en"),
             patch("ollama_agent.main.Console"),
             patch("ollama_agent.main.load_settings", return_value=Settings()),
@@ -432,7 +440,7 @@ class TestDispatchAndCLI(unittest.TestCase):
             self.assertEqual(call_args.kwargs["variables"], {"file": "app.py", "mode": "fast"})
             self.assertTrue(call_args.kwargs["yolo"])
 
-    def test_handle_cli_commands_task_run_validation_error(self) -> None:
+    def test_handle_subcommand_task_run_validation_error(self) -> None:
         parser = create_argument_parser()
         args = parser.parse_args(["task", "run", "my-task", "invalid_var"])
         settings = Settings()
@@ -441,7 +449,7 @@ class TestDispatchAndCLI(unittest.TestCase):
             patch("sys.stderr", new_callable=io.StringIO),
         ):
             with self.assertRaises(SystemExit) as cm:
-                handle_cli_commands(args, settings)
+                handle_subcommand(args, settings)
             self.assertEqual(cm.exception.code, 1)
 
     def test_extract_early_language(self) -> None:

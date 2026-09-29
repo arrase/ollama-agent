@@ -41,9 +41,19 @@ class TestTaskManager(unittest.TestCase):
             self.mgr.get("missing-task")
 
     def test_get_corrupted_task_raises(self) -> None:
-        (self.tasks_dir / "broken.yaml").write_text("title: Broken\nprompt: x\nmodel: m\n", encoding="utf-8")
-        with self.assertRaises(KeyError):
+        (self.tasks_dir / "broken.yaml").write_text("title: Broken\nmodel: m\n", encoding="utf-8")
+        with self.assertRaises(ValueError):
             self.mgr.get("broken")
+
+    def test_list_all_skips_corrupt_task(self) -> None:
+        """One bad file must not break /task list for the healthy ones."""
+        (self.tasks_dir / "good.yaml").write_text(
+            "title: Good\nprompt: hi\nmodel: m\n", encoding="utf-8"
+        )
+        (self.tasks_dir / "broken.yaml").write_text("title: Broken\nmodel: m\n", encoding="utf-8")
+        listed = dict(self.mgr.list_all())
+        self.assertIn("good", listed)
+        self.assertNotIn("broken", listed)
 
     def test_find_matches_rejects_invalid_prefix(self) -> None:
         with self.assertRaises(ValueError):

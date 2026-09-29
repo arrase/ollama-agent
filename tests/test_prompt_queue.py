@@ -21,27 +21,12 @@ from ollama_agent.interfaces.tui.widgets import (
     UserMessage,
 )
 
+from conftest import make_mock_runtime
+
 
 def _create_mock_repl() -> tuple[OllamaREPL, MagicMock]:
-    """Create a mock OllamaREPL instance with standard mock runtime."""
-    runtime = MagicMock()
-    runtime.settings.model.name = "qwen2.5-coder:32b"
-    runtime.settings.model.reasoning_effort = "high"
-    runtime.settings.model.context_window = 16384
-    runtime.effective_context_window = 16384
-    runtime.settings.runtime.collapse_thinking = True
-    runtime.yolo_mode = False
-    runtime.thread_id = "session_001"
-    runtime.last_context_tokens = 512
-    runtime.auto_approved_tools = set()
-    runtime.get_thread_messages = AsyncMock(return_value=[])
-    runtime.count_effective_tokens = AsyncMock(return_value=512)
-    runtime.reload = AsyncMock()
-
-    mock_state = MagicMock()
-    mock_state.interrupts = []
-    runtime.graph.aget_state = AsyncMock(return_value=mock_state)
-
+    """Create a real OllamaREPL shell around a mocked AgentRuntime."""
+    runtime = make_mock_runtime()
     repl = OllamaREPL(runtime=runtime)
     repl.console = Console(file=io.StringIO())
     return repl, runtime

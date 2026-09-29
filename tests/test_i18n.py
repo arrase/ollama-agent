@@ -4,6 +4,7 @@ import ast
 import json
 import os
 import re
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -432,7 +433,9 @@ class TestCLIAndSettingsI18n(unittest.TestCase):
 
     def test_reset_config_localization(self) -> None:
         set_locale("es")
-        msgs = reset_config("config-file", settings_path=Path("/tmp/dummy_settings.yaml"))
+        # tmp_path keeps the test from clobbering a real /tmp file.
+        target = Path(str(self.enterContext(tempfile.TemporaryDirectory()))) / "dummy_settings.yaml"
+        msgs = reset_config("config-file", settings_path=target)
         self.assertTrue(any("Reinicio:" in m or "restauró" in m for m in msgs), f"Unexpected messages: {msgs}")
 
 

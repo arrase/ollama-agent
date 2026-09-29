@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import re
 import sqlite3
 from collections import defaultdict
 from collections.abc import Iterator
@@ -41,7 +42,11 @@ def connect_history(db_path: Path, read_only: bool = True) -> Iterator[sqlite3.C
 
 def format_iso_timestamp(ts: str) -> str:
     """Format ISO timestamp into a human-readable UTC string (YYYY-MM-DD HH:MM UTC)."""
-    dt = datetime.fromisoformat(ts)
+    try:
+        dt = datetime.fromisoformat(ts)
+    except ValueError as exc:
+        # A blob written by another serde/version must not escape as a raw ValueError.
+        raise HistoryError(_("Malformed timestamp in history database: {ts}", ts=ts)) from exc
     if dt.tzinfo is not None:
         dt = dt.astimezone(timezone.utc)
     return dt.strftime("%Y-%m-%d %H:%M UTC")
@@ -67,14 +72,20 @@ def load_past_user_prompts(db_path: Path = HISTORY_DB_PATH) -> list[str]:
                         if text and text not in seen:
                             seen.add(text)
                             prompts.append(text)
-    except (sqlite3.Error, OSError) as e:
+    except (sqlite3.Error, OSError, ValueError) as e:
         raise HistoryError(_("Failed to read history database {db_path}: {e}", db_path=db_path, e=e)) from e
     return prompts
 
 
 def _read_history_checkpoints(cursor: sqlite3.Cursor, exclude_thread_id: str) -> dict[str, str]:
     thread_timestamps: dict[str, str] = {}
-    cursor.execute("SELECT thread_id, type, checkpoint FROM checkpoints ORDER BY rowid ASC")
+    # Only the newest checkpoint per thread survives below, so deserialise just that
+    # one. Every blob embeds the whole channel_values, so reading them all is O(N^2).
+    cursor.execute(
+        "SELECT c.thread_id, c.type, c.checkpoint FROM checkpoints c "
+        "JOIN (SELECT thread_id, MAX(rowid) AS rowid FROM checkpoints GROUP BY thread_id) latest "
+        "ON c.rowid = latest.rowid ORDER BY c.rowid ASC"
+    )
     for tid, typ, chk in cursor.fetchall():
         if exclude_thread_id and tid.startswith(exclude_thread_id):
             continue
@@ -113,7 +124,7 @@ def load_past_conversations(
             cursor = conn.cursor()
             thread_timestamps = _read_history_checkpoints(cursor, exclude_thread_id)
             thread_messages = _read_history_messages(cursor, exclude_thread_id)
-    except (sqlite3.Error, OSError) as e:
+    except (sqlite3.Error, OSError, ValueError) as e:
         raise HistoryError(_("Failed to read history database {db_path}: {e}", db_path=db_path, e=e)) from e
 
     conversations: dict[str, dict[str, Any]] = {}
@@ -135,9 +146,11 @@ def _format_snippet(role: str, text: str) -> str:
     return f"[{role_label}]: {truncated}"
 
 
+_DATE_TERM_RE = re.compile(r"^[\d:/\-.]+$")
+
+
 def _score_conversation(data: dict[str, Any], terms: list[str]) -> tuple[int, list[str]]:
     msgs = data["messages"]
-    formatted_date = data["formatted_date"]
 
     dialogue: list[tuple[str, str]] = []
     for msg in msgs:
@@ -147,7 +160,12 @@ def _score_conversation(data: dict[str, Any], terms: list[str]) -> tuple[int, li
                 dialogue.append((msg.type, text))
 
     snippets: list[str] = []
-    match_count = sum(formatted_date.lower().count(t) for t in terms)
+    # Date search is a supported feature, so the formatted date still counts -- but only
+    # for date-shaped terms, and as a substring. Scoring every term against
+    # "2026-08-20 10:00 UTC" with .count() would score every session for a query like
+    # "20" or "utc" and drown out real content matches.
+    formatted_date = str(data["formatted_date"]).lower()
+    match_count = sum(1 for t in terms if _DATE_TERM_RE.match(t) and t in formatted_date)
 
     for role, text in dialogue:
         term_hits = sum(text.lower().count(t) for t in terms)

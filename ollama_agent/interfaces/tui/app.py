@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
+import logging
 import os
 from collections import deque
 from collections.abc import Iterator
@@ -21,8 +21,13 @@ from textual.widgets import OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 from textual.worker import Worker
 
+from ...agent.episodic_memory import HistoryError
+from ...core import shorten
 from ...i18n import _
+from ...rag import RAGError
+from ...skills import SkillError
 from ...streaming import extract_action_requests, stream_agent_events
+from ...tasks import TaskError
 from ..clipboard import ClipboardError, copy_to_system_clipboard, get_system_clipboard
 from ..commands.sessions import get_available_sessions
 from .commands import _is_immediate_command, run_slash_command
@@ -65,6 +70,8 @@ from .widgets import (
 
 if TYPE_CHECKING:
     from .repl import OllamaREPL
+
+_log = logging.getLogger(__name__)
 
 
 class OllamaAgentApp(App):
@@ -167,12 +174,20 @@ class OllamaAgentApp(App):
     def on_mount(self) -> None:
         self.query_one(ReplInput).focus()
         self.update_mode_ui()
-        self.run_worker(self._warmup_agent(), group="warmup")
+        # exit_on_error=False: a startup failure must be reported in the UI, not crash the app.
+        self.run_worker(self._warmup_agent(), group="warmup", exit_on_error=False)
 
     async def _warmup_agent(self) -> None:
-        res = self.repl.runtime._ensure_graph()
-        if inspect.isawaitable(res):
-            await res
+        try:
+            await self.repl.runtime.warmup()
+        except asyncio.CancelledError:
+            raise
+        # Startup failures are reported in the TUI instead of killing it.
+        except Exception as exc:  # noqa: BLE001
+            _log.exception("Agent warmup failed")
+            notice = escape(_("Agent startup failed: {exc}", exc=exc))
+            self.show_system_notice(f"[bold #f87171]✕ {notice}[/bold #f87171]")
+            return
         self.query_one(AgentHeader).update_header()
 
     def update_mode_ui(self) -> None:
@@ -229,14 +244,31 @@ class OllamaAgentApp(App):
             return
 
         if val.startswith("/"):
-            self._current_worker = self.run_worker(self._run_slash_command(val))
+            self._start_slash(val)
         else:
-            scroll = self.query_one(_CHAT_SCROLL_ID)
-            scroll.mount(UserMessage(val))
-            agent_msg = AgentResponse()
-            scroll.mount(agent_msg)
-            self._deferred_scroll()
-            self._current_worker = self.run_worker(self._run_stream(val, scroll, agent_msg))
+            self._start_stream(val)
+
+    def _start_slash(self, cmd_line: str) -> None:
+        """Schedule a slash-command worker, claiming the generation slot first.
+
+        ``_is_generating`` is flipped here rather than inside the coroutine because
+        ``run_worker`` only creates the task: until it is first scheduled the flag
+        would still read ``False`` and a second Enter could start a parallel run.
+        """
+        self._is_generating = True
+        self.query_one(AgentFooter).set_generating(True)
+        self._current_worker = self.run_worker(self._run_slash_command(cmd_line))
+
+    def _start_stream(self, prompt: str) -> None:
+        """Mount the prompt widgets and schedule a streaming worker (see _start_slash)."""
+        scroll = self.query_one(_CHAT_SCROLL_ID)
+        scroll.mount(UserMessage(prompt))
+        agent_msg = AgentResponse()
+        scroll.mount(agent_msg)
+        self._deferred_scroll()
+        self._is_generating = True
+        self.query_one(AgentFooter).set_generating(True)
+        self._current_worker = self.run_worker(self._run_stream(prompt, scroll, agent_msg))
 
     def _process_next_in_queue(self) -> None:
         if not self._prompt_queue or self._is_generating or self._is_approval_pending:
@@ -244,14 +276,9 @@ class OllamaAgentApp(App):
         item = self._prompt_queue.popleft()
         self._update_queue_ui()
         if item.startswith("/"):
-            self._current_worker = self.run_worker(self._run_slash_command(item))
+            self._start_slash(item)
         else:
-            scroll = self.query_one(_CHAT_SCROLL_ID)
-            scroll.mount(UserMessage(item))
-            agent_msg = AgentResponse()
-            scroll.mount(agent_msg)
-            self._deferred_scroll()
-            self._current_worker = self.run_worker(self._run_stream(item, scroll, agent_msg))
+            self._start_stream(item)
 
     # ── Autocomplete ──────────────────────────────────────────────────────
 
@@ -310,7 +337,10 @@ class OllamaAgentApp(App):
         ]
 
     def _complete_task_args(self, root_cmd: str, sub_cmd: str, arg_token: str) -> list[tuple[str, Text]]:
-        tasks = self.repl._task_ctx.task_manager.list_all()
+        try:
+            tasks = self.repl._task_ctx.task_manager.list_all()
+        except (OSError, ValueError, TaskError):
+            return []
         return [
             (
                 f"{root_cmd} {sub_cmd} {tid}",
@@ -321,7 +351,10 @@ class OllamaAgentApp(App):
         ]
 
     def _complete_skill_args(self, root_cmd: str, sub_cmd: str, arg_token: str) -> list[tuple[str, Text]]:
-        skills = self.repl._skills_ctx.skill_manager.list_all()
+        try:
+            skills = self.repl._skills_ctx.skill_manager.list_all()
+        except (OSError, ValueError, SkillError):
+            return []
         return [
             (
                 f"{root_cmd} {sub_cmd} {sid}",
@@ -334,7 +367,8 @@ class OllamaAgentApp(App):
     def _complete_session_args(self, root_cmd: str, sub_cmd: str, arg_token: str) -> list[tuple[str, Text]]:
         try:
             sessions = get_available_sessions()
-        except OSError:
+        except (OSError, HistoryError):
+            # HistoryError is a RuntimeError, not an OSError.
             return []
         steps_label = _("steps")
         return [
@@ -350,7 +384,10 @@ class OllamaAgentApp(App):
         ]
 
     def _complete_rag_args(self, root_cmd: str, sub_cmd: str, arg_token: str) -> list[tuple[str, Text]]:
-        dbs = self.repl._get_rag_ctx().rag_manager.list_databases()
+        try:
+            dbs = self.repl._get_rag_ctx().rag_manager.list_databases()
+        except (RAGError, OSError):
+            return []
         chunks_label = _("chunks")
         return [
             (
@@ -370,8 +407,7 @@ class OllamaAgentApp(App):
         for idx, item in enumerate(self._prompt_queue, 1):
             if clean_arg and not str(idx).startswith(clean_arg):
                 continue
-            text = item.replace("\n", " ")
-            preview = escape(text[:57] + "..." if len(text) > 60 else text)
+            preview = escape(shorten(item))
             items.append(
                 (
                     f"{root_cmd} {sub_cmd} {idx}",
@@ -521,10 +557,11 @@ class OllamaAgentApp(App):
         await self._run_stream(command, scroll, agent_msg)
 
     async def _run_stream(self, prompt: str | Command[Any], scroll: Any, agent_msg: AgentResponse) -> None:
-        self._is_generating = True
-        footer = self.query_one(AgentFooter)
-        footer.set_generating(True)
+        """Stream one agent turn, reporting failures in the message widget.
 
+        A run that raises must not propagate: ``run_worker`` defaults to
+        ``exit_on_error=True``, which turns any exception into a fatal app crash.
+        """
         try:
             try:
                 await stream_agent_events(
@@ -538,6 +575,12 @@ class OllamaAgentApp(App):
                     self._prompt_queue.clear()
                     self._update_queue_ui()
                 raise
+            # Surface the failure in the transcript and keep the app alive.
+            except Exception as exc:  # noqa: BLE001
+                _log.exception("Agent run failed")
+                agent_msg.add_error(_("Run failed: {exc}", exc=exc))
+                self.query_one(ReplInput).focus()
+                return
             inp = self.query_one(ReplInput)
             inp.disabled = False
 
@@ -547,6 +590,7 @@ class OllamaAgentApp(App):
             if state.interrupts:
                 action_requests = extract_action_requests({"interrupts": state.interrupts})
                 self._is_approval_pending = True
+                footer = self.query_one(AgentFooter)
                 footer.set_approval(True)
                 approval_widget = ToolApprovalWidget(
                     action_requests=action_requests,
@@ -560,6 +604,6 @@ class OllamaAgentApp(App):
                 inp.focus()
         finally:
             self._is_generating = False
-            footer.set_generating(False)
+            self.query_one(AgentFooter).set_generating(False)
             self.query_one(AgentHeader).update_header()
             self._process_next_in_queue()

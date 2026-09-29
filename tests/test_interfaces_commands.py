@@ -10,8 +10,8 @@ from rich.console import Console
 from ollama_agent.agent.agent import AgentRuntime
 from ollama_agent.agent.episodic_memory import HistoryError
 from ollama_agent.core.models import ModelCapabilityError
-from ollama_agent.interfaces.cli import handle_cli_commands
-from ollama_agent.interfaces.commands.dispatch import build_repl_handlers, safe_call
+from ollama_agent.interfaces.cli import handle_subcommand, run_prompt_session
+from ollama_agent.interfaces.commands.dispatch import REPLHandler, build_repl_handlers, safe_call
 from ollama_agent.interfaces.commands.models import (
     ensure_model_configured,
     list_models,
@@ -32,27 +32,12 @@ from ollama_agent.settings.config import Settings
 from ollama_agent.skills import SkillError
 from ollama_agent.tasks.commands import TaskError
 
+from conftest import make_repl_environment
 
-def _repl_handler_kwargs(**overrides: object) -> dict:
-    """Mandatory keyword arguments for build_repl_handlers."""
-    kwargs: dict = {
-        "task_ctx": MagicMock(),
-        "skills_ctx": MagicMock(),
-        "get_rag_ctx": MagicMock(),
-        "console": Console(file=io.StringIO()),
-        "current_model": lambda: "gemma4:26b",
-        "base_url": lambda: "http://localhost:11434",
-        "switch_model": AsyncMock(),
-        "handle_yolo": lambda _: None,
-        "handle_stealth": lambda _: None,
-        "handle_queue": lambda _: None,
-        "get_runtime": lambda: MagicMock(),
-        "current_thread_id": lambda: "",
-        "switch_effort": AsyncMock(),
-        "switch_context_window": AsyncMock(),
-    }
-    kwargs.update(overrides)
-    return kwargs
+
+def _repl_handlers(**overrides: object) -> dict[str, REPLHandler]:
+    """Registry built from a fully-stubbed REPLEnvironment."""
+    return build_repl_handlers(make_repl_environment(**overrides))
 
 
 class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
@@ -398,12 +383,10 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime.settings.model.name = "llama3.2:3b"
         switch_context_window = AsyncMock()
 
-        handlers = build_repl_handlers(
-            **_repl_handler_kwargs(
+        handlers = _repl_handlers(
                 console=console,
                 get_runtime=lambda: runtime,
                 switch_context_window=switch_context_window,
-            )
         )
 
         # /context without args
@@ -475,13 +458,11 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime.settings.model.parameters = {"temperature": 0.8}
         switch_mock = AsyncMock()
 
-        handlers = build_repl_handlers(
-            **_repl_handler_kwargs(
+        handlers = _repl_handlers(
                 console=console,
                 current_model=lambda: "llama3.2:3b",
                 switch_model=switch_mock,
                 get_runtime=lambda: runtime,
-            )
         )
 
         # /params
@@ -509,12 +490,10 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime.settings.model.name = "llama3.2:3b"
         switch_effort = AsyncMock()
 
-        handlers = build_repl_handlers(
-            **_repl_handler_kwargs(
+        handlers = _repl_handlers(
                 console=console,
                 get_runtime=lambda: runtime,
                 switch_effort=switch_effort,
-            )
         )
 
         # /effort without args
@@ -537,8 +516,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         switch_effort = AsyncMock()
         switch_context_window = AsyncMock()
 
-        handlers = build_repl_handlers(
-            **_repl_handler_kwargs(
+        handlers = _repl_handlers(
                 task_ctx=task_ctx,
                 skills_ctx=skills_ctx,
                 get_rag_ctx=lambda: rag_ctx,
@@ -550,7 +528,6 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
                 get_runtime=lambda: runtime,
                 switch_effort=switch_effort,
                 switch_context_window=switch_context_window,
-            )
         )
 
         # 1. /model handler
@@ -681,60 +658,54 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         handlers["/agents"](["unknown_cmd"])
         self.assertIn("Unknown agents subcommand 'unknown_cmd'", console.export_text())
 
-    def test_handle_cli_commands_subcommand(self) -> None:
+    def test_handle_subcommand_task_list(self) -> None:
         args = argparse.Namespace(command="task", subcommand="list", prompt=None, yolo=False, rag=None)
         settings = Settings()
         with patch("ollama_agent.interfaces.commands.dispatch.list_tasks") as mock_list:
-            handled = handle_cli_commands(args, settings)
-            self.assertTrue(handled)
+            handle_subcommand(args, settings)
             mock_list.assert_called_once()
 
-    def test_handle_cli_commands_agents_list(self) -> None:
+    def test_handle_subcommand_agents_list(self) -> None:
         args = argparse.Namespace(command="agents", subcommand="list", prompt=None, yolo=False, rag=None)
         settings = Settings()
         with patch("ollama_agent.interfaces.commands.dispatch.list_subagents") as mock_list:
-            handled = handle_cli_commands(args, settings)
-            self.assertTrue(handled)
+            handle_subcommand(args, settings)
             mock_list.assert_called_once()
 
-    def test_handle_cli_commands_session_list(self) -> None:
+    def test_handle_subcommand_session_list(self) -> None:
         args = argparse.Namespace(command="session", subcommand="list", prompt=None, yolo=False, rag=None)
         settings = Settings()
         with patch("ollama_agent.interfaces.commands.dispatch.list_sessions") as mock_list:
-            handled = handle_cli_commands(args, settings)
-            self.assertTrue(handled)
+            handle_subcommand(args, settings)
             mock_list.assert_called_once()
 
-    def test_handle_cli_commands_session_search(self) -> None:
+    def test_handle_subcommand_session_search(self) -> None:
         args = argparse.Namespace(
             command="session", subcommand="search", query="fastapi", prompt=None, yolo=False, rag=None
         )
         settings = Settings()
         with patch("ollama_agent.interfaces.commands.dispatch.search_sessions") as mock_search:
-            handled = handle_cli_commands(args, settings)
-            self.assertTrue(handled)
+            handle_subcommand(args, settings)
             mock_search.assert_called_once()
 
-    def test_handle_cli_commands_session_delete(self) -> None:
+    def test_handle_subcommand_session_delete(self) -> None:
         args = argparse.Namespace(
             command="session", subcommand="delete", session_id="session-123", prompt=None, yolo=False, rag=None
         )
         settings = Settings()
         with patch("ollama_agent.interfaces.commands.dispatch.delete_session") as mock_del:
-            handled = handle_cli_commands(args, settings)
-            self.assertTrue(handled)
+            handle_subcommand(args, settings)
             mock_del.assert_called_once()
 
-    def test_handle_cli_commands_prompt(self) -> None:
+    def test_run_prompt_session(self) -> None:
         args = argparse.Namespace(command=None, prompt="hello world", yolo=True, stealth=False, rag=None)
         settings = Settings()
         with patch("ollama_agent.interfaces.cli.run_non_interactive", AsyncMock()) as mock_run:
             with patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()):
-                handled = handle_cli_commands(args, settings)
-                self.assertTrue(handled)
+                run_prompt_session(args, settings)
                 mock_run.assert_awaited_once()
 
-    def test_handle_cli_commands_prompt_with_rag(self) -> None:
+    def test_run_prompt_session_with_rag(self) -> None:
         args = argparse.Namespace(command=None, prompt="query with rag", yolo=False, stealth=False, rag="my_db")
         settings = Settings()
         with patch("ollama_agent.interfaces.cli.run_non_interactive", AsyncMock()) as mock_run:
@@ -742,15 +713,27 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
                 patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()),
                 patch("ollama_agent.interfaces.cli.load_rag_database") as mock_load_rag,
             ):
-                handled = handle_cli_commands(args, settings)
-                self.assertTrue(handled)
+                run_prompt_session(args, settings)
                 mock_load_rag.assert_called_once()
                 mock_run.assert_awaited_once()
 
-    def test_handle_cli_commands_unhandled(self) -> None:
-        args = argparse.Namespace(command=None, prompt=None)
+    def test_handle_subcommand_unknown_exits_2(self) -> None:
+        args = argparse.Namespace(command="task", subcommand="nope", prompt=None, yolo=False, rag=None)
         settings = Settings()
-        self.assertFalse(handle_cli_commands(args, settings))
+        with self.assertRaises(SystemExit) as ctx:
+            handle_subcommand(args, settings)
+        self.assertEqual(ctx.exception.code, 2)
+
+    def test_handle_subcommand_reports_false_result_as_failure(self) -> None:
+        """Handlers that signal failure by returning False must exit non-zero."""
+        args = argparse.Namespace(
+            command="session", subcommand="delete", session_id="bogus", prompt=None, yolo=False, rag=None
+        )
+        settings = Settings()
+        with patch("ollama_agent.interfaces.commands.dispatch.delete_session", return_value=False):
+            with self.assertRaises(SystemExit) as ctx:
+                handle_subcommand(args, settings)
+        self.assertEqual(ctx.exception.code, 1)
 
     def test_ensure_model_configured_already_available(self) -> None:
         settings = Settings()
@@ -877,11 +860,9 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
     def test_repl_subcommands_error_and_edge_cases(self) -> None:
         console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
-        handlers = build_repl_handlers(
-            **_repl_handler_kwargs(
+        handlers = _repl_handlers(
                 console=console,
                 get_runtime=lambda: runtime,
-            )
         )
 
         handlers["/mcp"](["unknown_sub"])
@@ -929,11 +910,9 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
     async def test_repl_rag_subcommands(self) -> None:
         console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
-        handlers = build_repl_handlers(
-            **_repl_handler_kwargs(
+        handlers = _repl_handlers(
                 console=console,
                 get_runtime=lambda: runtime,
-            )
         )
 
         handlers["/rag"](["create"])

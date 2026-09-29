@@ -95,7 +95,9 @@ class TestStreamingSystem(unittest.IsolatedAsyncioTestCase):
     def test_console_streaming_renderer_agent_prefix(self) -> None:
         console = Console(file=io.StringIO(), record=True)
         renderer = ConsoleStreamingRenderer(console=console)
-        self.assertEqual(renderer._agent_prefix({"agent_name": "worker"}), "[worker] ")
+        # The prefix is escaped so an agent name carrying markup cannot break printing.
+        self.assertEqual(renderer._agent_prefix({"agent_name": "worker"}), "\\[worker] ")
+        self.assertEqual(renderer._agent_prefix({"agent_name": "a[/b]c"}), "[a\\[/b]c] ")
         self.assertEqual(renderer._agent_prefix({"agent_name": ""}), "")
         self.assertEqual(renderer._agent_prefix({"agent_name": None}), "")
         self.assertEqual(renderer._agent_prefix({}), "")
@@ -194,6 +196,18 @@ class TestInterruptHandling(unittest.IsolatedAsyncioTestCase):
         with (
             patch("ollama_agent.streaming.console_renderer.sys.stdin", new=fake_stdin),
             patch("builtins.input", side_effect=EOFError),
+        ):
+            result = await renderer.handle_interrupt(self._interrupt_event(), MagicMock())
+        self.assertIsNone(result)
+        self.assertIn("Cancelled", console.export_text())
+
+    async def test_keyboard_interrupt_at_prompt_is_treated_as_cancel(self) -> None:
+        """Ctrl-C on the prompt is forwarded to the caller and cancels the approval."""
+        renderer, console = self._make_renderer()
+        fake_stdin = SimpleNamespace(isatty=lambda: True)
+        with (
+            patch("ollama_agent.streaming.console_renderer.sys.stdin", new=fake_stdin),
+            patch("builtins.input", side_effect=KeyboardInterrupt),
         ):
             result = await renderer.handle_interrupt(self._interrupt_event(), MagicMock())
         self.assertIsNone(result)

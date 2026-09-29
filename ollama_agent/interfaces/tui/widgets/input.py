@@ -30,8 +30,11 @@ class ReplInput(TextArea):
 
     def action_paste(self) -> None:
         """Paste text from clipboard."""
-        if self.app.clipboard:
-            self.insert(self.app.clipboard)
+        # Read once: OllamaAgentApp.clipboard is a property whose getter runs a
+        # subprocess, so two accesses would block the UI for twice as long.
+        text = self.app.clipboard
+        if text:
+            self.insert(text)
 
     def __init__(self, **kwargs: Any) -> None:
         kwargs.setdefault("highlight_cursor_line", False)

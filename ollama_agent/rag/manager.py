@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import shutil
 import uuid
@@ -21,6 +22,7 @@ from qdrant_client.models import (
 )
 
 from ..core.common import validate_identifier
+from ..core.models import create_ollama_async_client
 from ..i18n import _
 from ..settings import RAGSettings
 
@@ -77,6 +79,12 @@ SUPPORTED_RAG_EXTENSIONS: frozenset[str] = frozenset(
     }
 )
 
+# Bounds a single `add_directory` batch so pointing it at a virtualenv or a data dump
+# cannot embed an unbounded tree.
+MAX_INDEXED_FILES = 2000
+
+_REQUIRED_PAYLOAD_KEYS: frozenset[str] = frozenset({"content", "source", "filename", "chunk_index"})
+
 
 class RAGError(RuntimeError):
     """Base exception for RAG operations."""
@@ -103,7 +111,14 @@ class RAGManager:
         self._rag_dir.mkdir(parents=True, exist_ok=True)
         self._client: QdrantClient | None = None
         self._current_db: str | None = None
-        self._ollama_client = ollama.AsyncClient(host=self.settings.embedder_base_url.rstrip("/"))
+        # Created on first use: a manager that only lists or deletes databases must not
+        # hold an httpx connection pool open.
+        self._ollama_client: ollama.AsyncClient | None = None
+
+    def _embedder(self) -> ollama.AsyncClient:
+        if self._ollama_client is None:
+            self._ollama_client = create_ollama_async_client(self.settings.embedder_base_url)
+        return self._ollama_client
 
     @property
     def current_database(self) -> str | None:
@@ -169,8 +184,10 @@ class RAGManager:
                 ),
             )
         except Exception as e:
+            # The client must be closed before the storage directory is removed: Qdrant
+            # keeps it locked while open (notably on Windows).
             client.close()
-            shutil.rmtree(db_path)
+            shutil.rmtree(db_path, ignore_errors=True)
             raise RAGError(_("Failed to create database '{name}': {e}", name=name, e=e)) from e
         else:
             client.close()
@@ -219,11 +236,18 @@ class RAGManager:
             self._client = None
         self._current_db = None
 
+    async def aclose(self) -> None:
+        """Release every client owned by this manager."""
+        self.unload()
+        if self._ollama_client is not None:
+            await self._ollama_client.close()
+            self._ollama_client = None
+
     async def _index_chunks(self, client: QdrantClient, path: Path, chunks: list[str]) -> None:
         """Generate embeddings and upsert points for chunks of a file."""
         embeddings = await self._get_embeddings(chunks)
         source = str(path)
-        self._delete_source_points(client, source)
+        await self._delete_source_points(client, source)
         points = [
             PointStruct(
                 id=_generate_point_id(source, i),
@@ -239,7 +263,9 @@ class RAGManager:
             for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=True))
         ]
         try:
-            client.upsert(collection_name=self.COLLECTION_NAME, points=points)
+            await asyncio.to_thread(
+                client.upsert, collection_name=self.COLLECTION_NAME, points=points
+            )
         except Exception as e:
             raise RAGError(_("Failed to upsert points into vector database: {e}", e=e)) from e
 
@@ -295,18 +321,25 @@ class RAGManager:
                 results["skipped"] += 1
                 continue
 
+            if results["added"] + results["skipped"] >= MAX_INDEXED_FILES:
+                logger.warning("Reached the %d file cap; skipping the rest of %s", MAX_INDEXED_FILES, path)
+                results["skipped"] += 1
+                continue
+
+            # Isolate per-file failures: one bad file (or a transient embedder error)
+            # must not abort the whole batch after a partial ingest.
             try:
                 content = self._read_file(file_path, allowed_extensions=extensions)
+                if not content.strip():
+                    results["skipped"] += 1
+                    continue
+                chunks = self._chunk_text(content)
+                await self._index_chunks(client, file_path, chunks)
             except RAGError as e:
-                logger.warning("Failed to read %s: %s", file_path, e)
+                logger.warning("Failed to index %s: %s", file_path, e)
                 results["failed"] += 1
                 continue
 
-            if not content.strip():
-                continue
-
-            chunks = self._chunk_text(content)
-            await self._index_chunks(client, file_path, chunks)
             results["added"] += 1
             logger.info("Added file to RAG from batch: %s (%d chunks)", file_path.name, len(chunks))
 
@@ -326,8 +359,10 @@ class RAGManager:
         query_embedding = await self._get_embedding(query)
 
         # Prefer stable API across qdrant-client versions
+        # Qdrant local mode is blocking, so it must not run on the event loop.
         try:
-            response = client.query_points(
+            response = await asyncio.to_thread(
+                client.query_points,
                 collection_name=self.COLLECTION_NAME,
                 query=query_embedding,
                 limit=limit,
@@ -336,11 +371,19 @@ class RAGManager:
         except Exception as e:
             raise RAGError(_("Failed to query vector database: {e}", e=e)) from e
 
-        results = []
+        results: list[dict[str, Any]] = []
         for hit in response.points:
             payload = hit.payload
-            if payload is None:
-                raise RAGError("Missing payload in search result")
+            if not isinstance(payload, dict):
+                raise RAGError(
+                    _("Malformed payload in search result for point {id}", id=getattr(hit, "id", "?"))
+                )
+            missing = _REQUIRED_PAYLOAD_KEYS - payload.keys()
+            if missing:
+                raise RAGError(
+                    _("Malformed payload in search result for point {id}: missing {keys}",
+                      id=getattr(hit, "id", "?"), keys=", ".join(sorted(missing)))
+                )
             results.append(
                 {
                     "content": payload["content"],
@@ -364,7 +407,7 @@ class RAGManager:
         for i in range(0, len(texts), batch_size):
             batch_texts = texts[i : i + batch_size]
             try:
-                response = await self._ollama_client.embed(
+                response = await self._embedder().embed(
                     model=self.settings.embedder_model,
                     input=batch_texts,
                 )
@@ -394,11 +437,13 @@ class RAGManager:
             all_embeddings.extend(embeddings)
         return all_embeddings
 
-    def _delete_source_points(self, client: QdrantClient, source: str) -> None:
+    async def _delete_source_points(self, client: QdrantClient, source: str) -> None:
         """Delete all points previously indexed for a given source path."""
         filt = Filter(must=[FieldCondition(key="source", match=MatchValue(value=source))])
         try:
-            client.delete(collection_name=self.COLLECTION_NAME, points_selector=filt, wait=True)
+            await asyncio.to_thread(
+                client.delete, collection_name=self.COLLECTION_NAME, points_selector=filt, wait=True
+            )
         except Exception as e:
             raise RAGError(_("Failed to delete existing points for source '{source}': {e}", source=source, e=e)) from e
 

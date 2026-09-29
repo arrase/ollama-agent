@@ -39,8 +39,13 @@ async def _stream_tool_events(request: Any, handler: Any) -> Any:
 
     timeout_s = get_tool_timeout()
     try:
-        result = await asyncio.wait_for(handler(request), timeout=timeout_s)
-    except asyncio.TimeoutError:
+        async with asyncio.timeout(timeout_s) as timer:
+            result = await handler(request)
+    except TimeoutError:
+        # Since 3.11 asyncio.TimeoutError is TimeoutError, so a TimeoutError raised by
+        # the tool itself would otherwise be misreported as our own deadline expiring.
+        if not timer.expired():
+            raise
         result = ToolMessage(
             content=_("Tool '{tool_name}' timed out after {timeout_s}s", tool_name=tool_name, timeout_s=timeout_s),
             tool_call_id=tool_call_id,
@@ -48,8 +53,14 @@ async def _stream_tool_events(request: Any, handler: Any) -> Any:
             status="error",
         )
 
-    content = getattr(result, "content", result)
-    out_event: dict[str, Any] = {"type": "tool_output", "output_len": len(str(content))}
+    # Prefer an explicit "content" attribute; a bare str is itself the content. Anything
+    # else (e.g. a Command) has no measurable text, so report 0 rather than len(repr()).
+    content = getattr(result, "content", None)
+    if content is None:
+        output_len = len(result) if isinstance(result, str) else 0
+    else:
+        output_len = len(str(content))
+    out_event: dict[str, Any] = {"type": "tool_output", "output_len": output_len}
     if agent_name:
         out_event["agent_name"] = agent_name
     request.runtime.stream_writer(out_event)

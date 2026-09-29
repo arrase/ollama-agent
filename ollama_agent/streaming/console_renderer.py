@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import threading
 from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
+from rich.markup import escape
 from rich.padding import Padding
 
 from ..i18n import _
@@ -68,18 +70,18 @@ class ConsoleStreamingRenderer(StreamingRenderer):
             if i > 0:
                 self.console.print("\n  [dim magenta]│[/dim magenta] ", end="")
             if part:
-                self.console.print(part, end="", style="dim italic magenta")
+                self.console.print(escape(part), end="", style="dim italic magenta")
 
     def _agent_prefix(self, event: dict[str, Any]) -> str:
         agent = event.get("agent_name")
-        return f"[{agent}] " if agent else ""
+        return escape(f"[{agent}] ") if agent else ""
 
     def on_tool_call(self, event: dict[str, Any]) -> None:
         self._end_reasoning()
         self._toggle_live(False)
         prefix = self._agent_prefix(event)
-        tool_name = event["name"]
-        tool_msg = _("Calling tool: {tool_name}", tool_name=tool_name)
+        tool_name = escape(str(event["name"]))
+        tool_msg = escape(_("Calling tool: {tool_name}", tool_name=tool_name))
         self.console.print(f"  [yellow]✦ {prefix}{tool_msg}[/yellow]")
 
     def on_tool_output(self, event: dict[str, Any]) -> None:
@@ -91,12 +93,38 @@ class ConsoleStreamingRenderer(StreamingRenderer):
     def on_error(self, event: dict[str, Any]) -> None:
         self._end_reasoning()
         self._toggle_live(False)
-        self.console.print(f"  [red]❌ {_('Error:')} {event['content']}[/red]")
+        self.console.print(f"  [red]❌ {_('Error:')} {escape(str(event['content']))}[/red]")
 
     def on_warning(self, event: dict[str, Any]) -> None:
         self._end_reasoning()
         self._toggle_live(False)
-        self.console.print(f"  [yellow]⚠ {_('Warning:')} {event['content']}[/yellow]")
+        self.console.print(f"  [yellow]⚠ {_('Warning:')} {escape(str(event['content']))}[/yellow]")
+
+    @staticmethod
+    async def _prompt(prompt: str) -> str:
+        """Read one line on a daemon thread so Ctrl-C can never block interpreter shutdown.
+
+        ``asyncio.to_thread`` uses the default ThreadPoolExecutor, whose workers are joined
+        (without timeout) at exit, so a pending ``input()`` there hangs the whole process.
+        """
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[str] = loop.create_future()
+
+        def _read() -> None:
+            # Every input() failure is forwarded to the awaiting coroutine. KeyboardInterrupt
+            # is listed explicitly instead of catching BaseException, which would also swallow
+            # SystemExit and stop the interpreter from unwinding.
+            try:
+                value = input(prompt)
+            except Exception as exc:  # noqa: BLE001
+                loop.call_soon_threadsafe(future.set_exception, exc)
+            except KeyboardInterrupt as exc:
+                loop.call_soon_threadsafe(future.set_exception, exc)
+            else:
+                loop.call_soon_threadsafe(future.set_result, value)
+
+        threading.Thread(target=_read, daemon=True, name="ollama-agent-approval").start()
+        return await future
 
     async def handle_interrupt(self, event: dict[str, Any], runtime: AgentRuntime) -> list[dict[str, Any]] | None:
         self._toggle_live(False)
@@ -107,10 +135,8 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         self.console.print(f"\n  [bold yellow]⚠️ {_('Sensitive Tool Approval Required')}[/bold yellow]")
 
         for req in action_requests:
-            name = req["name"]
-            args = req["args"]
-            self.console.print(f"  {_('Tool:')} [bold]{name}[/bold]")
-            self.console.print(f"  {_('Arguments:')} {args}")
+            self.console.print(f"  {_('Tool:')} [bold]{escape(str(req['name']))}[/bold]")
+            self.console.print(f"  {_('Arguments:')} {escape(str(req['args']))}")
 
         if not sys.stdin.isatty():
             hint = _(
@@ -125,7 +151,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
                 prompt_msg = f"  {_('Choose action: Approve (y) / Reject (n) / Allow Session (a) / Cancel (c): ')}"
                 self.console.print(prompt_msg, end="")
                 self.console.file.flush()
-                choice = (await asyncio.to_thread(input)).strip().lower()
+                choice = (await self._prompt("")).strip().lower()
                 if choice == "y":
                     return build_approval_decisions(action_requests, "approve")
                 if choice == "n":
@@ -136,7 +162,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
                     break
                 invalid_msg = _("Invalid choice. Please enter 'y', 'n', 'a', or 'c'.")
                 self.console.print(f"  [red]{invalid_msg}[/red]")
-        except EOFError:
+        except (EOFError, KeyboardInterrupt):
             pass
 
         self.console.print(f"  [red]✗ {_('Cancelled')}[/red]\n")

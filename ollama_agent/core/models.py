@@ -22,6 +22,10 @@ _log = logging.getLogger(__name__)
 
 MIN_OLLAMA_VERSION = "0.34.3"
 
+# Reasoning effort is forwarded verbatim to Ollama's "think" parameter and written to
+# settings.yaml, so it is restricted to a short opaque token.
+_REASONING_EFFORT_RE = re.compile(r"[A-Za-z0-9_.:+-]{1,32}")
+
 
 class ExtendedShowResponse(ShowResponse):
     """Extended ShowResponse capturing the thinking metadata advertised by Ollama."""
@@ -48,8 +52,12 @@ def get_ollama_version(base_url: str) -> str:
         response = httpx.get(url, timeout=5.0)
         response.raise_for_status()
         data = response.json()
-        return str(data["version"])
-    except (httpx.HTTPError, OSError) as exc:
+        # A 200 with a non-JSON or unexpected body must not escape as KeyError/JSONDecodeError.
+        version = data.get("version") if isinstance(data, dict) else None
+        if not isinstance(version, str) or not version:
+            raise ValueError("missing 'version' field in /api/version response")
+        return version
+    except (httpx.HTTPError, OSError, ValueError) as exc:
         raise ModelCapabilityError(
             _("Could not connect to Ollama at '{base_url}': {exc}", base_url=base_url, exc=exc)
         ) from exc
@@ -76,17 +84,28 @@ def check_ollama_version(
     return version_str
 
 
+OLLAMA_HTTP_TIMEOUT = httpx.Timeout(30.0, connect=5.0)
+
+
+def create_ollama_async_client(base_url: str) -> ollama.AsyncClient:
+    """Build an AsyncClient with a bounded timeout.
+
+    ``ollama.AsyncClient`` defaults to ``timeout=None``, i.e. an httpx client that will
+    wait forever. Callers must also close it (``async with``) to release the pool.
+    """
+    return ollama.AsyncClient(host=base_url.rstrip("/"), timeout=OLLAMA_HTTP_TIMEOUT)
+
+
 async def _show_model(model: str, base_url: str) -> ExtendedShowResponse:
     """Fetch Ollama model metadata asynchronously."""
-    host = base_url.rstrip("/")
     try:
-        client = ollama.AsyncClient(host=host)
-        return await client._request(
-            ExtendedShowResponse,
-            "POST",
-            "/api/show",
-            json={"model": model},
-        )
+        async with create_ollama_async_client(base_url) as client:
+            return await client._request(
+                ExtendedShowResponse,
+                "POST",
+                "/api/show",
+                json={"model": model},
+            )
     except Exception as exc:
         raise ModelCapabilityError(_("Failed to fetch metadata for '{model}': {exc}", model=model, exc=exc)) from exc
 
@@ -117,7 +136,9 @@ async def get_model_capabilities(
     response = show_info if show_info is not None else await _show_model(model, base_url)
     caps = getattr(response, "capabilities", None)
     if isinstance(caps, dict):
-        caps = caps["capabilities"]
+        # Older servers nest the list under "capabilities"; a malformed payload must
+        # reach the ModelCapabilityError below rather than raising KeyError.
+        caps = caps.get("capabilities")
     if isinstance(caps, list):
         return {str(c).lower() for c in caps}
     raise ModelCapabilityError(
@@ -233,7 +254,9 @@ def _resolve_thinking_from_cfg(
     model: str,
     warn_callback: Callable[[str], None],
 ) -> bool | str | None:
-    values: list[Any] = thinking_cfg.get("values") or []
+    # Server metadata is untrusted: "values" must be a sequence, not e.g. a dict/str.
+    raw_values = thinking_cfg.get("values")
+    values: list[Any] = list(raw_values) if isinstance(raw_values, (list, tuple)) else []
     default: Any = thinking_cfg.get("default")
 
     if is_default:
@@ -435,12 +458,25 @@ async def create_ollama_chat_model(
 
 
 def validate_reasoning_effort(effort: Any) -> ReasoningEffortValue:
-    """Normalize and validate reasoning effort value."""
+    """Normalize and validate reasoning effort value.
+
+    The value is forwarded verbatim to Ollama's ``think`` parameter and persisted to
+    settings.yaml, so it is restricted to a short opaque token rather than accepted
+    as arbitrary free text.
+    """
     if isinstance(effort, bool):
         return "true" if effort else "false"
     normalized = str(effort).strip()
     if not normalized:
         raise ValueError(_("{name} cannot be empty.", name="Reasoning effort"))
+    if not _REASONING_EFFORT_RE.fullmatch(normalized):
+        raise ValueError(
+            _(
+                "Invalid reasoning effort '{effort}'. Expected a short token such as "
+                "'low', 'high' or 'default' (letters, digits, '_', '.', ':', '+' or '-').",
+                effort=normalized,
+            )
+        )
     return normalized
 
 

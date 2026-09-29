@@ -269,7 +269,14 @@ def _resolve_mention_target(
         return None
 
     target = url2pathname(unquote(urlparse(path_str).path)) if path_str.startswith(("file://", "file:")) else path_str
-    path = (resolved_base / Path(target).expanduser()).resolve()
+    try:
+        expanded = Path(target).expanduser()
+    except RuntimeError as exc:
+        # expanduser() raises RuntimeError when the home directory cannot be determined.
+        raise PromptProcessingError(
+            _("Cannot expand home directory in path '{path_str}': {exc}", path_str=path_str, exc=exc)
+        ) from exc
+    path = (resolved_base / expanded).resolve()
 
     if not allow_traversal and not path.is_relative_to(resolved_base):
         raise PromptProcessingError(_("Access to path outside working directory is not allowed: '{path_str}'", path_str=path_str))
