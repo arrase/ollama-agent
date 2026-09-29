@@ -201,6 +201,18 @@ class TestInterruptHandling(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(result)
         self.assertIn("Cancelled", console.export_text())
 
+    async def test_keyboard_interrupt_at_prompt_is_treated_as_cancel(self) -> None:
+        """Ctrl-C on the prompt is forwarded to the caller and cancels the approval."""
+        renderer, console = self._make_renderer()
+        fake_stdin = SimpleNamespace(isatty=lambda: True)
+        with (
+            patch("ollama_agent.streaming.console_renderer.sys.stdin", new=fake_stdin),
+            patch("builtins.input", side_effect=KeyboardInterrupt),
+        ):
+            result = await renderer.handle_interrupt(self._interrupt_event(), MagicMock())
+        self.assertIsNone(result)
+        self.assertIn("Cancelled", console.export_text())
+
     async def test_stream_agent_events_propagates_keyboard_interrupt(self) -> None:
         mock_runtime = MagicMock()
 

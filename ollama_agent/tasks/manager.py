@@ -76,6 +76,26 @@ class TaskInput:
         raise ValueError(_("Unsupported input type '{type}' for input '{name}'", type=self.type, name=name))
 
 
+def _task_input_from_dict(name: str, inp: Any, valid_input_keys: set[str]) -> TaskInput:
+    """Build a single TaskInput from its persisted mapping form."""
+    if isinstance(inp, TaskInput):
+        return inp
+    if not isinstance(inp, dict):
+        raise ValueError(_("Invalid input definition for '{name}'", name=name))
+    unknown = set(inp) - valid_input_keys
+    if unknown:
+        raise ValueError(_("Unknown input keys for '{name}': {keys}", name=name, keys=", ".join(sorted(unknown))))
+    return TaskInput(**inp)
+
+
+def _task_inputs_from_dict(raw_inputs: Any) -> dict[str, TaskInput]:
+    """Parse the ``inputs`` mapping of a persisted task, rejecting unknown or malformed entries."""
+    if not isinstance(raw_inputs, dict):
+        raise ValueError(_("Expected mapping for inputs in Task"))
+    valid_input_keys = {f.name for f in fields(TaskInput)}
+    return {name: _task_input_from_dict(name, inp, valid_input_keys) for name, inp in raw_inputs.items()}
+
+
 @dataclass(slots=True)
 class Task:
     """A saved task with title, prompt, model, reasoning effort, and inputs."""
@@ -98,30 +118,12 @@ class Task:
         missing = [k for k in ("title", "prompt", "model") if k not in d]
         if missing:
             raise ValueError(_("Task is missing required key(s): {keys}", keys=", ".join(missing)))
-        inputs: dict[str, TaskInput] = {}
-        if "inputs" in d:
-            raw_inputs = d["inputs"]
-            if not isinstance(raw_inputs, dict):
-                raise ValueError(_("Expected mapping for inputs in Task"))
-            valid_input_keys = {f.name for f in fields(TaskInput)}
-            for name, inp in raw_inputs.items():
-                if isinstance(inp, TaskInput):
-                    inputs[name] = inp
-                elif isinstance(inp, dict):
-                    unknown = set(inp) - valid_input_keys
-                    if unknown:
-                        raise ValueError(
-                            _("Unknown input keys for '{name}': {keys}", name=name, keys=", ".join(sorted(unknown)))
-                        )
-                    inputs[name] = TaskInput(**inp)
-                else:
-                    raise ValueError(_("Invalid input definition for '{name}'", name=name))
         return cls(
             title=str(d["title"]),
             prompt=str(d["prompt"]),
             model=str(d["model"]),
             reasoning_effort=d.get("reasoning_effort", DEFAULT_REASONING_EFFORT),
-            inputs=inputs,
+            inputs=_task_inputs_from_dict(d["inputs"]) if "inputs" in d else {},
         )
 
     def render(self, variables: dict[str, Any] | None = None) -> str:

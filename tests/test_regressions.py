@@ -275,8 +275,9 @@ class TestValidationGaps(unittest.TestCase):
             cfg = Path(tmp) / "mcp.json"
             cfg.write_text(json.dumps({"mcpServers": {"bad": 5}}), encoding="utf-8")
             with patch("ollama_agent.mcp.loader.MCP_PATH", cfg):
+                coro = _read_main_config()
                 with self.assertRaises(MCPConfigError):
-                    asyncio.run(_read_main_config())
+                    asyncio.run(coro)
 
     def test_mcp_args_must_be_strings(self) -> None:
         with self.assertRaises(MCPConfigError):

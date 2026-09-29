@@ -69,11 +69,11 @@ class TestDispatchAndCLI(unittest.TestCase):
     def test_argument_parser_rejects_invalid_numeric_args(self) -> None:
         """Garbage for -c/-t must be an argparse error, not a later traceback."""
         parser = create_argument_parser()
-        for argv in (["-c", "invalid"], ["-c", "-5"], ["-c", "0"], ["-t", "0"], ["-t", "abc"]):
-            with self.subTest(argv=argv), self.assertRaises(SystemExit) as ctx:
-                with patch("sys.stderr", new_callable=io.StringIO):
+        with patch("sys.stderr", new_callable=io.StringIO):
+            for argv in (["-c", "invalid"], ["-c", "-5"], ["-c", "0"], ["-t", "0"], ["-t", "abc"]):
+                with self.subTest(argv=argv), self.assertRaises(SystemExit) as ctx:
                     parser.parse_args(argv)
-            self.assertEqual(ctx.exception.code, 2)
+                self.assertEqual(ctx.exception.code, 2)
 
     def test_argument_parser_runtime_flags(self) -> None:
         parser = create_argument_parser()

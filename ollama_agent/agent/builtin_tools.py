@@ -86,7 +86,8 @@ async def search_past_conversations(query: str, limit: int = 3) -> str:
         )
     except HistoryError as exc:
         return _("Error searching past conversations: {exc}", exc=exc)
-    except Exception as exc:  # noqa: BLE001 - no database-level surprise may kill a tool call
+    # No database-level surprise may kill a tool call.
+    except Exception as exc:  # noqa: BLE001
         _log.exception("Unexpected failure searching past conversations")
         return _("Error searching past conversations: {exc}", exc=exc)
     return format_past_conversations_context(results)

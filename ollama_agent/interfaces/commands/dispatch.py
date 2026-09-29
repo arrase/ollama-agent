@@ -77,7 +77,8 @@ async def safe_call(
             await result
     except (SkillError, TaskError, RAGError, HistoryError, MCPConfigError) as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
-    except Exception as exc:  # noqa: BLE001 - a command must never crash the caller
+    # A command must never crash the caller.
+    except Exception as exc:  # noqa: BLE001
         _log.exception("Unhandled error in command %r", getattr(fn, "__name__", fn))
         console.print(f"[red]{escape(_('Command failed: {exc}', exc=exc))}[/red]")
 

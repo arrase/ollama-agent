@@ -182,7 +182,8 @@ class OllamaAgentApp(App):
             await self.repl.runtime.warmup()
         except asyncio.CancelledError:
             raise
-        except Exception as exc:  # noqa: BLE001 - never let startup kill the TUI
+        # Startup failures are reported in the TUI instead of killing it.
+        except Exception as exc:  # noqa: BLE001
             _log.exception("Agent warmup failed")
             notice = escape(_("Agent startup failed: {exc}", exc=exc))
             self.show_system_notice(f"[bold #f87171]✕ {notice}[/bold #f87171]")
@@ -574,7 +575,8 @@ class OllamaAgentApp(App):
                     self._prompt_queue.clear()
                     self._update_queue_ui()
                 raise
-            except Exception as exc:  # noqa: BLE001 - surface the failure, keep the app alive
+            # Surface the failure in the transcript and keep the app alive.
+            except Exception as exc:  # noqa: BLE001
                 _log.exception("Agent run failed")
                 agent_msg.add_error(_("Run failed: {exc}", exc=exc))
                 self.query_one(ReplInput).focus()

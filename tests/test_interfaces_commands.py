@@ -719,8 +719,9 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
 
     def test_handle_subcommand_unknown_exits_2(self) -> None:
         args = argparse.Namespace(command="task", subcommand="nope", prompt=None, yolo=False, rag=None)
+        settings = Settings()
         with self.assertRaises(SystemExit) as ctx:
-            handle_subcommand(args, Settings())
+            handle_subcommand(args, settings)
         self.assertEqual(ctx.exception.code, 2)
 
     def test_handle_subcommand_reports_false_result_as_failure(self) -> None:
@@ -728,9 +729,10 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         args = argparse.Namespace(
             command="session", subcommand="delete", session_id="bogus", prompt=None, yolo=False, rag=None
         )
+        settings = Settings()
         with patch("ollama_agent.interfaces.commands.dispatch.delete_session", return_value=False):
             with self.assertRaises(SystemExit) as ctx:
-                handle_subcommand(args, Settings())
+                handle_subcommand(args, settings)
         self.assertEqual(ctx.exception.code, 1)
 
     def test_ensure_model_configured_already_available(self) -> None:

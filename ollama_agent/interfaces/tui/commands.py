@@ -328,7 +328,8 @@ async def run_slash_command(app: OllamaAgentApp, cmd_line: str) -> None:
             app.query_one(AgentHeader).update_header()
     except asyncio.CancelledError:
         raise
-    except Exception as exc:  # noqa: BLE001 - a slash command must never kill the app
+    # A slash command must never kill the app.
+    except Exception as exc:  # noqa: BLE001
         _log.exception("Unhandled error running slash command %r", cmd_line)
         notice = escape(_("Command failed: {exc}", exc=exc))
         app.show_system_notice(f"[bold #f87171]✕ {notice}[/bold #f87171]")

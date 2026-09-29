@@ -111,9 +111,14 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         future: asyncio.Future[str] = loop.create_future()
 
         def _read() -> None:
+            # Every input() failure is forwarded to the awaiting coroutine. KeyboardInterrupt
+            # is listed explicitly instead of catching BaseException, which would also swallow
+            # SystemExit and stop the interpreter from unwinding.
             try:
                 value = input(prompt)
-            except BaseException as exc:  # noqa: BLE001 - forwarded to the awaiting coroutine
+            except Exception as exc:  # noqa: BLE001
+                loop.call_soon_threadsafe(future.set_exception, exc)
+            except KeyboardInterrupt as exc:
                 loop.call_soon_threadsafe(future.set_exception, exc)
             else:
                 loop.call_soon_threadsafe(future.set_result, value)

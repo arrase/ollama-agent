@@ -171,38 +171,37 @@ class Settings:
 T = TypeVar("T")
 
 
-def _coerce_setting(cls: type[Any], name: str, value: Any, hint: Any) -> Any:
+def _coerce_setting(name: str, value: Any, hint: Any) -> Any:
     """Validate one untrusted YAML value against its dataclass field annotation.
 
     Without this, ``context_window: true`` reaches Ollama as ``num_ctx=1`` and
     ``temperature: "hot"`` surfaces much later as a pydantic error from deep inside
     the model constructor.
     """
-    if hint is None:
+    if hint is None or hint is Any:
         return value
     origin = get_origin(hint)
-    if origin is None and hint is Any:
-        return value
-
-    # A union is only accepted if every member validates.
     if origin is Union or origin is UnionType:
-        errors = []
-        for arg in get_args(hint):
-            if arg is type(None):
-                if value is None:
-                    return None
-                continue
-            try:
-                return _coerce_value(name, value, arg)
-            except ValueError as exc:
-                errors.append(str(exc))
-        raise ValueError(
-            _("Invalid value for '{name}': {detail}", name=name, detail="; ".join(errors) or _("wrong type"))
-        )
-    return _coerce_value(name, value, hint)
+        return _coerce_union(name, value, hint)
+    return _coerce_value(value, hint)
 
 
-def _coerce_value(name: str, value: Any, hint: Any) -> Any:
+def _coerce_union(name: str, value: Any, hint: Any) -> Any:
+    """Validate against each union member in turn; a union is accepted if any member validates."""
+    errors: list[str] = []
+    for arg in get_args(hint):
+        if arg is type(None):
+            if value is None:
+                return None
+            continue
+        try:
+            return _coerce_value(value, arg)
+        except ValueError as exc:
+            errors.append(str(exc))
+    raise ValueError(_("Invalid value for '{name}': {detail}", name=name, detail="; ".join(errors) or _("wrong type")))
+
+
+def _coerce_value(value: Any, hint: Any) -> Any:
     origin = get_origin(hint) or hint
     if origin is bool:
         if not isinstance(value, bool):
@@ -241,7 +240,7 @@ def _dataclass_from_dict(cls: type[T], raw: Any) -> T:
         if f.name not in raw:
             continue
         try:
-            kwargs[f.name] = _coerce_setting(cast(Any, cls), f.name, raw[f.name], hints.get(f.name))
+            kwargs[f.name] = _coerce_setting(f.name, raw[f.name], hints.get(f.name))
         except ValueError as exc:
             raise ValueError(_("Invalid value for '{name}.{key}': {exc}", name=cls.__name__, key=f.name, exc=exc))
     return cls(**kwargs)
