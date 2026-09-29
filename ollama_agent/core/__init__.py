@@ -6,6 +6,7 @@ from .common import (
     ReasoningEffortValue,
     atomic_write_text,
     extract_text,
+    shorten,
     validate_identifier,
 )
 from .models import (
@@ -15,6 +16,7 @@ from .models import (
     OllamaChatModel,
     OllamaVersionError,
     check_ollama_version,
+    create_ollama_async_client,
     create_ollama_chat_model,
     ensure_model_supports_tools,
     get_model_capabilities,
@@ -52,6 +54,7 @@ __all__ = [
     "OllamaChatModel",
     "OllamaVersionError",
     "check_ollama_version",
+    "create_ollama_async_client",
     "create_ollama_chat_model",
     "ensure_model_supports_tools",
     "get_model_capabilities",
@@ -68,6 +71,7 @@ __all__ = [
     "extract_text",
     "require_text",
     "resolve_unique_match",
+    "shorten",
     "validate_identifier",
     # Prompt Processor
     "ContextLimitExceededError",

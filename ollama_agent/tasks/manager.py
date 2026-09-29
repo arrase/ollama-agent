@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+import logging
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,8 @@ from ..core import (
 from ..i18n import _
 from ..settings.config import render_prompt_template
 from ..settings.paths import TASKS_DIR
+
+logger = logging.getLogger(__name__)
 
 
 def _coerce_boolean(name: str, val: Any) -> bool:
@@ -90,23 +93,34 @@ class Task:
     def from_dict(cls, d: Any) -> Task:
         if not isinstance(d, dict):
             raise ValueError(_("Expected mapping for Task, got {type_name}", type_name=type(d).__name__))
+        # Report a missing key as a domain error instead of a bare KeyError escaping
+        # through /task list and taking the TUI down.
+        missing = [k for k in ("title", "prompt", "model") if k not in d]
+        if missing:
+            raise ValueError(_("Task is missing required key(s): {keys}", keys=", ".join(missing)))
         inputs: dict[str, TaskInput] = {}
         if "inputs" in d:
             raw_inputs = d["inputs"]
             if not isinstance(raw_inputs, dict):
                 raise ValueError(_("Expected mapping for inputs in Task"))
+            valid_input_keys = {f.name for f in fields(TaskInput)}
             for name, inp in raw_inputs.items():
                 if isinstance(inp, TaskInput):
                     inputs[name] = inp
                 elif isinstance(inp, dict):
+                    unknown = set(inp) - valid_input_keys
+                    if unknown:
+                        raise ValueError(
+                            _("Unknown input keys for '{name}': {keys}", name=name, keys=", ".join(sorted(unknown)))
+                        )
                     inputs[name] = TaskInput(**inp)
                 else:
                     raise ValueError(_("Invalid input definition for '{name}'", name=name))
         return cls(
-            title=d["title"],
-            prompt=d["prompt"],
-            model=d["model"],
-            reasoning_effort=d["reasoning_effort"],
+            title=str(d["title"]),
+            prompt=str(d["prompt"]),
+            model=str(d["model"]),
+            reasoning_effort=d.get("reasoning_effort", DEFAULT_REASONING_EFFORT),
             inputs=inputs,
         )
 
@@ -114,12 +128,20 @@ class Task:
         """Render the task prompt template using provided variables."""
         context = dict(variables) if variables else {}
         for name, inp in self.inputs.items():
-            if name not in context and inp.default is not None:
-                context[name] = inp.default
-            if name not in context or context[name] is None:
-                if inp.required:
-                    raise ValueError(_("Missing required input: {name}", name=name))
-            else:
+            # A required input must have a usable value whether it was omitted or
+            # explicitly passed as None.
+            if inp.required and context.get(name) is None:
+                raise ValueError(_("Missing required input: {name}", name=name))
+            if name not in context:
+                if inp.default is not None:
+                    # Defaults go through coerce() so `default: "5"` with `type: number`
+                    # does not reach the template as a string.
+                    context[name] = inp.coerce(name, inp.default)
+                else:
+                    # Optional and absent: render as empty rather than letting
+                    # StrictUndefined raise UndefinedError on an otherwise valid task.
+                    context[name] = ""
+            elif context[name] is not None:
                 context[name] = inp.coerce(name, context[name])
         return render_prompt_template(self.prompt, context)
 
@@ -166,6 +188,15 @@ class TaskManager(BaseFileStoreManager[Task]):
         self._path(self.validate_task_id(item_id)).unlink()
 
     def list_all(self) -> list[tuple[str, Task]]:
-        """List all tasks sorted by title."""
-        tasks = [(p.stem, self.get(p.stem)) for p in self.base_dir.glob("*.yaml")]
+        """List all tasks sorted by title.
+
+        A single corrupt or hand-edited task file (the agent can write these itself)
+        must not make ``/task list`` fail with a non-domain error.
+        """
+        tasks: list[tuple[str, Task]] = []
+        for path in self.base_dir.glob("*.yaml"):
+            try:
+                tasks.append((path.stem, self.get(path.stem)))
+            except (ValueError, TypeError, KeyError, OSError) as exc:
+                logger.warning("Skipping unreadable task file %s: %s", path.name, exc)
         return sorted(tasks, key=lambda x: x[1].title.lower())

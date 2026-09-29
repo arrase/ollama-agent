@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import shutil
 from dataclasses import dataclass
@@ -13,6 +14,8 @@ import yaml  # type: ignore[import-untyped]
 from ..core import BaseFileStoreManager, require_text, validate_identifier
 from ..i18n import _
 from ..settings.paths import BUILTIN_SKILLS_DIR, SKILLS_DIR
+
+logger = logging.getLogger(__name__)
 
 # Maximum SKILL.md size (10 MB) as per spec.
 _MAX_SKILL_SIZE = 10 * 1024 * 1024
@@ -97,13 +100,23 @@ class SkillManager(BaseFileStoreManager[SkillInfo]):
         return validate_identifier(skill_id, "skill_id")
 
     def _collect_skills(self, prefix: str = "") -> dict[str, SkillInfo]:
-        """Collect all skills matching *prefix*, allowing user skills to override built-ins."""
+        """Collect all skills matching *prefix*, allowing user skills to override built-ins.
+
+        A single malformed ``SKILL.md`` (easy to produce via the skill-creator tool)
+        is skipped rather than breaking ``/skill list`` for every other skill.
+        """
         skills: dict[str, SkillInfo] = {}
         search_dirs = [d for d in (self.builtin_dir, self.base_dir) if d and d.is_dir()]
         for directory in search_dirs:
             for d in directory.iterdir():
-                if d.is_dir() and d.name.startswith(prefix) and ((d / _SKILL_FILENAME).is_file() or (d / "skill.md").is_file()):
+                if not d.is_dir() or not d.name.startswith(prefix):
+                    continue
+                if not ((d / _SKILL_FILENAME).is_file() or (d / "skill.md").is_file()):
+                    continue
+                try:
                     skills[d.name] = _read_skill(d)
+                except (ValueError, OSError) as exc:
+                    logger.warning("Skipping invalid skill %s: %s", d.name, exc)
         return skills
 
     def get(self, item_id: str) -> SkillInfo:

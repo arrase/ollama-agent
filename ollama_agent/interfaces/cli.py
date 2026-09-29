@@ -5,6 +5,10 @@ from __future__ import annotations
 import argparse
 import asyncio
 import inspect
+from collections.abc import Coroutine
+from typing import Any, cast
+
+from rich.markup import escape
 
 from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager
@@ -18,6 +22,26 @@ from ..skills import SkillError, SkillManager, SkillsContext
 from ..streaming import run_non_interactive
 from ..tasks.commands import TaskError, TasksContext
 from .commands.dispatch import build_cli_handlers
+
+
+def _positive_seconds(value: str) -> int:
+    """argparse type for a strictly positive number of seconds."""
+    try:
+        seconds = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(_("Tool timeout must be an integer number of seconds.")) from None
+    if seconds <= 0:
+        raise argparse.ArgumentTypeError(_("Tool timeout must be greater than 0 seconds."))
+    return seconds
+
+
+def _context_window(value: str) -> int | str:
+    """argparse type for a token count or the literal ``max``."""
+    if value.strip().lower() == "max":
+        return "max"
+    if not value.isdigit() or int(value) <= 0:
+        raise argparse.ArgumentTypeError(_("Context window must be a positive integer or 'max'."))
+    return int(value)
 
 
 def _add_common_args(parser: argparse.ArgumentParser) -> None:
@@ -37,13 +61,15 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "-c",
         "--num-ctx",
-        type=str,
+        type=_context_window,
+        metavar="N|MAX",
         help=_("Set context window size in tokens (num_ctx) or 'max'"),
     )
     parser.add_argument(
         "-t",
         "--builtin-tool-timeout",
-        type=int,
+        type=_positive_seconds,
+        metavar="SECONDS",
         help=_("Set tool-call timeout in seconds (includes shell middleware and built-in tools)"),
     )
     parser.add_argument(
@@ -273,25 +299,36 @@ def create_argument_parser() -> argparse.ArgumentParser:
 def handle_subcommand(args: argparse.Namespace, settings: Settings) -> None:
     """Execute a CLI subcommand."""
     ctx = TasksContext(settings=settings)
-    rag_ctx = RAGContext(rag_manager=RAGManager(settings.rag))
     skills_ctx = SkillsContext(skill_manager=SkillManager())
 
+    handler_key = (args.command, args.subcommand)
     handlers = build_cli_handlers(
         args,
         task_ctx=ctx,
-        rag_ctx=rag_ctx,
+        rag_ctx=RAGContext(rag_manager=RAGManager(settings.rag)),
         skills_ctx=skills_ctx,
         settings=settings,
     )
-    handler_key = (args.command, args.subcommand)
-    if handler_key in handlers:
-        try:
-            result = handlers[handler_key]()
-            if inspect.isawaitable(result):
-                asyncio.run(result)  # type: ignore[arg-type]
-        except (SkillError, TaskError, RAGError, HistoryError, MCPConfigError) as exc:
-            ctx.console.print(f"[red]{exc}[/red]")
-            raise SystemExit(1) from exc
+    handler = handlers.get(handler_key)
+    if handler is None:
+        ctx.console.print(
+            f"[red]{escape(_('Unknown command: {command} {subcommand}', command=args.command, subcommand=args.subcommand))}[/red]"
+        )
+        raise SystemExit(2)
+
+    try:
+        result = handler()
+        if inspect.isawaitable(result):
+            # The handler is an async function, so the awaitable is always a coroutine.
+            result = asyncio.run(cast("Coroutine[Any, Any, Any]", result))
+    except (SkillError, TaskError, RAGError, HistoryError, MCPConfigError) as exc:
+        ctx.console.print(f"[red]{escape(str(exc))}[/red]")
+        raise SystemExit(1) from exc
+
+    # Handlers that report a failure return a falsy value instead of raising, so the
+    # exit status must reflect it (otherwise `session delete bogus` exits 0).
+    if result is False:
+        raise SystemExit(1)
 
 
 def run_prompt_session(args: argparse.Namespace, settings: Settings) -> None:
@@ -325,16 +362,3 @@ def run_prompt_session(args: argparse.Namespace, settings: Settings) -> None:
 
     if not completed:
         raise SystemExit(1)
-
-
-def handle_cli_commands(args: argparse.Namespace, settings: Settings) -> bool:
-    """Handle CLI commands and return True if a command was handled."""
-    if args.command and args.subcommand:
-        handle_subcommand(args, settings)
-        return True
-
-    if args.prompt:
-        run_prompt_session(args, settings)
-        return True
-
-    return False

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import TYPE_CHECKING, Any
 
 from jinja2.exceptions import TemplateError
+from rich.markup import escape
 from rich.text import Text
 
 from ...agent.episodic_memory import HistoryError
@@ -40,11 +43,14 @@ from .completion import (
     CMD_YOLO,
     _CHAT_SCROLL_ID,
 )
+from .widgets.footer import AgentFooter
 from .widgets.header import AgentHeader
 from .widgets.messages import AgentResponse, UserMessage
 
 if TYPE_CHECKING:
     from .app import OllamaAgentApp
+
+_log = logging.getLogger(__name__)
 
 IMMEDIATE_COMMANDS: frozenset[tuple[str, str]] = frozenset(
     {
@@ -270,7 +276,11 @@ async def _handle_slash_skill(app: OllamaAgentApp, cmd_line: str, args: list[str
 
 
 async def run_slash_command(app: OllamaAgentApp, cmd_line: str) -> None:
-    """Execute a user-typed slash command in the TUI."""
+    """Execute a user-typed slash command in the TUI.
+
+    Never propagates: a slash command that fails must surface the error in the UI,
+    not terminate the app via Textual's default ``exit_on_error`` worker behaviour.
+    """
     try:
         parts = cmd_line.split()
         cmd = parts[0].lower()
@@ -292,15 +302,20 @@ async def run_slash_command(app: OllamaAgentApp, cmd_line: str) -> None:
 
         commands = app.repl._get_commands()
         if cmd not in commands:
-            app.show_system_notice(f"[bold #f87171]✕ {_('Unknown command: {cmd}', cmd=cmd)}[/bold #f87171]")
+            notice = escape(_("Unknown command: {cmd}", cmd=cmd))
+            app.show_system_notice(f"[bold #f87171]✕ {notice}[/bold #f87171]")
             return
 
         handler = commands[cmd]
+        console = app.repl.console
+        prev_width, prev_height = console.width, console.height
         scroll_w = scroll.size.width if scroll.size.width > 10 else app.size.width
-        app.repl.console.width = max(40, scroll_w - 6)
-        app.repl.console.height = 25
-        with app.repl.console.capture() as capture:
-            await safe_call(handler, args, console=app.repl.console)
+        console.width = max(40, scroll_w - 6)
+        try:
+            with console.capture() as capture:
+                await safe_call(handler, args, console=console)
+        finally:
+            console.width, console.height = prev_width, prev_height
         output = capture.get()
         if output:
             app.show_system_output(Text.from_ansi(output), title=cmd_line)
@@ -311,5 +326,15 @@ async def run_slash_command(app: OllamaAgentApp, cmd_line: str) -> None:
             app._update_queue_ui()
         elif cmd in (CMD_MODEL, CMD_EFFORT, CMD_CONTEXT, CMD_RAG):
             app.query_one(AgentHeader).update_header()
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - a slash command must never kill the app
+        _log.exception("Unhandled error running slash command %r", cmd_line)
+        notice = escape(_("Command failed: {exc}", exc=exc))
+        app.show_system_notice(f"[bold #f87171]✕ {notice}[/bold #f87171]")
     finally:
+        # Releases the generation slot claimed by OllamaAgentApp._start_slash so the
+        # next queued prompt can be dispatched.
+        app._is_generating = False
+        app.query_one(AgentFooter).set_generating(False)
         app._process_next_in_queue()

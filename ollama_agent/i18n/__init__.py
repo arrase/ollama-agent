@@ -58,15 +58,27 @@ def detect_system_language() -> str:
 
 def set_locale(lang: str | None = None) -> str:
     global _current_locale, _translations
+    if lang is not None and not lang.strip():
+        raise ValueError("Language must be a non-empty locale code")
     target = _normalize_lang(lang) if lang else detect_system_language()
     if target not in SUPPORTED_LOCALES:
-        raise ValueError(f"Unsupported language: {lang}")
+        raise ValueError(f"Unsupported language: {lang}. Expected one of: {', '.join(SUPPORTED_LOCALES)}")
 
-    _current_locale = target
-    _translations = {}
+    # Load and validate before mutating global state: a corrupt locale file must not
+    # leave the process on the new locale with an empty translation table.
+    translations: dict[str, str] = {}
     if target != DEFAULT_LOCALE:
-        data = resources.files(__name__).joinpath("locales", f"{target}.json").read_text(encoding="utf-8")
-        _translations = json.loads(data)
+        path = resources.files(__name__).joinpath("locales", f"{target}.json")
+        try:
+            data: Any = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise ValueError(f"Failed to load locale '{target}': {exc}") from exc
+        if not isinstance(data, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in data.items()):
+            raise ValueError(f"Locale file for '{target}' must be an object of string -> string")
+        translations = data
+
+    _translations = translations
+    _current_locale = target
     return _current_locale
 
 
@@ -76,9 +88,13 @@ def get_locale() -> str:
 
 def get_text(message: str, **kwargs: Any) -> str:
     text = _translations[message] if message in _translations else message
-    if kwargs:
+    if not kwargs:
+        return text
+    try:
         return text.format(**kwargs)
-    return text
+    except (KeyError, IndexError):
+        # A literal brace in a (possibly translated) message must not crash the caller.
+        return text
 
 
 _ = get_text

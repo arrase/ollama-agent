@@ -95,7 +95,9 @@ class TestStreamingSystem(unittest.IsolatedAsyncioTestCase):
     def test_console_streaming_renderer_agent_prefix(self) -> None:
         console = Console(file=io.StringIO(), record=True)
         renderer = ConsoleStreamingRenderer(console=console)
-        self.assertEqual(renderer._agent_prefix({"agent_name": "worker"}), "[worker] ")
+        # The prefix is escaped so an agent name carrying markup cannot break printing.
+        self.assertEqual(renderer._agent_prefix({"agent_name": "worker"}), "\\[worker] ")
+        self.assertEqual(renderer._agent_prefix({"agent_name": "a[/b]c"}), "[a\\[/b]c] ")
         self.assertEqual(renderer._agent_prefix({"agent_name": ""}), "")
         self.assertEqual(renderer._agent_prefix({"agent_name": None}), "")
         self.assertEqual(renderer._agent_prefix({}), "")

@@ -162,6 +162,11 @@ class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
             patch("ollama_agent.agent.agent.ensure_model_supports_tools", AsyncMock()),
             patch("ollama_agent.agent.agent.create_ollama_chat_model", AsyncMock(return_value=mock_model)),
             patch("ollama_agent.agent.agent.create_deep_agent", return_value=mock_deep_agent) as mock_create_agent,
+            # Keep the test hermetic: no real MCP servers, no real ~/.ollama-agent writes.
+            patch("ollama_agent.agent.agent.load_main_mcp_tools", AsyncMock(return_value=[])),
+            patch("ollama_agent.agent.agent._ensure_agent_dirs", MagicMock()),
+            patch("ollama_agent.agent.agent._locate_agents_files", MagicMock(return_value=(False, agents_file))),
+            patch.object(AgentRuntime, "_sqlite_checkpointer", AsyncMock(return_value=MagicMock())),
         ):
             await runtime._build_graph()
 
@@ -195,6 +200,10 @@ class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
             patch("ollama_agent.agent.agent.ensure_model_supports_tools", AsyncMock()),
             patch("ollama_agent.agent.agent.create_ollama_chat_model", AsyncMock(return_value=mock_model)),
             patch("ollama_agent.agent.agent.create_deep_agent", return_value=mock_deep_agent) as mock_create_agent,
+            patch("ollama_agent.agent.agent.load_main_mcp_tools", AsyncMock(return_value=[])),
+            patch("ollama_agent.agent.agent._ensure_agent_dirs", MagicMock()),
+            patch("ollama_agent.agent.agent._locate_agents_files", MagicMock(return_value=(False, None))),
+            patch.object(AgentRuntime, "_sqlite_checkpointer", AsyncMock(return_value=MagicMock())),
         ):
             await runtime._build_graph()
 

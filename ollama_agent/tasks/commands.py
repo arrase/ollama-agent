@@ -117,12 +117,19 @@ async def run_task(
             effort=escape(t.reasoning_effort),
         )
     )
+    # apply_task_settings mutates the *shared* Settings object, so the previous model and
+    # effort are restored afterwards (the TUI path does this inline).
+    model_settings = ctx.settings.model
+    previous = (model_settings.name, model_settings.reasoning_effort)
     apply_task_settings(ctx.settings, t)
     runtime = AgentRuntime(settings=ctx.settings, yolo_mode=yolo)
-    async with runtime:
-        await runtime.reload()
-        if not await run_non_interactive(runtime, rendered_prompt):
-            raise TaskError(_("Task execution failed: {tid}", tid=tid))
+    try:
+        async with runtime:
+            await runtime.reload()
+            if not await run_non_interactive(runtime, rendered_prompt):
+                raise TaskError(_("Task execution failed: {tid}", tid=tid))
+    finally:
+        model_settings.name, model_settings.reasoning_effort = previous
 
 
 def delete_task(ctx: TasksContext, task_id: str) -> None:

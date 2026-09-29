@@ -6,7 +6,8 @@ import os
 from dataclasses import asdict, dataclass, field, fields
 from importlib import resources
 from pathlib import Path
-from typing import Any, Self, TypeVar, cast
+from types import UnionType
+from typing import Any, Self, TypeVar, Union, cast, get_args, get_origin, get_type_hints
 
 import yaml  # type: ignore[import-untyped]
 from jinja2 import Environment, StrictUndefined, select_autoescape
@@ -170,16 +171,80 @@ class Settings:
 T = TypeVar("T")
 
 
+def _coerce_setting(cls: type[Any], name: str, value: Any, hint: Any) -> Any:
+    """Validate one untrusted YAML value against its dataclass field annotation.
+
+    Without this, ``context_window: true`` reaches Ollama as ``num_ctx=1`` and
+    ``temperature: "hot"`` surfaces much later as a pydantic error from deep inside
+    the model constructor.
+    """
+    if hint is None:
+        return value
+    origin = get_origin(hint)
+    if origin is None and hint is Any:
+        return value
+
+    # A union is only accepted if every member validates.
+    if origin is Union or origin is UnionType:
+        errors = []
+        for arg in get_args(hint):
+            if arg is type(None):
+                if value is None:
+                    return None
+                continue
+            try:
+                return _coerce_value(name, value, arg)
+            except ValueError as exc:
+                errors.append(str(exc))
+        raise ValueError(
+            _("Invalid value for '{name}': {detail}", name=name, detail="; ".join(errors) or _("wrong type"))
+        )
+    return _coerce_value(name, value, hint)
+
+
+def _coerce_value(name: str, value: Any, hint: Any) -> Any:
+    origin = get_origin(hint) or hint
+    if origin is bool:
+        if not isinstance(value, bool):
+            raise ValueError(_("expected a boolean, got {t}", t=type(value).__name__))
+        return value
+    if origin is int:
+        # bool is a subclass of int; context_window: true must not become num_ctx=1.
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(_("expected an integer, got {t}", t=type(value).__name__))
+        return value
+    if origin is float:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(_("expected a number, got {t}", t=type(value).__name__))
+        return float(value)
+    if origin is str:
+        if not isinstance(value, str):
+            raise ValueError(_("expected a string, got {t}", t=type(value).__name__))
+        return value
+    return value
+
+
 def _dataclass_from_dict(cls: type[T], raw: Any) -> T:
     if not isinstance(raw, dict):
         raise ValueError(
             _("Expected mapping for '{name}', got {type_name}", name=cls.__name__, type_name=type(raw).__name__)
         )
-    valid = {f.name for f in fields(cast(Any, cls))}
+    dataclass_fields = fields(cast(Any, cls))
+    valid = {f.name for f in dataclass_fields}
     unknown = set(raw) - valid
     if unknown:
         raise ValueError(_("Unknown setting keys: {keys}", keys=sorted(unknown)))
-    return cls(**raw)
+
+    hints = get_type_hints(cast(Any, cls))
+    kwargs: dict[str, Any] = {}
+    for f in dataclass_fields:
+        if f.name not in raw:
+            continue
+        try:
+            kwargs[f.name] = _coerce_setting(cast(Any, cls), f.name, raw[f.name], hints.get(f.name))
+        except ValueError as exc:
+            raise ValueError(_("Invalid value for '{name}.{key}': {exc}", name=cls.__name__, key=f.name, exc=exc))
+    return cls(**kwargs)
 
 
 def _subagents_from_list(

@@ -7,15 +7,21 @@ from typing import Any
 
 from langchain_core._api.deprecation import LangChainPendingDeprecationWarning
 from rich.console import Console
+from rich.markup import escape
 
 from .agent import AgentRuntime
 from .agent.builtin_tools import set_tool_timeout
+from .agent.episodic_memory import HistoryError
 from .core import ModelCapabilityError, ModelContextWindowError, OllamaVersionError, check_ollama_version
 from .i18n import SUPPORTED_LOCALES, _, set_locale
 from .interfaces.cli import create_argument_parser, handle_subcommand, run_prompt_session
 from .interfaces.commands.models import ensure_model_configured
 from .interfaces.tui import OllamaREPL
+from .mcp import MCPConfigError
+from .rag import RAGError
 from .settings import Settings, load_settings, reset_config
+from .skills import SkillError
+from .tasks import TaskError
 
 # Silence only the known third-party noise, not all deprecations.
 warnings.filterwarnings(
@@ -44,8 +50,8 @@ def _apply_cli_overrides(settings: Settings, args: Any) -> None:
         settings.model.name = args.model
     if args.effort:
         settings.model.reasoning_effort = args.effort
-    if args.num_ctx:
-        settings.model.context_window = int(args.num_ctx) if args.num_ctx.isdigit() else args.num_ctx
+    if args.num_ctx is not None:
+        settings.model.context_window = args.num_ctx
     if args.builtin_tool_timeout is not None:
         settings.runtime.builtin_tool_timeout = args.builtin_tool_timeout
     if args.allow_traversal is not None:
@@ -54,35 +60,39 @@ def _apply_cli_overrides(settings: Settings, args: Any) -> None:
 
 def main() -> None:
     """Main entry point."""
-    early_lang = _extract_early_language(sys.argv[1:])
-    set_locale(early_lang)
-
-    parser = create_argument_parser()
-    args = parser.parse_args()
-
-    if args.command and args.prompt:
-        parser.error(_("--prompt cannot be used together with a subcommand."))
-
-    if args.config_reset:
-        console = Console()
-        for msg in reset_config(args.config_reset):
-            console.print(msg)
-        return
-
-    settings = load_settings()
-    settings.setup_environment()
-
-    if args.language:
-        settings.runtime.language = args.language
-        set_locale(args.language)
-    elif settings.runtime.language:
-        set_locale(settings.runtime.language)
-
-    _apply_cli_overrides(settings, args)
-
-    set_tool_timeout(settings.runtime.builtin_tool_timeout)
-
+    console = Console()
     try:
+        early_lang = _extract_early_language(sys.argv[1:])
+        set_locale(early_lang)
+
+        parser = create_argument_parser()
+        args = parser.parse_args()
+
+        if args.command and args.prompt:
+            parser.error(_("--prompt cannot be used together with a subcommand."))
+
+        if args.config_reset:
+            for msg in reset_config(args.config_reset):
+                console.print(msg)
+            return
+
+        settings = load_settings()
+        settings.setup_environment()
+
+        try:
+            if args.language:
+                settings.runtime.language = args.language
+                set_locale(args.language)
+            elif settings.runtime.language:
+                set_locale(settings.runtime.language)
+
+            _apply_cli_overrides(settings, args)
+            set_tool_timeout(settings.runtime.builtin_tool_timeout)
+        except ValueError as exc:
+            # Invalid locale or reasoning effort coming from settings.yaml / CLI.
+            console.print(f"[red]{escape(_('Error: {exc}', exc=exc))}[/red]")
+            raise SystemExit(1) from None
+
         if args.command:
             handle_subcommand(args, settings)
             return
@@ -107,8 +117,12 @@ def main() -> None:
     except KeyboardInterrupt:
         raise SystemExit(130) from None
     except (ModelCapabilityError, ModelContextWindowError, OllamaVersionError) as exc:
-        console = Console()
-        console.print(f"[red]{_('Error: {exc}', exc=exc)}[/red]")
+        console.print(f"[red]{escape(_('Error: {exc}', exc=exc))}[/red]")
+        raise SystemExit(1) from None
+    except SystemExit:
+        raise
+    except (SkillError, TaskError, RAGError, HistoryError, MCPConfigError) as exc:
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise SystemExit(1) from None
 
 

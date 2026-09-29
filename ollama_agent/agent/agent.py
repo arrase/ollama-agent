@@ -28,7 +28,7 @@ from ..core import (
     validate_reasoning_effort,
 )
 from ..i18n import _
-from ..mcp import load_main_mcp_tools
+from ..mcp import MCPConfigError, load_main_mcp_tools
 from ..settings import (
     AGENTS_PATH,
     BUILTIN_SKILLS_DIR,
@@ -58,19 +58,30 @@ from .subagents import build_subagents
 _log = logging.getLogger(__name__)
 
 
+def _ensure_agent_dirs() -> None:
+    """Create the agent-owned directories and seed MEMORY.md (blocking I/O)."""
+    SKILLS_DIR.mkdir(parents=True, exist_ok=True)
+    TASKS_DIR.mkdir(parents=True, exist_ok=True)
+    BUILTIN_SKILLS_DIR.mkdir(parents=True, exist_ok=True)
+    ensure_memory_file(MEMORY_PATH)
+
+
+def _locate_agents_files() -> tuple[bool, Path | None]:
+    """Return (global AGENTS.md exists, nearest project AGENTS.md) (blocking I/O)."""
+    return AGENTS_PATH.is_file(), find_agents_file(Path.cwd())
+
+
 def _prepare_instructions(settings: Settings) -> str:
     base_instructions = load_instructions()
     rag_mgr = get_rag_manager()
-    current_db = rag_mgr.current_database if rag_mgr is not None else None
-    rag_active = current_db is not None
-    rag_db_name = current_db if current_db is not None else ""
+    rag_db_name = rag_mgr.current_database if rag_mgr is not None else None
     context = {
         "settings": settings,
         "runtime": settings.runtime,
         "rag": settings.rag,
         "model": settings.model,
-        "rag_active": rag_active,
-        "rag_database": rag_db_name,
+        "rag_active": rag_db_name is not None,
+        "rag_database": rag_db_name or "",
     }
     instructions = render_prompt_template(base_instructions, context)
     os_info = environment_block(include_cwd=True)
@@ -105,10 +116,23 @@ class AgentRuntime:
     async def __aexit__(self, *exc: object) -> None:
         await self.aclose()
 
-    async def reload(self) -> None:
-        """Tear down existing resources and rebuild the agent graph."""
+    async def _reload_locked(self) -> None:
+        """Rebuild the graph. Caller must hold ``_init_lock``."""
         self._instructions = await asyncio.to_thread(_prepare_instructions, self.settings)
         self.graph = await self._build_graph()
+
+    async def reload(self) -> None:
+        """Tear down existing resources and rebuild the agent graph.
+
+        Serialised on ``_init_lock`` because ``/model``, ``/effort``, ``/context``,
+        ``/stealth`` and ``/rag`` all rebuild concurrently with lazy initialisation.
+        """
+        async with self._init_lock:
+            await self._reload_locked()
+
+    async def warmup(self) -> None:
+        """Build the graph (if needed) and resolve the default thread."""
+        await self._ensure_graph()
 
     async def _build_graph(self) -> Any:
         ms = self.settings.model
@@ -116,20 +140,28 @@ class AgentRuntime:
         def should_interrupt_tool(request: Any) -> bool:
             return not self.yolo_mode and request.tool_call["name"] not in self.auto_approved_tools
 
-        model_coro = create_ollama_chat_model(**get_model_creation_kwargs(ms, warn_callback=_log.warning))
-        mcp_coro = load_main_mcp_tools()
-        subagents_coro = build_subagents(
-            self.settings.subagents,
-            model_settings=self.settings.model,
-            should_interrupt_tool=should_interrupt_tool,
-        )
-        checkpointer = self._get_memory_checkpointer() if self.stealth_mode else await self._sqlite_checkpointer()
+        # TaskGroup (not gather) cancels the siblings when one fails: a bad subagent
+        # config must not leave MCP stdio subprocesses starting up in the background.
+        try:
+            async with asyncio.TaskGroup() as tg:
+                model_task = tg.create_task(
+                    create_ollama_chat_model(**get_model_creation_kwargs(ms, warn_callback=_log.warning))
+                )
+                mcp_task = tg.create_task(load_main_mcp_tools())
+                subagents_task = tg.create_task(
+                    build_subagents(
+                        self.settings.subagents,
+                        model_settings=self.settings.model,
+                        should_interrupt_tool=should_interrupt_tool,
+                    )
+                )
+        except* (MCPConfigError, ValueError) as eg:
+            # TaskGroup always populates .exceptions here; re-raise the original type so
+            # callers keep catching MCPConfigError / ValueError rather than a group.
+            raise eg.exceptions[0] from None
 
-        model, mcp_tools, subagents = await asyncio.gather(
-            model_coro,
-            mcp_coro,
-            subagents_coro,
-        )
+        model, mcp_tools, subagents = model_task.result(), mcp_task.result(), subagents_task.result()
+        checkpointer = self._get_memory_checkpointer() if self.stealth_mode else await self._sqlite_checkpointer()
         await ensure_model_supports_tools(
             ms.name,
             ms.base_url,
@@ -137,7 +169,8 @@ class AgentRuntime:
         )
 
         self.model = model
-        self.effective_context_window = model.num_ctx
+        # OllamaChatModel.num_ctx is None when the model relies on a server-side profile.
+        self.effective_context_window = model.num_ctx or 0
         self.effective_model_params = model.effective_params
 
         # Backend: CWD for shell + APP_DIR for agent files (memory, etc.)
@@ -148,10 +181,7 @@ class AgentRuntime:
             virtual_mode=not self.settings.runtime.allow_traversal,
             inherit_env=self.settings.runtime.inherit_env,
         )
-        SKILLS_DIR.mkdir(parents=True, exist_ok=True)
-        TASKS_DIR.mkdir(parents=True, exist_ok=True)
-        BUILTIN_SKILLS_DIR.mkdir(parents=True, exist_ok=True)
-        ensure_memory_file(MEMORY_PATH)
+        await asyncio.to_thread(_ensure_agent_dirs)
 
         agent_backend = FilesystemBackend(
             root_dir=MEMORY_PATH.parent,
@@ -177,11 +207,13 @@ class AgentRuntime:
         }
 
         # Memory sources: global user memory and AGENTS.md (project / global)
+        # The filesystem probes run off the event loop: _build_graph re-runs on every
+        # reload (/model, /effort, /ctx, /rag load) and a cold FS would visibly stall the UI.
         memory_sources: list[str] = ["/agent/MEMORY.md"]
-        if AGENTS_PATH.is_file():
+        has_global_agents, project_agents = await asyncio.to_thread(_locate_agents_files)
+        if has_global_agents:
             memory_sources.append("/agent/AGENTS.md")
 
-        project_agents = find_agents_file(Path.cwd())
         if project_agents is not None:
             if project_agents.parent == Path.cwd().resolve():
                 memory_sources.append(f"/{project_agents.name}")
@@ -248,7 +280,7 @@ class AgentRuntime:
         thread = thread_id or self.thread_id
         async with self._init_lock:
             if self.graph is None:
-                await self.reload()
+                await self._reload_locked()
         config: dict[str, Any] = {"configurable": {"thread_id": thread}}
         return self.graph, thread, config
 
@@ -329,18 +361,27 @@ class AgentRuntime:
         if state.interrupts:
             yield {"type": "interrupt", "interrupts": state.interrupts, "config": config}
 
+    @staticmethod
+    def _thread_values(state: Any) -> dict[str, Any]:
+        """Narrow a StateSnapshot's ``values`` to a mapping.
+
+        langgraph declares this as ``dict[str, Any] | Any``, so ``.get`` on it is
+        otherwise unchecked and a non-mapping would raise AttributeError.
+        """
+        values = getattr(state, "values", None)
+        return values if isinstance(values, dict) else {}
+
     async def get_thread_messages(self, thread_id: str = "") -> list[Any]:
         """Return the raw stored messages for a thread (empty when unknown)."""
         graph, _thread, config = await self._ensure_graph(thread_id)
         state = await graph.aget_state(config)
-        values: dict[str, Any] = state.values
-        return list(values.get("messages", []))
+        return list(self._thread_values(state).get("messages", []))
 
     async def count_effective_tokens(self, thread_id: str = "") -> int:
         """Count tokens of the effective context for a thread."""
         graph, _thread, config = await self._ensure_graph(thread_id)
         state = await graph.aget_state(config)
-        values: dict[str, Any] = state.values
+        values = self._thread_values(state)
         messages = list(values.get("messages", []))
         event = values.get("_summarization_event")
         if event and "summary_message" in event and "cutoff_index" in event:

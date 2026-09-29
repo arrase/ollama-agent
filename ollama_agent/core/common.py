@@ -24,7 +24,12 @@ class RAGToolResult(TypedDict, total=False):
 
 
 def extract_text(content: Any, *, sep: str = " ") -> str:
-    """Convert agent payload content into plain text."""
+    """Convert agent payload content into plain text.
+
+    Non-text multimodal blocks (image/audio/video/file) contribute no plain text, so
+    a conversation that attached one must still be readable. Genuinely malformed
+    payloads (e.g. a dict with no recognised key) still raise ``TypeError``.
+    """
     if isinstance(content, str):
         return content
     if content is None:
@@ -35,6 +40,8 @@ def extract_text(content: Any, *, sep: str = " ") -> str:
         for key in ("text", "content"):
             if key in content:
                 return extract_text(content[key], sep=sep)
+        if "type" in content:
+            return ""
         raise TypeError("Unsupported dict content for extract_text: missing 'text' or 'content' key")
     raise TypeError(f"Unsupported content shape for extract_text: {type(content).__name__}")
 
@@ -62,6 +69,17 @@ def validate_identifier(name: str, label: str = "identifier") -> str:
             )
         )
     return name
+
+
+QUICK_PREVIEW_LIMIT = 60
+
+
+def shorten(text: str, limit: int = QUICK_PREVIEW_LIMIT) -> str:
+    """Collapse newlines and truncate *text* to *limit* characters with an ellipsis."""
+    flat = text.replace("\n", " ")
+    if len(flat) <= limit:
+        return flat
+    return flat[: limit - 3] + "..."
 
 
 def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None:

@@ -5,13 +5,13 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Callable
 
-import httpx
 import ollama
 from rich.console import Console
 
 from ...agent import AgentRuntime
 from ...core import (
     ModelCapabilityError,
+    create_ollama_async_client,
     model_supports_tools,
 )
 from ...i18n import _
@@ -20,9 +20,9 @@ from ...settings import Settings, save_settings
 
 async def _list_models(base_url: str) -> list[Any]:
     """Fetch the list of available Ollama models asynchronously."""
-    client = ollama.AsyncClient(host=base_url)
-    response = await client.list()
-    return list(response.models)
+    async with create_ollama_async_client(base_url) as client:
+        response = await client.list()
+        return list(response.models)
 
 
 async def _tool_icon(model_name: str, base_url: str) -> str:
@@ -172,7 +172,7 @@ def ensure_model_configured(
     base_url = settings.model.base_url
     try:
         available_models = asyncio.run(_list_models(base_url))
-    except (httpx.HTTPError, ollama.ResponseError, OSError) as exc:
+    except (ollama.ResponseError, OSError) as exc:
         raise ModelCapabilityError(
             _("Could not connect to Ollama at '{base_url}': {exc}", base_url=base_url, exc=exc)
         ) from exc

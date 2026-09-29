@@ -3,19 +3,22 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextvars import ContextVar
 
 from langchain_core.tools import BaseTool, tool
 
 from ..core import RAGToolResult
 from ..i18n import _
-from ..rag import RAGError, RAGManager
+from ..rag import RAGError, RAGManager, RAGNotLoadedError
 from . import episodic_memory
 from .episodic_memory import (
     HistoryError,
     format_past_conversations_context,
     search_past_conversations_in_db,
 )
+
+_log = logging.getLogger(__name__)
 
 _tool_timeout: ContextVar[int] = ContextVar("tool_timeout", default=30)
 _rag_manager: ContextVar[RAGManager | None] = ContextVar("rag_manager", default=None)
@@ -53,7 +56,7 @@ async def rag_search(query: str, top_k: int | None = None) -> RAGToolResult:
     """Search the loaded RAG database for relevant document chunks."""
     mgr = get_rag_manager()
     if mgr is None:
-        raise AttributeError("RAG manager is not initialized")
+        raise RAGNotLoadedError(_("No RAG database loaded."))
     try:
         results = await mgr.search(query, top_k)
         context_parts: list[str] = []
@@ -82,6 +85,9 @@ async def search_past_conversations(query: str, limit: int = 3) -> str:
             limit=limit,
         )
     except HistoryError as exc:
+        return _("Error searching past conversations: {exc}", exc=exc)
+    except Exception as exc:  # noqa: BLE001 - no database-level surprise may kill a tool call
+        _log.exception("Unexpected failure searching past conversations")
         return _("Error searching past conversations: {exc}", exc=exc)
     return format_past_conversations_context(results)
 

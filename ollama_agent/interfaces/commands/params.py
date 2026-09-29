@@ -26,6 +26,17 @@ VALID_SAMPLING_PARAMS: dict[str, type] = {
     "repetition_penalty": float,
 }
 
+# Ollama accepts no meaningful value outside these ranges; accepting e.g.
+# `temperature 99` would be persisted to settings.yaml and sent on every request.
+SAMPLING_PARAM_BOUNDS: dict[str, tuple[float, float]] = {
+    "temperature": (0.0, 2.0),
+    "top_p": (0.0, 1.0),
+    "top_k": (0.0, 100_000.0),
+    "min_p": (0.0, 1.0),
+    "presence_penalty": (-2.0, 2.0),
+    "repeat_penalty": (0.0, 2.0),
+}
+
 
 def show_effort(console: Console, runtime: AgentRuntime) -> None:
     """Print the current reasoning effort and model."""
@@ -279,6 +290,24 @@ async def set_model_param(
             type_name=type_name,
         )
         console.print(f"[red]{invalid_msg}[/red]")
+        return
+
+    # ModelSettings uses slots=True, so setattr on a name with no field would fail deep
+    # inside save_settings; check the instance so bad input is reported, not persisted.
+    if not hasattr(runtime.settings.model, norm_name):
+        unknown_msg = _("Unknown parameter '{param_name}'", param_name=norm_name)
+        console.print(f"[red]{unknown_msg}[/red]")
+        return
+
+    low, high = SAMPLING_PARAM_BOUNDS[norm_name]
+    if not (low <= val <= high):
+        out_of_range = _(
+            "'{norm_name}' must be between {low} and {high}.",
+            norm_name=norm_name,
+            low=low,
+            high=high,
+        )
+        console.print(f"[red]{out_of_range}[/red]")
         return
 
     setattr(runtime.settings.model, norm_name, val)

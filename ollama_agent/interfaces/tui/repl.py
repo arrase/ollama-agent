@@ -9,11 +9,12 @@ from rich.markup import escape
 
 from ...agent import AgentRuntime
 from ...agent.builtin_tools import set_rag_manager, set_tool_timeout
+from ...core import shorten
 from ...i18n import _
 from ...rag import RAGContext, RAGManager, load_rag_database
 from ...skills import SkillsContext
 from ...tasks import TasksContext
-from ..commands.dispatch import REPLHandler, build_repl_handlers
+from ..commands.dispatch import REPLEnvironment, REPLHandler, build_repl_handlers
 from ..commands.models import set_model
 from ..commands.params import set_context_window, set_effort
 from ..commands.sessions import new_session
@@ -47,7 +48,7 @@ class OllamaREPL:
     def _get_commands(self) -> dict[str, REPLHandler]:
         """Lazily build and cache REPL command handlers."""
         if self._commands is None:
-            self._commands = build_repl_handlers(
+            env = REPLEnvironment(
                 task_ctx=self._task_ctx,
                 skills_ctx=self._skills_ctx,
                 get_rag_ctx=self._get_rag_ctx,
@@ -63,11 +64,12 @@ class OllamaREPL:
                 switch_effort=self._switch_effort,
                 switch_context_window=self._switch_context_window,
             )
+            self._commands = build_repl_handlers(env)
         return self._commands
 
     async def cleanup(self) -> None:
         if self._rag_ctx:
-            self._rag_ctx.rag_manager.unload()
+            await self._rag_ctx.rag_manager.aclose()
         await self.runtime.aclose()
 
     async def run(self) -> None:
@@ -81,7 +83,8 @@ class OllamaREPL:
         try:
             await app.run_async()
         except KeyboardInterrupt:
-            pass
+            # Surface the conventional SIGINT exit code instead of exiting 0.
+            raise SystemExit(130) from None
         finally:
             await self.cleanup()
 
@@ -163,11 +166,8 @@ class OllamaREPL:
         del queue[pos - 1]
         if self.app is not None:
             self.app._update_queue_ui()
-        truncated_text = item.replace("\n", " ")
-        if len(truncated_text) > 60:
-            truncated_text = truncated_text[:57] + "..."
-        msg = _("Removed #{pos} from prompt queue: {text}", pos=pos, text=truncated_text)
-        self.console.print(f"[bold #34d399]✓ {msg}[/bold #34d399]")
+        msg = _("Removed #{pos} from prompt queue: {text}", pos=pos, text=shorten(item))
+        self.console.print(f"[bold #34d399]✓ {escape(msg)}[/bold #34d399]")
 
     def _handle_queue_cmd(self, args: list[str]) -> None:
         queue = self.app._prompt_queue if self.app is not None else deque()
@@ -177,7 +177,7 @@ class OllamaREPL:
                 return
             self.console.print(f"[bold #38bdf8]{_('Queued prompts ({count}):', count=len(queue))}[/bold #38bdf8]")
             for i, item in enumerate(queue, 1):
-                self.console.print(f"  [dim]#{i}[/dim] {item}")
+                self.console.print(f"  [dim]#{i}[/dim] {escape(shorten(item))}")
             return
         if args[0] == "clear":
             count = len(queue)
@@ -185,13 +185,13 @@ class OllamaREPL:
             if self.app is not None:
                 self.app._update_queue_ui()
             msg = _("Prompt queue cleared ({count} removed).", count=count)
-            self.console.print(f"[bold #34d399]✓ {msg}[/bold #34d399]")
+            self.console.print(f"[bold #34d399]✓ {escape(msg)}[/bold #34d399]")
             return
         if args[0] in ("rm", "remove", "delete"):
             if len(args) < 2:
-                self.console.print(f"[red]{_('Usage: /queue rm <position>')}[/red]")
+                self.console.print(f"[red]{escape(_('Usage: /queue rm <position>'))}[/red]")
                 return
             self._handle_queue_rm(queue, args[1])
             return
         err_msg = _("Unknown queue subcommand '{sub}'. Usage: /queue [clear | rm <position>]", sub=args[0])
-        self.console.print(f"[red]{err_msg}[/red]")
+        self.console.print(f"[red]{escape(err_msg)}[/red]")

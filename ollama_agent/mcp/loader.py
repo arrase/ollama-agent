@@ -9,7 +9,7 @@ import logging
 import os
 import re
 import sys
-from typing import Any
+from typing import Any, cast
 
 import langchain_mcp_adapters.sessions
 import mcp.client.stdio
@@ -73,11 +73,15 @@ def _build_stdio_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, 
     command = cfg["command"]
     if not isinstance(command, str) or not command.strip():
         raise MCPConfigError(_("MCP server '{name}': 'command' must be a non-empty string", name=server_name))
-    args = []
+    args: list[Any]
     if "args" in cfg:
         args = cfg["args"]
-    if not isinstance(args, list):
-        raise MCPConfigError(_("MCP server '{name}': 'args' must be a list", name=server_name))
+        if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
+            # Otherwise a non-string element raises a bare TypeError from subprocess
+            # argument handling, escaping the MCPConfigError contract.
+            raise MCPConfigError(_("MCP server '{name}': 'args' must be a list of strings", name=server_name))
+    else:
+        args = []
     out: dict[str, Any] = {
         "transport": "stdio",
         "command": command,
@@ -158,7 +162,18 @@ async def _read_main_config() -> dict[str, dict[str, Any]]:
         raise MCPConfigError(
             _("Invalid MCP config {config_path}: 'mcpServers' must be an object", config_path=MCP_PATH)
         )
-    return servers_cfg
+    # Validate the shape here so every consumer (not just the loader) sees
+    # MCPConfigError rather than a bare TypeError from indexing a non-dict entry.
+    for name, cfg in servers_cfg.items():
+        if not isinstance(name, str) or not isinstance(cfg, dict):
+            raise MCPConfigError(
+                _(
+                    "Invalid MCP config {config_path}: server '{name}' must map to an object",
+                    config_path=MCP_PATH,
+                    name=name,
+                )
+            )
+    return cast("dict[str, dict[str, Any]]", servers_cfg)
 
 
 async def _connect_and_load(name: str, conn: dict[str, Any]) -> list[Any]:
@@ -170,6 +185,15 @@ async def _connect_and_load(name: str, conn: dict[str, Any]) -> list[Any]:
         async with asyncio.timeout(DEFAULT_MCP_TIMEOUT):
             client = MultiServerMCPClient({name: conn})  # type: ignore[dict-item,arg-type]
             tools = await client.get_tools()
+    except TimeoutError as exc:
+        # str(TimeoutError()) is empty, so the generic handler would report no reason.
+        raise MCPConfigError(
+            _(
+                "Connection to MCP server '{name}' timed out ({timeout}s)",
+                name=name,
+                timeout=DEFAULT_MCP_TIMEOUT,
+            )
+        ) from exc
     except Exception as exc:
         raise MCPConfigError(_("Failed to load tools from MCP server '{name}': {exc}", name=name, exc=exc)) from exc
     _log.info("Loaded %d MCP tools from server '%s'", len(tools), name)
@@ -184,10 +208,16 @@ async def _load_tools_from_connections(connections: dict[str, dict[str, Any]]) -
             for name, conn in connections.items():
                 tasks.append(tg.create_task(_connect_and_load(name, conn)))
     except ExceptionGroup as eg:
-        for exc in eg.exceptions:
-            if isinstance(exc, MCPConfigError):
-                raise exc from eg
-        raise
+        # Report every failing server, not just whichever task finished first, so the
+        # user can fix all of them in one pass.
+        failures = [e for e in eg.exceptions if isinstance(e, MCPConfigError)]
+        if not failures:
+            raise
+        if len(failures) == 1:
+            raise failures[0] from eg
+        raise MCPConfigError(
+            _("Failed to load {count} MCP server(s): {details}", count=len(failures), details="; ".join(str(e) for e in failures))
+        ) from eg
 
     return [tool for t in tasks for tool in t.result()]
 
@@ -202,8 +232,6 @@ async def load_main_mcp_tools() -> list[Any]:
 
     connections: dict[str, dict[str, Any]] = {}
     for name, cfg in servers_cfg.items():
-        if not isinstance(cfg, dict):
-            raise MCPConfigError(_("MCP server '{name}': configuration must be an object", name=name))
         connections[name] = _build_mcp_connection(name, cfg)
 
     return await _load_tools_from_connections(connections)
