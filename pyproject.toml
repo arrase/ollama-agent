@@ -19,7 +19,7 @@ dependencies = [
     "langchain-mcp-adapters==0.3.2",
     "langchain-text-splitters==1.1.2",
     "PyYAML==6.0.3",
-    "ollama==0.6.2",
+    "ollama==0.6.3",
     "textual==8.2.8",
     "qdrant-client==1.19.1",
     "rich==15.0.0",
