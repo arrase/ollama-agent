@@ -35,11 +35,11 @@ ollama-agent = "ollama_agent.main:main"
 dev = [
     "ruff==0.16.7",
     "mypy>=2.3.1",
-    "pytest>=8.0.0",
+    "pytest>=9.1.1",
     "pytest-cov>=5.0.0",
 ]
 test = [
-    "pytest>=8.0.0",
+    "pytest>=9.1.1",
     "pytest-cov>=5.0.0",
 ]
 docs = ["mkdocs-material>=9.7.7"]
