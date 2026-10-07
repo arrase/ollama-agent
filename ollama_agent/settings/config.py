@@ -52,7 +52,7 @@ class RuntimeSettings:
 @dataclass(slots=True)
 class RAGSettings:
     rag_dir: str = str(RAG_DIR)
-    embedder_model: str = "nomic-embed-text:latest"
+    embedder_model: str = "embeddinggemma-2:740m"
     embedder_base_url: str = "http://localhost:11434"
     embedding_dims: int = 768
     default_top_k: int = 5

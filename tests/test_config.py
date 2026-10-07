@@ -49,6 +49,8 @@ class TestConfigManagement(unittest.TestCase):
         self.assertEqual(s.runtime.builtin_tool_timeout, 30)
         self.assertEqual(s.mentions.max_files, 100)
         self.assertEqual(s.rag.default_top_k, 5)
+        self.assertEqual(s.rag.embedder_model, "embeddinggemma-2:740m")
+        self.assertEqual(s.rag.embedding_dims, 768)
 
         # Default model dict should not include unset sampling parameters
         model_dict = s.to_dict()["model"]

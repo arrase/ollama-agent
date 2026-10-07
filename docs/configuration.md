@@ -139,12 +139,12 @@ rag:
   rag_dir: "~/.ollama-agent/rag"
 
   # Ollama model used to generate embeddings for document indexing and queries.
-  embedder_model: "nomic-embed-text:latest"
+  embedder_model: "embeddinggemma-2:740m"
 
   # Ollama endpoint used specifically for embeddings generation.
   embedder_base_url: "http://localhost:11434"
 
-  # Embedding dimensionality (must match the embedder model, e.g. 768 for nomic-embed-text).
+  # Embedding dimensionality (must match the embedder model, e.g. 768 for embeddinggemma-2:740m).
   embedding_dims: 768
 
   # Default number of top relevant document chunks retrieved per search query.
@@ -225,7 +225,7 @@ The following table details every configuration key available in `settings.yaml`
 | **`runtime.collapse_thinking`** | `boolean` | `true` | When `true`, collapses reasoning blocks inside an expandable card in the REPL TUI. |
 | **`runtime.inherit_env`** | `boolean` | `true` | When `true`, child processes inherit the current host shell environment variables. |
 | **`rag.rag_dir`** | `string` | `~/.ollama-agent/rag` | Directory storing local vector database collections and indexes. |
-| **`rag.embedder_model`** | `string` | `nomic-embed-text:latest` | Ollama embeddings model tag. |
+| **`rag.embedder_model`** | `string` | `embeddinggemma-2:740m` | Ollama embeddings model tag. |
 | **`rag.embedder_base_url`** | `string` | `http://localhost:11434` | Ollama server endpoint used for embeddings inference. |
 | **`rag.embedding_dims`** | `int` | `768` | Vector embedding dimension size (must match the embedding model). |
 | **`rag.default_top_k`** | `int` | `5` | Number of document chunks retrieved per RAG query. |

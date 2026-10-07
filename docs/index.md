@@ -50,7 +50,7 @@ Before launching Ollama Agent, ensure the following are available on your system
    *(If unconfigured, Ollama Agent automatically scans your installed Ollama models and presents an interactive selector).*
 4. **Embeddings Model (Optional, for Local RAG)**:
    ```bash
-   ollama pull nomic-embed-text
+   ollama pull embeddinggemma-2:740m
    ```
 
 ---
@@ -208,8 +208,9 @@ In the interactive REPL, attach local files, directories, or media directly usin
 ### 3. Local Knowledge Base (RAG) Querying
 Create a local semantic search database for your documentation and query it on demand:
 ```bash
-# Index local docs into a collection
-ollama-agent rag create project-docs ./docs --model nomic-embed-text
+# Create knowledge base collection and index local docs
+ollama-agent rag create project-docs
+ollama-agent rag add project-docs ./docs --dir
 
 # Query the collection via CLI
 ollama-agent --rag project-docs -p "How do I configure subagents in settings.yaml?"
