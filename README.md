@@ -155,7 +155,7 @@ Reference local files or folders directly in your prompts with autocompletion:
 ### 🧩 Tasks, Skills & Local RAG
 - **Saved Tasks**: Reusable YAML prompt templates with Jinja2 expressions (`~/.ollama-agent/tasks/`), input type validation, and CLI execution (`ollama-agent task run <id>`).
 - **Agent Skills**: Modular procedural workflows adhering to the open [Agent Skills specification](https://agentskills.io/specification).
-- **Local RAG Engine**: Embed and index documents into local Qdrant collections using Ollama embeddings (`ollama pull nomic-embed-text`), retrieved automatically via the `rag_search` tool.
+- **Local RAG Engine**: Embed and index documents into local Qdrant collections using Ollama embeddings (`ollama pull embeddinggemma-2:740m`), retrieved automatically via the `rag_search` tool.
 
 ### 🔌 Model Context Protocol (MCP) & Subagents
 - **MCP Extensibility**: Connect external tools over `stdio`, `http`, and `sse` transports declared in `~/.ollama-agent/mcp.json`.

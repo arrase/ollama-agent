@@ -13,7 +13,7 @@ Get up and running with your own searchable knowledge base in four quick steps:
 Download a fast, high-quality local embedding model via Ollama:
 
 ```bash
-ollama pull nomic-embed-text
+ollama pull embeddinggemma-2:740m
 ```
 
 ### 2. Create a Knowledge Base
@@ -68,7 +68,7 @@ flowchart TD
     subgraph Ingestion ["1. Document Ingestion"]
         Files["Local Source Files\n(.py, .ts, .md, etc.)"] --> Reader["UTF-8 Parser & Whitelist Filter"]
         Reader --> Chunker["Boundary-Aware Chunker\n(Paragraph & Sentence Safe)"]
-        Chunker --> Embedder["Ollama Local Embeddings\n(nomic-embed-text)"]
+        Chunker --> Embedder["Ollama Local Embeddings\n(embeddinggemma-2:740m)"]
         Embedder --> VectorDB[("Embedded Local Vector Store\n~/.ollama-agent/rag/<db>/")]
     end
 
@@ -85,7 +85,7 @@ flowchart TD
 When you index files, long documents are split into manageable chunks configured by `chunk_size` (default: 500 characters) and `chunk_overlap` (default: 50 characters). The chunker respects natural paragraph breaks, sentences, and line boundaries so thoughts, code blocks, and function definitions are not severed mid-word.
 
 ### 2. High-Throughput Local Embeddings
-Document chunks are converted into dense vector embeddings locally via Ollama in optimized batches. By default, `nomic-embed-text` produces 768-dimensional vectors that capture semantic meaning across code and natural language.
+Document chunks are converted into dense vector embeddings locally via Ollama in optimized batches. By default, `embeddinggemma-2:740m` produces 768-dimensional vectors that capture semantic meaning across code and natural language.
 
 ### 3. Embedded Local Vector Store
 Embeddings and file metadata are saved to an embedded vector database under `~/.ollama-agent/rag/<db_name>/`. There are no external database services or Docker containers to manage—the vector engine runs directly within `ollama-agent`.
@@ -219,7 +219,7 @@ Customise embedding models, chunk dimensions, and search thresholds in `~/.ollam
 ```yaml
 rag:
   rag_dir: "~/.ollama-agent/rag"
-  embedder_model: "nomic-embed-text:latest"
+  embedder_model: "embeddinggemma-2:740m"
   embedder_base_url: "http://localhost:11434"
   embedding_dims: 768
   default_top_k: 5
@@ -232,7 +232,7 @@ rag:
 | Option | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `rag_dir` | `string` | `~/.ollama-agent/rag` | Directory on disk where local vector collections are stored. |
-| `embedder_model` | `string` | `nomic-embed-text:latest` | Ollama embedding model name used to calculate vectors. |
+| `embedder_model` | `string` | `embeddinggemma-2:740m` | Ollama embedding model name used to calculate vectors. |
 | `embedder_base_url` | `string` | `http://localhost:11434` | Endpoint for the local or remote Ollama server. |
 | `embedding_dims` | `integer` | `768` | Dimensionality of the embedding model output. Must match `embedder_model`. |
 | `default_top_k` | `integer` | `5` | Number of most relevant context chunks retrieved for each query. |
@@ -245,13 +245,25 @@ See the [Configuration Guide](configuration.md) for full details on global setti
 
 ## Pro Tips for High-Accuracy RAG
 
-### 1. Choose and Match the Right Embedding Model
+### 1. Default Embeddings: EmbeddingGemma 2 (740M)
 
-While `nomic-embed-text` is an excellent all-rounder with a long context window, you can use any embedding model supported by Ollama. When changing models, ensure `embedding_dims` in `settings.yaml` matches the model's output dimensionality:
+Ollama Agent defaults to **`embeddinggemma-2:740m`**, Google DeepMind's multimodal embedding model built on the **Gemma 4** architecture.
+
+Key model characteristics and optimal parameters:
+- **Architecture & Modalities:** 740M total parameters (270M text/code backbone with 170M vision and 300M audio encoders) mapping inputs into a unified 768-dimensional space.
+- **Dimensionality:** Native **768 dimensions** (`embedding_dims: 768`). Supports Matryoshka Representation Learning (MRL) truncation to 512, 256 (near-lossless, 3x compression), and 128.
+- **Context Window:** **8,192 tokens** (with a 1,024-token sliding window).
+- **Code & Multilingual Strength:** Delivers a ~14% improvement in code retrieval benchmarks (MTEB Code v1: 78.68 NDCG@10) and supports 100+ languages.
+- **Numerical Precision:** Inference runs in `bfloat16` or `float32` (never `float16` to prevent activation overflow and silent degradation).
+- **Task-Steered Instruction Format:** Trained with asymmetric prefixes: `title: {title} | text: {content}` for documents and `task: search result | query: {query}` (or `task: code retrieval | query: {query}`) for search queries.
+
+You can also use other embedding models supported by Ollama. When changing models, ensure `embedding_dims` in `settings.yaml` matches the model's output dimensionality:
 
 | Model | Dimensions (`embedding_dims`) | Best Used For |
 | :--- | :--- | :--- |
-| `nomic-embed-text` | `768` | Fast general documentation, code, and mixed text. |
+| `embeddinggemma-2:740m` *(Default)* | `768` *(MRL: 128, 256, 512, 768)* | High-accuracy code, multilingual text, and multimodal retrieval. |
+| `embeddinggemma-2:270m` | `768` | Lightweight text-only variant with minimal memory footprint. |
+| `nomic-embed-text` | `768` | General documentation and mixed text. |
 | `mxbai-embed-large` | `1024` | Complex semantic searches and deep technical papers. |
 | `bge-m3` | `1024` | Multilingual documents and cross-language retrieval. |
 
