@@ -34,7 +34,7 @@ ollama-agent = "ollama_agent.main:main"
 [project.optional-dependencies]
 dev = [
     "ruff==0.16.7",
-    "mypy>=2.3.1",
+    "mypy>=2.4.0",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
 ]
