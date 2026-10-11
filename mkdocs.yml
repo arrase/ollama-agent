@@ -2,6 +2,7 @@ site_name: Ollama Agent
 site_description: Autonomous CLI & REPL AI Agent with MCP tools, subagents, RAG engine, memory, and tracing for local LLMs via Ollama.
 site_author: Arrase
 site_url: https://arrase.github.io/ollama-agent/
+docs_dir: gh-pages
 
 repo_name: arrase/ollama-agent
 repo_url: https://github.com/arrase/ollama-agent

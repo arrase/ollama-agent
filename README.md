@@ -231,7 +231,7 @@ pip install -e .
 .venv/bin/python -m unittest discover -s tests
 ```
 
-For detailed contributing standards, linting with Ruff, and architectural breakdowns, see the [Developer Guide](docs/developer_guide.md).
+For detailed contributing standards, linting with Ruff, and architectural breakdowns, see the [Developer Guide](gh-pages/developer_guide.md).
 
 ---
 
