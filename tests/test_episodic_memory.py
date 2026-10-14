@@ -16,20 +16,18 @@ from ollama_agent.agent.builtin_tools import (
     set_tool_timeout,
 )
 from ollama_agent.agent.episodic_memory import (
+    HistoryError,
     format_iso_timestamp,
     format_past_conversations_context,
     load_past_conversations,
     load_past_user_prompts,
+    load_session_timestamps,
     search_past_conversations_in_db,
 )
-from ollama_agent.i18n import set_locale
-
-
 class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
     """Unit tests for episodic memory loading, keyword search, and formatting."""
 
     def setUp(self) -> None:
-        set_locale("en")
         self.tmpdir = tempfile.TemporaryDirectory()
         self.db_path = Path(self.tmpdir.name) / "history.db"
         self.serializer = JsonPlusSerializer()
@@ -38,7 +36,6 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
     def tearDown(self) -> None:
         set_active_thread_id("")
         self.tmpdir.cleanup()
-        set_locale("en")
 
     def _seed_db(self) -> None:
         conn = sqlite3.connect(str(self.db_path))
@@ -244,6 +241,8 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
 
             # Non-positive limit raises ValueError
             with self.assertRaises(ValueError):
+                await search_past_conversations.ainvoke({"query": "x", "limit": 0})
+            with self.assertRaises(ValueError):
                 await search_past_conversations.ainvoke({"query": "React Vite", "limit": -5})
 
     def test_tool_timeout_setter_getter(self) -> None:
@@ -254,7 +253,7 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
             set_tool_timeout(0)
 
         with self.assertRaises(ValueError):
-            set_tool_timeout(-10)
+            set_tool_timeout(-5)
 
     def test_format_iso_timestamp(self) -> None:
         # Naive timestamp should not shift timezone
@@ -311,6 +310,33 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
         self.assertIn("thread-scalar", convs)
         self.assertEqual(len(convs["thread-scalar"]["messages"]), 1)
         self.assertEqual(convs["thread-scalar"]["messages"][0].content, "Scalar prompt question")
+
+    def test_load_session_timestamps(self) -> None:
+        self.assertEqual(load_session_timestamps(self.db_path), [])
+        self._seed_db()
+        self.assertEqual(
+            load_session_timestamps(self.db_path),
+            [
+                ("thread-100", "2026-08-20 10:00 UTC"),
+                ("thread-200", "2026-08-21 14:30 UTC"),
+                ("thread-300", "2026-08-22 08:15 UTC"),
+            ],
+        )
+
+    def test_corrupted_checkpoint_raises_history_error(self) -> None:
+        self._seed_db()
+        conn = sqlite3.connect(str(self.db_path))
+        cur = conn.cursor()
+        chk_typ, chk_val = self.serializer.dumps_typed({"no_ts_key": 123})
+        cur.execute(
+            "INSERT INTO checkpoints (thread_id, checkpoint_id, type, checkpoint) VALUES (?, ?, ?, ?)",
+            ("thread-bad", "cp-bad", chk_typ, chk_val),
+        )
+        conn.commit()
+        conn.close()
+
+        with self.assertRaises(HistoryError):
+            load_past_conversations(self.db_path)
 
 
 if __name__ == "__main__":

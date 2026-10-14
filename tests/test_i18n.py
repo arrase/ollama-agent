@@ -23,9 +23,6 @@ from ollama_agent.settings import Settings, reset_config
 class TestI18nDetection(unittest.TestCase):
     """Test system language detection and fallbacks."""
 
-    def tearDown(self) -> None:
-        set_locale("en")
-
     def test_detect_language_from_language_env(self) -> None:
         with patch.dict(os.environ, {"LANGUAGE": "es_ES:es"}, clear=True):
             self.assertEqual(detect_system_language(), "es")
@@ -77,9 +74,6 @@ class TestI18nDetection(unittest.TestCase):
 class TestI18nLocaleManagement(unittest.TestCase):
     """Test setting the active locale and the supported locales registry."""
 
-    def tearDown(self) -> None:
-        set_locale("en")
-
     def test_supported_locales_list(self) -> None:
         locales = SUPPORTED_LOCALES
         self.assertIn("en", locales)
@@ -130,9 +124,6 @@ class TestI18nLocaleManagement(unittest.TestCase):
 
 class TestI18nTranslations(unittest.TestCase):
     """Test string translations across languages and parameter formatting."""
-
-    def tearDown(self) -> None:
-        set_locale("en")
 
     def test_english_translation(self) -> None:
         set_locale("en")
@@ -406,9 +397,6 @@ class TestCatalogCompleteness(unittest.TestCase):
 
 class TestCLIAndSettingsI18n(unittest.TestCase):
     """Test CLI language argument and runtime settings integration."""
-
-    def tearDown(self) -> None:
-        set_locale("en")
 
     def test_cli_parser_language_arg(self) -> None:
         parser = create_argument_parser()

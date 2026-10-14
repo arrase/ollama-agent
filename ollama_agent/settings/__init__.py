@@ -12,7 +12,6 @@ from .config import (
     ensure_memory_file,
     load_instructions,
     load_settings,
-    render_prompt_template,
     reset_config,
     save_settings,
 )
@@ -61,7 +60,6 @@ __all__ = [
     "find_agents_file",
     "load_instructions",
     "load_settings",
-    "render_prompt_template",
     "reset_config",
     "save_settings",
 ]

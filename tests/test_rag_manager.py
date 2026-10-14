@@ -190,29 +190,28 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
         self.manager._current_db = "test_db"
 
         with patch.object(RAGManager, "_get_embeddings", AsyncMock(return_value=[[0.1, 0.2, 0.3, 0.4]])):
-            with patch.object(RAGManager, "_get_embedding", AsyncMock(return_value=[0.1, 0.2, 0.3, 0.4])):
-                res = await self.manager.add_file(str(doc))
-                self.assertEqual(res["chunks"], 1)
-                mock_client.upsert.assert_called_once()
+            res = await self.manager.add_file(str(doc))
+            self.assertEqual(res["chunks"], 1)
+            mock_client.upsert.assert_called_once()
 
-                hits = await self.manager.search("LangGraph")
-                self.assertEqual(len(hits), 1)
-                self.assertEqual(hits[0]["filename"], "doc.txt")
-                self.assertEqual(hits[0]["score"], 0.92)
+            hits = await self.manager.search("LangGraph")
+            self.assertEqual(len(hits), 1)
+            self.assertEqual(hits[0]["filename"], "doc.txt")
+            self.assertEqual(hits[0]["score"], 0.92)
 
-                # empty query raises RAGError
-                with self.assertRaises(RAGError):
-                    await self.manager.search("   ")
+            # empty query raises RAGError
+            with self.assertRaises(RAGError):
+                await self.manager.search("   ")
 
-                # top_k <= 0 raises RAGError
-                with self.assertRaises(RAGError):
-                    await self.manager.search("LangGraph", top_k=0)
+            # top_k <= 0 raises RAGError
+            with self.assertRaises(RAGError):
+                await self.manager.search("LangGraph", top_k=0)
 
-                # payload is None raises RAGError
-                mock_hit_none = MagicMock(payload=None, score=0.5)
-                mock_client.query_points.return_value = MagicMock(points=[mock_hit_none])
-                with self.assertRaises(RAGError):
-                    await self.manager.search("LangGraph")
+            # payload is None raises RAGError
+            mock_hit_none = MagicMock(payload=None, score=0.5, id="pt1")
+            mock_client.query_points.return_value = MagicMock(points=[mock_hit_none])
+            with self.assertRaises(RAGError):
+                await self.manager.search("LangGraph")
 
     async def test_add_file_rejects_unsupported_extension(self) -> None:
         doc = self.rag_dir / "data.xyz"
@@ -333,6 +332,28 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(results["skipped"], 1)
         self.assertEqual(results["added"], 1)
+
+    async def test_add_directory_cap_counts_only_added_and_warns_once(self) -> None:
+        sub_dir = self.rag_dir / "cap_dir"
+        sub_dir.mkdir()
+        (sub_dir / "00_ignored.bin").write_bytes(b"\x00\x01")
+        (sub_dir / "01_a.md").write_text("# A", encoding="utf-8")
+        (sub_dir / "02_b.md").write_text("# B", encoding="utf-8")
+        (sub_dir / "03_c.md").write_text("# C", encoding="utf-8")
+
+        self.manager._client = MagicMock()
+        self.manager._current_db = "cap_db"
+
+        with (
+            patch("ollama_agent.rag.manager.MAX_INDEXED_FILES", 1),
+            patch.object(RAGManager, "_get_embeddings", AsyncMock(return_value=[[0.1, 0.2, 0.3, 0.4]])),
+            patch("ollama_agent.rag.manager.logger.warning") as mock_warn,
+        ):
+            results = await self.manager.add_directory(str(sub_dir))
+
+        self.assertEqual(results["added"], 1)
+        self.assertEqual(results["skipped"], 1)
+        mock_warn.assert_called_once()
 
 
 if __name__ == "__main__":

@@ -1,9 +1,7 @@
 """RAG (Retrieval-Augmented Generation) package for document indexing and retrieval."""
 
 from .commands import (
-    AmbiguousRAGDatabaseError,
     RAGContext,
-    RAGDatabaseNotFoundError,
     add_rag_directory,
     add_rag_file,
     create_rag_database,
@@ -14,7 +12,6 @@ from .commands import (
     unload_rag_database,
 )
 from .manager import (
-    RAGDatabaseExistsError,
     RAGError,
     RAGManager,
     RAGNotLoadedError,
@@ -23,13 +20,10 @@ from .manager import (
 __all__ = [
     # Manager
     "RAGError",
-    "RAGDatabaseExistsError",
     "RAGManager",
     "RAGNotLoadedError",
     # Commands
-    "AmbiguousRAGDatabaseError",
     "RAGContext",
-    "RAGDatabaseNotFoundError",
     "add_rag_directory",
     "add_rag_file",
     "create_rag_database",
@@ -39,3 +33,4 @@ __all__ = [
     "show_rag_status",
     "unload_rag_database",
 ]
+

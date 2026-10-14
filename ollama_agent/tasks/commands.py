@@ -11,10 +11,9 @@ from rich.markup import escape
 from rich.table import Table
 
 from ..agent import AgentRuntime
-from ..core import DEFAULT_REASONING_EFFORT, ReasoningEffortValue
-from ..core.resource_manager import require_text
+from ..core import DEFAULT_REASONING_EFFORT, ReasoningEffortValue, check_ollama_version, require_text
 from ..i18n import _
-from ..settings import Settings, load_settings
+from ..settings import Settings
 from ..streaming import run_non_interactive
 from .manager import Task, TaskManager
 
@@ -41,7 +40,7 @@ class TasksContext:
 
     console: Console = field(default_factory=Console)
     task_manager: TaskManager = field(default_factory=TaskManager)
-    settings: Settings = field(default_factory=load_settings)
+    settings: Settings = field(default_factory=Settings)
 
     def resolve_task(self, task_id: str) -> tuple[str, Task]:
         return self.task_manager.resolve(
@@ -51,11 +50,6 @@ class TasksContext:
             ambiguous_error=AmbiguousTaskError,
             validation_error=ValidationError,
         )
-
-    _resolve_task = resolve_task
-
-    def _require(self, value: str, name: str) -> str:
-        return require_text(value, name, ValidationError)
 
 
 def parse_var_assignments(args: list[str]) -> dict[str, str]:
@@ -95,6 +89,20 @@ def list_tasks(ctx: TasksContext) -> None:
     ctx.console.print(table)
 
 
+def prepare_task_run(
+    ctx: TasksContext,
+    task_id: str,
+    variables: dict[str, Any] | None = None,
+) -> tuple[str, Task, str]:
+    """Resolve *task_id* and render its prompt template with *variables*."""
+    tid, task = ctx.resolve_task(task_id)
+    try:
+        rendered_prompt = task.render(variables)
+    except (ValueError, TemplateError) as exc:
+        raise ValidationError(str(exc)) from exc
+    return tid, task, rendered_prompt
+
+
 async def run_task(
     ctx: TasksContext,
     task_id: str,
@@ -102,11 +110,8 @@ async def run_task(
     variables: dict[str, Any] | None = None,
     yolo: bool = False,
 ) -> None:
-    tid, t = ctx.resolve_task(task_id)
-    try:
-        rendered_prompt = t.render(variables)
-    except (ValueError, TemplateError) as exc:
-        raise ValidationError(str(exc)) from exc
+    tid, t, rendered_prompt = prepare_task_run(ctx, task_id, variables)
+    check_ollama_version(ctx.settings.model.base_url)
     ctx.console.print(
         _(
             "Executing: {title} ({tid})\nPrompt: {prompt}\nModel: {model} | Effort: {effort}",
@@ -125,7 +130,6 @@ async def run_task(
     runtime = AgentRuntime(settings=ctx.settings, yolo_mode=yolo)
     try:
         async with runtime:
-            await runtime.reload()
             if not await run_non_interactive(runtime, rendered_prompt):
                 raise TaskError(_("Task execution failed: {tid}", tid=tid))
     finally:
@@ -148,9 +152,9 @@ def create_task(
     reasoning_effort: ReasoningEffortValue = DEFAULT_REASONING_EFFORT,
     force: bool = False,
 ) -> None:
-    title = ctx._require(title, _("Title"))
-    prompt_text = ctx._require(prompt, _("Prompt"))
-    model_name = ctx._require(model, _("Model"))
+    title = require_text(title, _("Title"), ValidationError)
+    prompt_text = require_text(prompt, _("Prompt"), ValidationError)
+    model_name = require_text(model, _("Model"), ValidationError)
     try:
         task = Task(title, prompt_text, model_name, reasoning_effort=reasoning_effort)
         saved_id = ctx.task_manager.save(task_id, task, overwrite=force)

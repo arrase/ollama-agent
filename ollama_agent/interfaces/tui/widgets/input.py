@@ -6,6 +6,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
+from rich.markup import escape
 from textual import events
 from textual.message import Message
 from textual.widgets import OptionList, TextArea
@@ -63,7 +64,8 @@ class ReplInput(TextArea):
         except HistoryError as exc:
             _log.warning("Prompt history unavailable: %s", exc)
             app = cast("OllamaAgentApp", self.app)
-            app.show_system_notice(f"[yellow]⚠ {_('Prompt history unavailable: {exc}', exc=exc)}[/yellow]")
+            notice = escape(_("Prompt history unavailable: {exc}", exc=exc))
+            app.show_system_notice(f"[yellow]⚠ {notice}[/yellow]")
             db_entries = []
         self._history = list(db_entries)
         self._history_index = len(self._history)
@@ -118,11 +120,19 @@ class ReplInput(TextArea):
             app.hide_autocomplete()
             return True
         if event.key == "enter" and autolist.highlighted is not None:
+            opt = autolist.get_option_at_index(autolist.highlighted)
+            if opt and opt.id and self.text.strip() == opt.id:
+                app.hide_autocomplete()
+                return False
             event.stop()
             event.prevent_default()
             app.accept_completion(autolist.highlighted)
             return True
         return False
+
+    def _move_cursor_to_end(self) -> None:
+        lines = self.text.split("\n")
+        self.move_cursor((len(lines) - 1, len(lines[-1])))
 
     def _handle_history_up(self, event: events.Key) -> bool:
         if self.document.line_count > 1:
@@ -142,7 +152,7 @@ class ReplInput(TextArea):
             if self._history_index > 0:
                 self._history_index -= 1
                 self.text = self._history[self._history_index]
-                self.action_cursor_line_end()
+                self._move_cursor_to_end()
                 self._update_height()
         return True
 
@@ -166,7 +176,7 @@ class ReplInput(TextArea):
                 self.text = self._temp_input
             else:
                 self.text = self._history[self._history_index]
-            self.action_cursor_line_end()
+            self._move_cursor_to_end()
             self._update_height()
         return True
 

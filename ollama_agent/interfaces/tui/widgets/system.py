@@ -14,6 +14,16 @@ from ....core import shorten
 from ....i18n import _
 
 
+def format_queue_preview(item: str) -> str:
+    """Return a single-line, truncated, Rich-markup-escaped preview of a queued prompt."""
+    return escape(shorten(item))
+
+
+def format_queue_line(index: int, item: str) -> str:
+    """Format a numbered queue entry line for console and widget display."""
+    return f"  [dim]#{index}[/dim] {format_queue_preview(item)}"
+
+
 class PromptQueueWidget(Static):
     """Widget displaying currently queued prompts and commands."""
 
@@ -30,7 +40,7 @@ class PromptQueueWidget(Static):
         lines = [header]
 
         for i, item in enumerate(islice(queue, 3), 1):
-            lines.append(f"  [dim]#{i}[/dim] {escape(shorten(item))}")
+            lines.append(format_queue_line(i, item))
 
         if count > 3:
             remaining = count - 3

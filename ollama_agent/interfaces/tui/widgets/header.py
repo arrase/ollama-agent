@@ -13,11 +13,13 @@ if TYPE_CHECKING:
     from ..repl import OllamaREPL
 
 
-def _format_context_info(tokens: float, eff_ctx: Any, ms_context_window: Any) -> str:
+def _format_context_info(tokens: int, eff_ctx: int, ms_context_window: int | str) -> str:
     num_ctx = 0
-    if isinstance(eff_ctx, int) and eff_ctx > 0:
+    if eff_ctx > 0:
         num_ctx = eff_ctx
-    elif str(ms_context_window).isdigit():
+    elif isinstance(ms_context_window, int):
+        num_ctx = ms_context_window
+    elif ms_context_window.isdigit():
         num_ctx = int(ms_context_window)
 
     if num_ctx <= 0:
@@ -31,8 +33,8 @@ def _format_context_info(tokens: float, eff_ctx: Any, ms_context_window: Any) ->
     else:
         color = "#38bdf8"
 
-    tok_str = f"{tokens / 1000:.1f}k" if tokens >= 1000 else str(int(tokens))
-    ctx_str = f"{num_ctx / 1000:.1f}k" if num_ctx >= 1000 else str(int(num_ctx))
+    tok_str = f"{tokens / 1000:.1f}k" if tokens >= 1000 else str(tokens)
+    ctx_str = f"{num_ctx / 1000:.1f}k" if num_ctx >= 1000 else str(num_ctx)
     ctx_label = _("Context:")
     return (
         f"  [#30363d]│[/]  [bold #8b949e]{ctx_label}[/bold #8b949e] "
@@ -49,7 +51,6 @@ class AgentHeader(Static):
 
     def on_mount(self) -> None:
         self.update_header()
-        self.set_interval(2.0, self.update_header)
 
     def update_header(self) -> None:
         ms = self.repl.runtime.settings.model
@@ -62,7 +63,7 @@ class AgentHeader(Static):
         rag_label = _("RAG:")
         rag_info = (
             f"  [#30363d]│[/]  [bold #8b949e]{rag_label}[/bold #8b949e] "
-            f"[bold #a78bfa]{escape(str(rag_db))}[/bold #a78bfa]"
+            f"[bold #a78bfa]{escape(rag_db)}[/bold #a78bfa]"
             if rag_db
             else ""
         )
@@ -82,8 +83,8 @@ class AgentHeader(Static):
         self.update(
             f"[bold #38bdf8]● ollama-agent[/bold #38bdf8]  [#30363d]│[/]  "
             f"[bold #8b949e]{_('Model:')}[/bold #8b949e] "
-            f"[bold #e6edf3]{escape(str(ms.name))}[/bold #e6edf3]{ctx_info}  [#30363d]│[/]  "
+            f"[bold #e6edf3]{escape(ms.name)}[/bold #e6edf3]{ctx_info}  [#30363d]│[/]  "
             f"[bold #8b949e]{_('Effort:')}[/bold #8b949e] "
-            f"[#e6edf3]{escape(str(ms.reasoning_effort))}[/#e6edf3]{rag_info}  [#30363d]│[/]  "
+            f"[#e6edf3]{escape(ms.reasoning_effort)}[/#e6edf3]{rag_info}  [#30363d]│[/]  "
             f"{yolo_status}  [#30363d]│[/]  {stealth_status}"
         )

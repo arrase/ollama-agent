@@ -2,16 +2,28 @@
 
 from __future__ import annotations
 
+import os
 import re
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import ollama
+from rich.markup import escape
 from rich.text import Text
 
+from ...agent.episodic_memory import HistoryError
 from ...core.models import get_model_thinking_config
 from ...i18n import _
+from ...rag import RAGError
+from ...skills import SkillError
+from ...tasks import TaskError
+from ..commands.models import format_model_size
+from ..commands.sessions import get_available_sessions
+from .widgets.system import format_queue_preview
+
+if TYPE_CHECKING:
+    from .repl import OllamaREPL
 
 # @-mention regex: matches @"quoted", @'quoted', or @bare at word boundaries.
 _AT_MENTION_RE = re.compile(r"""(?:^|[\s\(\[\{<])@(?:"([^"]*)|'([^']*)|([^\s"'\(\[\{<>,;]*))$""")
@@ -33,6 +45,7 @@ CMD_NEW = "/new"
 CMD_CLEAR = "/clear"
 CMD_EXIT = "/exit"
 CMD_QUIT = "/quit"
+NO_ARG_COMMANDS: frozenset[str] = frozenset({CMD_CLEAR, CMD_NEW, CMD_EXIT, CMD_QUIT})
 _CHAT_SCROLL_ID = "#chat-scroll"
 _AUTOCOMPLETE_LIST_ID = "#autocomplete-list"
 
@@ -178,7 +191,7 @@ def _complete_effort(sub_token: str, runtime_model: Any) -> list[tuple[str, Text
                 (
                     f"{CMD_EFFORT} {v_str}",
                     Text.from_markup(
-                        f"[bold #38bdf8]{v_str:<12}[/bold #38bdf8] [dim #8b949e]{def_label}[/dim #8b949e]"
+                        f"[bold #38bdf8]{escape(v_str):<12}[/bold #38bdf8] [dim #8b949e]{def_label}[/dim #8b949e]"
                     ),
                 )
             )
@@ -199,6 +212,169 @@ def _complete_subcommands(root_cmd: str, sub_token: str) -> list[tuple[str, Text
     ]
 
 
+def _complete_model_args(root_cmd: str, sub_cmd: str, arg_token: str, base_url: str) -> list[tuple[str, Text]]:
+    try:
+        models = _list_models_sync(base_url)
+    except Exception:  # noqa: BLE001
+        return []
+    results = []
+    for m in models:
+        if not (m.model and m.model.startswith(arg_token)):
+            continue
+        size_str = format_model_size(m.size)
+        markup = f"[bold #e6edf3]{escape(m.model):<30}[/bold #e6edf3] [dim #8b949e]{size_str}[/dim #8b949e]"
+        results.append((f"{root_cmd} {sub_cmd} {m.model}", Text.from_markup(markup)))
+    return results
+
+
+def _complete_context_args(root_cmd: str, sub_cmd: str, arg_token: str) -> list[tuple[str, Text]]:
+    presets = ["4096", "8192", "16384", "32768", "65536", "131072", "max"]
+    tok_label = _("tokens")
+    return [
+        (
+            f"{root_cmd} {sub_cmd} {p}",
+            Text.from_markup(f"[bold #e6edf3]{p:<10}[/bold #e6edf3] [dim #8b949e]{tok_label}[/dim #8b949e]"),
+        )
+        for p in presets
+        if p.startswith(arg_token)
+    ]
+
+
+def _complete_task_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: OllamaREPL) -> list[tuple[str, Text]]:
+    try:
+        tasks = repl._task_ctx.task_manager.list_all()
+    except (OSError, ValueError, TaskError):
+        return []
+    return [
+        (
+            f"{root_cmd} {sub_cmd} {tid}",
+            Text.from_markup(
+                f"[bold #e6edf3]{escape(tid):<20}[/bold #e6edf3] [dim #8b949e]{escape(t.title)}[/dim #8b949e]"
+            ),
+        )
+        for tid, t in tasks
+        if tid.startswith(arg_token)
+    ]
+
+
+def _complete_skill_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: OllamaREPL) -> list[tuple[str, Text]]:
+    try:
+        skills = repl._skills_ctx.skill_manager.list_all()
+    except (OSError, ValueError, SkillError):
+        return []
+    return [
+        (
+            f"{root_cmd} {sub_cmd} {sid}",
+            Text.from_markup(
+                f"[bold #e6edf3]{escape(sid):<20}[/bold #e6edf3] [dim #8b949e]{escape(s.name)}[/dim #8b949e]"
+            ),
+        )
+        for sid, s in skills
+        if sid.startswith(arg_token)
+    ]
+
+
+def _complete_session_args(root_cmd: str, sub_cmd: str, arg_token: str) -> list[tuple[str, Text]]:
+    try:
+        sessions = get_available_sessions()
+    except (OSError, HistoryError):
+        # HistoryError is a RuntimeError, not an OSError.
+        return []
+    steps_label = _("steps")
+    return [
+        (
+            f"{root_cmd} {sub_cmd} {s['thread_id']}",
+            Text.from_markup(
+                f"[bold #e6edf3]{escape(s['thread_id'][:8]):<10}[/bold #e6edf3] "
+                f"[dim #8b949e]{s['steps']} {steps_label}[/dim #8b949e]"
+            ),
+        )
+        for s in sessions
+        if s["thread_id"].startswith(arg_token)
+    ]
+
+
+def _complete_rag_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: OllamaREPL) -> list[tuple[str, Text]]:
+    try:
+        dbs = repl._get_rag_ctx().rag_manager.list_databases()
+    except (RAGError, OSError):
+        return []
+    chunks_label = _("chunks")
+    return [
+        (
+            f"{root_cmd} {sub_cmd} {d['name']}",
+            Text.from_markup(
+                f"[bold #e6edf3]{escape(d['name']):<20}[/bold #e6edf3] "
+                f"[dim #8b949e]{d['chunks'] if d['chunks'] is not None else 0} {chunks_label}[/dim #8b949e]"
+            ),
+        )
+        for d in dbs
+        if d["name"].startswith(arg_token)
+    ]
+
+
+def _complete_queue_args(
+    root_cmd: str, sub_cmd: str, arg_token: str, prompt_queue: Sequence[str]
+) -> list[tuple[str, Text]]:
+    clean_arg = arg_token.lstrip("#")
+    items = []
+    for idx, item in enumerate(prompt_queue, 1):
+        if clean_arg and not str(idx).startswith(clean_arg):
+            continue
+        preview = format_queue_preview(item)
+        items.append(
+            (
+                f"{root_cmd} {sub_cmd} {idx}",
+                Text.from_markup(f"[bold #e6edf3]#{idx}[/bold #e6edf3] [dim #8b949e]{preview}[/dim #8b949e]"),
+            )
+        )
+    return items
+
+
+def _complete_arguments(
+    root_cmd: str, sub_cmd: str, arg_token: str, repl: OllamaREPL, prompt_queue: Sequence[str]
+) -> list[tuple[str, Text]]:
+    if root_cmd == CMD_MODEL and sub_cmd == "set":
+        return _complete_model_args(root_cmd, sub_cmd, arg_token, repl.runtime.settings.model.base_url)
+    if root_cmd == CMD_CONTEXT and sub_cmd == "set":
+        return _complete_context_args(root_cmd, sub_cmd, arg_token)
+    if root_cmd == CMD_TASK and sub_cmd in ("run", "delete"):
+        return _complete_task_args(root_cmd, sub_cmd, arg_token, repl)
+    if root_cmd == CMD_SKILL and sub_cmd in ("show", "delete"):
+        return _complete_skill_args(root_cmd, sub_cmd, arg_token, repl)
+    if root_cmd == CMD_SESSION and sub_cmd in ("resume", "switch", "delete"):
+        return _complete_session_args(root_cmd, sub_cmd, arg_token)
+    if root_cmd == CMD_RAG and sub_cmd in ("load", "delete"):
+        return _complete_rag_args(root_cmd, sub_cmd, arg_token, repl)
+    if root_cmd == CMD_QUEUE and sub_cmd in ("rm", "remove", "delete"):
+        return _complete_queue_args(root_cmd, sub_cmd, arg_token, prompt_queue)
+    return []
+
+
+def slash_completions(text: str, repl: OllamaREPL, prompt_queue: Sequence[str]) -> list[tuple[str, Text]]:
+    """Build slash-command autocomplete candidates for the current input *text*."""
+    parts = text.split(" ")
+    num_parts = len(parts)
+
+    # Level 0: Root commands (e.g., "/" or "/mo")
+    if num_parts == 1:
+        return _complete_root_commands(parts[0])
+
+    root_cmd = parts[0]
+    if root_cmd == CMD_EFFORT and num_parts == 2:
+        return _complete_effort(parts[1], repl.runtime.model)
+
+    # Level 1: Subcommands (e.g., "/task " or "/task r")
+    if num_parts == 2:
+        return _complete_subcommands(root_cmd, parts[1])
+
+    # Level 2: Arguments / Dynamic entities (e.g., "/task run ")
+    if num_parts == 3:
+        return _complete_arguments(root_cmd, parts[1], parts[2], repl, prompt_queue)
+
+    return []
+
+
 def _collect_dir_candidates(
     dirs: list[str],
     root_path: Path,
@@ -212,15 +388,21 @@ def _collect_dir_candidates(
             continue
         rel = (root_path / dirname).relative_to(cwd).as_posix() + "/"
         rel_lower = rel.lower()
-        if prefix_lower.startswith(rel_lower) or rel_lower.startswith(prefix_lower):
+        if (
+            dirname.lower().startswith(prefix_lower)
+            or prefix_lower.startswith(rel_lower)
+            or rel_lower.startswith(prefix_lower)
+        ):
             candidate_dirs.append((dirname, rel))
     return candidate_dirs
 
 
 def _iter_dir_completions(candidate_dirs: list[tuple[str, str]], prefix_lower: str) -> Iterator[tuple[str, str]]:
-    for _dirname, rel in candidate_dirs:
+    for dirname, rel in candidate_dirs:
         rel_lower = rel.lower()
-        if rel_lower != prefix_lower and rel_lower.startswith(prefix_lower):
+        if rel_lower != prefix_lower and (
+            dirname.lower().startswith(prefix_lower) or rel_lower.startswith(prefix_lower)
+        ):
             yield rel, _("dir")
 
 
@@ -234,7 +416,7 @@ def _filter_file_candidate(
     if not show_hidden and filename.startswith("."):
         return None
     rel = (root_path / filename).relative_to(cwd).as_posix()
-    if not rel.lower().startswith(prefix_lower):
+    if not (filename.lower().startswith(prefix_lower) or rel.lower().startswith(prefix_lower)):
         return None
     try:
         size_kb = (root_path / filename).stat().st_size / 1024
@@ -254,4 +436,55 @@ def _iter_file_completions(
     for filename in sorted(files):
         item = _filter_file_candidate(filename, root_path, cwd, prefix_lower, show_hidden)
         if item is not None:
+            yield item
+
+
+def file_completions(token: str, max_completions: int = 15) -> Iterator[tuple[str, Text]]:
+    """Yield `@`-mention file and directory completions matching *token*."""
+    cwd = Path.cwd()
+    token_path = Path(token)
+    if token.endswith(("/", "\\")):
+        search_dir = (cwd / token_path).resolve()
+        prefix = ""
+    else:
+        search_dir = (cwd / token_path.parent).resolve()
+        prefix = token_path.name
+
+    try:
+        rel_dir = search_dir.relative_to(cwd)
+    except ValueError:
+        return
+
+    if not search_dir.is_dir():
+        return
+
+    show_hidden = prefix.startswith(".")
+    prefix_lower = ("" if rel_dir == Path(".") else f"{rel_dir.as_posix().lower()}/") + prefix.lower()
+    count = 0
+
+    for root, dirs, files in os.walk(search_dir):
+        root_path = Path(root)
+        candidate_dirs = _collect_dir_candidates(dirs, root_path, cwd, prefix_lower, show_hidden)
+        dirs[:] = [d[0] for d in candidate_dirs]
+
+        for rel, meta in _iter_dir_completions(candidate_dirs, prefix_lower):
+            escaped_rel = escape(rel)
+            item = (
+                rel,
+                Text.from_markup(f"[bold #38bdf8]{escaped_rel:<30}[/bold #38bdf8] [dim #8b949e]{meta}[/dim #8b949e]"),
+            )
+            if count >= max_completions:
+                return
+            count += 1
+            yield item
+
+        for rel, meta in _iter_file_completions(files, root_path, cwd, prefix_lower, show_hidden):
+            escaped_rel = escape(rel)
+            item = (
+                rel,
+                Text.from_markup(f"[bold #38bdf8]{escaped_rel:<30}[/bold #38bdf8] [dim #8b949e]{meta}[/dim #8b949e]"),
+            )
+            if count >= max_completions:
+                return
+            count += 1
             yield item

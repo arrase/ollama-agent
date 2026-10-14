@@ -38,9 +38,12 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
         self.temp_dir.cleanup()
 
     def test_require_validation(self) -> None:
-        self.assertEqual(self.ctx._require("  valid title  ", "Title"), "valid title")
         with self.assertRaises(ValidationError):
-            self.ctx._require("   ", "Title")
+            create_task(self.ctx, "t1", title="   ", prompt="p", model="m")
+        with self.assertRaises(ValidationError):
+            create_task(self.ctx, "t1", title="t", prompt="   ", model="m")
+        with self.assertRaises(ValidationError):
+            create_task(self.ctx, "t1", title="t", prompt="p", model="   ")
 
     def test_apply_task_settings(self) -> None:
         task = Task(title="T", prompt="P", model="llama3:8b", reasoning_effort="high")
@@ -86,18 +89,21 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
             prompt="summarize file",
             model="gemma4:26b",
         )
-        with patch("ollama_agent.tasks.commands.run_non_interactive", AsyncMock(return_value=True)) as mock_run:
-            with patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()):
-                with patch("ollama_agent.tasks.commands.AgentRuntime") as mock_runtime_cls:
-                    mock_instance = AsyncMock()
-                    mock_runtime_cls.return_value = mock_instance
-                    mock_instance.__aenter__.return_value = mock_instance
-                    mock_instance.__aexit__.return_value = None
+        with (
+            patch("ollama_agent.tasks.commands.check_ollama_version", return_value="0.34.3") as mock_check_version,
+            patch("ollama_agent.tasks.commands.run_non_interactive", AsyncMock(return_value=True)) as mock_run,
+            patch("ollama_agent.tasks.commands.AgentRuntime") as mock_runtime_cls,
+        ):
+            mock_instance = AsyncMock()
+            mock_runtime_cls.return_value = mock_instance
+            mock_instance.__aenter__.return_value = mock_instance
+            mock_instance.__aexit__.return_value = None
 
-                    await run_task(self.ctx, "quick-task", yolo=True)
-                    mock_runtime_cls.assert_called_once()
-                    self.assertTrue(mock_runtime_cls.call_args.kwargs.get("yolo_mode"))
-                    mock_run.assert_awaited_once()
+            await run_task(self.ctx, "quick-task", yolo=True)
+            mock_check_version.assert_called_once_with(self.ctx.settings.model.base_url)
+            mock_runtime_cls.assert_called_once()
+            self.assertTrue(mock_runtime_cls.call_args.kwargs.get("yolo_mode"))
+            mock_run.assert_awaited_once()
 
     async def test_run_task_raises_when_execution_fails(self) -> None:
         create_task(
@@ -107,16 +113,18 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
             prompt="boom",
             model="gemma4:26b",
         )
-        with patch("ollama_agent.tasks.commands.run_non_interactive", AsyncMock(return_value=False)):
-            with patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()):
-                with patch("ollama_agent.tasks.commands.AgentRuntime") as mock_runtime_cls:
-                    mock_instance = AsyncMock()
-                    mock_runtime_cls.return_value = mock_instance
-                    mock_instance.__aenter__.return_value = mock_instance
-                    mock_instance.__aexit__.return_value = None
+        with (
+            patch("ollama_agent.tasks.commands.check_ollama_version", return_value="0.34.3"),
+            patch("ollama_agent.tasks.commands.run_non_interactive", AsyncMock(return_value=False)),
+            patch("ollama_agent.tasks.commands.AgentRuntime") as mock_runtime_cls,
+        ):
+            mock_instance = AsyncMock()
+            mock_runtime_cls.return_value = mock_instance
+            mock_instance.__aenter__.return_value = mock_instance
+            mock_instance.__aexit__.return_value = None
 
-                    with self.assertRaises(TaskError):
-                        await run_task(self.ctx, "failing-task")
+            with self.assertRaises(TaskError):
+                await run_task(self.ctx, "failing-task")
 
     def test_create_task_rejects_empty_reasoning_effort(self) -> None:
         with self.assertRaises(ValidationError):
@@ -173,7 +181,6 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
         resolved_id, resolved_task = self.ctx.resolve_task("deploy-prod")
         self.assertEqual(resolved_id, "deploy-prod")
         self.assertEqual(resolved_task.title, "Prod Deploy")
-        self.assertEqual(self.ctx._resolve_task("deploy-prod"), (resolved_id, resolved_task))
 
     def test_parse_var_assignments_valid(self) -> None:
         raw = ["file=src/main.py", "strict=true", "count=42", "expr=a=b=c"]
@@ -235,16 +242,18 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
         )
         self.mgr.save("render-task", task)
 
-        with patch("ollama_agent.tasks.commands.run_non_interactive", AsyncMock(return_value=True)) as mock_run:
-            with patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()):
-                with patch("ollama_agent.tasks.commands.AgentRuntime") as mock_runtime_cls:
-                    mock_instance = AsyncMock()
-                    mock_runtime_cls.return_value = mock_instance
-                    mock_instance.__aenter__.return_value = mock_instance
-                    mock_instance.__aexit__.return_value = None
+        with (
+            patch("ollama_agent.tasks.commands.check_ollama_version", return_value="0.34.3"),
+            patch("ollama_agent.tasks.commands.run_non_interactive", AsyncMock(return_value=True)) as mock_run,
+            patch("ollama_agent.tasks.commands.AgentRuntime") as mock_runtime_cls,
+        ):
+            mock_instance = AsyncMock()
+            mock_runtime_cls.return_value = mock_instance
+            mock_instance.__aenter__.return_value = mock_instance
+            mock_instance.__aexit__.return_value = None
 
-                    await run_task(self.ctx, "render-task", variables={"file": "app.py"})
-                    mock_run.assert_awaited_once_with(mock_instance, "Analyze app.py with mode=fast")
+            await run_task(self.ctx, "render-task", variables={"file": "app.py"})
+            mock_run.assert_awaited_once_with(mock_instance, "Analyze app.py with mode=fast")
 
     async def test_run_task_missing_required_variable_raises_validation_error(self) -> None:
         task = Task(

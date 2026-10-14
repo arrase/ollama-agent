@@ -18,6 +18,7 @@ class _TUIStreamingRenderer(StreamingRenderer):
         self.app = app
         self.scroll = scroll
         self.widget = widget
+        self.last_interrupt: dict[str, Any] | None = None
         self._auto_scroll = True
         self._last_scroll_y = scroll.scroll_y
         self._last_max_scroll_y = scroll.max_scroll_y
@@ -55,8 +56,8 @@ class _TUIStreamingRenderer(StreamingRenderer):
 
     def on_tool_output(self, event: dict[str, Any]) -> None:
         self.widget.add_tool_output(
+            output_len=event["output_len"],
             agent=event.get("agent_name"),
-            output_len=event.get("output_len"),
         )
         self._scroll()
 
@@ -67,6 +68,10 @@ class _TUIStreamingRenderer(StreamingRenderer):
     def on_warning(self, event: dict[str, Any]) -> None:
         self.widget.add_warning(event["content"])
         self._scroll()
+
+    async def handle_interrupt(self, event: dict[str, Any], runtime: Any) -> list[dict[str, Any]] | None:
+        self.last_interrupt = event
+        return None
 
     def close(self) -> None:
         self._timer.stop()

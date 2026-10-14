@@ -18,7 +18,7 @@ class TestSkillsManager(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.skills_dir = Path(self.temp_dir.name)
-        self.mgr = SkillManager(self.skills_dir, builtin_skills_dir=None)
+        self.mgr = SkillManager(self.skills_dir, builtin_skills_dir=self.skills_dir / "_no_builtin")
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()

@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import asyncio
-import io
 import unittest
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
-
-from rich.console import Console
 
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.types import Command
 
-from ollama_agent.interfaces.tui import OllamaAgentApp, OllamaREPL
-from ollama_agent.interfaces.tui.commands import _is_immediate_command
+from ollama_agent.interfaces.tui import OllamaAgentApp
+from ollama_agent.interfaces.tui.commands import IMMEDIATE_COMMANDS, _is_immediate_command
+from ollama_agent.interfaces.tui.completion import slash_completions
 from ollama_agent.interfaces.tui.widgets import (
     AgentFooter,
     AgentResponse,
@@ -21,15 +20,7 @@ from ollama_agent.interfaces.tui.widgets import (
     UserMessage,
 )
 
-from conftest import make_mock_runtime
-
-
-def _create_mock_repl() -> tuple[OllamaREPL, MagicMock]:
-    """Create a real OllamaREPL shell around a mocked AgentRuntime."""
-    runtime = make_mock_runtime()
-    repl = OllamaREPL(runtime=runtime)
-    repl.console = Console(file=io.StringIO())
-    return repl, runtime
+from conftest import make_mock_repl, recording_console
 
 
 class TestPromptQueueWidget(unittest.TestCase):
@@ -79,6 +70,17 @@ class TestPromptQueueWidget(unittest.TestCase):
 class TestIsImmediateCommand(unittest.TestCase):
     """Unit tests for immediate vs stateful/queued slash command classification."""
 
+    def test_immediate_commands_set(self) -> None:
+        self.assertIn(("/exit", "*"), IMMEDIATE_COMMANDS)
+        self.assertIn(("/quit", "*"), IMMEDIATE_COMMANDS)
+        self.assertIn(("/queue", "*"), IMMEDIATE_COMMANDS)
+        self.assertIn(("/yolo", "*"), IMMEDIATE_COMMANDS)
+        self.assertIn(("/stealth", "*"), IMMEDIATE_COMMANDS)
+        self.assertIn(("/model", "list"), IMMEDIATE_COMMANDS)
+        self.assertIn(("/effort", ""), IMMEDIATE_COMMANDS)
+        self.assertIn(("/context", ""), IMMEDIATE_COMMANDS)
+        self.assertIn(("/session", "list"), IMMEDIATE_COMMANDS)
+
     def test_immediate_commands_bypass_queue(self) -> None:
         immediate_samples = [
             "/exit",
@@ -92,6 +94,9 @@ class TestIsImmediateCommand(unittest.TestCase):
             "/yolo",
             "/yolo on",
             "/yolo off",
+            "/stealth",
+            "/stealth on",
+            "/stealth off",
             "/model",
             "/model list",
             "/effort",
@@ -114,9 +119,6 @@ class TestIsImmediateCommand(unittest.TestCase):
             "/rag status",
             "/rag list",
             "/rag create test_db",
-            "/rag delete test_db",
-            "/rag load test_db",
-            "/rag unload",
             "/mcp",
             "/mcp list",
             "/mcp status",
@@ -147,6 +149,9 @@ class TestIsImmediateCommand(unittest.TestCase):
             "/task create write_unit_tests",
             "/task run task_123",
             "/skill create custom_skill",
+            "/rag delete test_db",
+            "/rag load test_db",
+            "/rag unload",
             "/rag add /path/to/doc.pdf",
             "/rag add /path/to/docs --dir",
             "/mcp reload",
@@ -160,7 +165,7 @@ class TestPromptQueueFIFO(unittest.IsolatedAsyncioTestCase):
     """Unit tests for FIFO queuing of multiple messages and slash commands."""
 
     async def test_fifo_queuing_of_multiple_prompts(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             inp = app.query_one(ReplInput)
@@ -191,7 +196,7 @@ class TestPromptQueueFIFO(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(sys_out.display)
 
     async def test_fifo_queuing_stateful_slash_commands(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             inp = app.query_one(ReplInput)
@@ -210,7 +215,7 @@ class TestPromptQueueFIFO(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(footer._queued_count, 3)
 
     async def test_fifo_queuing_mixed_prompts_and_commands(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             inp = app.query_one(ReplInput)
@@ -229,7 +234,7 @@ class TestPromptQueueFIFO(unittest.IsolatedAsyncioTestCase):
             )
 
     async def test_empty_or_whitespace_input_not_queued(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             inp = app.query_one(ReplInput)
@@ -245,17 +250,18 @@ class TestImmediateCommandExecution(unittest.IsolatedAsyncioTestCase):
     """Unit tests for immediate commands executed while queue is non-empty or generation is active."""
 
     async def test_immediate_command_bypasses_queue_when_generating(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
-        async with app.run_test():
+        async with app.run_test() as pilot:
             inp = app.query_one(ReplInput)
 
             app._is_generating = True
             active_worker = MagicMock()
             app._current_worker = active_worker
 
-            with patch.object(app, "_run_slash_command", new_callable=AsyncMock):
+            with patch("ollama_agent.interfaces.tui.app.run_slash_command", new_callable=AsyncMock):
                 app.on_repl_input_submitted(ReplInput.Submitted(inp, "/yolo"))
+                await pilot.pause()
 
                 # Immediate command must not be added to queue
                 self.assertEqual(len(app._prompt_queue), 0)
@@ -263,9 +269,9 @@ class TestImmediateCommandExecution(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(app._current_worker, active_worker)
 
     async def test_immediate_command_while_queue_has_items(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
-        async with app.run_test():
+        async with app.run_test() as pilot:
             inp = app.query_one(ReplInput)
             footer = app.query_one(AgentFooter)
 
@@ -276,42 +282,44 @@ class TestImmediateCommandExecution(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(footer._queued_count, 2)
 
-            with patch.object(app, "_run_slash_command", new_callable=AsyncMock):
+            with patch("ollama_agent.interfaces.tui.app.run_slash_command", new_callable=AsyncMock):
                 app.on_repl_input_submitted(ReplInput.Submitted(inp, "/queue list"))
+                await pilot.pause()
 
                 # Queue remains unmodified
                 self.assertEqual(len(app._prompt_queue), 2)
                 self.assertEqual(footer._queued_count, 2)
 
     async def test_immediate_command_when_idle_sets_current_worker(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
-        async with app.run_test():
+        async with app.run_test() as pilot:
             inp = app.query_one(ReplInput)
             app._is_generating = False
 
-            with patch.object(app, "_run_slash_command", new_callable=AsyncMock):
+            with patch("ollama_agent.interfaces.tui.app.run_slash_command", new_callable=AsyncMock):
                 app.on_repl_input_submitted(ReplInput.Submitted(inp, "/yolo"))
                 self.assertIsNotNone(app._current_worker)
+                await pilot.pause()
 
 
 class TestQueueDrainingBehavior(unittest.IsolatedAsyncioTestCase):
     """Unit tests for queue draining when generation or slash commands complete."""
 
     async def test_process_next_in_queue_noop_when_empty(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             with (
                 patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream,
-                patch.object(app, "_run_slash_command", new_callable=AsyncMock) as mock_slash,
+                patch("ollama_agent.interfaces.tui.app.run_slash_command", new_callable=AsyncMock) as mock_slash,
             ):
                 app._process_next_in_queue()
                 mock_stream.assert_not_called()
                 mock_slash.assert_not_called()
 
     async def test_process_next_in_queue_blocked_when_busy(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             app._prompt_queue.append("Pending item")
@@ -332,9 +340,9 @@ class TestQueueDrainingBehavior(unittest.IsolatedAsyncioTestCase):
                 mock_stream.assert_not_called()
 
     async def test_drains_prompt_item_and_updates_badge(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
-        async with app.run_test():
+        async with app.run_test() as pilot:
             footer = app.query_one(AgentFooter)
             chat_scroll = app.query_one("#chat-scroll")
 
@@ -344,6 +352,7 @@ class TestQueueDrainingBehavior(unittest.IsolatedAsyncioTestCase):
 
             with patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream:
                 app._process_next_in_queue()
+                await pilot.pause()
 
                 self.assertEqual(len(app._prompt_queue), 0)
                 self.assertEqual(footer._queued_count, 0)
@@ -358,24 +367,25 @@ class TestQueueDrainingBehavior(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(mock_stream.call_args[0][0], "Drainable prompt")
 
     async def test_drains_slash_command_item(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
-        async with app.run_test():
+        async with app.run_test() as pilot:
             footer = app.query_one(AgentFooter)
 
             app._prompt_queue.append("/task run task_123")
             app._update_queue_ui()
             self.assertEqual(footer._queued_count, 1)
 
-            with patch.object(app, "_run_slash_command", new_callable=AsyncMock) as mock_slash:
+            with patch("ollama_agent.interfaces.tui.app.run_slash_command", new_callable=AsyncMock) as mock_slash:
                 app._process_next_in_queue()
+                await pilot.pause()
 
                 self.assertEqual(len(app._prompt_queue), 0)
                 self.assertEqual(footer._queued_count, 0)
-                mock_slash.assert_called_once_with("/task run task_123")
+                mock_slash.assert_called_once_with(app, "/task run task_123")
 
     async def test_sequential_queue_draining_flow(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test() as pilot:
             app._prompt_queue.append("Prompt 1")
@@ -403,7 +413,7 @@ class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
     """Unit tests for Esc / Ctrl+C cancellation behavior with the prompt queue."""
 
     async def test_cancel_generation_clears_queue_and_cancels_worker(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             footer = app.query_one(AgentFooter)
@@ -431,7 +441,7 @@ class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Prompt queue cleared", str(sys_out.render()))
 
     async def test_cancel_generation_cancels_worker_and_approval(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             footer = app.query_one(AgentFooter)
@@ -460,7 +470,7 @@ class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Approval cancelled", str(sys_out.render()))
 
     async def test_action_cancel_or_quit_branches(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             with patch.object(app, "action_cancel_generation") as mock_cancel, patch.object(app, "exit") as mock_exit:
@@ -494,7 +504,7 @@ class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
                 mock_exit.assert_called_once()
 
     async def test_run_stream_cancelled_error_clears_queue(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             chat_scroll = app.query_one("#chat-scroll")
@@ -521,7 +531,7 @@ class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Execution interrupted by user", str(sys_out.render()))
 
     async def test_queue_clear_and_rm_do_not_interrupt_active_generation(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             mock_worker = MagicMock()
@@ -552,23 +562,27 @@ class TestToolApprovalModalAndQueue(unittest.IsolatedAsyncioTestCase):
     """Unit tests for tool approval interaction with prompt queue and input widget."""
 
     async def test_approval_modal_keeps_repl_input_enabled(self) -> None:
-        repl, runtime = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             inp = app.query_one(ReplInput)
             footer = app.query_one(AgentFooter)
             chat_scroll = app.query_one("#chat-scroll")
             agent_msg = AgentResponse()
-            chat_scroll.mount(agent_msg)
+            await chat_scroll.mount(agent_msg)
 
-            # Mock graph state to return interrupts requiring approval
-            mock_state = MagicMock()
             mock_interrupt = MagicMock()
             mock_interrupt.value = {"action_requests": [{"name": "read_file", "args": {"path": "main.py"}}]}
-            mock_state.interrupts = [mock_interrupt]
-            runtime.graph.aget_state = AsyncMock(return_value=mock_state)
 
-            with patch("ollama_agent.interfaces.tui.app.stream_agent_events", new_callable=AsyncMock):
+            async def fake_stream(
+                rt: object, prompt: object, renderer: Any, auto_close: bool = True
+            ) -> None:
+                await renderer.handle_interrupt(
+                    {"interrupts": [mock_interrupt]},
+                    rt,
+                )
+
+            with patch("ollama_agent.interfaces.tui.app.stream_agent_events", side_effect=fake_stream):
                 await app._run_stream("Read file prompt", chat_scroll, agent_msg)
 
             self.assertTrue(app._is_approval_pending)
@@ -576,7 +590,7 @@ class TestToolApprovalModalAndQueue(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Approval required", str(footer.render()))
 
     async def test_queuing_prompts_during_approval_pending(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             inp = app.query_one(ReplInput)
@@ -593,7 +607,8 @@ class TestToolApprovalModalAndQueue(unittest.IsolatedAsyncioTestCase):
             self.assertIn("1 queued", str(footer.render()))
 
     async def test_approval_decision_resumes_stream_and_drains_queue(self) -> None:
-        repl, runtime = _create_mock_repl()
+        repl = make_mock_repl()
+        runtime = repl.runtime
         mock_state = MagicMock()
         mock_state.interrupts = []
         runtime.graph.aget_state = AsyncMock(return_value=mock_state)
@@ -630,28 +645,29 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
     """Unit tests for /queue and /queue clear command handler."""
 
     def test_queue_list_when_empty(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
+        repl.app = None
         repl._handle_queue_cmd([])
-        output = repl.console.file.getvalue()
+        output = repl.console.export_text()
         self.assertIn("Prompt queue is empty", output)
 
     async def test_queue_list_with_items(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             app._prompt_queue.append("Prompt alpha")
             app._prompt_queue.append("Prompt beta")
 
-            repl.console = Console(file=io.StringIO())
+            repl.console = recording_console()
             repl._handle_queue_cmd(["list"])
-            output = repl.console.file.getvalue()
+            output = repl.console.export_text()
 
             self.assertIn("Queued prompts (2)", output)
             self.assertIn("#1 Prompt alpha", output)
             self.assertIn("#2 Prompt beta", output)
 
     async def test_queue_clear_subcommand(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             app._prompt_queue.append("Item 1")
@@ -659,9 +675,9 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
             app._prompt_queue.append("Item 3")
             app._update_queue_ui()
 
-            repl.console = Console(file=io.StringIO())
+            repl.console = recording_console()
             repl._handle_queue_cmd(["clear"])
-            output = repl.console.file.getvalue()
+            output = repl.console.export_text()
 
             self.assertIn("Prompt queue cleared (3 removed)", output)
             self.assertEqual(len(app._prompt_queue), 0)
@@ -669,7 +685,7 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(footer._queued_count, 0)
 
     async def test_queue_rm_success(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             app._prompt_queue.append("Item 1")
@@ -677,9 +693,9 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
             app._prompt_queue.append("Item 3")
             app._update_queue_ui()
 
-            repl.console = Console(file=io.StringIO())
+            repl.console = recording_console()
             repl._handle_queue_cmd(["rm", "2"])
-            output = repl.console.file.getvalue()
+            output = repl.console.export_text()
 
             self.assertIn("Removed #2 from prompt queue: Item 2", output)
             self.assertEqual(len(app._prompt_queue), 2)
@@ -689,85 +705,87 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(footer._queued_count, 2)
 
     async def test_queue_rm_with_hash_prefix(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             app._prompt_queue.append("Item 1")
             app._prompt_queue.append("Item 2")
             app._update_queue_ui()
 
-            repl.console = Console(file=io.StringIO())
+            repl.console = recording_console()
             repl._handle_queue_cmd(["rm", "#1"])
-            output = repl.console.file.getvalue()
+            output = repl.console.export_text()
 
             self.assertIn("Removed #1 from prompt queue: Item 1", output)
             self.assertEqual(len(app._prompt_queue), 1)
             self.assertEqual(app._prompt_queue[0], "Item 2")
 
     async def test_queue_rm_aliases_remove_and_delete(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             app._prompt_queue.append("Alpha")
             app._prompt_queue.append("Beta")
             app._update_queue_ui()
 
-            repl.console = Console(file=io.StringIO())
+            repl.console = recording_console()
             repl._handle_queue_cmd(["remove", "1"])
-            self.assertIn("Removed #1 from prompt queue: Alpha", repl.console.file.getvalue())
+            self.assertIn("Removed #1 from prompt queue: Alpha", repl.console.export_text())
 
-            repl.console = Console(file=io.StringIO())
+            repl.console = recording_console()
             repl._handle_queue_cmd(["delete", "1"])
-            self.assertIn("Removed #1 from prompt queue: Beta", repl.console.file.getvalue())
+            self.assertIn("Removed #1 from prompt queue: Beta", repl.console.export_text())
             self.assertEqual(len(app._prompt_queue), 0)
 
     def test_queue_rm_missing_position(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
+        repl.app = None
         repl._handle_queue_cmd(["rm"])
-        output = repl.console.file.getvalue()
+        output = repl.console.export_text()
         self.assertIn("Usage: /queue rm <position>", output)
 
     def test_queue_rm_when_empty(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
+        repl.app = None
         repl._handle_queue_cmd(["rm", "1"])
-        output = repl.console.file.getvalue()
+        output = repl.console.export_text()
         self.assertIn("Prompt queue is empty.", output)
 
     async def test_queue_rm_invalid_position_non_digit(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             app._prompt_queue.append("Item 1")
-            repl.console = Console(file=io.StringIO())
+            repl.console = recording_console()
             repl._handle_queue_cmd(["rm", "abc"])
-            output = repl.console.file.getvalue()
+            output = repl.console.export_text()
             self.assertIn("Invalid queue position 'abc'. Usage: /queue rm <position>", output)
 
     async def test_queue_rm_out_of_range(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             app._prompt_queue.append("Item 1")
             app._prompt_queue.append("Item 2")
             app._update_queue_ui()
 
-            repl.console = Console(file=io.StringIO())
+            repl.console = recording_console()
             repl._handle_queue_cmd(["rm", "0"])
-            self.assertIn("Queue position 0 out of range (queue has 2 items).", repl.console.file.getvalue())
+            self.assertIn("Queue position 0 out of range (queue has 2 items).", repl.console.export_text())
 
-            repl.console = Console(file=io.StringIO())
+            repl.console = recording_console()
             repl._handle_queue_cmd(["rm", "5"])
-            self.assertIn("Queue position 5 out of range (queue has 2 items).", repl.console.file.getvalue())
+            self.assertIn("Queue position 5 out of range (queue has 2 items).", repl.console.export_text())
 
     async def test_queue_rm_autocomplete(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test():
             app._prompt_queue.append("First queued prompt")
             app._prompt_queue.append("Second queued prompt")
 
             # Level 2 completions for /queue rm
-            comps = app._slash_completions("/queue rm ")
+            comps = slash_completions("/queue rm ", app.repl, list(app._prompt_queue))
             self.assertEqual(len(comps), 2)
             self.assertEqual(comps[0][0], "/queue rm 1")
             self.assertEqual(comps[1][0], "/queue rm 2")
@@ -775,38 +793,40 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
             self.assertIn("First queued prompt", comps[0][1].plain)
 
             # Filtered completion
-            comps_filtered = app._slash_completions("/queue remove 2")
+            comps_filtered = slash_completions("/queue remove 2", app.repl, list(app._prompt_queue))
             self.assertEqual(len(comps_filtered), 1)
             self.assertEqual(comps_filtered[0][0], "/queue remove 2")
 
             # Hash-prefixed filter
-            comps_hash = app._slash_completions("/queue delete #1")
+            comps_hash = slash_completions("/queue delete #1", app.repl, list(app._prompt_queue))
             self.assertEqual(len(comps_hash), 1)
             self.assertEqual(comps_hash[0][0], "/queue delete 1")
 
     def test_queue_invalid_subcommand(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
+        repl.app = None
         repl._handle_queue_cmd(["unknown_cmd"])
-        output = repl.console.file.getvalue()
+        output = repl.console.export_text()
         self.assertIn("Unknown queue subcommand 'unknown_cmd'", output)
 
     def test_queue_handler_when_app_is_none(self) -> None:
-        repl, _ = _create_mock_repl()
+        repl = make_mock_repl()
         repl.app = None
 
         repl._handle_queue_cmd(["list"])
-        self.assertIn("Prompt queue is empty", repl.console.file.getvalue())
+        self.assertIn("Prompt queue is empty", repl.console.export_text())
 
-        repl.console = Console(file=io.StringIO())
+        repl.console = recording_console()
         repl._handle_queue_cmd(["clear"])
-        self.assertIn("Prompt queue cleared (0 removed)", repl.console.file.getvalue())
+        self.assertIn("Prompt queue cleared (0 removed)", repl.console.export_text())
 
 
 class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
     """Unit tests for session creation, switching, and resuming with queued items."""
 
     async def test_session_new_drains_subsequent_queue(self) -> None:
-        repl, runtime = _create_mock_repl()
+        repl = make_mock_repl()
+        runtime = repl.runtime
         app = OllamaAgentApp(repl)
         async with app.run_test() as pilot:
             app._prompt_queue.append("/session new")
@@ -833,7 +853,8 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(streamed, ["First message in fresh session"])
 
     async def test_session_resume_success_drains_subsequent_queue(self) -> None:
-        repl, runtime = _create_mock_repl()
+        repl = make_mock_repl()
+        runtime = repl.runtime
         runtime.get_thread_messages = AsyncMock(
             return_value=[
                 HumanMessage(content="Hello previous session"),
@@ -877,7 +898,7 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(streamed, ["Followup question"])
 
     async def test_session_resume_not_found_drains_subsequent_queue(self) -> None:
-        repl, runtime = _create_mock_repl()
+        repl = make_mock_repl()
         app = OllamaAgentApp(repl)
         async with app.run_test() as pilot:
             chat_scroll = app.query_one("#chat-scroll")
@@ -907,7 +928,8 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
     async def test_clear_and_new_aliases_drain_subsequent_queue(self) -> None:
         for alias in ("/clear", "/new"):
             with self.subTest(alias=alias):
-                repl, runtime = _create_mock_repl()
+                repl = make_mock_repl()
+                runtime = repl.runtime
                 app = OllamaAgentApp(repl)
                 async with app.run_test() as pilot:
                     app._prompt_queue.append(alias)

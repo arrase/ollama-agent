@@ -30,7 +30,6 @@ class ResolvedContext(NamedTuple):
 
     text_contents: dict[Path, str]
     attachments: list[dict[str, Any]]
-    classifications: dict[Path, str]
     warnings: list[str]
     total_size: int
 
@@ -48,9 +47,6 @@ _MIME_FALLBACKS: dict[str, str] = {
     "audio": "audio/mpeg",
     "file": "application/pdf",
 }
-
-
-_FILE_TOO_LARGE_MSG = "File too large: {file_path} ({file_size} bytes, limit is {max_file_size} bytes)"
 
 
 def classify_multimodal_file(file_path: Path) -> str | None:
@@ -75,15 +71,26 @@ def is_binary_file(file_path: Path) -> bool:
         return b"\x00" in f.read(1024)
 
 
+def _check_file_size(file_path: Path, max_file_size: int) -> int:
+    """Return file size in bytes, raising FileTooLargeError if it exceeds max_file_size."""
+    size = file_path.stat().st_size
+    if size > max_file_size:
+        raise FileTooLargeError(
+            _(
+                "File too large: {file_path} ({file_size} bytes, limit is {max_file_size} bytes)",
+                file_path=file_path,
+                file_size=size,
+                max_file_size=max_file_size,
+            )
+        )
+    return size
+
+
 def read_file_content(file_path: Path, max_file_size: int = 1024 * 1024) -> str:
     """Read file content as text, enforcing file type and size limit."""
     if not file_path.is_file():
         raise PromptProcessingError(_("Path is not a file: {file_path}", file_path=file_path))
-    size = file_path.stat().st_size
-    if size > max_file_size:
-        raise FileTooLargeError(
-            _(_FILE_TOO_LARGE_MSG, file_path=file_path, file_size=size, max_file_size=max_file_size)
-        )
+    _check_file_size(file_path, max_file_size)
     if is_binary_file(file_path):
         raise PromptProcessingError(_("Cannot read binary file as text: {file_path}", file_path=file_path))
     return file_path.read_text(encoding="utf-8", errors="replace")
@@ -91,12 +98,34 @@ def read_file_content(file_path: Path, max_file_size: int = 1024 * 1024) -> str:
 
 def read_binary_file_b64(file_path: Path, max_file_size: int = 1024 * 1024) -> str:
     """Read binary file content and return as base64 string."""
-    size = file_path.stat().st_size
-    if size > max_file_size:
-        raise FileTooLargeError(
-            _(_FILE_TOO_LARGE_MSG, file_path=file_path, file_size=size, max_file_size=max_file_size)
-        )
+    _check_file_size(file_path, max_file_size)
     return base64.b64encode(file_path.read_bytes()).decode("utf-8")
+
+
+def _load_validated_file(
+    file_path: Path,
+    max_file_size: int,
+    max_total_size: int,
+    current_size: int,
+    text_contents: dict[Path, str],
+    attachments: list[dict[str, Any]],
+) -> int:
+    """Validate size and load file into text_contents or attachments, returning its byte size."""
+    size = _check_file_size(file_path, max_file_size)
+    if current_size + size > max_total_size:
+        raise ContextLimitExceededError(
+            _("Total context size limit of {max_total_size} bytes exceeded.", max_total_size=max_total_size)
+        )
+    kind = classify_multimodal_file(file_path)
+    if kind:
+        b64_data = base64.b64encode(file_path.read_bytes()).decode("utf-8")
+        mime = get_file_type(file_path) or _MIME_FALLBACKS[kind]
+        attachments.append({"type": kind, "base64": b64_data, "mime_type": mime})
+        return size
+    if is_binary_file(file_path):
+        raise PromptProcessingError(_("Cannot read binary file as text: {file_path}", file_path=file_path))
+    text_contents[file_path] = file_path.read_text(encoding="utf-8", errors="replace")
+    return size
 
 
 def _resolve_single_file(
@@ -106,53 +135,19 @@ def _resolve_single_file(
     max_total_size: int,
     initial_count: int,
     initial_size: int,
+    seen_files: set[Path],
 ) -> ResolvedContext:
     """Resolve a single file into context data."""
+    resolved_file = target_path.resolve()
+    if resolved_file in seen_files:
+        return ResolvedContext({}, [], [], 0)
     if initial_count >= max_files:
         raise ContextLimitExceededError(_("Mentions limit exceeded: max {max_files} files.", max_files=max_files))
-    size = target_path.stat().st_size
-    if size > max_file_size:
-        raise FileTooLargeError(
-            _(
-                _FILE_TOO_LARGE_MSG,
-                file_path=target_path,
-                file_size=size,
-                max_file_size=max_file_size,
-            )
-        )
-    if initial_size + size > max_total_size:
-        raise ContextLimitExceededError(
-            _("Total context size limit of {max_total_size} bytes exceeded.", max_total_size=max_total_size)
-        )
-    kind = classify_multimodal_file(target_path)
-    if kind:
-        b64_data = read_binary_file_b64(target_path, max_file_size)
-        mime = get_file_type(target_path) or _MIME_FALLBACKS.get(kind, "application/octet-stream")
-        return ResolvedContext({}, [{"type": kind, "base64": b64_data, "mime_type": mime}], {target_path: kind}, [], size)
-    return ResolvedContext({target_path: read_file_content(target_path, max_file_size)}, [], {}, [], size)
-
-
-def _append_dir_file_content(
-    file_path: Path,
-    max_file_size: int,
-    text_contents: dict[Path, str],
-    attachments: list[dict[str, Any]],
-    classifications: dict[Path, str],
-    warnings: list[str],
-) -> bool:
-    """Classify and append file content to text_contents or attachments. Returns True if appended."""
-    kind = classify_multimodal_file(file_path)
-    if kind:
-        classifications[file_path] = kind
-        b64_data = read_binary_file_b64(file_path, max_file_size)
-        mime = get_file_type(file_path) or _MIME_FALLBACKS.get(kind, "application/octet-stream")
-        attachments.append({"type": kind, "base64": b64_data, "mime_type": mime})
-        return True
-    if is_binary_file(file_path):
-        warnings.append(_("Cannot read binary file as text: {file_path}", file_path=file_path))
-        return False
-    text_contents[file_path] = file_path.read_text(encoding="utf-8", errors="replace")
-    return True
+    text_contents: dict[Path, str] = {}
+    attachments: list[dict[str, Any]] = []
+    size = _load_validated_file(target_path, max_file_size, max_total_size, initial_size, text_contents, attachments)
+    seen_files.add(resolved_file)
+    return ResolvedContext(text_contents, attachments, [], size)
 
 
 def _resolve_directory(
@@ -162,11 +157,13 @@ def _resolve_directory(
     max_total_size: int,
     initial_count: int,
     initial_size: int,
+    seen_files: set[Path],
+    resolved_base: Path,
+    allow_traversal: bool,
 ) -> ResolvedContext:
     """Resolve files in a directory into context data."""
     text_contents: dict[Path, str] = {}
     attachments: list[dict[str, Any]] = []
-    classifications: dict[Path, str] = {}
     warnings: list[str] = []
     resolved_size = 0
 
@@ -175,32 +172,37 @@ def _resolve_directory(
             if not file_path.is_file():
                 continue
 
+            resolved_file = file_path.resolve()
+            if not allow_traversal and not resolved_file.is_relative_to(resolved_base):
+                warnings.append(
+                    _("Access to path outside working directory is not allowed: '{path_str}'", path_str=file_path)
+                )
+                continue
+
+            if resolved_file in seen_files:
+                continue
+
             if initial_count + len(text_contents) + len(attachments) >= max_files:
                 warnings.append(_("Mentions limit exceeded: max {max_files} files.", max_files=max_files))
                 break
 
-            size = file_path.stat().st_size
-            if size > max_file_size:
-                warnings.append(
-                    _(
-                        _FILE_TOO_LARGE_MSG,
-                        file_path=file_path,
-                        file_size=size,
-                        max_file_size=max_file_size,
-                    )
-                )
-                continue
-
-            if initial_size + resolved_size + size > max_total_size:
-                warnings.append(_("Total context size limit of {max_total_size} bytes exceeded.", max_total_size=max_total_size))
-                break
-
-            if _append_dir_file_content(file_path, max_file_size, text_contents, attachments, classifications, warnings):
-                resolved_size += size
+            size = _load_validated_file(
+                file_path,
+                max_file_size,
+                max_total_size,
+                initial_size + resolved_size,
+                text_contents,
+                attachments,
+            )
+            seen_files.add(resolved_file)
+            resolved_size += size
+        except ContextLimitExceededError as exc:
+            warnings.append(str(exc))
+            break
         except (OSError, UnicodeDecodeError, PromptProcessingError) as exc:
             warnings.append(str(exc))
 
-    return ResolvedContext(text_contents, attachments, classifications, list(dict.fromkeys(warnings)), resolved_size)
+    return ResolvedContext(text_contents, attachments, list(dict.fromkeys(warnings)), resolved_size)
 
 
 def resolve_context_files(
@@ -211,11 +213,15 @@ def resolve_context_files(
     *,
     initial_count: int = 0,
     initial_size: int = 0,
+    seen_files: set[Path] | None = None,
+    resolved_base: Path | None = None,
+    allow_traversal: bool = True,
 ) -> ResolvedContext:
     """Resolve a target file or directory into context data."""
     if not target_path.exists():
         raise PromptProcessingError(_("Path is neither a file nor a directory: {file_path}", file_path=target_path))
 
+    seen = seen_files if seen_files is not None else set()
     if target_path.is_file():
         return _resolve_single_file(
             target_path,
@@ -224,6 +230,7 @@ def resolve_context_files(
             max_total_size=max_total_size,
             initial_count=initial_count,
             initial_size=initial_size,
+            seen_files=seen,
         )
 
     return _resolve_directory(
@@ -233,6 +240,9 @@ def resolve_context_files(
         max_total_size=max_total_size,
         initial_count=initial_count,
         initial_size=initial_size,
+        seen_files=seen,
+        resolved_base=resolved_base if resolved_base is not None else target_path.resolve(),
+        allow_traversal=allow_traversal,
     )
 
 
@@ -250,7 +260,7 @@ def _extract_mention_path(match: re.Match[str]) -> tuple[str, int, bool]:
         if (
             path_str in (".", "..")
             or path_str.endswith(("/..", "\\..", "/.", "\\."))
-            or bool(re.match(r"^[a-zA-Z]:$", path_str))
+            or re.match(r"^[a-zA-Z]:$", path_str)
         ):
             break
         path_str = path_str[:-1]
@@ -295,16 +305,15 @@ def process_prompt_mentions(
     max_files: int = 100,
     max_total_size: int = 10 * 1024 * 1024,
     allow_traversal: bool = True,
-    base_dir: Path | None = None,
+    base_dir: Path = Path("."),
 ) -> tuple[str, list[dict[str, Any]], list[str]]:
     """Resolve file @-mentions in prompt, returning updated prompt, attachments, and warnings."""
-    if base_dir is None:
-        base_dir = Path.cwd()
     resolved_base = base_dir.resolve()
 
     pattern = re.compile(r'(?:^|(?<=[\s\(\[\{<]))@(?:\"([^\"]*)\"|\'([^\']*)\'|([^\s\"\'\(\[\{<>,;]+))')
 
-    resolved_paths: set[Path] = set()
+    resolved_targets: set[Path] = set()
+    seen_files: set[Path] = set()
     text_contents: dict[Path, str] = {}
     attachments: list[dict[str, Any]] = []
     warnings: list[str] = []
@@ -322,9 +331,9 @@ def process_prompt_mentions(
             if kind:
                 replacements.append((match.start(), end, f"[{kind}: {path_str}]"))
 
-        if path in resolved_paths:
+        if path in resolved_targets or path in seen_files:
             continue
-        resolved_paths.add(path)
+        resolved_targets.add(path)
 
         ctx = resolve_context_files(
             path,
@@ -333,6 +342,9 @@ def process_prompt_mentions(
             max_total_size=max_total_size,
             initial_count=len(text_contents) + len(attachments),
             initial_size=total_size,
+            seen_files=seen_files,
+            resolved_base=resolved_base,
+            allow_traversal=allow_traversal,
         )
         text_contents.update(ctx.text_contents)
         attachments.extend(ctx.attachments)

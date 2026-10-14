@@ -63,12 +63,11 @@ class TestRAGCommands(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(AmbiguousRAGDatabaseError):
             ctx.resolve_database("alpha")
 
-    def test_database_resolution_case_insensitive_exact_priority(self) -> None:
+    def test_database_resolution_exact_priority(self) -> None:
         mock_mgr = MagicMock()
-        mock_mgr.list_database_names.return_value = ["Alpha", "alphabet"]
+        mock_mgr.list_database_names.return_value = ["alpha", "alphabet"]
         ctx = RAGContext(rag_manager=mock_mgr, console=self.console)
-        # "alpha" matches "Alpha" exactly (case-insensitive) instead of matching "alphabet" as prefix
-        self.assertEqual(ctx.resolve_database("alpha"), "Alpha")
+        self.assertEqual(ctx.resolve_database("alpha"), "alpha")
 
     def test_database_resolution_empty_name_raises(self) -> None:
         mock_mgr = MagicMock()

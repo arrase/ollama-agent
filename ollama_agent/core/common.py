@@ -6,7 +6,9 @@ import os
 import re
 import tempfile
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
+
+from jinja2 import Environment, StrictUndefined, select_autoescape
 
 from ..i18n import _
 
@@ -14,16 +16,7 @@ ReasoningEffortValue = str
 DEFAULT_REASONING_EFFORT: ReasoningEffortValue = "default"
 
 
-class RAGToolResult(TypedDict, total=False):
-    """Result from RAG operations."""
-
-    success: bool
-    context: str
-    results: list[dict[str, Any]]
-    error: str
-
-
-def extract_text(content: Any, *, sep: str = " ") -> str:
+def extract_text(content: Any) -> str:
     """Convert agent payload content into plain text.
 
     Non-text multimodal blocks (image/audio/video/file) contribute no plain text, so
@@ -35,11 +28,11 @@ def extract_text(content: Any, *, sep: str = " ") -> str:
     if content is None:
         return ""
     if isinstance(content, (list, tuple)):
-        return sep.join(filter(None, (extract_text(item, sep=sep) for item in content))).strip()
+        return " ".join(filter(None, (extract_text(item) for item in content))).strip()
     if isinstance(content, dict):
         for key in ("text", "content"):
             if key in content:
-                return extract_text(content[key], sep=sep)
+                return extract_text(content[key])
         if "type" in content:
             return ""
         raise TypeError("Unsupported dict content for extract_text: missing 'text' or 'content' key")
@@ -82,14 +75,14 @@ def shorten(text: str, limit: int = QUICK_PREVIEW_LIMIT) -> str:
     return flat[: limit - 3] + "..."
 
 
-def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None:
+def atomic_write_text(path: Path, text: str) -> None:
     """Write text to *path* atomically using a temporary file in path.parent."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
             mode="w",
-            encoding=encoding,
+            encoding="utf-8",
             dir=path.parent,
             prefix=f".{path.stem}_",
             suffix=".tmp",
@@ -104,3 +97,15 @@ def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None
     finally:
         if tmp_path is not None and tmp_path.exists():
             tmp_path.unlink()
+
+
+def render_prompt_template(template_str: str, context: dict[str, Any]) -> str:
+    """Render a Jinja2 template string with the provided context dictionary."""
+    env = Environment(
+        autoescape=select_autoescape(["html", "xml"]),
+        undefined=StrictUndefined,
+        trim_blocks=True,
+        lstrip_blocks=True,
+    )
+    template = env.from_string(template_str)
+    return template.render(context)

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ollama-agent"
-version = "0.10.8"
+version = "1.0.0"
 description = "AI agent to interact with local language models through Ollama"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -32,15 +32,14 @@ dependencies = [
 ollama-agent = "ollama_agent.main:main"
 
 [project.optional-dependencies]
-dev = [
-    "ruff==0.16.10",
-    "mypy>=2.4.0",
-    "pytest>=9.1.1",
-    "pytest-cov>=7.1.0",
-]
 test = [
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
+]
+dev = [
+    "ollama-agent[test]",
+    "ruff==0.16.10",
+    "mypy>=2.4.0",
 ]
 docs = ["mkdocs-material>=9.7.7"]
 
@@ -50,13 +49,10 @@ include = ["ollama_agent*"]
 
 [tool.setuptools.package-data]
 ollama_agent = [
+    "interfaces/tui/*.tcss",
     "settings/prompts/*.md",
-    "interfaces/*.tcss",
-    "interfaces/*.css",
-    "interfaces/**/*.tcss",
-    "interfaces/**/*.css",
+    "skills/builtin/**/*.md",
     "i18n/locales/*.json",
-    "skills/builtin/**",
 ]
 
 [tool.ruff]

@@ -1,16 +1,14 @@
 """Tasks management package."""
 
 from .commands import (
-    AmbiguousTaskError,
     TaskError,
-    TaskNotFoundError,
     TasksContext,
-    ValidationError,
     apply_task_settings,
     create_task,
     delete_task,
     list_tasks,
     parse_var_assignments,
+    prepare_task_run,
     run_task,
 )
 from .manager import Task, TaskManager
@@ -20,13 +18,11 @@ __all__ = [
     "TaskManager",
     "TasksContext",
     "TaskError",
-    "TaskNotFoundError",
-    "AmbiguousTaskError",
-    "ValidationError",
     "apply_task_settings",
     "create_task",
     "delete_task",
     "list_tasks",
     "parse_var_assignments",
+    "prepare_task_run",
     "run_task",
 ]

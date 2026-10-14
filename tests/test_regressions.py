@@ -7,21 +7,23 @@ that a plausible future refactor could silently reintroduce.
 from __future__ import annotations
 
 import asyncio
-import io
 import json
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from langchain_core.messages import AIMessageChunk
-from rich.console import Console
 
 from ollama_agent.agent.episodic_memory import HistoryError, format_iso_timestamp
 from ollama_agent.agent.middleware import _stream_tool_events
 from ollama_agent.core.common import extract_text, shorten
-from ollama_agent.core.models import get_ollama_version, validate_reasoning_effort
+from ollama_agent.core.models import (
+    ModelCapabilityError,
+    create_ollama_async_client,
+    get_ollama_version,
+    validate_reasoning_effort,
+)
 from ollama_agent.core.prompt_processor import PromptProcessingError, process_prompt_mentions
 from ollama_agent.i18n import _, get_locale, get_text, set_locale
 from ollama_agent.interfaces.commands.dispatch import safe_call
@@ -32,15 +34,13 @@ from ollama_agent.mcp.loader import _build_stdio_connection, _read_main_config
 from ollama_agent.rag.manager import RAGError, RAGManager
 from ollama_agent.settings import RAGSettings
 from ollama_agent.settings.config import Settings
+from ollama_agent.skills.manager import SkillManager
 from ollama_agent.streaming.console_renderer import ConsoleStreamingRenderer
 from ollama_agent.streaming.parsers import ThinkTagParser
+from ollama_agent.tasks.commands import TaskError
 from ollama_agent.tasks.manager import Task, TaskInput
 
-from conftest import make_repl_environment
-
-
-def _console() -> Console:
-    return Console(file=io.StringIO(), record=True)
+from conftest import make_repl_environment, recording_console
 
 
 class TestRichMarkupInjection(unittest.TestCase):
@@ -51,35 +51,33 @@ class TestRichMarkupInjection(unittest.TestCase):
     """
 
     def test_reasoning_delta_with_closing_tag_does_not_crash(self) -> None:
-        console = _console()
+        console = recording_console()
         renderer = ConsoleStreamingRenderer(console=console)
         renderer.on_reasoning_delta({"type": "reasoning_delta", "content": "see [/italic] and foo [/]"})
         self.assertIn("[/italic]", console.export_text())
 
     def test_error_and_warning_content_does_not_crash(self) -> None:
-        console = _console()
+        console = recording_console()
         renderer = ConsoleStreamingRenderer(console=console)
         renderer.on_error({"type": "error", "content": "boom [/red]"})
         renderer.on_warning({"type": "warning", "content": "careful [/bold]"})
         self.assertIn("boom", console.export_text())
 
     def test_tool_call_with_markup_in_name_does_not_crash(self) -> None:
-        console = _console()
+        console = recording_console()
         renderer = ConsoleStreamingRenderer(console=console)
         renderer.on_tool_call({"type": "tool_call", "name": "weird[/name]", "agent_name": "a[/b]c"})
         self.assertIn("weird", console.export_text())
 
     def test_unknown_subcommand_with_markup_does_not_crash(self) -> None:
-        env = make_repl_environment(console=_console())
+        env = make_repl_environment(console=recording_console())
         for handler_name in ("handle_agents", "handle_mcp", "handle_task", "handle_skill", "handle_rag"):
             with self.subTest(handler=handler_name):
                 getattr(env, handler_name)(["x[/y]z"])
         self.assertTrue(env.console.file.getvalue())  # type: ignore[union-attr]
 
     def test_safe_call_escapes_domain_error(self) -> None:
-        from ollama_agent.tasks.commands import TaskError
-
-        console = _console()
+        console = recording_console()
         env = make_repl_environment(console=console)
         with patch("ollama_agent.interfaces.commands.dispatch.list_tasks", side_effect=TaskError("bad [/x]")):
             asyncio.run(safe_call(env.handle_task, ["list"], console=console))
@@ -216,8 +214,6 @@ class TestOllamaClientLifetime(unittest.TestCase):
     """ollama.AsyncClient defaults to no timeout and must be closed."""
 
     def test_async_client_has_bounded_timeout(self) -> None:
-        from ollama_agent.core.models import create_ollama_async_client
-
         client = create_ollama_async_client("http://localhost:11434/")
         try:
             self.assertIsNotNone(client._client.timeout.read)
@@ -226,14 +222,12 @@ class TestOllamaClientLifetime(unittest.TestCase):
             asyncio.run(client.close())
 
     def test_rag_manager_defers_embedder_client(self) -> None:
-        with temp_dir() as tmp:
+        with tempfile.TemporaryDirectory() as tmp:
             mgr = RAGManager(RAGSettings(rag_dir=str(tmp)))
             # A manager that only lists databases must not hold a connection pool.
             self.assertIsNone(mgr._ollama_client)
 
     def test_get_ollama_version_rejects_body_without_version(self) -> None:
-        from ollama_agent.core.models import ModelCapabilityError
-
         response = MagicMock()
         response.json.return_value = {"unexpected": "field"}
         with patch("httpx.get", return_value=response):
@@ -271,7 +265,7 @@ class TestValidationGaps(unittest.TestCase):
         self.assertEqual(validate_reasoning_effort(True), "true")
 
     def test_mcp_config_rejects_non_object_server(self) -> None:
-        with temp_dir() as tmp:
+        with tempfile.TemporaryDirectory() as tmp:
             cfg = Path(tmp) / "mcp.json"
             cfg.write_text(json.dumps({"mcpServers": {"bad": 5}}), encoding="utf-8")
             with patch("ollama_agent.mcp.loader.MCP_PATH", cfg):
@@ -294,7 +288,7 @@ class TestValidationGaps(unittest.TestCase):
 
 class TestSamplingParamBounds(unittest.IsolatedAsyncioTestCase):
     async def test_out_of_range_param_is_rejected(self) -> None:
-        console = _console()
+        console = recording_console()
         runtime = MagicMock()
         runtime.settings.model.temperature = 0.7
         runtime.reload = AsyncMock()
@@ -307,21 +301,23 @@ class TestSamplingParamBounds(unittest.IsolatedAsyncioTestCase):
 
 
 class TestI18nRobustness(unittest.TestCase):
-    def tearDown(self) -> None:
-        set_locale("en")
-
     def test_failed_locale_load_does_not_corrupt_state(self) -> None:
-        set_locale("en")
         with patch("ollama_agent.i18n.resources") as res:
             res.files.return_value.joinpath.return_value.read_text.side_effect = OSError("boom")
             with self.assertRaises(ValueError):
                 set_locale("es")
         self.assertEqual(get_locale(), "en")
-        self.assertEqual(_("Usage: /model list"), "Usage: /model list")
+        self.assertEqual(
+            _("Usage: /model [list | set <model>]"),
+            "Usage: /model [list | set <model>]",
+        )
 
     def test_literal_brace_does_not_crash(self) -> None:
         self.assertEqual(get_text("Expected JSON: {}"), "Expected JSON: {}")
+        self.assertEqual(get_text("Expected JSON: {unclosed", foo="bar"), "Expected JSON: {unclosed")
         self.assertEqual(get_text("a {missing} b", other=1), "a {missing} b")
+        self.assertEqual(get_text("stray { brace", other=1), "stray { brace")
+        self.assertEqual(get_text("stray } brace", other=1), "stray } brace")
 
     def test_empty_locale_string_rejected(self) -> None:
         with self.assertRaises(ValueError):
@@ -365,12 +361,12 @@ class TestTaskValidation(unittest.TestCase):
 
 class TestExportSessionErrors(unittest.IsolatedAsyncioTestCase):
     async def test_uncreatable_parent_is_reported_not_raised(self) -> None:
-        console = _console()
+        console = recording_console()
         session_id = "abc12345"
         runtime = MagicMock()
         runtime.get_thread_messages = AsyncMock(return_value=[MagicMock(type="human", content="hi")])
         # A path under an existing *file* cannot have its parent created.
-        with temp_dir() as tmp:
+        with tempfile.TemporaryDirectory() as tmp:
             blocker = Path(tmp) / "blocker"
             blocker.write_text("x", encoding="utf-8")
             target = str(blocker / "sub" / "out.md")
@@ -383,7 +379,7 @@ class TestExportSessionErrors(unittest.IsolatedAsyncioTestCase):
 
 class TestRAGIsolation(unittest.IsolatedAsyncioTestCase):
     async def test_malformed_payload_raises_rag_error(self) -> None:
-        with temp_dir() as tmp:
+        with tempfile.TemporaryDirectory() as tmp:
             mgr = RAGManager(RAGSettings(rag_dir=str(tmp)))
             mgr._current_db = "db"
             client = MagicMock()
@@ -393,16 +389,14 @@ class TestRAGIsolation(unittest.IsolatedAsyncioTestCase):
             hit.score = 0.5
             client.query_points.return_value = MagicMock(points=[hit])
             mgr._client = client
-            with patch.object(RAGManager, "_get_embedding", AsyncMock(return_value=[0.0])):
+            with patch.object(RAGManager, "_get_embeddings", AsyncMock(return_value=[[0.0]])):
                 with self.assertRaises(RAGError):
                     await mgr.search("q")
 
 
 class TestSkillManagerIsolation(unittest.TestCase):
     def test_broken_skill_does_not_break_listing(self) -> None:
-        from ollama_agent.skills.manager import SkillManager
-
-        with temp_dir() as tmp:
+        with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "skills"
             (base / "broken").mkdir(parents=True)
             (base / "broken" / "SKILL.md").write_text("no frontmatter here", encoding="utf-8")
@@ -410,28 +404,10 @@ class TestSkillManagerIsolation(unittest.TestCase):
             (base / "good" / "SKILL.md").write_text(
                 "---\nname: Good\ndescription: d\n---\nbody\n", encoding="utf-8"
             )
-            mgr = SkillManager(skills_dir=base, builtin_skills_dir=None)
+            mgr = SkillManager(skills_dir=base, builtin_skills_dir=Path(tmp) / "_no_builtin")
             names = [sid for sid, _ in mgr.list_all()]
             self.assertIn("good", names)
             self.assertNotIn("broken", names)
-
-
-# --- small local helpers -----------------------------------------------------
-
-
-class temp_dir:
-    """Context manager yielding a fresh temporary directory path."""
-
-    def __init__(self) -> None:
-        self.path: Path | None = None
-
-    def __enter__(self) -> Path:
-        self.path = Path(tempfile.mkdtemp(prefix="regression-"))
-        return self.path
-
-    def __exit__(self, *exc: object) -> None:
-        if self.path is not None:
-            shutil.rmtree(self.path, ignore_errors=True)
 
 
 if __name__ == "__main__":

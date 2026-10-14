@@ -80,8 +80,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         self._end_reasoning()
         self._toggle_live(False)
         prefix = self._agent_prefix(event)
-        tool_name = escape(str(event["name"]))
-        tool_msg = escape(_("Calling tool: {tool_name}", tool_name=tool_name))
+        tool_msg = escape(_("Calling tool: {tool_name}", tool_name=str(event["name"])))
         self.console.print(f"  [yellow]✦ {prefix}{tool_msg}[/yellow]")
 
     def on_tool_output(self, event: dict[str, Any]) -> None:
@@ -101,7 +100,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         self.console.print(f"  [yellow]⚠ {_('Warning:')} {escape(str(event['content']))}[/yellow]")
 
     @staticmethod
-    async def _prompt(prompt: str) -> str:
+    async def _prompt() -> str:
         """Read one line on a daemon thread so Ctrl-C can never block interpreter shutdown.
 
         ``asyncio.to_thread`` uses the default ThreadPoolExecutor, whose workers are joined
@@ -115,7 +114,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
             # is listed explicitly instead of catching BaseException, which would also swallow
             # SystemExit and stop the interpreter from unwinding.
             try:
-                value = input(prompt)
+                value = input()
             except Exception as exc:  # noqa: BLE001
                 loop.call_soon_threadsafe(future.set_exception, exc)
             except KeyboardInterrupt as exc:
@@ -151,7 +150,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
                 prompt_msg = f"  {_('Choose action: Approve (y) / Reject (n) / Allow Session (a) / Cancel (c): ')}"
                 self.console.print(prompt_msg, end="")
                 self.console.file.flush()
-                choice = (await self._prompt("")).strip().lower()
+                choice = (await self._prompt()).strip().lower()
                 if choice == "y":
                     return build_approval_decisions(action_requests, "approve")
                 if choice == "n":
@@ -162,7 +161,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
                     break
                 invalid_msg = _("Invalid choice. Please enter 'y', 'n', 'a', or 'c'.")
                 self.console.print(f"  [red]{invalid_msg}[/red]")
-        except (EOFError, KeyboardInterrupt):
+        except EOFError:
             pass
 
         self.console.print(f"  [red]✗ {_('Cancelled')}[/red]\n")

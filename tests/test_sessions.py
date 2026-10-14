@@ -122,10 +122,8 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         conn.commit()
         conn.close()
 
-        sessions = get_available_sessions(self.db_path)
-        session_map = {s["thread_id"]: s["timestamp"] for s in sessions}
-        self.assertIn("session-nots", session_map)
-        self.assertEqual(session_map["session-nots"], "-")
+        with self.assertRaises(HistoryError):
+            get_available_sessions(self.db_path)
 
     def test_resolve_session_id(self) -> None:
         available = [

@@ -19,16 +19,16 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
 
 from ..core import (
+    REASONING_OFF_VALUES,
     OllamaChatModel,
     PromptProcessingError,
     create_ollama_chat_model,
     ensure_model_supports_tools,
-    get_model_creation_kwargs,
     process_prompt_mentions,
+    render_prompt_template,
     validate_reasoning_effort,
 )
-from ..i18n import _
-from ..mcp import MCPConfigError, load_main_mcp_tools
+from ..mcp.loader import load_main_mcp_tools
 from ..settings import (
     AGENTS_PATH,
     BUILTIN_SKILLS_DIR,
@@ -40,7 +40,6 @@ from ..settings import (
     ensure_memory_file,
     find_agents_file,
     load_instructions,
-    render_prompt_template,
     save_settings,
 )
 from ..streaming.parsers import ThinkTagParser
@@ -53,7 +52,7 @@ from .builtin_tools import (
 )
 from .environment import SKILL_ROOTS, environment_block
 from .middleware import stream_tool_events_mw
-from .subagents import build_subagents
+from .subagents import build_interrupt_config, build_subagents
 
 _log = logging.getLogger(__name__)
 
@@ -102,7 +101,6 @@ class AgentRuntime:
     effective_model_params: dict[str, tuple[Any, str]] = field(default_factory=dict, init=False)
     model: OllamaChatModel | None = field(default=None, init=False, repr=False)
     graph: Any = field(default=None, init=False, repr=False)
-    _instructions: str = field(default="", init=False)
     _checkpointer: AsyncSqliteSaver | None = field(default=None, init=False, repr=False)
     _memory_checkpointer: MemorySaver | None = field(default=None, init=False, repr=False)
     _checkpointer_stack: contextlib.AsyncExitStack = field(
@@ -116,11 +114,6 @@ class AgentRuntime:
     async def __aexit__(self, *exc: object) -> None:
         await self.aclose()
 
-    async def _reload_locked(self) -> None:
-        """Rebuild the graph. Caller must hold ``_init_lock``."""
-        self._instructions = await asyncio.to_thread(_prepare_instructions, self.settings)
-        self.graph = await self._build_graph()
-
     async def reload(self) -> None:
         """Tear down existing resources and rebuild the agent graph.
 
@@ -128,7 +121,7 @@ class AgentRuntime:
         ``/stealth`` and ``/rag`` all rebuild concurrently with lazy initialisation.
         """
         async with self._init_lock:
-            await self._reload_locked()
+            self.graph = await self._build_graph()
 
     async def warmup(self) -> None:
         """Build the graph (if needed) and resolve the default thread."""
@@ -136,6 +129,7 @@ class AgentRuntime:
 
     async def _build_graph(self) -> Any:
         ms = self.settings.model
+        instructions = await asyncio.to_thread(_prepare_instructions, self.settings)
 
         def should_interrupt_tool(request: Any) -> bool:
             return not self.yolo_mode and request.tool_call["name"] not in self.auto_approved_tools
@@ -145,7 +139,18 @@ class AgentRuntime:
         try:
             async with asyncio.TaskGroup() as tg:
                 model_task = tg.create_task(
-                    create_ollama_chat_model(**get_model_creation_kwargs(ms, warn_callback=_log.warning))
+                    create_ollama_chat_model(
+                        model=ms.name,
+                        base_url=ms.base_url,
+                        context_window=ms.context_window,
+                        reasoning_effort=ms.reasoning_effort,
+                        temperature=ms.temperature,
+                        top_p=ms.top_p,
+                        top_k=ms.top_k,
+                        min_p=ms.min_p,
+                        presence_penalty=ms.presence_penalty,
+                        repeat_penalty=ms.repeat_penalty,
+                    )
                 )
                 mcp_task = tg.create_task(load_main_mcp_tools())
                 subagents_task = tg.create_task(
@@ -155,12 +160,11 @@ class AgentRuntime:
                         should_interrupt_tool=should_interrupt_tool,
                     )
                 )
-        except* (MCPConfigError, ValueError) as eg:
-            # TaskGroup always populates .exceptions here; re-raise the original type so
-            # callers keep catching MCPConfigError / ValueError rather than a group.
+        except ExceptionGroup as eg:
             raise eg.exceptions[0] from None
 
         model, mcp_tools, subagents = model_task.result(), mcp_task.result(), subagents_task.result()
+        await asyncio.to_thread(_ensure_agent_dirs)
         checkpointer = self._get_memory_checkpointer() if self.stealth_mode else await self._sqlite_checkpointer()
         await ensure_model_supports_tools(
             ms.name,
@@ -169,8 +173,7 @@ class AgentRuntime:
         )
 
         self.model = model
-        # OllamaChatModel.num_ctx is None when the model relies on a server-side profile.
-        self.effective_context_window = model.num_ctx or 0
+        self.effective_context_window = model.num_ctx
         self.effective_model_params = model.effective_params
 
         # Backend: CWD for shell + APP_DIR for agent files (memory, etc.)
@@ -181,7 +184,6 @@ class AgentRuntime:
             virtual_mode=not self.settings.runtime.allow_traversal,
             inherit_env=self.settings.runtime.inherit_env,
         )
-        await asyncio.to_thread(_ensure_agent_dirs)
 
         agent_backend = FilesystemBackend(
             root_dir=MEMORY_PATH.parent,
@@ -229,13 +231,7 @@ class AgentRuntime:
             routes=routes,
         )
 
-        interrupt_on = {
-            tool_name: {
-                "allowed_decisions": ["approve", "reject"],
-                "when": should_interrupt_tool,
-            }
-            for tool_name in ("execute", "write_file", "edit_file", *(t.name for t in mcp_tools))
-        }
+        interrupt_on = build_interrupt_config(mcp_tools, should_interrupt_tool)
 
         rag_mgr = get_rag_manager()
         rag_tools = [rag_search] if rag_mgr and rag_mgr.current_database else []
@@ -246,7 +242,7 @@ class AgentRuntime:
         kwargs: dict[str, Any] = {
             "model": model,
             "tools": tools,
-            "system_prompt": self._instructions,
+            "system_prompt": instructions,
             "backend": backend,
             "memory": memory_sources,
             "skills": SKILL_ROOTS,
@@ -270,9 +266,11 @@ class AgentRuntime:
 
     async def _sqlite_checkpointer(self) -> AsyncSqliteSaver:
         if self._checkpointer is None:
+            HISTORY_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
             saver = AsyncSqliteSaver.from_conn_string(str(HISTORY_DB_PATH))
-            self._checkpointer = await self._checkpointer_stack.enter_async_context(saver)
-            await self._checkpointer.setup()
+            checkpointer = await self._checkpointer_stack.enter_async_context(saver)
+            await checkpointer.setup()
+            self._checkpointer = checkpointer
         return self._checkpointer
 
     async def _ensure_graph(self, thread_id: str = "") -> tuple[Any, str, dict[str, Any]]:
@@ -280,7 +278,7 @@ class AgentRuntime:
         thread = thread_id or self.thread_id
         async with self._init_lock:
             if self.graph is None:
-                await self._reload_locked()
+                self.graph = await self._build_graph()
         config: dict[str, Any] = {"configurable": {"thread_id": thread}}
         return self.graph, thread, config
 
@@ -290,51 +288,52 @@ class AgentRuntime:
 
     def _prepare_stream_inputs(
         self,
-        prompt: str | Command,
-    ) -> tuple[dict[str, Any] | Command, str | None]:
+        prompt: str | Command[Any],
+    ) -> tuple[dict[str, Any] | Command[Any], list[str]]:
         if isinstance(prompt, Command):
-            return prompt, None
+            return prompt, []
 
-        try:
-            mentions_cfg = self.settings.mentions
-            processed_prompt, attachments, mention_warnings = process_prompt_mentions(
-                prompt,
-                max_file_size=mentions_cfg.max_file_size,
-                max_files=mentions_cfg.max_files,
-                max_total_size=mentions_cfg.max_total_size,
-                allow_traversal=self.settings.runtime.allow_traversal,
-            )
-        except PromptProcessingError as exc:
-            return {}, str(exc)
+        mentions_cfg = self.settings.mentions
+        processed_prompt, attachments, mention_warnings = process_prompt_mentions(
+            prompt,
+            max_file_size=mentions_cfg.max_file_size,
+            max_files=mentions_cfg.max_files,
+            max_total_size=mentions_cfg.max_total_size,
+            allow_traversal=self.settings.runtime.allow_traversal,
+        )
 
         for warning in mention_warnings:
             _log.warning(warning)
 
         if attachments:
-            user_msg = {
+            user_msg: dict[str, Any] = {
                 "role": "user",
                 "content": [{"type": "text", "text": processed_prompt}] + attachments,
             }
         else:
             user_msg = {"role": "user", "content": processed_prompt}
 
-        return {"messages": [user_msg]}, None
+        return {"messages": [user_msg]}, mention_warnings
 
     async def run_streamed(
         self,
-        prompt: str | Command,
+        prompt: str | Command[Any],
         *,
         thread_id: str = "",
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream agent events for the given prompt."""
         graph, thread, config = await self._ensure_graph(thread_id)
         set_active_thread_id(thread)
-        hide_reasoning = self.settings.model.reasoning_effort in ("hide", "disabled", "false", "0", "off")
+        hide_reasoning = self.settings.model.reasoning_effort.lower() in REASONING_OFF_VALUES
 
-        inputs, error = self._prepare_stream_inputs(prompt)
-        if error:
-            yield {"type": "error", "content": error}
+        try:
+            inputs, mention_warnings = self._prepare_stream_inputs(prompt)
+        except PromptProcessingError as exc:
+            yield {"type": "error", "content": str(exc)}
             return
+
+        for warning in mention_warnings:
+            yield {"type": "warning", "content": warning}
 
         parser = ThinkTagParser()
         async for mode, event in graph.astream(
@@ -342,11 +341,16 @@ class AgentRuntime:
             config,
             stream_mode=["messages", "custom"],
         ):
-            if mode == "custom" and isinstance(event, dict) and event.get("type"):
+            if mode == "custom":
+                if event["type"] == "tool_call":
+                    for result in parser.flush(hide_reasoning=hide_reasoning):
+                        yield result
                 yield event
                 continue
             if mode == "messages":
-                chunk = event[0]
+                chunk, metadata = event
+                if metadata.get("langgraph_node") == "tools":
+                    continue
                 meta = chunk.response_metadata
                 if "prompt_eval_count" in meta:
                     self.last_context_tokens = int(meta.get("eval_count", 0)) + int(meta["prompt_eval_count"])
@@ -359,29 +363,19 @@ class AgentRuntime:
         # Surface pending interrupts (e.g. awaiting tool approval) after the stream ends.
         state = await graph.aget_state(config)
         if state.interrupts:
-            yield {"type": "interrupt", "interrupts": state.interrupts, "config": config}
-
-    @staticmethod
-    def _thread_values(state: Any) -> dict[str, Any]:
-        """Narrow a StateSnapshot's ``values`` to a mapping.
-
-        langgraph declares this as ``dict[str, Any] | Any``, so ``.get`` on it is
-        otherwise unchecked and a non-mapping would raise AttributeError.
-        """
-        values = getattr(state, "values", None)
-        return values if isinstance(values, dict) else {}
+            yield {"type": "interrupt", "interrupts": state.interrupts}
 
     async def get_thread_messages(self, thread_id: str = "") -> list[Any]:
         """Return the raw stored messages for a thread (empty when unknown)."""
         graph, _thread, config = await self._ensure_graph(thread_id)
         state = await graph.aget_state(config)
-        return list(self._thread_values(state).get("messages", []))
+        return list(state.values.get("messages", []))
 
     async def count_effective_tokens(self, thread_id: str = "") -> int:
         """Count tokens of the effective context for a thread."""
         graph, _thread, config = await self._ensure_graph(thread_id)
         state = await graph.aget_state(config)
-        values = self._thread_values(state)
+        values = state.values
         messages = list(values.get("messages", []))
         event = values.get("_summarization_event")
         if event and "summary_message" in event and "cutoff_index" in event:
@@ -390,24 +384,21 @@ class AgentRuntime:
                 messages = [event["summary_message"]] + messages[cutoff:]
         return count_tokens_approximately(messages)
 
-    async def set_model(self, model_name: str) -> str:
+    async def set_model(self, model_name: str) -> None:
         self.settings.model.name = model_name
         await asyncio.to_thread(save_settings, self.settings)
         await self.reload()
-        return _("Model set to {model_name}.", model_name=model_name)
 
-    async def set_reasoning_effort(self, effort: str) -> str:
+    async def set_reasoning_effort(self, effort: str) -> None:
         validated = validate_reasoning_effort(effort)
         self.settings.model.reasoning_effort = validated
         await asyncio.to_thread(save_settings, self.settings)
         await self.reload()
-        return _("Reasoning effort set to {validated}.", validated=validated)
 
-    async def set_context_window(self, context_window: int | str) -> str:
+    async def set_context_window(self, context_window: int | str) -> None:
         self.settings.model.context_window = context_window
         await asyncio.to_thread(save_settings, self.settings)
         await self.reload()
-        return _("Context window set to {context_window}.", context_window=context_window)
 
     async def aclose(self) -> None:
         await self._checkpointer_stack.aclose()

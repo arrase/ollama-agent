@@ -41,11 +41,6 @@ AgentHeader {
     padding: 0 1;
 }
 
-#autocomplete-list:focus > .option-list--option-highlighted {
-    background: #264f78;
-    color: #e6edf3;
-}
-
 #autocomplete-list > .option-list--option-highlighted {
     background: #264f78;
     color: #e6edf3;
@@ -274,7 +269,7 @@ ToolOutputMessage {
 }
 
 /* ── System Messages ───────────────────────────────────────────────────── */
-SystemMessage, .system-message {
+.system-message {
     margin: 1 0 1 2;
     padding: 0;
     color: #e6edf3;

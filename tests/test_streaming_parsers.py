@@ -31,25 +31,10 @@ class TestStreamingParsers(unittest.TestCase):
 
     def test_streaming_reasoning_from_additional_kwargs(self) -> None:
         kwargs = {"reasoning_content": "Thinking step by step"}
-        self.assertEqual(streaming_reasoning("", kwargs), "Thinking step by step")
-
-    def test_streaming_reasoning_from_content_list(self) -> None:
-        payload = [
-            {
-                "type": "reasoning",
-                "summary": [
-                    {"type": "summary_text", "text": "Step 1: Analyzed prompt. "},
-                    {"type": "summary_text", "text": "Step 2: Generating response."},
-                ],
-            }
-        ]
-        self.assertEqual(
-            streaming_reasoning(payload),
-            "Step 1: Analyzed prompt. Step 2: Generating response.",
-        )
+        self.assertEqual(streaming_reasoning(kwargs), "Thinking step by step")
 
     def test_streaming_reasoning_empty(self) -> None:
-        self.assertEqual(streaming_reasoning("just plain string"), "")
+        self.assertEqual(streaming_reasoning({}), "")
         self.assertEqual(streaming_reasoning(None), "")
 
     def test_streaming_text_edge_cases(self) -> None:
@@ -62,15 +47,9 @@ class TestStreamingParsers(unittest.TestCase):
         self.assertEqual(streaming_text({"other": "value"}), "")
 
     def test_streaming_reasoning_edge_cases(self) -> None:
-        self.assertEqual(streaming_reasoning(None, None), "")
-        self.assertEqual(streaming_reasoning("", None), "")
-        self.assertEqual(streaming_reasoning(None, {"reasoning_content": 123}), "")
-        self.assertEqual(streaming_reasoning(None, {"reasoning_content": "step 1"}), "step 1")
-        self.assertEqual(streaming_reasoning([123, "not_dict"], None), "")
-        self.assertEqual(streaming_reasoning([{"type": "reasoning"}], None), "")
-        self.assertEqual(streaming_reasoning([{"type": "reasoning", "summary": "not_list"}], None), "")
-        self.assertEqual(streaming_reasoning([{"type": "reasoning", "summary": [{"type": "summary_text"}]}], None), "")
-        self.assertEqual(streaming_reasoning([{"type": "reasoning", "summary": ["not_dict"]}], None), "")
+        self.assertEqual(streaming_reasoning(None), "")
+        self.assertEqual(streaming_reasoning({"reasoning_content": 123}), "")
+        self.assertEqual(streaming_reasoning({"reasoning_content": "step 1"}), "step 1")
 
     def test_think_tag_parser_chunk_splits(self) -> None:
         parser = ThinkTagParser()

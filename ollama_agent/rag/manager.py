@@ -311,9 +311,9 @@ class RAGManager:
         if not path.is_dir():
             raise RAGError(_("Not a directory: {dir_path}", dir_path=dir_path))
 
-        results: dict[str, Any] = {"added": 0, "failed": 0, "skipped": 0}
+        results: dict[str, int] = {"added": 0, "failed": 0, "skipped": 0}
 
-        for file_path in path.rglob("*"):
+        for file_path in sorted(path.rglob("*")):
             if not file_path.is_file():
                 continue
 
@@ -321,10 +321,9 @@ class RAGManager:
                 results["skipped"] += 1
                 continue
 
-            if results["added"] + results["skipped"] >= MAX_INDEXED_FILES:
+            if results["added"] >= MAX_INDEXED_FILES:
                 logger.warning("Reached the %d file cap; skipping the rest of %s", MAX_INDEXED_FILES, path)
-                results["skipped"] += 1
-                continue
+                break
 
             # Isolate per-file failures: one bad file (or a transient embedder error)
             # must not abort the whole batch after a partial ingest.
@@ -356,7 +355,7 @@ class RAGManager:
         client = self._ensure_loaded()
 
         # Get query embedding
-        query_embedding = await self._get_embedding(query)
+        query_embedding = (await self._get_embeddings([query]))[0]
 
         # Prefer stable API across qdrant-client versions
         # Qdrant local mode is blocking, so it must not run on the event loop.
@@ -376,13 +375,13 @@ class RAGManager:
             payload = hit.payload
             if not isinstance(payload, dict):
                 raise RAGError(
-                    _("Malformed payload in search result for point {id}", id=getattr(hit, "id", "?"))
+                    _("Malformed payload in search result for point {id}", id=hit.id)
                 )
             missing = _REQUIRED_PAYLOAD_KEYS - payload.keys()
             if missing:
                 raise RAGError(
                     _("Malformed payload in search result for point {id}: missing {keys}",
-                      id=getattr(hit, "id", "?"), keys=", ".join(sorted(missing)))
+                      id=hit.id, keys=", ".join(sorted(missing)))
                 )
             results.append(
                 {
@@ -394,11 +393,6 @@ class RAGManager:
                 }
             )
         return results
-
-    async def _get_embedding(self, text: str) -> list[float]:
-        """Generate embedding for text using Ollama."""
-        embeddings = await self._get_embeddings([text])
-        return embeddings[0]
 
     async def _get_embeddings(self, texts: list[str], batch_size: int = 100) -> list[list[float]]:
         """Generate embeddings for a batch of texts using Ollama."""

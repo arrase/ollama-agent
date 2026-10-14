@@ -4,20 +4,17 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
-from langchain_mcp_adapters.client import MultiServerMCPClient
 from rich import box
 from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
 
+from ..agent.agent import AgentRuntime
 from ..i18n import _
 from ..settings import MCP_PATH, Settings
-from .loader import DEFAULT_MCP_TIMEOUT, MCPConfigError, _build_mcp_connection, _read_main_config
-
-if TYPE_CHECKING:
-    from ..agent import AgentRuntime
+from .loader import MCPConfigError, _build_mcp_connection, _connect_and_load, _read_main_config
 
 
 @dataclass(slots=True)
@@ -46,19 +43,8 @@ async def check_mcp_server(
     target = f"{conn['command']} {' '.join(conn['args'])}".strip() if "command" in conn else conn["url"]
 
     try:
-        async with asyncio.timeout(DEFAULT_MCP_TIMEOUT):
-            client = MultiServerMCPClient({name: conn})  # type: ignore[dict-item,arg-type]
-            tools = await client.get_tools()
-    except TimeoutError:
-        return MCPServerStatus(
-            name=name,
-            transport=transport,
-            target=target,
-            status="failed",
-            tools=[],
-            error=_("Connection timed out ({timeout}s)", timeout=int(DEFAULT_MCP_TIMEOUT)),
-        )
-    except Exception as exc:
+        tools = await _connect_and_load(name, conn)
+    except MCPConfigError as exc:
         return MCPServerStatus(name=name, transport=transport, target=target, status="failed", tools=[], error=str(exc))
 
     return MCPServerStatus(
@@ -78,12 +64,11 @@ async def list_mcp_servers(
     """List all configured MCP servers and display their connection status."""
     servers_cfg = await _read_main_config()
 
-    subagent_servers: dict[str, dict[str, Any]] = {}
+    all_servers: list[tuple[str, dict[str, Any]]] = list(servers_cfg.items())
     for sa in settings.subagents:
         for srv in sa.mcp_servers:
-            subagent_servers[f"{srv.name} ({sa.name})"] = srv.to_dict()
+            all_servers.append((f"{srv.name} ({sa.name})", srv.to_connection_config()))
 
-    all_servers = {**servers_cfg, **subagent_servers}
     if not all_servers:
         console.print(
             f"[yellow]{_('No MCP servers configured.')}[/yellow]\n"
@@ -91,7 +76,7 @@ async def list_mcp_servers(
         )
         return
 
-    tasks = [check_mcp_server(name, cfg) for name, cfg in all_servers.items()]
+    tasks = [check_mcp_server(name, cfg) for name, cfg in all_servers]
     statuses: list[MCPServerStatus] = await asyncio.gather(*tasks)
 
     table = Table(

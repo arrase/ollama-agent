@@ -6,28 +6,24 @@ import json
 import sqlite3
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from rich import box
 from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
 
+from ...agent import AgentRuntime
 from ...agent.episodic_memory import (
     HistoryError,
     connect_history,
-    format_iso_timestamp,
+    load_session_timestamps,
     search_past_conversations_in_db,
 )
 from ...core.common import extract_text
 from ...i18n import _
 from ...settings.paths import HISTORY_DB_PATH
 
-if TYPE_CHECKING:
-    from ...agent import AgentRuntime
-
-_serializer = JsonPlusSerializer()
 _SESSION_NOT_FOUND_MSG = "Session '{target_id}' not found."
 
 
@@ -58,16 +54,10 @@ def get_available_sessions(db_path: Path = HISTORY_DB_PATH) -> list[dict[str, An
     if not db_path.exists():
         return []
 
+    timestamps = dict(load_session_timestamps(db_path))
     try:
         with connect_history(db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT thread_id, type, checkpoint FROM checkpoints ORDER BY rowid ASC")
-            timestamps: dict[str, str] = {}
-            for tid, typ, chk in cursor.fetchall():
-                c = _serializer.loads_typed((typ, chk))
-                if isinstance(c, dict) and "ts" in c:
-                    timestamps[tid] = str(c["ts"])
-
             cursor.execute(
                 "SELECT thread_id, COUNT(*) as steps FROM checkpoints GROUP BY thread_id ORDER BY MAX(rowid) DESC"
             )
@@ -76,7 +66,7 @@ def get_available_sessions(db_path: Path = HISTORY_DB_PATH) -> list[dict[str, An
                 {
                     "thread_id": row[0],
                     "steps": row[1],
-                    "timestamp": format_iso_timestamp(timestamps[row[0]]) if row[0] in timestamps else "-",
+                    "timestamp": timestamps[row[0]] if row[0] in timestamps else "-",
                 }
                 for row in rows
             ]
@@ -154,14 +144,14 @@ def resume_session(
                 target_id=target_id,
                 matches=matches_str,
             )
-            console.print(f"[red]{ambiguous_msg}[/red]")
+            console.print(f"[red]{escape(ambiguous_msg)}[/red]")
         else:
             not_found_msg = _(_SESSION_NOT_FOUND_MSG, target_id=target_id)
-            console.print(f"[red]{not_found_msg}[/red]")
+            console.print(f"[red]{escape(not_found_msg)}[/red]")
         return None
 
     switched_msg = _("Switched to session: {resolved}", resolved=f"{resolved[:8]} ({resolved})")
-    console.print(f"[green]✓ {switched_msg}[/green]")
+    console.print(f"[green]✓ {escape(switched_msg)}[/green]")
     return resolved
 
 
@@ -175,7 +165,7 @@ def delete_session(
     resolved = resolve_session_id(target_id, sessions)
     if resolved is None:
         not_found_msg = _(_SESSION_NOT_FOUND_MSG, target_id=target_id)
-        console.print(f"[red]{not_found_msg}[/red]")
+        console.print(f"[red]{escape(not_found_msg)}[/red]")
         return False
 
     try:
@@ -185,11 +175,11 @@ def delete_session(
             cursor.execute("DELETE FROM writes WHERE thread_id = ?", (resolved,))
             conn.commit()
         deleted_msg = _("Deleted session: {resolved}", resolved=resolved)
-        console.print(f"[green]✓ {deleted_msg}[/green]")
+        console.print(f"[green]✓ {escape(deleted_msg)}[/green]")
         return True
     except (sqlite3.Error, OSError, HistoryError) as exc:
         failed_msg = _("Failed to delete session '{resolved}': {exc}", resolved=resolved, exc=exc)
-        console.print(f"[red]{failed_msg}[/red]")
+        console.print(f"[red]{escape(failed_msg)}[/red]")
         return False
 
 
@@ -238,16 +228,22 @@ async def export_session(
     """Export conversation messages from a session to a Markdown file."""
     sessions = get_available_sessions(db_path)
     resolved = resolve_session_id(target_id, sessions)
+    if (
+        resolved is None
+        and runtime.stealth_mode is True
+        and (not target_id.strip() or is_current(target_id.strip(), runtime.thread_id))
+    ):
+        resolved = runtime.thread_id
     if resolved is None:
         not_found_msg = _(_SESSION_NOT_FOUND_MSG, target_id=target_id)
-        console.print(f"[red]{not_found_msg}[/red]")
+        console.print(f"[red]{escape(not_found_msg)}[/red]")
         return None
 
     messages = await runtime.get_thread_messages(resolved)
 
     if not messages:
         no_msgs = _("No messages found for session '{resolved}'.", resolved=resolved)
-        console.print(f"[yellow]{no_msgs}[/yellow]")
+        console.print(f"[yellow]{escape(no_msgs)}[/yellow]")
         return None
 
     export_title = _("Session Export: {resolved}", resolved=resolved)
@@ -289,10 +285,10 @@ def search_sessions(
     )
     if not results:
         no_res = _("No sessions found matching '{query}'.", query=clean_query)
-        console.print(f"[yellow]{no_res}[/yellow]")
+        console.print(f"[yellow]{escape(no_res)}[/yellow]")
         return []
 
-    table_title = _("Search Results for '{query}'", query=clean_query)
+    table_title = escape(_("Search Results for '{query}'", query=clean_query))
     table = Table(title=table_title, box=box.ROUNDED, header_style="bold cyan")
     table.add_column(_("Session ID"), style="bold", no_wrap=True)
     table.add_column(_("Date / Time"), style="cyan", no_wrap=True)

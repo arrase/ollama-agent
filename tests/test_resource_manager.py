@@ -111,6 +111,16 @@ class TestResourceManager(unittest.TestCase):
                 ambiguous_error=AmbiguousItemError,
             )
 
+    def test_resolve_unique_match_exact_match_takes_precedence(self) -> None:
+        match = resolve_unique_match(
+            [("test", "v1"), ("test-all", "v2")],
+            "test",
+            label="Item",
+            not_found_error=ItemNotFoundError,
+            ambiguous_error=AmbiguousItemError,
+        )
+        self.assertEqual(match, ("test", "v1"))
+
     def test_manager_resolve_success(self) -> None:
         self.mgr.items["tool-a"] = "alpha"
         res = self.mgr.resolve(

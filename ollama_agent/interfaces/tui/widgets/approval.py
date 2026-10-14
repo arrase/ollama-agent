@@ -13,7 +13,6 @@ from textual.widgets import Button, Static
 from ....i18n import _
 from ....streaming import build_approval_decisions
 from .footer import AgentFooter
-from .input import ReplInput
 from .messages import AgentResponse
 
 if TYPE_CHECKING:
@@ -46,6 +45,7 @@ class ToolApprovalWidget(Container):
         self.scroll = scroll
         self.agent_msg = agent_msg
         self.buttons_container: Horizontal | None = None
+        self._decided = False
 
     def compose(self) -> ComposeResult:
         yield Static(f"[bold #fbbf24]⚠ {_('Action Approval Required')}[/bold #fbbf24]", classes="approval-title")
@@ -63,15 +63,12 @@ class ToolApprovalWidget(Container):
             yield Button(_("Cancel (c)"), id="cancel-btn", classes="approval-btn")
 
     def on_mount(self) -> None:
-        buttons = self.query("#approve-btn")
-        if buttons:
-            buttons.first().focus()
-        else:
-            self.call_after_refresh(lambda: self.query_one("#approve-btn", Button).focus())
+        self.query_one("#approve-btn", Button).focus()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         event.stop()
-        self._handle_decision(event.button.id)
+        if event.button.id:
+            self._handle_decision(event.button.id)
 
     def _cycle_button_focus(self, forward: bool) -> None:
         focused = self.app.focused
@@ -110,9 +107,10 @@ class ToolApprovalWidget(Container):
             event.prevent_default()
             self._handle_decision(decision)
 
-    def _handle_decision(self, decision_type: str | None) -> None:
-        if not self.buttons_container:
+    def _handle_decision(self, decision_type: str) -> None:
+        if self._decided or not self.buttons_container:
             return
+        self._decided = True
 
         for child in self.buttons_container.query(Button):
             child.disabled = True
@@ -123,12 +121,10 @@ class ToolApprovalWidget(Container):
             decisions = build_approval_decisions(self.action_requests, "reject")
         elif decision_type == "allow-btn":
             decisions = build_approval_decisions(self.action_requests, "allow", runtime=self.app_ref.repl.runtime)
-        elif decision_type == "cancel-btn":
+        else:
             decisions = build_approval_decisions(
                 self.action_requests, "reject", reject_message=_("User cancelled the execution.")
             )
-        else:
-            decisions = []
 
         self.buttons_container.remove()
         self.buttons_container = None
@@ -139,15 +135,14 @@ class ToolApprovalWidget(Container):
             "allow-btn": f"[bold #38bdf8]✓ {_('Allowed for session & approved')}[/bold #38bdf8]",
             "cancel-btn": f"[bold #f87171]✗ {_('Cancelled')}[/bold #f87171]",
         }
-        status_text = status_map.get(decision_type or "", "")
+        status_text = status_map[decision_type]
         self.mount(Static(f"  {status_text}", classes="approval-status"))
-
-        inp = self.app_ref.query_one(ReplInput)
-        inp.disabled = False
 
         footer = self.app_ref.query_one(AgentFooter)
         footer.set_approval(False)
         self.app_ref._is_approval_pending = False
+        self.app_ref._is_generating = True
+        footer.set_generating(True)
 
         self.app_ref._current_worker = self.app_ref.run_worker(
             self.app_ref._handle_approval_decision(decisions, self.scroll, self.agent_msg)

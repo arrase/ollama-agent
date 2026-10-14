@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import os
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from importlib import resources
 from pathlib import Path
 from types import UnionType
 from typing import Any, Self, TypeVar, Union, cast, get_args, get_origin, get_type_hints
 
 import yaml  # type: ignore[import-untyped]
-from jinja2 import Environment, StrictUndefined, select_autoescape
 
-from ..core import DEFAULT_REASONING_EFFORT, atomic_write_text
+from ..core import (
+    DEFAULT_REASONING_EFFORT,
+    atomic_write_text,
+)
 from ..i18n import _
 from .paths import (
     INSTRUCTIONS_PATH,
@@ -73,7 +75,7 @@ class SubAgentMCPServer:
     args: list[str] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_connection_config(self) -> dict[str, Any]:
         return {
             "command": self.command,
             "args": self.args,
@@ -122,26 +124,7 @@ class Settings:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> Self:
-        if not isinstance(raw, dict):
-            raise ValueError(_("Expected mapping for Settings, got {type_name}", type_name=type(raw).__name__))
-        valid = {f.name for f in fields(cls)}
-        unknown = set(raw) - valid
-        if unknown:
-            raise ValueError(_("Unknown setting keys: {keys}", keys=sorted(unknown)))
-        kwargs: dict[str, Any] = {}
-        if "model" in raw:
-            kwargs["model"] = _dataclass_from_dict(ModelSettings, raw["model"])
-        if "runtime" in raw:
-            kwargs["runtime"] = _dataclass_from_dict(RuntimeSettings, raw["runtime"])
-        if "rag" in raw:
-            kwargs["rag"] = _dataclass_from_dict(RAGSettings, raw["rag"])
-        if "mentions" in raw:
-            kwargs["mentions"] = _dataclass_from_dict(MentionSettings, raw["mentions"])
-        if "subagents" in raw:
-            kwargs["subagents"] = _subagents_from_list(raw["subagents"])
-        if "langsmith" in raw:
-            kwargs["langsmith"] = _dataclass_from_dict(LangSmithSettings, raw["langsmith"])
-        return cls(**kwargs)
+        return _dataclass_from_dict(cls, raw)
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -178,8 +161,6 @@ def _coerce_setting(name: str, value: Any, hint: Any) -> Any:
     ``temperature: "hot"`` surfaces much later as a pydantic error from deep inside
     the model constructor.
     """
-    if hint is None or hint is Any:
-        return value
     origin = get_origin(hint)
     if origin is Union or origin is UnionType:
         return _coerce_union(name, value, hint)
@@ -203,6 +184,8 @@ def _coerce_union(name: str, value: Any, hint: Any) -> Any:
 
 def _coerce_value(value: Any, hint: Any) -> Any:
     origin = get_origin(hint) or hint
+    if is_dataclass(origin):
+        return _dataclass_from_dict(cast(type[Any], origin), value)
     if origin is bool:
         if not isinstance(value, bool):
             raise ValueError(_("expected a boolean, got {t}", t=type(value).__name__))
@@ -220,6 +203,16 @@ def _coerce_value(value: Any, hint: Any) -> Any:
         if not isinstance(value, str):
             raise ValueError(_("expected a string, got {t}", t=type(value).__name__))
         return value
+    if origin is list:
+        if not isinstance(value, list):
+            raise ValueError(f"expected a list, got {type(value).__name__}")
+        (item_hint,) = get_args(hint)
+        return [_coerce_value(item, item_hint) for item in value]
+    if origin is dict:
+        if not isinstance(value, dict):
+            raise ValueError(f"expected a dict, got {type(value).__name__}")
+        key_hint, val_hint = get_args(hint)
+        return {_coerce_value(k, key_hint): _coerce_value(v, val_hint) for k, v in value.items()}
     return value
 
 
@@ -240,32 +233,10 @@ def _dataclass_from_dict(cls: type[T], raw: Any) -> T:
         if f.name not in raw:
             continue
         try:
-            kwargs[f.name] = _coerce_setting(f.name, raw[f.name], hints.get(f.name))
+            kwargs[f.name] = _coerce_setting(f.name, raw[f.name], hints[f.name])
         except ValueError as exc:
             raise ValueError(_("Invalid value for '{name}.{key}': {exc}", name=cls.__name__, key=f.name, exc=exc))
     return cls(**kwargs)
-
-
-def _subagents_from_list(
-    raw: Any,
-) -> list[SubAgentSettings]:
-    """Parse subagent list from YAML, handling nested mcp_servers."""
-    if not isinstance(raw, list):
-        raise ValueError(_("Expected list for subagents, got {type_name}", type_name=type(raw).__name__))
-    subagents: list[SubAgentSettings] = []
-    for item in raw:
-        if not isinstance(item, dict):
-            raise ValueError(_("Expected mapping for subagent, got {type_name}", type_name=type(item).__name__))
-        data = dict(item)
-        if "mcp_servers" in item:
-            mcp_servers_raw = item["mcp_servers"]
-            if not isinstance(mcp_servers_raw, list):
-                raise ValueError(
-                    _("Expected list for mcp_servers, got {type_name}", type_name=type(mcp_servers_raw).__name__)
-                )
-            data["mcp_servers"] = [_dataclass_from_dict(SubAgentMCPServer, m) for m in mcp_servers_raw]
-        subagents.append(_dataclass_from_dict(SubAgentSettings, data))
-    return subagents
 
 
 # ---------------------------------------------------------------------------
@@ -295,18 +266,6 @@ def save_settings(settings: Settings, settings_path: Path = SETTINGS_PATH) -> No
 # ---------------------------------------------------------------------------
 # Instructions
 # ---------------------------------------------------------------------------
-
-
-def render_prompt_template(template_str: str, context: dict[str, Any]) -> str:
-    """Render a Jinja2 template string with the provided context dictionary."""
-    env = Environment(
-        autoescape=select_autoescape(["html", "xml"]),
-        undefined=StrictUndefined,
-        trim_blocks=True,
-        lstrip_blocks=True,
-    )
-    template = env.from_string(template_str)
-    return template.render(context)
 
 
 def load_instructions(instructions_path: Path = INSTRUCTIONS_PATH) -> str:

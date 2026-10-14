@@ -3,75 +3,39 @@
 from __future__ import annotations
 
 import asyncio
-import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
-from rich import box
-from rich.console import Console
-from rich.table import Table
+from langchain_core.tools import BaseTool
 
-from ..core import create_ollama_chat_model, get_model_creation_kwargs
+from ..core import create_ollama_chat_model, render_prompt_template
 from ..i18n import _
-from ..mcp import load_subagent_mcp_tools
+from ..mcp.loader import load_subagent_mcp_tools
 from ..settings import (
-    SETTINGS_PATH,
     ModelSettings,
-    Settings,
     SubAgentSettings,
-    render_prompt_template,
 )
+from .builtin_tools import BUILTIN_TOOLS
 from .environment import SKILL_ROOTS, environment_block
-
-_log = logging.getLogger(__name__)
-
-
-def list_subagents(
-    console: Console,
-    settings: Settings,
-) -> None:
-    """List all configured subagents and their properties in a table."""
-    if not settings.subagents:
-        console.print(
-            f"[yellow]{_('No subagents configured.')}[/yellow]\n"
-            f"[dim]{_('Configure subagents in {path}', path=SETTINGS_PATH)}[/dim]"
-        )
-        return
-
-    table = Table(
-        title=_("Configured Subagents"),
-        box=box.ROUNDED,
-        show_header=True,
-        header_style="bold magenta",
-    )
-    table.add_column(_("Name"), style="bold cyan", no_wrap=True)
-    table.add_column(_("Description"), style="white")
-    table.add_column(_("Model"), style="green", no_wrap=True)
-    table.add_column(_("Context"), style="yellow", no_wrap=True)
-    table.add_column(_("MCP Servers"), style="blue")
-
-    for sa in settings.subagents:
-        model_str = sa.model or f"[dim]{settings.model.name} ({_('inherited')})[/dim]"
-        ctx_str = (
-            str(sa.context_window)
-            if sa.context_window
-            else f"[dim]{settings.model.context_window} ({_('inherited')})[/dim]"
-        )
-        mcp_str = ", ".join(srv.name for srv in sa.mcp_servers) if sa.mcp_servers else "[dim]-[/dim]"
-
-        table.add_row(
-            sa.name,
-            sa.description,
-            model_str,
-            ctx_str,
-            mcp_str,
-        )
-
-    console.print(table)
+from .middleware import stream_tool_events_mw
 
 
 def _default_should_interrupt(_request: Any) -> bool:
     return True
+
+
+def build_interrupt_config(
+    mcp_tools: Sequence[BaseTool],
+    should_interrupt_tool: Callable[[Any], bool],
+) -> dict[str, Any]:
+    """Build the ``interrupt_on`` mapping for sensitive built-in and MCP tools."""
+    return {
+        tool_name: {
+            "allowed_decisions": ["approve", "reject"],
+            "when": should_interrupt_tool,
+        }
+        for tool_name in ("execute", "write_file", "edit_file", *(t.name for t in mcp_tools))
+    }
 
 
 async def build_subagents(
@@ -81,11 +45,17 @@ async def build_subagents(
     should_interrupt_tool: Callable[[Any], bool] = _default_should_interrupt,
 ) -> list[dict[str, Any]]:
     """Convert ``SubAgentSettings`` into dicts for ``create_deep_agent(subagents=...)``."""
-    tasks = [
-        _build_spec(sa, model_settings=model_settings, should_interrupt_tool=should_interrupt_tool)
-        for sa in subagent_settings
-    ]
-    return await asyncio.gather(*tasks)
+    try:
+        async with asyncio.TaskGroup() as tg:
+            tasks = [
+                tg.create_task(
+                    _build_spec(sa, model_settings=model_settings, should_interrupt_tool=should_interrupt_tool)
+                )
+                for sa in subagent_settings
+            ]
+    except ExceptionGroup as eg:
+        raise eg.exceptions[0] from None
+    return [t.result() for t in tasks]
 
 
 async def _build_spec(
@@ -111,28 +81,28 @@ async def _build_spec(
         "name": sa.name,
         "description": sa.description,
         "system_prompt": rendered_prompt + environment_block(include_cwd=False),
+        "middleware": [stream_tool_events_mw],
     }
 
-    model_kwargs = get_model_creation_kwargs(
-        model_settings,
-        model=sa.model,
-        context_window=sa.context_window,
-        warn_callback=_log.warning,
+    spec["model"] = await create_ollama_chat_model(
+        model=sa.model or model_settings.name,
+        base_url=model_settings.base_url,
+        context_window=sa.context_window or model_settings.context_window,
+        reasoning_effort=model_settings.reasoning_effort,
+        temperature=model_settings.temperature,
+        top_p=model_settings.top_p,
+        top_k=model_settings.top_k,
+        min_p=model_settings.min_p,
+        presence_penalty=model_settings.presence_penalty,
+        repeat_penalty=model_settings.repeat_penalty,
     )
-    spec["model"] = await create_ollama_chat_model(**model_kwargs)
 
     spec["skills"] = SKILL_ROOTS
 
     if sa.mcp_servers:
         tools = await load_subagent_mcp_tools(sa.name, sa.mcp_servers)
         if tools:
-            spec["tools"] = tools
-            spec["interrupt_on"] = {
-                tool_name: {
-                    "allowed_decisions": ["approve", "reject"],
-                    "when": should_interrupt_tool,
-                }
-                for tool_name in ("execute", "write_file", "edit_file", *(t.name for t in tools))
-            }
+            spec["tools"] = [*BUILTIN_TOOLS, *tools]
+            spec["interrupt_on"] = build_interrupt_config(tools, should_interrupt_tool)
 
     return spec

@@ -102,7 +102,7 @@ class TestCommonUtilities(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             target = Path(td) / "encoding_error.txt"
             with self.assertRaises(UnicodeEncodeError):
-                atomic_write_text(target, "café con leche", encoding="ascii")
+                atomic_write_text(target, "\ud800")
             self.assertFalse(target.exists())
             tmp_files = list(Path(td).glob("*.tmp"))
             self.assertEqual(tmp_files, [])

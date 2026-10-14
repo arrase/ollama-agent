@@ -48,11 +48,8 @@ class MCPConfigError(RuntimeError):
     """Raised when the MCP configuration is unreadable or invalid."""
 
 
-def _resolve_env(env: dict[str, str], server_name: str) -> dict[str, str]:
-    """Resolve ``${VAR}`` and ``%VAR%`` patterns against ``os.environ``.
-
-    Raises MCPConfigError when a required environment variable is missing.
-    """
+def _resolve_env_str(value: str, server_name: str) -> str:
+    """Resolve ``${VAR}`` and ``%VAR%`` patterns in *value* against ``os.environ``."""
     def _replace(match: re.Match[str]) -> str:
         var = match.group(1) or match.group(2)
         try:
@@ -66,7 +63,15 @@ def _resolve_env(env: dict[str, str], server_name: str) -> dict[str, str]:
                 )
             )
 
-    return {key: _ENV_RE.sub(_replace, str(value)) for key, value in env.items()}
+    return _ENV_RE.sub(_replace, value)
+
+
+def _resolve_env(env: dict[str, str], server_name: str) -> dict[str, str]:
+    """Resolve ``${VAR}`` and ``%VAR%`` patterns against ``os.environ``.
+
+    Raises MCPConfigError when a required environment variable is missing.
+    """
+    return {key: _resolve_env_str(str(value), server_name) for key, value in env.items()}
 
 
 def _build_stdio_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, Any]:
@@ -115,8 +120,10 @@ def _build_url_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, An
                 transport=transport,
             )
         )
-    out = {"transport": transport, "url": url}
-    for k in ("headers", "timeout", "sse_read_timeout", "session_kwargs"):
+    out: dict[str, Any] = {"transport": transport, "url": _resolve_env_str(url, server_name)}
+    if "headers" in cfg:
+        out["headers"] = {str(k): _resolve_env_str(str(v), server_name) for k, v in cfg["headers"].items()}
+    for k in ("timeout", "sse_read_timeout", "session_kwargs"):
         if k in cfg:
             out[k] = cfg[k]
     return out
@@ -202,24 +209,28 @@ async def _connect_and_load(name: str, conn: dict[str, Any]) -> list[Any]:
 
 async def _load_tools_from_connections(connections: dict[str, dict[str, Any]]) -> list[Any]:
     """Connect to multiple MCP servers concurrently and return all discovered tools."""
-    tasks: list[asyncio.Task[list[Any]]] = []
-    try:
-        async with asyncio.TaskGroup() as tg:
-            for name, conn in connections.items():
-                tasks.append(tg.create_task(_connect_and_load(name, conn)))
-    except ExceptionGroup as eg:
-        # Report every failing server, not just whichever task finished first, so the
-        # user can fix all of them in one pass.
-        failures = [e for e in eg.exceptions if isinstance(e, MCPConfigError)]
-        if not failures:
-            raise
-        if len(failures) == 1:
-            raise failures[0] from eg
+    results = await asyncio.gather(
+        *(_connect_and_load(name, conn) for name, conn in connections.items()),
+        return_exceptions=True,
+    )
+    # Report every failing server, not just whichever task finished first, so the
+    # user can fix all of them in one pass.
+    failures: list[MCPConfigError] = []
+    tools: list[Any] = []
+    for res in results:
+        if isinstance(res, MCPConfigError):
+            failures.append(res)
+        elif isinstance(res, BaseException):
+            raise res
+        else:
+            tools.extend(res)
+    if len(failures) == 1:
+        raise failures[0]
+    if failures:
         raise MCPConfigError(
             _("Failed to load {count} MCP server(s): {details}", count=len(failures), details="; ".join(str(e) for e in failures))
-        ) from eg
-
-    return [tool for t in tasks for tool in t.result()]
+        )
+    return tools
 
 
 async def load_main_mcp_tools() -> list[Any]:
@@ -262,7 +273,7 @@ async def load_subagent_mcp_tools(
                 )
             )
         seen_names.add(name)
-        connections[name] = _build_mcp_connection(name, srv.to_dict())
+        connections[name] = _build_mcp_connection(name, srv.to_connection_config())
 
     tools = await _load_tools_from_connections(connections)
     _log.info("Subagent '%s': loaded %d MCP tools", subagent_name, len(tools))

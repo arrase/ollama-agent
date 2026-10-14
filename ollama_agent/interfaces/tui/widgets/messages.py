@@ -76,6 +76,7 @@ class AgentResponse(Container):
             self.current_thinking.title = _("Thought process")
 
     def append_thinking(self, delta: str) -> None:
+        self.flush_text()
         self.current_text_widget = None
         if self.current_thinking is None:
             app = cast("OllamaAgentApp", self.app)
@@ -134,9 +135,9 @@ class AgentResponse(Container):
         self._reset_active_stream()
         self.mount(ToolCallMessage(tool_name=name, agent_name=agent))
 
-    def add_tool_output(self, agent: str | None = None, output_len: int | None = None) -> None:
+    def add_tool_output(self, output_len: int, agent: str | None = None) -> None:
         self._reset_active_stream()
-        self.mount(ToolOutputMessage(agent_name=agent, output_len=output_len))
+        self.mount(ToolOutputMessage(output_len=output_len, agent_name=agent))
 
     def add_error(self, content: str) -> None:
         self._reset_active_stream()
@@ -170,9 +171,9 @@ class ToolCallMessage(Static):
 class ToolOutputMessage(Static):
     """One-line tool output acknowledgement."""
 
-    def __init__(self, agent_name: str | None = None, output_len: int | None = None, **kwargs: Any) -> None:
+    def __init__(self, output_len: int, agent_name: str | None = None, **kwargs: Any) -> None:
         prefix = f"[dim]{escape(f'[{agent_name}]')}[/dim] " if agent_name else ""
-        suffix = f" [dim]({_('{output_len} chars', output_len=output_len)})[/dim]" if output_len is not None else ""
+        suffix = f" [dim]({_('{output_len} chars', output_len=output_len)})[/dim]"
         super().__init__(
             f"  [#34d399]✓[/#34d399] {prefix}[dim]{_('output received')}[/dim]{suffix}",
             **kwargs,

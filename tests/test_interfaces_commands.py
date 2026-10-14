@@ -381,12 +381,10 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime.settings.model.context_window = 10000
         runtime.effective_context_window = 10000
         runtime.settings.model.name = "llama3.2:3b"
-        switch_context_window = AsyncMock()
 
         handlers = _repl_handlers(
-                console=console,
-                get_runtime=lambda: runtime,
-                switch_context_window=switch_context_window,
+            console=console,
+            runtime=runtime,
         )
 
         # /context without args
@@ -395,13 +393,14 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Current context window", out)
         self.assertIn("10000", out)
 
-        # /context <size>
-        await safe_call(handlers["/context"], ["16384"], console=console)
-        switch_context_window.assert_awaited_with("16384")
+        with patch("ollama_agent.interfaces.commands.dispatch.set_context_window", AsyncMock()) as mock_set_ctx:
+            # /context <size>
+            await safe_call(handlers["/context"], ["16384"], console=console)
+            mock_set_ctx.assert_awaited_with(console, "16384", runtime=runtime)
 
-        # /context max
-        await safe_call(handlers["/context"], ["max"], console=console)
-        switch_context_window.assert_awaited_with("max")
+            # /context max
+            await safe_call(handlers["/context"], ["max"], console=console)
+            mock_set_ctx.assert_awaited_with(console, "max", runtime=runtime)
 
     def test_show_model_params(self) -> None:
         console = Console(file=io.StringIO(), record=True)
@@ -410,7 +409,6 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime.effective_model_params = {
             "temperature": (0.7, "user"),
             "top_p": (0.85, "modelfile"),
-            "top_k": (40, "default"),
         }
 
         show_model_params(console, runtime)
@@ -421,7 +419,16 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         self.assertIn("0.7", out)
         self.assertIn("User Config", out)
         self.assertIn("Modelfile", out)
-        self.assertIn("Ollama Default", out)
+
+    def test_show_model_params_empty(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.settings.model.name = "llama3.2:3b"
+        runtime.effective_model_params = {}
+
+        show_model_params(console, runtime)
+        out = console.export_text()
+        self.assertIn("No active parameter data for model 'llama3.2:3b'.", out)
 
     async def test_set_model_param_success(self) -> None:
         console = Console(file=io.StringIO(), record=True)
@@ -455,20 +462,19 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
         runtime.settings.model.name = "llama3.2:3b"
-        runtime.settings.model.parameters = {"temperature": 0.8}
-        switch_mock = AsyncMock()
+        runtime.effective_model_params = {"temperature": (0.8, "user")}
 
         handlers = _repl_handlers(
-                console=console,
-                current_model=lambda: "llama3.2:3b",
-                switch_model=switch_mock,
-                get_runtime=lambda: runtime,
+            console=console,
+            runtime=runtime,
         )
 
         # /params
         handlers["/params"]([])
         out = console.export_text()
         self.assertIn("Active Model Parameters", out)
+        self.assertIn("temperature", out)
+        self.assertIn("0.8", out)
 
         # /params list (handlers print to the console they were built with,
         # so all following assertions check the accumulated output)
@@ -479,21 +485,20 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         handlers["/params"](["set", "temperature"])
         self.assertIn("Usage: /params set", console.export_text())
 
-        # /model <name> routes to switch_model (single arg is treated as a model name)
-        await safe_call(handlers["/model"], ["some-model"], console=console)
-        switch_mock.assert_called_once_with("some-model")
+        # /model <name> routes to set_model (single arg is treated as a model name)
+        with patch("ollama_agent.interfaces.commands.dispatch.set_model", AsyncMock()) as switch_mock:
+            await safe_call(handlers["/model"], ["some-model"], console=console)
+            switch_mock.assert_awaited_once_with(console, "some-model", runtime=runtime)
 
     async def test_effort_dispatch(self) -> None:
         console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
         runtime.settings.model.reasoning_effort = "medium"
         runtime.settings.model.name = "llama3.2:3b"
-        switch_effort = AsyncMock()
 
         handlers = _repl_handlers(
-                console=console,
-                get_runtime=lambda: runtime,
-                switch_effort=switch_effort,
+            console=console,
+            runtime=runtime,
         )
 
         # /effort without args
@@ -503,8 +508,9 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         self.assertIn("medium", out)
 
         # /effort <level>
-        await safe_call(handlers["/effort"], ["high"], console=console)
-        switch_effort.assert_called_once_with("high")
+        with patch("ollama_agent.interfaces.commands.dispatch.set_effort", AsyncMock()) as switch_effort:
+            await safe_call(handlers["/effort"], ["high"], console=console)
+            switch_effort.assert_awaited_once_with(console, "high", runtime=runtime)
 
     async def test_unified_repl_handlers(self) -> None:
         console = Console(file=io.StringIO(), record=True)
@@ -512,22 +518,16 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         skills_ctx = MagicMock()
         rag_ctx = MagicMock()
         runtime = MagicMock()
-        switch_model = AsyncMock()
-        switch_effort = AsyncMock()
-        switch_context_window = AsyncMock()
+        runtime.settings.model.name = "gemma4:26b"
+        runtime.settings.model.base_url = "http://localhost:11434"
 
         handlers = _repl_handlers(
-                task_ctx=task_ctx,
-                skills_ctx=skills_ctx,
-                get_rag_ctx=lambda: rag_ctx,
-                console=console,
-                current_model=lambda: "gemma4:26b",
-                base_url=lambda: "http://localhost:11434",
-                switch_model=switch_model,
-                handle_yolo=lambda _: None,
-                get_runtime=lambda: runtime,
-                switch_effort=switch_effort,
-                switch_context_window=switch_context_window,
+            runtime=runtime,
+            task_ctx=task_ctx,
+            skills_ctx=skills_ctx,
+            get_rag_ctx=lambda: rag_ctx,
+            console=console,
+            handle_yolo=lambda _: None,
         )
 
         # 1. /model handler
@@ -535,30 +535,33 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             await safe_call(handlers["/model"], ["list"], console=console)
             mock_list_models.assert_awaited_once()
 
-        await safe_call(handlers["/model"], ["set", "llama3:8b"], console=console)
-        switch_model.assert_awaited_with("llama3:8b")
+        with patch("ollama_agent.interfaces.commands.dispatch.set_model", AsyncMock()) as switch_model:
+            await safe_call(handlers["/model"], ["set", "llama3:8b"], console=console)
+            switch_model.assert_awaited_with(console, "llama3:8b", runtime=runtime)
 
         # 1b. /effort handler
         with patch("ollama_agent.interfaces.commands.dispatch.show_effort") as mock_show_effort:
             handlers["/effort"]([])
             mock_show_effort.assert_called_once_with(console, runtime)
 
-        await safe_call(handlers["/effort"], ["set", "high"], console=console)
-        switch_effort.assert_awaited_with("high")
+        with patch("ollama_agent.interfaces.commands.dispatch.set_effort", AsyncMock()) as switch_effort:
+            await safe_call(handlers["/effort"], ["set", "high"], console=console)
+            switch_effort.assert_awaited_with(console, "high", runtime=runtime)
 
-        await safe_call(handlers["/effort"], ["low"], console=console)
-        switch_effort.assert_awaited_with("low")
+            await safe_call(handlers["/effort"], ["low"], console=console)
+            switch_effort.assert_awaited_with(console, "low", runtime=runtime)
 
         # 1c. /context handler
         with patch("ollama_agent.interfaces.commands.dispatch.show_context_window") as mock_show_context:
             handlers["/context"]([])
             mock_show_context.assert_called_once_with(console, runtime)
 
-        await safe_call(handlers["/context"], ["set", "16384"], console=console)
-        switch_context_window.assert_awaited_with("16384")
+        with patch("ollama_agent.interfaces.commands.dispatch.set_context_window", AsyncMock()) as switch_context_window:
+            await safe_call(handlers["/context"], ["set", "16384"], console=console)
+            switch_context_window.assert_awaited_with(console, "16384", runtime=runtime)
 
-        await safe_call(handlers["/context"], ["max"], console=console)
-        switch_context_window.assert_awaited_with("max")
+            await safe_call(handlers["/context"], ["max"], console=console)
+            switch_context_window.assert_awaited_with(console, "max", runtime=runtime)
 
         # 2. /task handler (create/run are intercepted inline by the TUI app)
         with patch("ollama_agent.interfaces.commands.dispatch.list_tasks") as mock_list_tasks:
@@ -742,7 +745,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         mock_m2 = MagicMock(model="llama3:8b", size=1024**3 * 5)
 
         with patch("ollama_agent.interfaces.commands.models._list_models", AsyncMock(return_value=[mock_m1, mock_m2])):
-            res = ensure_model_configured(settings)
+            res = ensure_model_configured(settings, console=Console(file=io.StringIO()))
             self.assertEqual(res, "qwen3:32b")
             self.assertEqual(settings.model.name, "qwen3:32b")
 
@@ -755,7 +758,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             patch("ollama_agent.interfaces.commands.models._list_models", AsyncMock(return_value=[mock_m])),
             patch("ollama_agent.interfaces.commands.models.save_settings") as mock_save,
         ):
-            res = ensure_model_configured(settings)
+            res = ensure_model_configured(settings, console=Console(file=io.StringIO()))
             self.assertEqual(res, "llama3:latest")
             self.assertEqual(settings.model.name, "llama3:latest")
             mock_save.assert_called_once_with(settings)
@@ -846,7 +849,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
 
         with patch("ollama_agent.interfaces.commands.models._list_models", AsyncMock(return_value=[])):
             with self.assertRaises(ModelCapabilityError) as cm:
-                ensure_model_configured(settings)
+                ensure_model_configured(settings, console=Console(file=io.StringIO()))
             self.assertIn("No models found in Ollama", str(cm.exception))
 
     def test_ensure_model_configured_connection_error_raises(self) -> None:
@@ -854,15 +857,15 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
 
         with patch("ollama_agent.interfaces.commands.models._list_models", AsyncMock(side_effect=ConnectionError("Refused"))):
             with self.assertRaises(ModelCapabilityError) as cm:
-                ensure_model_configured(settings)
+                ensure_model_configured(settings, console=Console(file=io.StringIO()))
             self.assertIn("Could not connect to Ollama", str(cm.exception))
 
     def test_repl_subcommands_error_and_edge_cases(self) -> None:
         console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
         handlers = _repl_handlers(
-                console=console,
-                get_runtime=lambda: runtime,
+            console=console,
+            runtime=runtime,
         )
 
         handlers["/mcp"](["unknown_sub"])
@@ -911,8 +914,8 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
         handlers = _repl_handlers(
-                console=console,
-                get_runtime=lambda: runtime,
+            console=console,
+            runtime=runtime,
         )
 
         handlers["/rag"](["create"])
