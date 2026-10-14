@@ -11,11 +11,11 @@ from typing import TYPE_CHECKING, Any
 from langgraph.types import Command
 from rich.console import Console
 
+from .base import StreamingRenderer
 from .console_renderer import ConsoleStreamingRenderer
 
 if TYPE_CHECKING:
     from ..agent import AgentRuntime
-    from .base import StreamingRenderer
 
 
 async def stream_agent_events(

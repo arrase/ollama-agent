@@ -355,20 +355,22 @@ class TestTaskManager(unittest.TestCase):
         with self.assertRaises(UndefinedError):
             task.render()
 
-    def test_task_from_dict_with_task_input_instances(self) -> None:
-        raw = {
-            "title": "Direct TaskInput",
-            "prompt": "{{ text }}",
-            "model": "m",
-            "reasoning_effort": "low",
-            "inputs": {
-                "text": TaskInput(description="Sample", default="demo", type="string"),
-            },
-        }
-        task = Task.from_dict(raw)
-        self.assertIsInstance(task.inputs["text"], TaskInput)
-        self.assertEqual(task.inputs["text"].description, "Sample")
-        self.assertEqual(task.render(), "demo")
+    def test_task_from_dict_rejects_null_or_empty_fields(self) -> None:
+        for field_name in ("title", "prompt", "model"):
+            with self.assertRaises(ValueError):
+                Task.from_dict({"title": "T", "prompt": "P", "model": "M", field_name: None})
+            with self.assertRaises(ValueError):
+                Task.from_dict({"title": "T", "prompt": "P", "model": "M", field_name: "   "})
+        with self.assertRaises(ValueError):
+            Task.from_dict({"title": "T", "prompt": "P", "model": "M", "reasoning_effort": None})
+
+    def test_get_and_find_matches_handle_invalid_yaml(self) -> None:
+        (self.tasks_dir / "bad-yaml.yaml").write_text("title: [unclosed\n", encoding="utf-8")
+        (self.tasks_dir / "bad-good.yaml").write_text("title: Good\nprompt: hi\nmodel: m\n", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            self.mgr.get("bad-yaml")
+        matches = self.mgr.find_matches("bad-")
+        self.assertEqual([m[0] for m in matches], ["bad-good"])
 
     def test_render_complex_template_with_mixed_inputs(self) -> None:
         prompt = (

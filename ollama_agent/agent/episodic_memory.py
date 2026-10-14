@@ -72,26 +72,31 @@ def load_past_user_prompts(db_path: Path = HISTORY_DB_PATH) -> list[str]:
                         if text and text not in seen:
                             seen.add(text)
                             prompts.append(text)
-    except (sqlite3.Error, OSError, ValueError) as e:
+    except (sqlite3.Error, OSError, ValueError, KeyError, TypeError, AttributeError) as e:
         raise HistoryError(_("Failed to read history database {db_path}: {e}", db_path=db_path, e=e)) from e
     return prompts
 
 
-def _read_history_checkpoints(cursor: sqlite3.Cursor, exclude_thread_id: str) -> dict[str, str]:
-    thread_timestamps: dict[str, str] = {}
-    # Only the newest checkpoint per thread survives below, so deserialise just that
-    # one. Every blob embeds the whole channel_values, so reading them all is O(N^2).
-    cursor.execute(
-        "SELECT c.thread_id, c.type, c.checkpoint FROM checkpoints c "
-        "JOIN (SELECT thread_id, MAX(rowid) AS rowid FROM checkpoints GROUP BY thread_id) latest "
-        "ON c.rowid = latest.rowid ORDER BY c.rowid ASC"
-    )
-    for tid, typ, chk in cursor.fetchall():
-        if exclude_thread_id and tid.startswith(exclude_thread_id):
-            continue
-        c = _serializer.loads_typed((typ, chk))
-        thread_timestamps[tid] = str(c["ts"])
-    return thread_timestamps
+def load_session_timestamps(db_path: Path = HISTORY_DB_PATH) -> list[tuple[str, str]]:
+    """Return ``(thread_id, formatted_ts)`` pairs ordered chronologically."""
+    if not db_path.exists():
+        return []
+
+    results: list[tuple[str, str]] = []
+    try:
+        with connect_history(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT thread_id, type, checkpoint FROM checkpoints "
+                "WHERE rowid IN (SELECT MAX(rowid) FROM checkpoints GROUP BY thread_id) "
+                "ORDER BY rowid ASC"
+            )
+            for tid, typ, chk in cursor.fetchall():
+                c = _serializer.loads_typed((typ, chk))
+                results.append((tid, format_iso_timestamp(str(c["ts"]))))
+    except (sqlite3.Error, OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+        raise HistoryError(_("Failed to read history database {db_path}: {e}", db_path=db_path, e=e)) from e
+    return results
 
 
 def _read_history_messages(cursor: sqlite3.Cursor, exclude_thread_id: str) -> defaultdict[str, list[Any]]:
@@ -119,21 +124,26 @@ def load_past_conversations(
     if not db_path.exists():
         return {}
 
+    thread_timestamps = {
+        tid: ts
+        for tid, ts in load_session_timestamps(db_path)
+        if not (exclude_thread_id and tid.startswith(exclude_thread_id))
+    }
+
     try:
         with connect_history(db_path) as conn:
             cursor = conn.cursor()
-            thread_timestamps = _read_history_checkpoints(cursor, exclude_thread_id)
             thread_messages = _read_history_messages(cursor, exclude_thread_id)
-    except (sqlite3.Error, OSError, ValueError) as e:
+    except (sqlite3.Error, OSError, ValueError, KeyError, TypeError, AttributeError) as e:
         raise HistoryError(_("Failed to read history database {db_path}: {e}", db_path=db_path, e=e)) from e
 
     conversations: dict[str, dict[str, Any]] = {}
     for tid, msgs in thread_messages.items():
         if tid in thread_timestamps:
-            raw_ts = thread_timestamps[tid]
+            formatted_ts = thread_timestamps[tid]
             conversations[tid] = {
-                "timestamp": raw_ts,
-                "formatted_date": format_iso_timestamp(raw_ts),
+                "timestamp": formatted_ts,
+                "formatted_date": formatted_ts,
                 "messages": msgs,
             }
 
@@ -164,7 +174,7 @@ def _score_conversation(data: dict[str, Any], terms: list[str]) -> tuple[int, li
     # for date-shaped terms, and as a substring. Scoring every term against
     # "2026-08-20 10:00 UTC" with .count() would score every session for a query like
     # "20" or "utc" and drown out real content matches.
-    formatted_date = str(data["formatted_date"]).lower()
+    formatted_date = data["formatted_date"].lower()
     match_count = sum(1 for t in terms if _DATE_TERM_RE.match(t) and t in formatted_date)
 
     for role, text in dialogue:

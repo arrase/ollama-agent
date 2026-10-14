@@ -7,7 +7,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import jinja2
 from rich.console import Console
 
-from ollama_agent.agent.subagents import build_subagents, list_subagents
+from ollama_agent.agent.builtin_tools import BUILTIN_TOOLS
+from ollama_agent.agent.middleware import stream_tool_events_mw
+from ollama_agent.agent.subagents import build_subagents
+from ollama_agent.interfaces.commands.models import list_subagents
 from ollama_agent.settings.config import (
     ModelSettings,
     Settings,
@@ -132,7 +135,8 @@ class TestSubAgents(unittest.IsolatedAsyncioTestCase):
             specs = await build_subagents(sa_list, model_settings=ms)
             self.assertEqual(len(specs), 1)
             self.assertIn("tools", specs[0])
-            self.assertEqual(specs[0]["tools"], [mock_tool])
+            self.assertEqual(specs[0]["tools"], [*BUILTIN_TOOLS, mock_tool])
+            self.assertEqual(specs[0]["middleware"], [stream_tool_events_mw])
             mock_mcp.assert_awaited_once_with("mcp_agent", sa_list[0].mcp_servers)
 
             self.assertIn("interrupt_on", specs[0])

@@ -5,6 +5,7 @@ import sys
 import warnings
 from typing import Any
 
+import yaml
 from langchain_core._api.deprecation import LangChainPendingDeprecationWarning
 from rich.console import Console
 from rich.markup import escape
@@ -12,7 +13,13 @@ from rich.markup import escape
 from .agent import AgentRuntime
 from .agent.builtin_tools import set_tool_timeout
 from .agent.episodic_memory import HistoryError
-from .core import ModelCapabilityError, ModelContextWindowError, OllamaVersionError, check_ollama_version
+from .core import (
+    ModelCapabilityError,
+    ModelContextWindowError,
+    OllamaVersionError,
+    check_ollama_version,
+    validate_reasoning_effort,
+)
 from .i18n import SUPPORTED_LOCALES, _, set_locale
 from .interfaces.cli import create_argument_parser, handle_subcommand, run_prompt_session
 from .interfaces.commands.models import ensure_model_configured
@@ -49,7 +56,7 @@ def _apply_cli_overrides(settings: Settings, args: Any) -> None:
     if args.model:
         settings.model.name = args.model
     if args.effort:
-        settings.model.reasoning_effort = args.effort
+        settings.model.reasoning_effort = validate_reasoning_effort(args.effort)
     if args.num_ctx is not None:
         settings.model.context_window = args.num_ctx
     if args.builtin_tool_timeout is not None:
@@ -76,10 +83,10 @@ def main() -> None:
                 console.print(msg)
             return
 
-        settings = load_settings()
-        settings.setup_environment()
-
         try:
+            settings = load_settings()
+            settings.setup_environment()
+
             if args.language:
                 settings.runtime.language = args.language
                 set_locale(args.language)
@@ -87,9 +94,10 @@ def main() -> None:
                 set_locale(settings.runtime.language)
 
             _apply_cli_overrides(settings, args)
+            settings.model.reasoning_effort = validate_reasoning_effort(settings.model.reasoning_effort)
             set_tool_timeout(settings.runtime.builtin_tool_timeout)
-        except ValueError as exc:
-            # Invalid locale or reasoning effort coming from settings.yaml / CLI.
+        except (ValueError, yaml.YAMLError) as exc:
+            # Invalid locale, settings.yaml, or reasoning effort coming from settings.yaml / CLI.
             console.print(f"[red]{escape(_('Error: {exc}', exc=exc))}[/red]")
             raise SystemExit(1) from None
 
@@ -98,7 +106,7 @@ def main() -> None:
             return
 
         check_ollama_version(settings.model.base_url)
-        ensure_model_configured(settings)
+        ensure_model_configured(settings, console=console)
 
         if args.prompt:
             run_prompt_session(args, settings)

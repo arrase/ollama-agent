@@ -14,11 +14,11 @@ from ..core import (
     BaseFileStoreManager,
     ReasoningEffortValue,
     atomic_write_text,
+    render_prompt_template,
     validate_identifier,
     validate_reasoning_effort,
 )
 from ..i18n import _
-from ..settings.config import render_prompt_template
 from ..settings.paths import TASKS_DIR
 
 logger = logging.getLogger(__name__)
@@ -78,8 +78,6 @@ class TaskInput:
 
 def _task_input_from_dict(name: str, inp: Any, valid_input_keys: set[str]) -> TaskInput:
     """Build a single TaskInput from its persisted mapping form."""
-    if isinstance(inp, TaskInput):
-        return inp
     if not isinstance(inp, dict):
         raise ValueError(_("Invalid input definition for '{name}'", name=name))
     unknown = set(inp) - valid_input_keys
@@ -118,11 +116,16 @@ class Task:
         missing = [k for k in ("title", "prompt", "model") if k not in d]
         if missing:
             raise ValueError(_("Task is missing required key(s): {keys}", keys=", ".join(missing)))
+        for k in ("title", "prompt", "model"):
+            if not isinstance(d[k], str) or not d[k].strip():
+                raise ValueError(_("{name} cannot be empty.", name=k))
+        if "reasoning_effort" in d and d["reasoning_effort"] is None:
+            raise ValueError(_("{name} cannot be empty.", name="reasoning_effort"))
         return cls(
-            title=str(d["title"]),
-            prompt=str(d["prompt"]),
-            model=str(d["model"]),
-            reasoning_effort=d.get("reasoning_effort", DEFAULT_REASONING_EFFORT),
+            title=d["title"],
+            prompt=d["prompt"],
+            model=d["model"],
+            reasoning_effort=d["reasoning_effort"] if "reasoning_effort" in d else DEFAULT_REASONING_EFFORT,
             inputs=_task_inputs_from_dict(d["inputs"]) if "inputs" in d else {},
         )
 
@@ -152,42 +155,51 @@ class TaskManager(BaseFileStoreManager[Task]):
     """Manages task persistence using YAML files."""
 
     _ext: str = ".yaml"
+    not_found_label: str = "task_id"
 
     def __init__(self, tasks_dir: Path = TASKS_DIR) -> None:
         super().__init__(tasks_dir)
 
-    @staticmethod
-    def validate_task_id(task_id: str) -> str:
-        """Validate task_id: letters, numbers, underscore, dash only."""
-        return validate_identifier(task_id, "task_id")
-
     def save(self, task_id: str, task: Task, *, overwrite: bool = False) -> str:
         """Save a task and return its ID."""
-        task_id = self.validate_task_id(task_id)
         path = self._path(task_id)
         if path.exists() and not overwrite:
-            raise FileExistsError(_("Task already exists: {task_id}", task_id=task_id))
+            raise FileExistsError(_("Task already exists: {task_id}", task_id=path.stem))
         text = yaml.safe_dump(asdict(task), allow_unicode=True)
         atomic_write_text(path, text)
-        return task_id
+        return path.stem
+
+    def _collect_tasks(self, prefix: str = "") -> list[tuple[str, Task]]:
+        """Collect all valid tasks matching *prefix*, skipping corrupt files."""
+        tasks: list[tuple[str, Task]] = []
+        for path in self.base_dir.glob(f"{prefix}*.yaml"):
+            if not path.is_file():
+                continue
+            try:
+                tasks.append((path.stem, self.get(path.stem)))
+            except (ValueError, OSError) as exc:
+                logger.warning("Skipping unreadable task file %s: %s", path.name, exc)
+        return tasks
 
     def find_matches(self, prefix: str) -> list[tuple[str, Task]]:
         """Return all tasks whose id starts with prefix."""
-        prefix = self.validate_task_id(prefix)
-        matches = [(p.stem, self.get(p.stem)) for p in self.base_dir.glob(f"{prefix}*.yaml")]
-        return sorted(matches, key=lambda x: x[0])
+        prefix = validate_identifier(prefix, self.not_found_label)
+        return sorted(self._collect_tasks(prefix), key=lambda x: x[0])
 
     def get(self, item_id: str) -> Task:
         """Retrieve a task by ID. Raise FileNotFoundError if missing."""
-        path = self._path(self.validate_task_id(item_id))
+        path = self._path(item_id)
         if not path.is_file():
             raise FileNotFoundError(str(path))
-        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        try:
+            raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except yaml.YAMLError as exc:
+            raise ValueError(f"Invalid YAML in {path}: {exc}") from exc
         return Task.from_dict(raw)
 
     def delete(self, item_id: str) -> None:
         """Delete a task by ID. Raise FileNotFoundError if missing."""
-        self._path(self.validate_task_id(item_id)).unlink()
+        self._path(item_id).unlink()
 
     def list_all(self) -> list[tuple[str, Task]]:
         """List all tasks sorted by title.
@@ -195,10 +207,4 @@ class TaskManager(BaseFileStoreManager[Task]):
         A single corrupt or hand-edited task file (the agent can write these itself)
         must not make ``/task list`` fail with a non-domain error.
         """
-        tasks: list[tuple[str, Task]] = []
-        for path in self.base_dir.glob("*.yaml"):
-            try:
-                tasks.append((path.stem, self.get(path.stem)))
-            except (ValueError, TypeError, KeyError, OSError) as exc:
-                logger.warning("Skipping unreadable task file %s: %s", path.name, exc)
-        return sorted(tasks, key=lambda x: x[1].title.lower())
+        return sorted(self._collect_tasks(), key=lambda x: x[1].title.lower())

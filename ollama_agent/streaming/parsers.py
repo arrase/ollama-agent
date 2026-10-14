@@ -22,19 +22,11 @@ def streaming_text(content: Any) -> str:
     return ""
 
 
-def streaming_reasoning(content: Any, additional_kwargs: dict[str, Any] | None = None) -> str:
+def streaming_reasoning(additional_kwargs: dict[str, Any] | None = None) -> str:
     """Extract reasoning text from a streaming chunk."""
     if additional_kwargs and isinstance(additional_kwargs.get("reasoning_content"), str):
         return additional_kwargs["reasoning_content"]
-    if not isinstance(content, list):
-        return ""
-    return "".join(
-        entry["text"]
-        for block in content
-        if isinstance(block, dict) and block.get("type") == "reasoning"
-        for entry in block.get("summary", ())
-        if isinstance(entry, dict) and entry.get("type") == "summary_text" and "text" in entry
-    )
+    return ""
 
 
 def _buffer_partial_tag(tag: str, text: str) -> tuple[str, str]:
@@ -90,12 +82,12 @@ class ThinkTagParser:
         emits them together for interleaved-thinking models), so the two must be
         emitted independently instead of returning early on reasoning.
         """
-        if chunk.type == "tool":
+        if chunk.type not in ("ai", "AIMessageChunk"):
             return []
 
         events: list[dict[str, Any]] = []
 
-        reasoning = streaming_reasoning(chunk.content, chunk.additional_kwargs)
+        reasoning = streaming_reasoning(chunk.additional_kwargs)
         if reasoning and not hide_reasoning:
             events.append({"type": "reasoning_delta", "content": reasoning})
 

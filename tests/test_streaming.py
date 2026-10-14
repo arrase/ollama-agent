@@ -201,17 +201,16 @@ class TestInterruptHandling(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(result)
         self.assertIn("Cancelled", console.export_text())
 
-    async def test_keyboard_interrupt_at_prompt_is_treated_as_cancel(self) -> None:
-        """Ctrl-C on the prompt is forwarded to the caller and cancels the approval."""
-        renderer, console = self._make_renderer()
+    async def test_keyboard_interrupt_at_prompt_propagates(self) -> None:
+        """Ctrl-C on the prompt propagates KeyboardInterrupt to the caller."""
+        renderer, _console = self._make_renderer()
         fake_stdin = SimpleNamespace(isatty=lambda: True)
         with (
             patch("ollama_agent.streaming.console_renderer.sys.stdin", new=fake_stdin),
             patch("builtins.input", side_effect=KeyboardInterrupt),
+            self.assertRaises(KeyboardInterrupt),
         ):
-            result = await renderer.handle_interrupt(self._interrupt_event(), MagicMock())
-        self.assertIsNone(result)
-        self.assertIn("Cancelled", console.export_text())
+            await renderer.handle_interrupt(self._interrupt_event(), MagicMock())
 
     async def test_stream_agent_events_propagates_keyboard_interrupt(self) -> None:
         mock_runtime = MagicMock()
@@ -278,13 +277,24 @@ class TestExtractActionRequests(unittest.TestCase):
         }
         self.assertEqual(extract_action_requests(event), requests)
 
+    def test_multiple_interrupts_concatenates_requests(self) -> None:
+        req1 = {"name": "execute", "args": {"command": "ls"}}
+        req2 = {"name": "write_file", "args": {"file_path": "/test"}}
+        event = {
+            "type": "interrupt",
+            "interrupts": [
+                SimpleNamespace(value={"action_requests": [req1]}),
+                SimpleNamespace(value={"action_requests": [req2]}),
+            ],
+        }
+        self.assertEqual(extract_action_requests(event), [req1, req2])
+
     def test_missing_interrupts_raises(self) -> None:
         with self.assertRaises(KeyError):
             extract_action_requests({"type": "interrupt"})
 
-    def test_empty_interrupts_raises(self) -> None:
-        with self.assertRaises(IndexError):
-            extract_action_requests({"type": "interrupt", "interrupts": []})
+    def test_empty_interrupts_returns_empty_list(self) -> None:
+        self.assertEqual(extract_action_requests({"type": "interrupt", "interrupts": []}), [])
 
     def test_missing_value_attribute_raises(self) -> None:
         event = {"type": "interrupt", "interrupts": [SimpleNamespace()]}

@@ -15,10 +15,9 @@ from ...rag import RAGContext, RAGManager, load_rag_database
 from ...skills import SkillsContext
 from ...tasks import TasksContext
 from ..commands.dispatch import REPLEnvironment, REPLHandler, build_repl_handlers
-from ..commands.models import set_model
-from ..commands.params import set_context_window, set_effort
 from ..commands.sessions import new_session
 from .app import OllamaAgentApp
+from .widgets.system import format_queue_line
 
 
 class OllamaREPL:
@@ -49,20 +48,14 @@ class OllamaREPL:
         """Lazily build and cache REPL command handlers."""
         if self._commands is None:
             env = REPLEnvironment(
+                runtime=self.runtime,
                 task_ctx=self._task_ctx,
                 skills_ctx=self._skills_ctx,
                 get_rag_ctx=self._get_rag_ctx,
                 console=self.console,
-                current_model=lambda: self.runtime.settings.model.name,
-                base_url=lambda: self.runtime.settings.model.base_url,
-                switch_model=self._switch_model,
                 handle_yolo=self._handle_yolo_cmd,
                 handle_stealth=self._handle_stealth_cmd,
                 handle_queue=self._handle_queue_cmd,
-                get_runtime=lambda: self.runtime,
-                current_thread_id=lambda: self.runtime.thread_id,
-                switch_effort=self._switch_effort,
-                switch_context_window=self._switch_context_window,
             )
             self._commands = build_repl_handlers(env)
         return self._commands
@@ -88,49 +81,36 @@ class OllamaREPL:
         finally:
             await self.cleanup()
 
-    async def _switch_model(self, model_name: str) -> None:
-        await set_model(self.console, model_name, runtime=self.runtime)
-
-    async def _switch_effort(self, effort: str) -> None:
-        await set_effort(self.console, effort, runtime=self.runtime)
-
-    async def _switch_context_window(self, context_window: str) -> None:
-        await set_context_window(self.console, context_window, runtime=self.runtime)
-
     def _handle_new_session(self) -> None:
-        self.runtime.thread_id = new_session(self.console)
+        with self.console.capture():
+            self.runtime.thread_id = new_session(self.console)
         self.runtime.last_context_tokens = 0
 
-    def _handle_yolo_cmd(self, args: list[str]) -> None:
-        if args:
-            val = args[0].lower()
-            if val in ("on", "true", "yes", "1"):
-                self.runtime.yolo_mode = True
-            elif val in ("off", "false", "no", "0"):
-                self.runtime.yolo_mode = False
-            else:
-                self.console.print(f"[red]{escape(_('Usage: /yolo [on|off]'))}[/red]")
-                return
-        else:
-            self.runtime.yolo_mode = not self.runtime.yolo_mode
+    def _parse_toggle_arg(self, args: list[str], current: bool, usage: str) -> bool | None:
+        if not args:
+            return not current
+        val = args[0].lower()
+        if val in ("on", "true", "yes", "1"):
+            return True
+        if val in ("off", "false", "no", "0"):
+            return False
+        self.console.print(f"[red]{escape(usage)}[/red]")
+        return None
 
+    def _handle_yolo_cmd(self, args: list[str]) -> None:
+        new_val = self._parse_toggle_arg(args, self.runtime.yolo_mode, _("Usage: /yolo [on|off]"))
+        if new_val is None:
+            return
+        self.runtime.yolo_mode = new_val
         status = _("on") if self.runtime.yolo_mode else _("off")
         color = "red" if self.runtime.yolo_mode else "green"
         self.console.print(f"[bold {color}]{_('YOLO mode is now {status}', status=status)}[/bold {color}]")
 
     async def _handle_stealth_cmd(self, args: list[str]) -> None:
-        if args:
-            val = args[0].lower()
-            if val in ("on", "true", "yes", "1"):
-                self.runtime.stealth_mode = True
-            elif val in ("off", "false", "no", "0"):
-                self.runtime.stealth_mode = False
-            else:
-                self.console.print(f"[red]{escape(_('Usage: /stealth [on|off]'))}[/red]")
-                return
-        else:
-            self.runtime.stealth_mode = not self.runtime.stealth_mode
-
+        new_val = self._parse_toggle_arg(args, self.runtime.stealth_mode, _("Usage: /stealth [on|off]"))
+        if new_val is None:
+            return
+        self.runtime.stealth_mode = new_val
         await self.runtime.reload()
 
         status = _("on") if self.runtime.stealth_mode else _("off")
@@ -151,7 +131,7 @@ class OllamaREPL:
         raw_pos = pos_str.lstrip("#")
         if not raw_pos.isdigit():
             msg = _("Invalid queue position '{pos}'. Usage: /queue rm <position>", pos=raw_pos)
-            self.console.print(f"[red]{msg}[/red]")
+            self.console.print(f"[red]{escape(msg)}[/red]")
             return
         pos = int(raw_pos)
         if pos < 1 or pos > len(queue):
@@ -160,7 +140,7 @@ class OllamaREPL:
                 pos=pos,
                 count=len(queue),
             )
-            self.console.print(f"[red]{err}[/red]")
+            self.console.print(f"[red]{escape(err)}[/red]")
             return
         item = queue[pos - 1]
         del queue[pos - 1]
@@ -177,7 +157,7 @@ class OllamaREPL:
                 return
             self.console.print(f"[bold #38bdf8]{_('Queued prompts ({count}):', count=len(queue))}[/bold #38bdf8]")
             for i, item in enumerate(queue, 1):
-                self.console.print(f"  [dim]#{i}[/dim] {escape(shorten(item))}")
+                self.console.print(format_queue_line(i, item))
             return
         if args[0] == "clear":
             count = len(queue)

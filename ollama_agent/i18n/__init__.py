@@ -92,7 +92,7 @@ def get_text(message: str, **kwargs: Any) -> str:
         return text
     try:
         return text.format(**kwargs)
-    except (KeyError, IndexError):
+    except (KeyError, IndexError, ValueError):
         # A literal brace in a (possibly translated) message must not crash the caller.
         return text
 

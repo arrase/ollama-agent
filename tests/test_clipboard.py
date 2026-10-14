@@ -11,8 +11,10 @@ from ollama_agent.interfaces.clipboard import (
     copy_to_system_clipboard,
     get_system_clipboard,
 )
-from ollama_agent.interfaces.tui import OllamaAgentApp, OllamaREPL
+from ollama_agent.interfaces.tui import OllamaAgentApp
 from ollama_agent.interfaces.tui.widgets import UserMessage
+
+from conftest import make_mock_repl
 
 
 def _proc(returncode: int = 0, stdout: str = "", stderr: str = "") -> MagicMock:
@@ -310,12 +312,7 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
     """Integration tests for OllamaAgentApp selection and clipboard features."""
 
     async def test_app_copy_to_clipboard_invokes_system_copy(self) -> None:
-        repl_mock = MagicMock(spec=OllamaREPL)
-        repl_mock.runtime = MagicMock()
-        repl_mock.runtime.yolo_mode = False
-        repl_mock._rag_ctx = None
-        repl_mock.runtime.settings.model.name = "gemma4:26b"
-        repl_mock.runtime.settings.model.reasoning_effort = "medium"
+        repl_mock = make_mock_repl()
 
         app = OllamaAgentApp(repl_mock)
         with patch("ollama_agent.interfaces.tui.app.copy_to_system_clipboard") as mock_sys_copy:
@@ -325,12 +322,7 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(app._clipboard, "test copy content")
 
     async def test_text_selected_auto_copies(self) -> None:
-        repl_mock = MagicMock(spec=OllamaREPL)
-        repl_mock.runtime = MagicMock()
-        repl_mock.runtime.yolo_mode = False
-        repl_mock._rag_ctx = None
-        repl_mock.runtime.settings.model.name = "gemma4:26b"
-        repl_mock.runtime.settings.model.reasoning_effort = "medium"
+        repl_mock = make_mock_repl()
 
         app = OllamaAgentApp(repl_mock)
         with patch("ollama_agent.interfaces.tui.app.copy_to_system_clipboard") as mock_sys_copy:
@@ -347,12 +339,7 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("Selectable text here", copied_arg)
 
     async def test_action_copy_selection(self) -> None:
-        repl_mock = MagicMock(spec=OllamaREPL)
-        repl_mock.runtime = MagicMock()
-        repl_mock.runtime.yolo_mode = False
-        repl_mock._rag_ctx = None
-        repl_mock.runtime.settings.model.name = "gemma4:26b"
-        repl_mock.runtime.settings.model.reasoning_effort = "medium"
+        repl_mock = make_mock_repl()
 
         app = OllamaAgentApp(repl_mock)
         with patch("ollama_agent.interfaces.tui.app.copy_to_system_clipboard") as mock_sys_copy:
@@ -369,12 +356,7 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("Copy action message", copied_arg)
 
     async def test_app_copy_failure_notifies_user(self) -> None:
-        repl_mock = MagicMock(spec=OllamaREPL)
-        repl_mock.runtime = MagicMock()
-        repl_mock.runtime.yolo_mode = False
-        repl_mock._rag_ctx = None
-        repl_mock.runtime.settings.model.name = "gemma4:26b"
-        repl_mock.runtime.settings.model.reasoning_effort = "medium"
+        repl_mock = make_mock_repl()
 
         app = OllamaAgentApp(repl_mock)
         with (
@@ -388,12 +370,7 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("no xclip", mock_notify.call_args[0][0])
 
     async def test_screen_forward_event_handles_detached_widget_gracefully(self) -> None:
-        repl_mock = MagicMock(spec=OllamaREPL)
-        repl_mock.runtime = MagicMock()
-        repl_mock.runtime.yolo_mode = False
-        repl_mock._rag_ctx = None
-        repl_mock.runtime.settings.model.name = "gemma4:26b"
-        repl_mock.runtime.settings.model.reasoning_effort = "medium"
+        repl_mock = make_mock_repl()
 
         app = OllamaAgentApp(repl_mock)
         async with app.run_test():
@@ -409,12 +386,7 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
                 self.assertIsNone(app.screen._select_state)
 
     async def test_screen_forward_event_reraises_other_attribute_error(self) -> None:
-        repl_mock = MagicMock(spec=OllamaREPL)
-        repl_mock.runtime = MagicMock()
-        repl_mock.runtime.yolo_mode = False
-        repl_mock._rag_ctx = None
-        repl_mock.runtime.settings.model.name = "gemma4:26b"
-        repl_mock.runtime.settings.model.reasoning_effort = "medium"
+        repl_mock = make_mock_repl()
 
         app = OllamaAgentApp(repl_mock)
         async with app.run_test():

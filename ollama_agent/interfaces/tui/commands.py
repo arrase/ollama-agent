@@ -6,7 +6,6 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
-from jinja2.exceptions import TemplateError
 from rich.markup import escape
 from rich.text import Text
 
@@ -17,6 +16,7 @@ from ...tasks import (
     TaskError,
     apply_task_settings,
     parse_var_assignments,
+    prepare_task_run,
 )
 from ..commands.dispatch import safe_call
 from ..commands.sessions import (
@@ -81,9 +81,6 @@ IMMEDIATE_COMMANDS: frozenset[tuple[str, str]] = frozenset(
         (CMD_RAG, "status"),
         (CMD_RAG, "list"),
         (CMD_RAG, "create"),
-        (CMD_RAG, "delete"),
-        (CMD_RAG, "load"),
-        (CMD_RAG, "unload"),
         (CMD_MCP, ""),
         (CMD_MCP, "list"),
         (CMD_MCP, "status"),
@@ -108,9 +105,10 @@ async def _resume_slash_session(app: OllamaAgentApp, args: list[str], scroll: An
         app.show_system_notice(f"[bold #f87171]✕ {usage_msg}[/bold #f87171]")
         return
     try:
-        resolved = resume_session(app.repl.console, args[1])
+        with app.repl.console.capture() as capture:
+            resolved = resume_session(app.repl.console, args[1])
     except HistoryError as exc:
-        app.show_system_notice(f"[red]{exc}[/red]")
+        app.show_system_notice(f"[red]{escape(str(exc))}[/red]")
         return
     if resolved:
         app.repl.runtime.thread_id = resolved
@@ -126,39 +124,48 @@ async def _resume_slash_session(app: OllamaAgentApp, args: list[str], scroll: An
                 scroll.mount(UserMessage(content))
             elif role in ("ai", "assistant"):
                 scroll.mount(AgentResponse(initial_text=content))
-        resumed_label = f"{resolved[:8]} ({resolved})"
+        resumed_label = escape(f"{resolved[:8]} ({resolved})")
         notice = _("Resumed session: {session_id}", session_id=resumed_label)
         app.show_system_notice(f"[bold #38bdf8]✓ {notice}[/bold #38bdf8]")
         app.query_one(AgentHeader).update_header()
         app._deferred_scroll()
     else:
-        not_found = _("Session not found: {session_id}", session_id=args[1])
-        app.show_system_notice(f"[bold #f87171]✕ {not_found}[/bold #f87171]")
+        err_output = capture.get().strip()
+        if err_output:
+            app.show_system_notice(Text.from_ansi(err_output))
+        else:
+            not_found = _("Session not found: {session_id}", session_id=escape(args[1]))
+            app.show_system_notice(f"[bold #f87171]✕ {not_found}[/bold #f87171]")
 
 
 async def _export_slash_session(app: OllamaAgentApp, args: list[str]) -> None:
     try:
-        out_file = await export_session(
-            app.repl.console,
-            app.repl.runtime,
-            app.repl.runtime.thread_id,
-            output_path=args[1] if len(args) > 1 else None,
-        )
+        with app.repl.console.capture() as capture:
+            out_file = await export_session(
+                app.repl.console,
+                app.repl.runtime,
+                app.repl.runtime.thread_id,
+                output_path=args[1] if len(args) > 1 else None,
+            )
     except HistoryError as exc:
-        app.show_system_notice(f"[red]{exc}[/red]")
+        app.show_system_notice(f"[red]{escape(str(exc))}[/red]")
         return
     if out_file:
-        export_msg = _("Session exported to: {path}", path=out_file)
+        export_msg = _("Session exported to: {path}", path=escape(str(out_file)))
         app.show_system_notice(f"[bold #38bdf8]✓ {export_msg}[/bold #38bdf8]")
     else:
-        app.show_system_notice(f"[bold #f87171]✕ {_('Failed to export session.')}[/bold #f87171]")
+        err_output = capture.get().strip()
+        if err_output:
+            app.show_system_notice(Text.from_ansi(err_output))
+        else:
+            app.show_system_notice(f"[bold #f87171]✕ {_('Failed to export session.')}[/bold #f87171]")
 
 
 async def _handle_slash_session(app: OllamaAgentApp, cmd: str, args: list[str], scroll: Any) -> bool:
     if cmd in (CMD_CLEAR, CMD_NEW) or (cmd == CMD_SESSION and args and args[0] == "new"):
         app.repl._handle_new_session()
         await scroll.remove_children()
-        notice = _("New session started: {session_id}", session_id=app.repl.runtime.thread_id[:8])
+        notice = _("New session started: {session_id}", session_id=escape(app.repl.runtime.thread_id[:8]))
         app.show_system_notice(f"[bold #38bdf8]✓ {notice}[/bold #38bdf8]")
         app.query_one(AgentHeader).update_header()
         return True
@@ -213,11 +220,10 @@ async def _handle_slash_task(app: OllamaAgentApp, cmd_line: str, args: list[str]
         target_id = positional[0]
         var_args = positional[1:]
         try:
-            t = app.repl._task_ctx.resolve_task(target_id)[1]
             variables = parse_var_assignments(var_args)
-            rendered_prompt = t.render(variables)
-        except (TaskError, ValueError, TemplateError) as exc:
-            app.show_system_notice(f"[red]{exc}[/red]")
+            _tid, t, rendered_prompt = prepare_task_run(app.repl._task_ctx, target_id, variables)
+        except TaskError as exc:
+            app.show_system_notice(f"[red]{escape(str(exc))}[/red]")
             return True
 
         scroll.mount(UserMessage(cmd_line))
@@ -229,18 +235,27 @@ async def _handle_slash_task(app: OllamaAgentApp, cmd_line: str, args: list[str]
         prev_model = settings.model.name
         prev_effort = settings.model.reasoning_effort
         prev_yolo = app.repl.runtime.yolo_mode
-        try:
-            apply_task_settings(settings, t)
-            if "-y" in sub_args or "--yolo" in sub_args:
-                app.repl.runtime.yolo_mode = True
-            await app.repl.runtime.reload()
-            await app._run_stream(rendered_prompt, scroll, agent_msg)
-        finally:
+
+        async def _restore_task_settings() -> None:
             settings.model.name = prev_model
             settings.model.reasoning_effort = prev_effort
             app.repl.runtime.yolo_mode = prev_yolo
             await app.repl.runtime.reload()
             app.update_mode_ui()
+
+        app._post_stream_cleanup = _restore_task_settings
+        try:
+            apply_task_settings(settings, t)
+            if "-y" in sub_args or "--yolo" in sub_args:
+                app.repl.runtime.yolo_mode = True
+            await app.repl.runtime.reload()
+            app.update_mode_ui()
+            await app._run_stream(rendered_prompt, scroll, agent_msg)
+        finally:
+            if not app._is_approval_pending and app._post_stream_cleanup is not None:
+                cleanup = app._post_stream_cleanup
+                app._post_stream_cleanup = None
+                await cleanup()
         return True
 
     return False
@@ -281,6 +296,10 @@ async def run_slash_command(app: OllamaAgentApp, cmd_line: str) -> None:
     Never propagates: a slash command that fails must surface the error in the UI,
     not terminate the app via Textual's default ``exit_on_error`` worker behaviour.
     """
+    is_immediate = _is_immediate_command(cmd_line)
+    if not is_immediate:
+        app._is_generating = True
+        app.query_one(AgentFooter).set_generating(True)
     try:
         parts = cmd_line.split()
         cmd = parts[0].lower()
@@ -334,8 +353,9 @@ async def run_slash_command(app: OllamaAgentApp, cmd_line: str) -> None:
         notice = escape(_("Command failed: {exc}", exc=exc))
         app.show_system_notice(f"[bold #f87171]✕ {notice}[/bold #f87171]")
     finally:
-        # Releases the generation slot claimed by OllamaAgentApp._start_slash so the
-        # next queued prompt can be dispatched.
-        app._is_generating = False
-        app.query_one(AgentFooter).set_generating(False)
-        app._process_next_in_queue()
+        # Only non-immediate commands claim the generation slot via _start_slash.
+        if not is_immediate:
+            app._is_generating = False
+            app.query_one(AgentFooter).set_generating(False)
+            if not app._is_approval_pending:
+                app._process_next_in_queue()

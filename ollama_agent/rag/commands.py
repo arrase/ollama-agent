@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from rich.console import Console
 from rich.table import Table
 
-from ..core import require_text
+from ..core import require_text, resolve_unique_match
 from ..i18n import _
 from .manager import RAGError, RAGManager
 
@@ -31,21 +31,13 @@ class RAGContext:
         """Find a database by name/prefix or raise RAGError."""
         target = require_text(name, _("Database name"), RAGDatabaseNotFoundError)
         names = self.rag_manager.list_database_names()
-        if target in names:
-            return target
-        exact_ci = [c for c in names if c.lower() == target.lower()]
-        if len(exact_ci) == 1:
-            return exact_ci[0]
-        matches = [c for c in names if c.startswith(target)] or [
-            c for c in names if c.lower().startswith(target.lower())
-        ]
-        if len(matches) == 1:
-            return matches[0]
-        if not matches:
-            raise RAGDatabaseNotFoundError(_("{label} not found: {prefix}", label=_("Database"), prefix=target))
-        raise AmbiguousRAGDatabaseError(
-            _("Ambiguous prefix: {name} -> {matches}", name=target, matches=", ".join(matches))
-        )
+        return resolve_unique_match(
+            [(n, n) for n in names if n.startswith(target)],
+            target,
+            label=_("Database"),
+            not_found_error=RAGDatabaseNotFoundError,
+            ambiguous_error=AmbiguousRAGDatabaseError,
+        )[0]
 
 
 def list_rag_databases(ctx: RAGContext) -> None:

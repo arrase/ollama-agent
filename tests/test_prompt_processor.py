@@ -71,7 +71,6 @@ class TestPromptProcessor(unittest.TestCase):
         self.assertIn(file, context.text_contents)
         self.assertEqual(context.text_contents[file], "# Title\nNotes here")
         self.assertEqual(context.attachments, [])
-        self.assertEqual(context.classifications, {})
         self.assertEqual(context.warnings, [])
 
     def test_resolve_context_files_multimodal_file_exposes_classification(self) -> None:
@@ -79,8 +78,8 @@ class TestPromptProcessor(unittest.TestCase):
         image.write_bytes(b"\x89PNG\r\n\x1a\n")
 
         context = resolve_context_files(image)
-        self.assertEqual(context.classifications, {image: "image"})
         self.assertEqual(len(context.attachments), 1)
+        self.assertEqual(context.attachments[0]["type"], "image")
 
     def test_resolve_context_files_neither_file_nor_dir_raises(self) -> None:
         with self.assertRaises(PromptProcessingError):
@@ -371,6 +370,51 @@ class TestPromptProcessor(unittest.TestCase):
             self.assertIn(ok_file, context.text_contents)
             self.assertNotIn(bad_file, context.text_contents)
             self.assertTrue(any("Simulated I/O error" in w for w in context.warnings))
+
+    def test_process_prompt_mentions_skips_symlink_outside_base_dir_inside_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as outside_dir:
+            outside_file = Path(outside_dir) / "outside_secret.txt"
+            outside_file.write_text("secret data", encoding="utf-8")
+
+            sub = self.base_path / "subdir"
+            sub.mkdir()
+            (sub / "local.txt").write_text("local data", encoding="utf-8")
+            (sub / "escape_link.txt").symlink_to(outside_file)
+
+            processed, attachments, warnings = process_prompt_mentions(
+                f"Check @{sub}",
+                allow_traversal=False,
+                base_dir=self.base_path,
+            )
+            self.assertIn("local data", processed)
+            self.assertNotIn("secret data", processed)
+            self.assertEqual(attachments, [])
+            self.assertEqual(len(warnings), 1)
+            self.assertIn("Access to path outside working directory is not allowed", warnings[0])
+
+    def test_process_prompt_mentions_deduplicates_file_and_directory_mentions(self) -> None:
+        folder = self.base_path / "dup_folder"
+        folder.mkdir()
+        img = folder / "pic.png"
+        img.write_bytes(b"\x89PNG\r\n\x1a\n")
+
+        processed, attachments, warnings = process_prompt_mentions(
+            f"Check @{img} and @{folder}",
+            max_total_size=img.stat().st_size,
+            base_dir=self.base_path,
+        )
+        self.assertIn(f"[image: {img}]", processed)
+        self.assertEqual(len(attachments), 1)
+        self.assertEqual(warnings, [])
+
+        processed2, attachments2, warnings2 = process_prompt_mentions(
+            f"Check @{folder} and @{img}",
+            max_total_size=img.stat().st_size,
+            base_dir=self.base_path,
+        )
+        self.assertIn(f"[image: {img}]", processed2)
+        self.assertEqual(len(attachments2), 1)
+        self.assertEqual(warnings2, [])
 
 
 if __name__ == "__main__":

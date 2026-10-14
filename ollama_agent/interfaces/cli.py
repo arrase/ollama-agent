@@ -8,12 +8,13 @@ import inspect
 from collections.abc import Coroutine
 from typing import Any, cast
 
+from rich.console import Console
 from rich.markup import escape
 
 from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager
 from ..agent.episodic_memory import HistoryError
-from ..core import DEFAULT_REASONING_EFFORT
+from ..core import DEFAULT_REASONING_EFFORT, ModelContextWindowError, parse_context_window_input
 from ..i18n import SUPPORTED_LOCALES, _
 from ..mcp import MCPConfigError
 from ..rag import RAGContext, RAGError, RAGManager, load_rag_database
@@ -37,11 +38,10 @@ def _positive_seconds(value: str) -> int:
 
 def _context_window(value: str) -> int | str:
     """argparse type for a token count or the literal ``max``."""
-    if value.strip().lower() == "max":
-        return "max"
-    if not value.isdigit() or int(value) <= 0:
-        raise argparse.ArgumentTypeError(_("Context window must be a positive integer or 'max'."))
-    return int(value)
+    try:
+        return parse_context_window_input(value)
+    except (ModelContextWindowError, ValueError) as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
 def _add_common_args(parser: argparse.ArgumentParser) -> None:
@@ -298,20 +298,24 @@ def create_argument_parser() -> argparse.ArgumentParser:
 
 def handle_subcommand(args: argparse.Namespace, settings: Settings) -> None:
     """Execute a CLI subcommand."""
-    ctx = TasksContext(settings=settings)
-    skills_ctx = SkillsContext(skill_manager=SkillManager())
+    console = Console()
+    ctx = TasksContext(console=console, settings=settings)
+    skills_ctx = SkillsContext(console=console, skill_manager=SkillManager())
+    rag_ctx = RAGContext(console=console, rag_manager=RAGManager(settings.rag)) if args.command == "rag" else None
 
     handler_key = (args.command, args.subcommand)
     handlers = build_cli_handlers(
         args,
         task_ctx=ctx,
-        rag_ctx=RAGContext(rag_manager=RAGManager(settings.rag)),
+        rag_ctx=rag_ctx,
         skills_ctx=skills_ctx,
         settings=settings,
     )
     handler = handlers.get(handler_key)
     if handler is None:
-        ctx.console.print(
+        if rag_ctx is not None:
+            asyncio.run(rag_ctx.rag_manager.aclose())
+        console.print(
             f"[red]{escape(_('Unknown command: {command} {subcommand}', command=args.command, subcommand=args.subcommand))}[/red]"
         )
         raise SystemExit(2)
@@ -322,8 +326,11 @@ def handle_subcommand(args: argparse.Namespace, settings: Settings) -> None:
             # The handler is an async function, so the awaitable is always a coroutine.
             result = asyncio.run(cast("Coroutine[Any, Any, Any]", result))
     except (SkillError, TaskError, RAGError, HistoryError, MCPConfigError) as exc:
-        ctx.console.print(f"[red]{escape(str(exc))}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise SystemExit(1) from exc
+    finally:
+        if rag_ctx is not None:
+            asyncio.run(rag_ctx.rag_manager.aclose())
 
     # Handlers that report a failure return a falsy value instead of raising, so the
     # exit status must reflect it (otherwise `session delete bogus` exits 0).
@@ -342,18 +349,24 @@ def run_prompt_session(args: argparse.Namespace, settings: Settings) -> None:
 
     async def _run() -> None:
         nonlocal completed
-        async with runtime:
-            if args.rag:
-                rag_manager = RAGManager(settings.rag)
-                rag_ctx = RAGContext(rag_manager=rag_manager)
-                set_rag_manager(rag_manager)
-                try:
-                    load_rag_database(rag_ctx, args.rag)
-                except RAGError as exc:
-                    rag_ctx.console.print(f"[red]{exc}[/red]")
-                    raise SystemExit(1) from exc
-            await runtime.reload()
-            completed = await run_non_interactive(runtime, args.prompt)
+        rag_manager: RAGManager | None = None
+        try:
+            async with runtime:
+                if args.rag:
+                    rag_manager = RAGManager(settings.rag)
+                    rag_ctx = RAGContext(rag_manager=rag_manager)
+                    set_rag_manager(rag_manager)
+                    try:
+                        load_rag_database(rag_ctx, args.rag)
+                    except RAGError as exc:
+                        rag_ctx.console.print(f"[red]{escape(str(exc))}[/red]")
+                        raise SystemExit(1) from exc
+                await runtime.reload()
+                completed = await run_non_interactive(runtime, args.prompt)
+        finally:
+            if rag_manager is not None:
+                set_rag_manager(None)
+                await rag_manager.aclose()
 
     try:
         asyncio.run(_run())

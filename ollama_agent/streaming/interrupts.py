@@ -2,26 +2,28 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
-
+from typing import TYPE_CHECKING, Any, Mapping
 
 from ..i18n import _
+
+if TYPE_CHECKING:
+    from ..agent import AgentRuntime
 
 
 def extract_action_requests(interrupt_event: Mapping[str, Any]) -> list[dict[str, Any]]:
     """Extract action requests from a streaming interrupt event."""
-    return interrupt_event["interrupts"][0].value["action_requests"]
+    return [req for intr in interrupt_event["interrupts"] for req in intr.value["action_requests"]]
 
 
 def build_approval_decisions(
     action_requests: list[dict[str, Any]],
     action: str,  # "approve", "reject", or "allow"
     *,
-    runtime: Any = None,
+    runtime: AgentRuntime | None = None,
     reject_message: str | None = None,
 ) -> list[dict[str, Any]]:
     """Consolidate LangGraph approval/rejection payload construction used across CLI and TUI."""
-    if action == "allow" and runtime:
+    if action == "allow" and runtime is not None:
         for req in action_requests:
             runtime.auto_approved_tools.add(req["name"])
 

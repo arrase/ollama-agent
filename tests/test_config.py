@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import jinja2
 
+from ollama_agent.core import render_prompt_template
 from ollama_agent.settings.config import (
     LangSmithSettings,
     ModelSettings,
@@ -16,11 +17,9 @@ from ollama_agent.settings.config import (
     SubAgentMCPServer,
     SubAgentSettings,
     _dataclass_from_dict,
-    _subagents_from_list,
     ensure_memory_file,
     load_instructions,
     load_settings,
-    render_prompt_template,
     reset_config,
     save_settings,
 )
@@ -314,7 +313,7 @@ class TestConfigManagement(unittest.TestCase):
                 "mcp_servers": [{"name": "fetch", "command": "uvx", "args": ["mcp-server-fetch"]}],
             },
         ]
-        subagents = _subagents_from_list(raw)
+        subagents = Settings.from_dict({"subagents": raw}).subagents
         self.assertEqual(len(subagents), 2)
         self.assertEqual(subagents[0].name, "explorer")
         self.assertEqual(subagents[0].mcp_servers, [])
@@ -324,13 +323,13 @@ class TestConfigManagement(unittest.TestCase):
 
     def test_subagents_from_list_validation(self) -> None:
         with self.assertRaises(ValueError):
-            _subagents_from_list(None)
+            Settings.from_dict({"subagents": None})
         with self.assertRaises(ValueError):
-            _subagents_from_list("not-a-list")
+            Settings.from_dict({"subagents": "not-a-list"})
         with self.assertRaises(ValueError):
-            _subagents_from_list(["not-a-dict"])
+            Settings.from_dict({"subagents": ["not-a-dict"]})
         with self.assertRaises(ValueError):
-            _subagents_from_list([{"name": "coder", "mcp_servers": "invalid"}])
+            Settings.from_dict({"subagents": [{"name": "coder", "mcp_servers": "invalid"}]})
 
     def test_load_settings_empty_file_raises_value_error(self) -> None:
         self.settings_file.write_text("", encoding="utf-8")

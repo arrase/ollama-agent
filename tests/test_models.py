@@ -61,7 +61,10 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(validate_reasoning_effort("default"), "default")
         self.assertEqual(validate_reasoning_effort(True), "true")
         self.assertEqual(validate_reasoning_effort(False), "false")
-        self.assertEqual(validate_reasoning_effort(123), "123")
+        with self.assertRaises(ValueError):
+            validate_reasoning_effort(None)
+        with self.assertRaises(ValueError):
+            validate_reasoning_effort(123)
         with self.assertRaises(ValueError):
             validate_reasoning_effort("")
         with self.assertRaises(ValueError):
@@ -88,13 +91,13 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(caps, {"tools"})
 
     def test_get_model_info(self) -> None:
-        response = MagicMock(model_info={"llama.context_length": 4096}, modelinfo=None)
+        response = ExtendedShowResponse.model_validate({"model_info": {"llama.context_length": 4096}})
         self.assertEqual(_get_model_info(response), {"llama.context_length": 4096})
 
-        response_sdk = MagicMock(model_info=None, modelinfo={"gemma.context_length": 8192})
+        response_sdk = ExtendedShowResponse(model_info={"gemma.context_length": 8192})
         self.assertEqual(_get_model_info(response_sdk), {"gemma.context_length": 8192})
 
-        self.assertIsNone(_get_model_info(MagicMock(model_info="nope", modelinfo=None)))
+        self.assertIsNone(_get_model_info(MagicMock(modelinfo=None)))
 
     @patch("ollama_agent.core.models.get_model_capabilities")
     async def test_model_supports_tools(self, mock_caps: AsyncMock) -> None:
@@ -106,12 +109,12 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
 
     def test_get_model_thinking_config(self) -> None:
         cfg = {"values": ["low", "high"], "default": "high"}
-        self.assertEqual(get_model_thinking_config({"thinking": cfg}), cfg)
+        self.assertEqual(get_model_thinking_config(ExtendedShowResponse(model_info={}, thinking=cfg)), cfg)
         self.assertEqual(get_model_thinking_config(MagicMock(thinking=cfg)), cfg)
-        self.assertIsNone(get_model_thinking_config({"thinking": None}))
-        self.assertIsNone(get_model_thinking_config({}))
+        self.assertIsNone(get_model_thinking_config(ExtendedShowResponse(model_info={}, thinking=None)))
+        self.assertIsNone(get_model_thinking_config(ExtendedShowResponse(model_info={})))
         self.assertIsNone(get_model_thinking_config(MagicMock(thinking=None)))
-        self.assertIsNone(get_model_thinking_config({"thinking": "not-a-dict"}))
+        self.assertIsNone(get_model_thinking_config(ExtendedShowResponse(model_info={}, thinking="not-a-dict")))
         self.assertIsNone(get_model_thinking_config(None))
 
     @patch("ollama_agent.core.models._show_model")
@@ -322,10 +325,12 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
 
     @patch("ollama_agent.core.models._show_model")
     async def test_resolve_context_window_max(self, mock_show: AsyncMock) -> None:
-        mock_show.return_value = MagicMock(
-            model_info={"llama.context_length": 131072},
-            parameters="",
-            modelfile="",
+        mock_show.return_value = ExtendedShowResponse.model_validate(
+            {
+                "model_info": {"llama.context_length": 131072},
+                "parameters": "",
+                "modelfile": "",
+            }
         )
         resolved = await resolve_context_window("llama3.3:70b", "max", "http://localhost:11434")
         self.assertEqual(resolved, 131072)
@@ -335,9 +340,8 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resolved_upper, 131072)
 
         # Ollama SDK modelinfo attribute format (without underscore)
-        mock_show.return_value = MagicMock(
-            model_info=None,
-            modelinfo={"gemma4.context_length": 262144},
+        mock_show.return_value = ExtendedShowResponse(
+            model_info={"gemma4.context_length": 262144},
             parameters="",
             modelfile="",
         )
@@ -346,7 +350,7 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
 
     @patch("ollama_agent.core.models._show_model")
     async def test_resolve_context_window_max_modelfile_fallback(self, mock_show: AsyncMock) -> None:
-        mock_show.return_value = MagicMock(
+        mock_show.return_value = ExtendedShowResponse(
             model_info={},
             parameters="PARAMETER num_ctx 32768",
             modelfile="",
@@ -356,7 +360,7 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
 
     @patch("ollama_agent.core.models._show_model")
     async def test_resolve_context_window_max_unresolved_raises(self, mock_show: AsyncMock) -> None:
-        mock_show.return_value = MagicMock(
+        mock_show.return_value = ExtendedShowResponse(
             model_info={},
             parameters="",
             modelfile="",

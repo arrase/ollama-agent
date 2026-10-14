@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Generic, TypeVar
 
 from ..i18n import _
+from .common import validate_identifier
 
 T = TypeVar("T")
 E = TypeVar("E", bound=Exception)
@@ -32,6 +33,7 @@ class BaseFileStoreManager(ABC, Generic[T]):
     #: File extension used when building item paths. Set to ``""`` for
     #: directory-based resources (e.g. skills) or ``".yaml"`` for files.
     _ext: str = ""
+    not_found_label: str = "identifier"
 
     def __init__(self, base_dir: Path) -> None:
         self.base_dir = base_dir.resolve()
@@ -43,7 +45,8 @@ class BaseFileStoreManager(ABC, Generic[T]):
 
     def _path(self, item_id: str) -> Path:
         """Return the filesystem path for *item_id*."""
-        resolved = (self.base_dir / f"{item_id}{self._ext}").resolve()
+        valid_id = validate_identifier(item_id, self.not_found_label)
+        resolved = (self.base_dir / f"{valid_id}{self._ext}").resolve()
         if not resolved.is_relative_to(self.base_dir) or resolved == self.base_dir:
             raise ValueError(_("Path traversal detected: {item_id}", item_id=item_id))
         return resolved
@@ -111,6 +114,9 @@ def resolve_unique_match(
         return matches[0]
     if not matches:
         raise not_found_error(_("{label} not found: {prefix}", label=label, prefix=prefix))
+    for item in matches:
+        if item[0] == prefix:
+            return item
     raise ambiguous_error(
         _("Ambiguous prefix: {name} -> {matches}", name=prefix, matches=", ".join(m[0] for m in matches))
     )

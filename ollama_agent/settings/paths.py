@@ -29,7 +29,7 @@ def find_agents_file(start_dir: Path = Path(".")) -> Path | None:
     """Find AGENTS.md in the given directory or its parent hierarchy up to git root."""
     current = start_dir.resolve()
     for parent in [current, *current.parents]:
-        for candidate in ("AGENTS.md", "agents.md", ".agents.md"):
+        for candidate in (AGENTS_MD_NAME, "agents.md", ".agents.md"):
             target = parent / candidate
             if target.is_file():
                 return target

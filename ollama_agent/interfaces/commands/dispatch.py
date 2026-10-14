@@ -6,18 +6,20 @@ import argparse
 import inspect
 import logging
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable
+from typing import Any, Callable
 
 from rich.console import Console
 from rich.markup import escape
 
-from ...agent import AgentRuntime, list_subagents
+from ...agent import AgentRuntime
 from ...agent.episodic_memory import HistoryError
 from ...i18n import _
-from ...mcp import MCPConfigError, list_mcp_servers, reload_mcp_servers
+from ...mcp import MCPConfigError
+from ...mcp.commands import list_mcp_servers, reload_mcp_servers
 from ...rag import (
     RAGContext,
     RAGError,
+    RAGManager,
     add_rag_directory,
     add_rag_file,
     create_rag_database,
@@ -38,8 +40,10 @@ from ...tasks import (
     parse_var_assignments,
     run_task,
 )
-from .models import list_models
+from .models import list_models, list_subagents, set_model
 from .params import (
+    set_context_window,
+    set_effort,
     set_model_param,
     show_context_window,
     show_effort,
@@ -79,7 +83,7 @@ async def safe_call(
         console.print(f"[red]{escape(str(exc))}[/red]")
     # A command must never crash the caller.
     except Exception as exc:  # noqa: BLE001
-        _log.exception("Unhandled error in command %r", getattr(fn, "__name__", fn))
+        _log.exception("Unhandled error in command %r", fn.__name__)
         console.print(f"[red]{escape(_('Command failed: {exc}', exc=exc))}[/red]")
 
 
@@ -97,24 +101,34 @@ def build_cli_handlers(
     args: argparse.Namespace,
     *,
     task_ctx: TasksContext,
-    rag_ctx: RAGContext,
+    rag_ctx: RAGContext | None = None,
     skills_ctx: SkillsContext,
     settings: Settings,
 ) -> dict[tuple[str, str], CLIHandler]:
     """Map parsed CLI subcommands to their synchronous or async handler functions."""
-    console = Console()
+    console = task_ctx.console
+
+    def _get_rag_ctx() -> RAGContext:
+        nonlocal rag_ctx
+        if rag_ctx is None:
+            rag_ctx = RAGContext(rag_manager=RAGManager(settings.rag), console=console)
+        return rag_ctx
 
     async def task_run() -> None:
-        raw_vars = list(args.vars) + list(args.flag_vars or [])
+        raw_vars = list(args.vars) + list(args.flag_vars)
         variables = parse_var_assignments(raw_vars)
         await run_task(task_ctx, args.task_id, variables=variables, yolo=args.yolo)
 
     async def rag_add() -> None:
-        load_rag_database(rag_ctx, args.database)
-        if args.dir:
-            await add_rag_directory(rag_ctx, args.path)
-            return
-        await add_rag_file(rag_ctx, args.path)
+        ctx = _get_rag_ctx()
+        load_rag_database(ctx, args.database)
+        try:
+            if args.dir:
+                await add_rag_directory(ctx, args.path)
+                return
+            await add_rag_file(ctx, args.path)
+        finally:
+            await ctx.rag_manager.aclose()
 
     return {
         ("task", "list"): lambda: list_tasks(task_ctx),
@@ -129,9 +143,9 @@ def build_cli_handlers(
             reasoning_effort=args.task_effort,
             force=args.force,
         ),
-        ("rag", "list"): lambda: list_rag_databases(rag_ctx),
-        ("rag", "create"): lambda: create_rag_database(rag_ctx, args.name),
-        ("rag", "delete"): lambda: delete_rag_database(rag_ctx, args.name),
+        ("rag", "list"): lambda: list_rag_databases(_get_rag_ctx()),
+        ("rag", "create"): lambda: create_rag_database(_get_rag_ctx(), args.name),
+        ("rag", "delete"): lambda: delete_rag_database(_get_rag_ctx(), args.name),
         ("rag", "add"): rag_add,
         ("skill", "list"): lambda: list_skills(skills_ctx),
         ("skill", "show"): lambda: show_skill(skills_ctx, args.skill_id),
@@ -166,97 +180,96 @@ def build_cli_handlers(
 
 @dataclass(slots=True)
 class REPLEnvironment:
+    runtime: AgentRuntime
     task_ctx: TasksContext
     skills_ctx: SkillsContext
     get_rag_ctx: Callable[[], RAGContext]
     console: Console
-    current_model: Callable[[], str]
-    base_url: Callable[[], str]
-    switch_model: Callable[[str], Awaitable[None]]
     handle_yolo: Callable[[list[str]], object]
     handle_stealth: Callable[[list[str]], object]
     handle_queue: Callable[[list[str]], object]
-    get_runtime: Callable[[], AgentRuntime]
-    current_thread_id: Callable[[], str]
-    switch_effort: Callable[[str], Awaitable[None]]
-    switch_context_window: Callable[[str], Awaitable[None]]
 
     # ── Argument-parsing helpers ─────────────────────────────────────────
     # Every handler follows the same "missing argument" / "unknown subcommand"
     # shape; centralising it keeps user-supplied text escaped exactly once.
 
+    def _error(self, message: str) -> None:
+        """Report a usage or unrecognised-subcommand error, escaping *message*."""
+        self.console.print(f"[red]{escape(message)}[/red]")
+
     def _require_arg(self, args: list[str], index: int, usage: str) -> str | None:
         """Return ``args[index]`` or report *usage* (a full "Usage: ..." line) when absent."""
         if len(args) <= index:
-            self.console.print(f"[red]{escape(usage)}[/red]")
+            self._error(usage)
             return None
         return args[index]
 
-    def _unknown_subcommand(self, message: str) -> None:
-        """Report an unrecognised subcommand, escaping the user-supplied token in *message*."""
-        self.console.print(f"[red]{escape(message)}[/red]")
-
-    def _usage(self, usage: str) -> None:
-        self.console.print(f"[red]{escape(usage)}[/red]")
+    def _dispatch_switch(
+        self,
+        args: list[str],
+        *,
+        usage: str,
+        on_show: Callable[[], object],
+        on_switch: Callable[[str], object],
+    ) -> object:
+        if not args or args[0] in ("list", "show"):
+            return on_show()
+        if args[0] in ("set", "use", "switch"):
+            val = self._require_arg(args, 1, usage)
+            return on_switch(val) if val is not None else None
+        if len(args) == 1:
+            return on_switch(args[0])
+        self._error(usage)
+        return None
 
     # ── Handlers ─────────────────────────────────────────────────────────
 
     def handle_agents(self, args: list[str]) -> object:
         if not args or args[0] == "list":
-            list_subagents(self.console, settings=self.get_runtime().settings)
+            list_subagents(self.console, settings=self.runtime.settings)
             return None
-        self._unknown_subcommand(_("Unknown agents subcommand '{sub}'. Usage: /agents [list]", sub=args[0]))
+        self._error(_("Unknown agents subcommand '{sub}'. Usage: /agents [list]", sub=args[0]))
         return None
 
     def handle_mcp(self, args: list[str]) -> object:
         if not args or args[0] in ("list", "status"):
-            return list_mcp_servers(self.console, settings=self.get_runtime().settings)
+            return list_mcp_servers(self.console, settings=self.runtime.settings)
         if args[0] == "reload":
-            return reload_mcp_servers(self.console, runtime=self.get_runtime())
-        self._unknown_subcommand(_("Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]", sub=args[0]))
+            return reload_mcp_servers(self.console, runtime=self.runtime)
+        self._error(_("Unknown mcp subcommand '{sub}'. Usage: /mcp [list | reload]", sub=args[0]))
         return None
 
     def handle_model(self, args: list[str]) -> object:
-        usage = _("Usage: /model [list | set <model>]")
-        if not args or args[0] == "list":
-            return list_models(self.console, self.current_model(), self.base_url())
-        if args[0] in ("set", "use", "switch"):
-            model = self._require_arg(args, 1, usage)
-            return self.switch_model(model) if model is not None else None
-        if len(args) == 1:
-            return self.switch_model(args[0])
-        self._usage(usage)
-        return None
+        return self._dispatch_switch(
+            args,
+            usage=_("Usage: /model [list | set <model>]"),
+            on_show=lambda: list_models(
+                self.console,
+                self.runtime.settings.model.name,
+                self.runtime.settings.model.base_url,
+            ),
+            on_switch=lambda model_name: set_model(self.console, model_name, runtime=self.runtime),
+        )
 
     def handle_effort(self, args: list[str]) -> object:
-        usage = _("Usage: /effort [set <level>]")
-        if not args:
-            show_effort(self.console, self.get_runtime())
-            return None
-        if args[0] in ("set", "use", "switch"):
-            level = self._require_arg(args, 1, usage)
-            return self.switch_effort(level) if level is not None else None
-        if len(args) == 1:
-            return self.switch_effort(args[0])
-        self._usage(usage)
-        return None
+        return self._dispatch_switch(
+            args,
+            usage=_("Usage: /effort [set <level>]"),
+            on_show=lambda: show_effort(self.console, self.runtime),
+            on_switch=lambda effort: set_effort(self.console, effort, runtime=self.runtime),
+        )
 
     def handle_context(self, args: list[str]) -> object:
-        usage = _("Usage: /context [set <size>]")
-        if not args:
-            show_context_window(self.console, self.get_runtime())
-            return None
-        if args[0] in ("set", "use", "switch"):
-            size = self._require_arg(args, 1, usage)
-            return self.switch_context_window(size) if size is not None else None
-        if len(args) == 1:
-            return self.switch_context_window(args[0])
-        self._usage(usage)
-        return None
+        return self._dispatch_switch(
+            args,
+            usage=_("Usage: /context [set <size>]"),
+            on_show=lambda: show_context_window(self.console, self.runtime),
+            on_switch=lambda size: set_context_window(self.console, size, runtime=self.runtime),
+        )
 
     def handle_params(self, args: list[str]) -> object:
         if not args or args[0] == "list":
-            show_model_params(self.console, self.get_runtime())
+            show_model_params(self.console, self.runtime)
             return None
         if args[0] == "set":
             if len(args) < 3:
@@ -265,8 +278,8 @@ class REPLEnvironment:
                     f"[dim]{escape(_('Example: /params set temperature 0.7'))}[/dim]"
                 )
                 return None
-            return set_model_param(self.console, args[1], args[2], runtime=self.get_runtime())
-        self._usage(_("Usage: /params [list | set <parameter> <value>]"))
+            return set_model_param(self.console, args[1], args[2], runtime=self.runtime)
+        self._error(_("Usage: /params [list | set <parameter> <value>]"))
         return None
 
     def handle_task(self, args: list[str]) -> object:
@@ -278,7 +291,7 @@ class REPLEnvironment:
             if task_id is not None:
                 delete_task(self.task_ctx, task_id)
             return None
-        self._unknown_subcommand(_("Unknown task subcommand '{sub}'. Usage: /task [list | delete <id>]", sub=args[0]))
+        self._error(_("Unknown task subcommand '{sub}'. Usage: /task [list | delete <id>]", sub=args[0]))
         return None
 
     def handle_skill(self, args: list[str]) -> object:
@@ -296,7 +309,7 @@ class REPLEnvironment:
             else:
                 delete_skill(self.skills_ctx, skill_id)
             return None
-        self._unknown_subcommand(
+        self._error(
             _("Unknown skill subcommand '{sub}'. Usage: /skill [list | show <id> | delete <id>]", sub=args[0])
         )
         return None
@@ -308,7 +321,7 @@ class REPLEnvironment:
         is_dir = "--dir" in sub_args
         paths = [a for a in sub_args if a != "--dir"]
         if not paths:
-            self._usage(_("Usage: /rag add <path> [--dir]"))
+            self._error(_("Usage: /rag add <path> [--dir]"))
             return None
         target_path = " ".join(paths)
         if is_dir:
@@ -333,19 +346,19 @@ class REPLEnvironment:
             if name is None:
                 return None
             delete_rag_database(self.get_rag_ctx(), name)
-            return self.get_runtime().reload()
+            return self.runtime.reload()
         if sub == "load":
             name = self._require_arg(args, 1, _("Usage: /rag load <name>"))
             if name is None:
                 return None
             load_rag_database(self.get_rag_ctx(), name)
-            return self.get_runtime().reload()
+            return self.runtime.reload()
         if sub == "unload":
             unload_rag_database(self.get_rag_ctx())
-            return self.get_runtime().reload()
+            return self.runtime.reload()
         if sub == "add":
             return self._handle_rag_add(args[1:])
-        self._unknown_subcommand(
+        self._error(
             _(
                 "Unknown rag subcommand '{sub}'. Usage: /rag [status | list | create | delete | load | unload | add]",
                 sub=sub,
@@ -355,17 +368,17 @@ class REPLEnvironment:
 
     def handle_session(self, args: list[str]) -> object:
         if not args or args[0] == "list":
-            list_sessions(self.console, current_thread_id=self.current_thread_id())
+            list_sessions(self.console, current_thread_id=self.runtime.thread_id)
             return None
         sub = args[0]
         if sub == "search":
             if len(args) < 2:
-                self._usage(_("Usage: /session search <query>"))
+                self._error(_("Usage: /session search <query>"))
                 return None
             search_sessions(
                 self.console,
                 " ".join(args[1:]),
-                current_thread_id=self.current_thread_id(),
+                current_thread_id=self.runtime.thread_id,
             )
             return None
         if sub == "delete":
@@ -373,7 +386,7 @@ class REPLEnvironment:
             if session_id is not None:
                 delete_session(self.console, session_id)
             return None
-        self._unknown_subcommand(
+        self._error(
             _("Unknown session subcommand '{sub}'. Usage: /session [list | search <query> | delete <id>]", sub=sub)
         )
         return None

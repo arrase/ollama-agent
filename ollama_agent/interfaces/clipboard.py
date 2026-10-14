@@ -36,26 +36,36 @@ def _configure_win32_clipboard(u32: Any, k32: Any) -> None:
     k32.GlobalFree.restype = ctypes.c_void_p
 
 
+def _detect_linux_clipboard_cmd(
+    wayland_cmd: list[str],
+    xclip_cmd: list[str],
+    xsel_cmd: list[str],
+) -> list[str]:
+    if (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("WAYLAND_SOCKET")) and shutil.which(wayland_cmd[0]):
+        return wayland_cmd
+    if shutil.which("xclip"):
+        return xclip_cmd
+    if shutil.which("xsel"):
+        return xsel_cmd
+    raise ClipboardError(f"No clipboard command found (install {wayland_cmd[0]}, xclip or xsel)")
+
+
 def _get_linux_copy_cmd() -> list[str]:
     """Detect available Linux clipboard copy command."""
-    if (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("WAYLAND_SOCKET")) and shutil.which("wl-copy"):
-        return ["wl-copy"]
-    if shutil.which("xclip"):
-        return ["xclip", "-selection", "clipboard"]
-    if shutil.which("xsel"):
-        return ["xsel", "--clipboard", "--input"]
-    raise ClipboardError("No clipboard command found (install wl-copy, xclip or xsel)")
+    return _detect_linux_clipboard_cmd(
+        ["wl-copy"],
+        ["xclip", "-selection", "clipboard"],
+        ["xsel", "--clipboard", "--input"],
+    )
 
 
 def _get_linux_paste_cmd() -> list[str]:
     """Detect available Linux clipboard paste command."""
-    if (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("WAYLAND_SOCKET")) and shutil.which("wl-paste"):
-        return ["wl-paste", "--no-newline"]
-    if shutil.which("xclip"):
-        return ["xclip", "-selection", "clipboard", "-o"]
-    if shutil.which("xsel"):
-        return ["xsel", "--clipboard", "--output"]
-    raise ClipboardError("No clipboard command found (install wl-paste, xclip or xsel)")
+    return _detect_linux_clipboard_cmd(
+        ["wl-paste", "--no-newline"],
+        ["xclip", "-selection", "clipboard", "-o"],
+        ["xsel", "--clipboard", "--output"],
+    )
 
 
 def _copy_via_command(cmd: list[str], text: str) -> None:
@@ -99,6 +109,8 @@ def _copy_win32(text: str) -> None:
         u32.EmptyClipboard()
         encoded = text.encode("utf-16-le") + b"\x00\x00"
         h_mem = k32.GlobalAlloc(0x0042, len(encoded))
+        if not h_mem:
+            raise ClipboardError("GlobalAlloc failed")
         if not (p_mem := k32.GlobalLock(h_mem)):
             k32.GlobalFree(h_mem)
             raise ClipboardError("GlobalLock failed while copying to the clipboard")

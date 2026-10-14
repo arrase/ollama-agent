@@ -159,6 +159,7 @@ class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("pathlib.Path.cwd", return_value=sub_dir),
+            patch("ollama_agent.agent.agent.load_instructions", return_value="base"),
             patch("ollama_agent.agent.agent.ensure_model_supports_tools", AsyncMock()),
             patch("ollama_agent.agent.agent.create_ollama_chat_model", AsyncMock(return_value=mock_model)),
             patch("ollama_agent.agent.agent.create_deep_agent", return_value=mock_deep_agent) as mock_create_agent,
@@ -197,6 +198,7 @@ class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("pathlib.Path.cwd", return_value=empty_dir),
+            patch("ollama_agent.agent.agent.load_instructions", return_value="base"),
             patch("ollama_agent.agent.agent.ensure_model_supports_tools", AsyncMock()),
             patch("ollama_agent.agent.agent.create_ollama_chat_model", AsyncMock(return_value=mock_model)),
             patch("ollama_agent.agent.agent.create_deep_agent", return_value=mock_deep_agent) as mock_create_agent,

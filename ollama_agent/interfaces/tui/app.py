@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from collections import deque
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -21,39 +20,17 @@ from textual.widgets import OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 from textual.worker import Worker
 
-from ...agent.episodic_memory import HistoryError
-from ...core import shorten
 from ...i18n import _
-from ...rag import RAGError
-from ...skills import SkillError
 from ...streaming import extract_action_requests, stream_agent_events
-from ...tasks import TaskError
 from ..clipboard import ClipboardError, copy_to_system_clipboard, get_system_clipboard
-from ..commands.sessions import get_available_sessions
 from .commands import _is_immediate_command, run_slash_command
 from .completion import (
-    CMD_CLEAR,
-    CMD_CONTEXT,
-    CMD_EFFORT,
-    CMD_EXIT,
-    CMD_MODEL,
-    CMD_NEW,
-    CMD_QUEUE,
-    CMD_QUIT,
-    CMD_RAG,
-    CMD_SESSION,
-    CMD_SKILL,
-    CMD_TASK,
+    NO_ARG_COMMANDS,
     _AT_MENTION_RE,
     _AUTOCOMPLETE_LIST_ID,
     _CHAT_SCROLL_ID,
-    _collect_dir_candidates,
-    _complete_effort,
-    _complete_root_commands,
-    _complete_subcommands,
-    _iter_dir_completions,
-    _iter_file_completions,
-    _list_models_sync,
+    file_completions,
+    slash_completions,
 )
 from .renderer import _TUIStreamingRenderer
 from .screens import MainScreen
@@ -103,10 +80,15 @@ class OllamaAgentApp(App):
         if self._is_generating and self._current_worker is not None:
             self._current_worker.cancel()
         elif self._is_approval_pending:
+            for w in self.query(ToolApprovalWidget):
+                if not w._decided:
+                    w._handle_decision("cancel-btn")
+                    return
             self._is_approval_pending = False
             footer = self.query_one(AgentFooter)
             footer.set_approval(False)
             self.show_system_notice(f"[bold #f87171]🛑 {_('Approval cancelled.')}[/bold #f87171]")
+            self._process_next_in_queue()
 
     def action_cancel_or_quit(self) -> None:
         if self._is_generating or self._is_approval_pending or self._prompt_queue:
@@ -150,6 +132,7 @@ class OllamaAgentApp(App):
         self._is_approval_pending = False
         self._prompt_queue: deque[str] = deque()
         self._current_worker: Worker | None = None
+        self._post_stream_cleanup: Callable[[], Awaitable[None]] | None = None
 
     def compose(self) -> ComposeResult:
         yield AgentHeader(self.repl)
@@ -223,8 +206,6 @@ class OllamaAgentApp(App):
             self.update_autocomplete(event.text_area.text)
 
     def on_repl_input_submitted(self, event: ReplInput.Submitted) -> None:
-        if event.input.id != "repl-input":
-            return
         val = event.value.strip()
         if not val:
             return
@@ -233,7 +214,7 @@ class OllamaAgentApp(App):
         event.input.add_history_entry(val)
 
         if _is_immediate_command(val):
-            worker = self.run_worker(self._run_slash_command(val))
+            worker = self.run_worker(run_slash_command(self, val))
             if not self._is_generating:
                 self._current_worker = worker
             return
@@ -255,9 +236,10 @@ class OllamaAgentApp(App):
         ``run_worker`` only creates the task: until it is first scheduled the flag
         would still read ``False`` and a second Enter could start a parallel run.
         """
-        self._is_generating = True
-        self.query_one(AgentFooter).set_generating(True)
-        self._current_worker = self.run_worker(self._run_slash_command(cmd_line))
+        if not _is_immediate_command(cmd_line):
+            self._is_generating = True
+            self.query_one(AgentFooter).set_generating(True)
+        self._current_worker = self.run_worker(run_slash_command(self, cmd_line))
 
     def _start_stream(self, prompt: str) -> None:
         """Mount the prompt widgets and schedule a streaming worker (see _start_slash)."""
@@ -288,151 +270,6 @@ class OllamaAgentApp(App):
         autolist.display = False
         autolist.highlighted = None
 
-    def _slash_completions(self, text: str) -> list[tuple[str, Text]]:
-        parts = text.split(" ")
-        num_parts = len(parts)
-
-        # Level 0: Root commands (e.g., "/" or "/mo")
-        if num_parts == 1:
-            return _complete_root_commands(parts[0])
-
-        root_cmd = parts[0]
-        if root_cmd == CMD_EFFORT and num_parts == 2:
-            return _complete_effort(parts[1], self.repl.runtime.model)
-
-        # Level 1: Subcommands (e.g., "/task " or "/task r")
-        if num_parts == 2:
-            return _complete_subcommands(root_cmd, parts[1])
-
-        # Level 2: Arguments / Dynamic entities (e.g., "/task run ")
-        if num_parts == 3:
-            return self._complete_arguments(root_cmd, parts[1], parts[2])
-
-        return []
-
-    def _complete_model_args(self, root_cmd: str, sub_cmd: str, arg_token: str) -> list[tuple[str, Text]]:
-        try:
-            models = _list_models_sync(self.repl.runtime.settings.model.base_url)
-        except (OSError, RuntimeError):
-            return []
-        results = []
-        for m in models:
-            if not (m.model and m.model.startswith(arg_token)):
-                continue
-            size_str = f"{(m.size / (1024**3)):.1f}GB" if m.size else ""
-            markup = f"[bold #e6edf3]{m.model:<30}[/bold #e6edf3] [dim #8b949e]{size_str}[/dim #8b949e]"
-            results.append((f"{root_cmd} {sub_cmd} {m.model}", Text.from_markup(markup)))
-        return results
-
-    def _complete_context_args(self, root_cmd: str, sub_cmd: str, arg_token: str) -> list[tuple[str, Text]]:
-        presets = ["4096", "8192", "16384", "32768", "65536", "131072", "max"]
-        tok_label = _("tokens")
-        return [
-            (
-                f"{root_cmd} {sub_cmd} {p}",
-                Text.from_markup(f"[bold #e6edf3]{p:<10}[/bold #e6edf3] [dim #8b949e]{tok_label}[/dim #8b949e]"),
-            )
-            for p in presets
-            if p.startswith(arg_token)
-        ]
-
-    def _complete_task_args(self, root_cmd: str, sub_cmd: str, arg_token: str) -> list[tuple[str, Text]]:
-        try:
-            tasks = self.repl._task_ctx.task_manager.list_all()
-        except (OSError, ValueError, TaskError):
-            return []
-        return [
-            (
-                f"{root_cmd} {sub_cmd} {tid}",
-                Text.from_markup(f"[bold #e6edf3]{tid:<20}[/bold #e6edf3] [dim #8b949e]{t.title}[/dim #8b949e]"),
-            )
-            for tid, t in tasks
-            if tid.startswith(arg_token)
-        ]
-
-    def _complete_skill_args(self, root_cmd: str, sub_cmd: str, arg_token: str) -> list[tuple[str, Text]]:
-        try:
-            skills = self.repl._skills_ctx.skill_manager.list_all()
-        except (OSError, ValueError, SkillError):
-            return []
-        return [
-            (
-                f"{root_cmd} {sub_cmd} {sid}",
-                Text.from_markup(f"[bold #e6edf3]{sid:<20}[/bold #e6edf3] [dim #8b949e]{s.name}[/dim #8b949e]"),
-            )
-            for sid, s in skills
-            if sid.startswith(arg_token)
-        ]
-
-    def _complete_session_args(self, root_cmd: str, sub_cmd: str, arg_token: str) -> list[tuple[str, Text]]:
-        try:
-            sessions = get_available_sessions()
-        except (OSError, HistoryError):
-            # HistoryError is a RuntimeError, not an OSError.
-            return []
-        steps_label = _("steps")
-        return [
-            (
-                f"{root_cmd} {sub_cmd} {s['thread_id']}",
-                Text.from_markup(
-                    f"[bold #e6edf3]{s['thread_id'][:8]:<10}[/bold #e6edf3] "
-                    f"[dim #8b949e]{s['steps']} {steps_label}[/dim #8b949e]"
-                ),
-            )
-            for s in sessions
-            if s["thread_id"].startswith(arg_token)
-        ]
-
-    def _complete_rag_args(self, root_cmd: str, sub_cmd: str, arg_token: str) -> list[tuple[str, Text]]:
-        try:
-            dbs = self.repl._get_rag_ctx().rag_manager.list_databases()
-        except (RAGError, OSError):
-            return []
-        chunks_label = _("chunks")
-        return [
-            (
-                f"{root_cmd} {sub_cmd} {d['name']}",
-                Text.from_markup(
-                    f"[bold #e6edf3]{d['name']:<20}[/bold #e6edf3] "
-                    f"[dim #8b949e]{d['chunks'] if d['chunks'] is not None else 0} {chunks_label}[/dim #8b949e]"
-                ),
-            )
-            for d in dbs
-            if d["name"].startswith(arg_token)
-        ]
-
-    def _complete_queue_args(self, root_cmd: str, sub_cmd: str, arg_token: str) -> list[tuple[str, Text]]:
-        clean_arg = arg_token.lstrip("#")
-        items = []
-        for idx, item in enumerate(self._prompt_queue, 1):
-            if clean_arg and not str(idx).startswith(clean_arg):
-                continue
-            preview = escape(shorten(item))
-            items.append(
-                (
-                    f"{root_cmd} {sub_cmd} {idx}",
-                    Text.from_markup(f"[bold #e6edf3]#{idx}[/bold #e6edf3] [dim #8b949e]{preview}[/dim #8b949e]"),
-                )
-            )
-        return items
-
-    def _complete_arguments(self, root_cmd: str, sub_cmd: str, arg_token: str) -> list[tuple[str, Text]]:
-        if root_cmd == CMD_MODEL and sub_cmd == "set":
-            return self._complete_model_args(root_cmd, sub_cmd, arg_token)
-        if root_cmd == CMD_CONTEXT and sub_cmd == "set":
-            return self._complete_context_args(root_cmd, sub_cmd, arg_token)
-        if root_cmd == CMD_TASK and sub_cmd in ("run", "delete"):
-            return self._complete_task_args(root_cmd, sub_cmd, arg_token)
-        if root_cmd == CMD_SKILL and sub_cmd in ("show", "delete"):
-            return self._complete_skill_args(root_cmd, sub_cmd, arg_token)
-        if root_cmd == CMD_SESSION and sub_cmd in ("resume", "switch", "delete"):
-            return self._complete_session_args(root_cmd, sub_cmd, arg_token)
-        if root_cmd == CMD_RAG and sub_cmd in ("load", "delete"):
-            return self._complete_rag_args(root_cmd, sub_cmd, arg_token)
-        if root_cmd == CMD_QUEUE and sub_cmd in ("rm", "remove", "delete"):
-            return self._complete_queue_args(root_cmd, sub_cmd, arg_token)
-        return []
-
     def update_autocomplete(self, text: str) -> None:
         autolist = self.query_one(_AUTOCOMPLETE_LIST_ID, OptionList)
 
@@ -440,7 +277,7 @@ class OllamaAgentApp(App):
         match = _AT_MENTION_RE.search(text)
         if match:
             token = match.group(1) or match.group(2) or match.group(3) or ""
-            items = list(self._file_completions(token))
+            items = list(file_completions(token))
             if items:
                 autolist.clear_options()
                 for insert_val, display_markup in items:
@@ -450,8 +287,8 @@ class OllamaAgentApp(App):
                 return
 
         # 2. Slash command completions
-        if text.startswith("/"):
-            items = self._slash_completions(text)
+        if text.startswith("/") and text not in NO_ARG_COMMANDS:
+            items = slash_completions(text, self.repl, self._prompt_queue)
             if items:
                 autolist.clear_options()
                 for insert_val, display_text in items:
@@ -482,58 +319,11 @@ class OllamaAgentApp(App):
             inp.text = before + quote + opt.id + quote + " "
         else:
             # Slash command completion
-            trailing = "" if opt.id in (CMD_CLEAR, CMD_NEW, CMD_EXIT, CMD_QUIT) else " "
+            trailing = "" if opt.id in NO_ARG_COMMANDS else " "
             inp.text = opt.id + trailing
 
         inp.action_cursor_line_end()
         self.hide_autocomplete()
-
-    def _file_completions(self, token: str, max_completions: int = 15) -> Iterator[tuple[str, Text]]:
-        cwd = Path.cwd()
-        token_path = Path(token)
-        if token.endswith(("/", "\\")):
-            search_dir = (cwd / token_path).resolve()
-            prefix = ""
-        else:
-            search_dir = (cwd / token_path.parent).resolve()
-            prefix = token_path.name
-
-        try:
-            search_dir.relative_to(cwd)
-        except ValueError:
-            return
-
-        if not search_dir.is_dir():
-            return
-
-        show_hidden = prefix.startswith(".")
-        prefix_lower = prefix.lower()
-        count = 0
-
-        for root, dirs, files in os.walk(search_dir):
-            root_path = Path(root)
-            candidate_dirs = _collect_dir_candidates(dirs, root_path, cwd, prefix_lower, show_hidden)
-            dirs[:] = [d[0] for d in candidate_dirs]
-
-            for rel, meta in _iter_dir_completions(candidate_dirs, prefix_lower):
-                item = (
-                    rel,
-                    Text.from_markup(f"[bold #38bdf8]{rel:<30}[/bold #38bdf8] [dim #8b949e]{meta}[/dim #8b949e]"),
-                )
-                if count >= max_completions:
-                    return
-                count += 1
-                yield item
-
-            for rel, meta in _iter_file_completions(files, root_path, cwd, prefix_lower, show_hidden):
-                item = (
-                    rel,
-                    Text.from_markup(f"[bold #38bdf8]{rel:<30}[/bold #38bdf8] [dim #8b949e]{meta}[/dim #8b949e]"),
-                )
-                if count >= max_completions:
-                    return
-                count += 1
-                yield item
 
     # ── Deferred scroll helper ────────────────────────────────────────────
 
@@ -541,11 +331,6 @@ class OllamaAgentApp(App):
         """Schedule a scroll-to-end after the next layout refresh."""
         scroll = self.query_one(_CHAT_SCROLL_ID)
         self.call_after_refresh(scroll.scroll_end, animate=False)
-
-    # ── Slash command dispatch ────────────────────────────────────
-
-    async def _run_slash_command(self, cmd_line: str) -> None:
-        await run_slash_command(self, cmd_line)
 
     # ── Streaming chat ────────────────────────────────────────────────────
 
@@ -562,12 +347,15 @@ class OllamaAgentApp(App):
         A run that raises must not propagate: ``run_worker`` defaults to
         ``exit_on_error=True``, which turns any exception into a fatal app crash.
         """
+        self._is_generating = True
+        self.query_one(AgentFooter).set_generating(True)
+        renderer = _TUIStreamingRenderer(self, scroll, agent_msg)
         try:
             try:
                 await stream_agent_events(
                     self.repl.runtime,
                     prompt,
-                    _TUIStreamingRenderer(self, scroll, agent_msg),
+                    renderer,
                 )
             except asyncio.CancelledError:
                 self.show_system_notice(f"[bold #f87171]🛑 {_('Execution interrupted by user.')}[/bold #f87171]")
@@ -581,14 +369,9 @@ class OllamaAgentApp(App):
                 agent_msg.add_error(_("Run failed: {exc}", exc=exc))
                 self.query_one(ReplInput).focus()
                 return
-            inp = self.query_one(ReplInput)
-            inp.disabled = False
 
-            # Check if the execution got interrupted
-            config = {"configurable": {"thread_id": self.repl.runtime.thread_id}}
-            state = await self.repl.runtime.graph.aget_state(config)
-            if state.interrupts:
-                action_requests = extract_action_requests({"interrupts": state.interrupts})
+            if renderer.last_interrupt is not None:
+                action_requests = extract_action_requests(renderer.last_interrupt)
                 self._is_approval_pending = True
                 footer = self.query_one(AgentFooter)
                 footer.set_approval(True)
@@ -598,12 +381,19 @@ class OllamaAgentApp(App):
                     scroll=scroll,
                     agent_msg=agent_msg,
                 )
-                agent_msg.mount(approval_widget)
+                await agent_msg.mount(approval_widget)
                 self._deferred_scroll()
             else:
-                inp.focus()
+                self.query_one(ReplInput).focus()
         finally:
-            self._is_generating = False
-            self.query_one(AgentFooter).set_generating(False)
-            self.query_one(AgentHeader).update_header()
-            self._process_next_in_queue()
+            try:
+                if not self._is_approval_pending and self._post_stream_cleanup is not None:
+                    cleanup = self._post_stream_cleanup
+                    self._post_stream_cleanup = None
+                    await cleanup()
+            finally:
+                self._is_generating = False
+                self.query_one(AgentFooter).set_generating(False)
+                self.query_one(AgentHeader).update_header()
+                if not self._is_approval_pending:
+                    self._process_next_in_queue()

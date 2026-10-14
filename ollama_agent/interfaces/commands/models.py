@@ -6,7 +6,10 @@ import asyncio
 from typing import Any, Callable
 
 import ollama
+from rich import box
 from rich.console import Console
+from rich.markup import escape
+from rich.table import Table
 
 from ...agent import AgentRuntime
 from ...core import (
@@ -15,7 +18,64 @@ from ...core import (
     model_supports_tools,
 )
 from ...i18n import _
-from ...settings import Settings, save_settings
+from ...settings import SETTINGS_PATH, Settings, save_settings
+
+
+def format_model_size(size: int | None) -> str:
+    """Format a model byte size in gigabytes (e.g. '4.7GB'), or '' when unknown."""
+    return f"{(size / (1024**3)):.1f}GB" if size else ""
+
+
+def list_subagents(
+    console: Console,
+    settings: Settings,
+) -> None:
+    """List all configured subagents and their properties in a table."""
+    if not settings.subagents:
+        console.print(
+            f"[yellow]{_('No subagents configured.')}[/yellow]\n"
+            f"[dim]{_('Configure subagents in {path}', path=SETTINGS_PATH)}[/dim]"
+        )
+        return
+
+    table = Table(
+        title=_("Configured Subagents"),
+        box=box.ROUNDED,
+        show_header=True,
+        header_style="bold magenta",
+    )
+    table.add_column(_("Name"), style="bold cyan", no_wrap=True)
+    table.add_column(_("Description"), style="white")
+    table.add_column(_("Model"), style="green", no_wrap=True)
+    table.add_column(_("Context"), style="yellow", no_wrap=True)
+    table.add_column(_("MCP Servers"), style="blue")
+
+    for sa in settings.subagents:
+        model_str = (
+            escape(sa.model)
+            if sa.model
+            else f"[dim]{escape(settings.model.name)} ({_('inherited')})[/dim]"
+        )
+        ctx_str = (
+            escape(str(sa.context_window))
+            if sa.context_window
+            else f"[dim]{escape(str(settings.model.context_window))} ({_('inherited')})[/dim]"
+        )
+        mcp_str = (
+            ", ".join(escape(srv.name) for srv in sa.mcp_servers)
+            if sa.mcp_servers
+            else "[dim]-[/dim]"
+        )
+
+        table.add_row(
+            escape(sa.name),
+            escape(sa.description),
+            model_str,
+            ctx_str,
+            mcp_str,
+        )
+
+    console.print(table)
 
 
 async def _list_models(base_url: str) -> list[Any]:
@@ -50,13 +110,13 @@ async def list_models(
         console.print(f"[bold]{_('Available Models:')}[/bold]\n[dim]{'─' * 60}[/dim]")
         for item, tool_icon in zip(models, tool_icons, strict=True):
             marker = f" [green]◀ {_('current')}[/green]" if item.model == current_model else ""
-            size_str = f"{(item.size / (1024**3)):.1f}GB" if item.size else ""
-            console.print(f"  {tool_icon} [cyan]{item.model}[/cyan] {size_str}{marker}")
+            size_str = format_model_size(item.size)
+            console.print(f"  {tool_icon} [cyan]{escape(item.model)}[/cyan] {size_str}{marker}")
         legend_str = _("supports tools | Use /model set <model> to switch")
         console.print(f"[dim]{'─' * 60}[/dim]\n[dim]✓ = {legend_str}[/dim]")
     except (ollama.ResponseError, OSError) as exc:
         err_msg = _("Error listing models: {exc}", exc=exc)
-        console.print(f"[red]{err_msg}[/red]")
+        console.print(f"[red]{escape(err_msg)}[/red]")
 
 
 async def set_model(
@@ -74,17 +134,17 @@ async def set_model(
                 "Model '{model_name}' not found.\nUse /model to see available models.",
                 model_name=model_name,
             )
-            console.print(f"[red]{not_found_msg}[/red]")
+            console.print(f"[red]{escape(not_found_msg)}[/red]")
             return None
     except (ollama.ResponseError, OSError) as exc:
         err_msg = _("Error checking model: {exc}", exc=exc)
-        console.print(f"[red]{err_msg}[/red]")
+        console.print(f"[red]{escape(err_msg)}[/red]")
         return None
 
     current = runtime.settings.model.name
     if model_name == current:
         already_msg = _("Already using model '{model_name}'.", model_name=model_name)
-        console.print(f"[yellow]{already_msg}[/yellow]")
+        console.print(f"[yellow]{escape(already_msg)}[/yellow]")
         return current
 
     try:
@@ -93,11 +153,11 @@ async def set_model(
                 "Model '{model_name}' does not support tools.\nThe agent requires tool support.",
                 model_name=model_name,
             )
-            console.print(f"[red]{no_tools_msg}[/red]")
+            console.print(f"[red]{escape(no_tools_msg)}[/red]")
             return None
     except ModelCapabilityError as exc:
         err_msg = _("Cannot verify model capabilities: {exc}", exc=exc)
-        console.print(f"[red]{err_msg}[/red]")
+        console.print(f"[red]{escape(err_msg)}[/red]")
         return None
 
     try:
@@ -107,11 +167,11 @@ async def set_model(
             current=current,
             model_name=model_name,
         )
-        console.print(f"[green]✓ {switched_msg}[/green]")
+        console.print(f"[green]✓ {escape(switched_msg)}[/green]")
         return model_name
     except (ollama.ResponseError, OSError) as exc:
         failed_msg = _("Failed to switch to model '{model_name}': {exc}", model_name=model_name, exc=exc)
-        console.print(f"[red]{failed_msg}[/red]")
+        console.print(f"[red]{escape(failed_msg)}[/red]")
         return None
 
 
@@ -130,8 +190,9 @@ def _prompt_user_select_model(
     console.print(f"[bold]{_('Available Ollama models:')}[/bold]")
     for i, item in enumerate(available_models, start=1):
         icon = icons_by_model[item.model]
-        size_str = f" ({item.size / (1024**3):.1f} GB)" if item.size else ""
-        console.print(f"  [cyan]{i})[/cyan] {icon} [bold]{item.model}[/bold]{size_str}")
+        size_gb = format_model_size(item.size)
+        size_str = f" ({size_gb})" if size_gb else ""
+        console.print(f"  [cyan]{i})[/cyan] {icon} [bold]{escape(item.model)}[/bold]{size_str}")
 
     while True:
         try:
@@ -151,21 +212,21 @@ def _prompt_user_select_model(
             choice=choice,
             count=len(available_models),
         )
-        console.print(f"[red]{invalid_sel}[/red]")
+        console.print(f"[red]{escape(invalid_sel)}[/red]")
 
-    if icons_by_model.get(selected) == "[red]✗[/red]":
+    if icons_by_model[selected] == "[red]✗[/red]":
         warn_msg = _(
             "Model '{model_name}' does not support tools.\nThe agent requires tool support.",
             model_name=selected,
         )
-        console.print(f"[yellow]{warn_msg}[/yellow]")
+        console.print(f"[yellow]{escape(warn_msg)}[/yellow]")
 
     return selected
 
 
 def ensure_model_configured(
     settings: Settings,
-    console: Console | None = None,
+    console: Console,
     input_func: Callable[[str], str] = input,
 ) -> str:
     """Ensure the configured model is available in Ollama, or prompt the user to choose one."""
@@ -195,12 +256,9 @@ def ensure_model_configured(
             save_settings(settings)
             return settings.model.name
 
-    if console is None:
-        console = Console()
-
     if configured:
         not_avail_msg = _("Configured model '{configured}' is not available in Ollama.", configured=configured)
-        console.print(f"[yellow]{not_avail_msg}[/yellow]")
+        console.print(f"[yellow]{escape(not_avail_msg)}[/yellow]")
     else:
         console.print(f"[yellow]{_('No model is currently configured in settings.')}[/yellow]")
 
@@ -209,5 +267,5 @@ def ensure_model_configured(
     settings.model.name = selected
     save_settings(settings)
     saved_msg = _("Selected model '{selected}' saved to configuration.", selected=selected)
-    console.print(f"[green]✓ {saved_msg}[/green]\n")
+    console.print(f"[green]✓ {escape(saved_msg)}[/green]\n")
     return selected

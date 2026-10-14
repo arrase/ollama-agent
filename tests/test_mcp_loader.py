@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 import io
 import json
@@ -13,7 +14,6 @@ from rich.console import Console
 
 import ollama_agent.mcp as mcp_pkg
 from ollama_agent.mcp.commands import (
-    DEFAULT_MCP_TIMEOUT as CMD_DEFAULT_MCP_TIMEOUT,
     check_mcp_server,
     list_mcp_servers,
     reload_mcp_servers,
@@ -145,13 +145,26 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(MCPConfigError, "'url' must be a non-empty string"):
             _build_mcp_connection("srv", {"url": None})
 
-    def test_subagent_mcp_server_to_dict(self) -> None:
+    def test_subagent_mcp_server_to_connection_config(self) -> None:
         srv = SubAgentMCPServer(name="git", command="npx", args=["-y", "git-mcp"], env={"GIT_AUTHOR": "test"})
-        self.assertEqual(srv.to_dict(), {"command": "npx", "args": ["-y", "git-mcp"], "env": {"GIT_AUTHOR": "test"}})
+        self.assertEqual(
+            srv.to_connection_config(),
+            {"command": "npx", "args": ["-y", "git-mcp"], "env": {"GIT_AUTHOR": "test"}},
+        )
+
+    def test_build_mcp_connection_url_and_headers_with_env(self) -> None:
+        with patch.dict("os.environ", {"MCP_HOST": "mcp.example.com", "API_TOKEN": "tok_xyz"}):
+            cfg = {
+                "type": "http",
+                "url": "https://${MCP_HOST}/mcp",
+                "headers": {"Authorization": "Bearer %API_TOKEN%"},
+            }
+            conn = _build_mcp_connection("srv", cfg)
+            self.assertEqual(conn["url"], "https://mcp.example.com/mcp")
+            self.assertEqual(conn["headers"], {"Authorization": "Bearer tok_xyz"})
 
     def test_default_mcp_timeout(self) -> None:
         self.assertEqual(DEFAULT_MCP_TIMEOUT, 10.0)
-        self.assertEqual(CMD_DEFAULT_MCP_TIMEOUT, 10.0)
 
     def test_mcp_package_exports(self) -> None:
         self.assertIn("MCPConfigError", mcp_pkg.__all__)
@@ -319,7 +332,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         mock_client = MagicMock()
         mock_client.get_tools = AsyncMock(return_value=[mock_tool])
 
-        with patch("ollama_agent.mcp.commands.MultiServerMCPClient", return_value=mock_client):
+        with patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client):
             status = await check_mcp_server("test-server", cfg)
             self.assertEqual(status.name, "test-server")
             self.assertEqual(status.status, "active")
@@ -333,7 +346,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         mock_client = MagicMock()
         mock_client.get_tools = AsyncMock(side_effect=RuntimeError("Command not found"))
 
-        with patch("ollama_agent.mcp.commands.MultiServerMCPClient", return_value=mock_client):
+        with patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client):
             status = await check_mcp_server("bad-server", cfg)
             self.assertEqual(status.name, "bad-server")
             self.assertEqual(status.status, "failed")
@@ -345,12 +358,29 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         tools = await _load_tools_from_connections({})
         self.assertEqual(tools, [])
 
+    async def test_load_tools_from_connections_reports_all_failures(self) -> None:
+        connections = {
+            "fast-fail": {"transport": "http", "url": "http://fast"},
+            "slow-fail": {"transport": "http", "url": "http://slow"},
+        }
+
+        async def fake_connect(name: str, _conn: dict[str, object]) -> list[object]:
+            if name == "slow-fail":
+                await asyncio.sleep(0.02)
+            raise MCPConfigError(f"boom-{name}")
+
+        with patch("ollama_agent.mcp.loader._connect_and_load", side_effect=fake_connect):
+            with self.assertRaises(MCPConfigError) as cm:
+                await _load_tools_from_connections(connections)
+        self.assertIn("boom-fast-fail", str(cm.exception))
+        self.assertIn("boom-slow-fail", str(cm.exception))
+
     async def test_check_mcp_server_timeout(self) -> None:
         cfg = {"type": "http", "url": "https://mcp.example.com"}
         mock_client = MagicMock()
         mock_client.get_tools = AsyncMock(side_effect=TimeoutError())
 
-        with patch("ollama_agent.mcp.commands.MultiServerMCPClient", return_value=mock_client):
+        with patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client):
             status = await check_mcp_server("slow-server", cfg)
             self.assertEqual(status.name, "slow-server")
             self.assertEqual(status.status, "failed")
@@ -417,7 +447,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
 
             with (
                 patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path),
-                patch("ollama_agent.mcp.commands.MultiServerMCPClient", return_value=mock_client),
+                patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client),
             ):
                 await list_mcp_servers(console, settings=settings)
                 out = console.export_text()

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import io
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from textual import events
@@ -12,8 +14,10 @@ from rich.console import Console
 
 from ollama_agent.agent.episodic_memory import HistoryError
 from ollama_agent.interfaces.tui import OllamaAgentApp, OllamaREPL
-from ollama_agent.interfaces.tui.commands import _is_immediate_command
+from ollama_agent.interfaces.tui.commands import run_slash_command
+from ollama_agent.interfaces.tui.completion import file_completions
 from ollama_agent.interfaces.tui.renderer import _TUIStreamingRenderer
+from ollama_agent.interfaces.tui.screens import MainScreen
 from ollama_agent.interfaces.tui.widgets import (
     AgentFooter,
     AgentHeader,
@@ -559,7 +563,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
 
             # 5. Level 2: Dynamic Session IDs for /session resume
             with patch(
-                "ollama_agent.interfaces.tui.app.get_available_sessions",
+                "ollama_agent.interfaces.tui.completion.get_available_sessions",
                 return_value=[{"thread_id": "session-12345678", "steps": 5}],
             ):
                 app.update_autocomplete("/session resume ")
@@ -576,7 +580,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             # 7. Level 2: Dynamic Models for /model set
             mock_m1 = MagicMock(model="llama3.2:latest", size=4 * 1024**3)
             mock_m2 = MagicMock(model="mistral:latest", size=5 * 1024**3)
-            with patch("ollama_agent.interfaces.tui.app._list_models_sync", return_value=[mock_m1, mock_m2]):
+            with patch("ollama_agent.interfaces.tui.completion._list_models_sync", return_value=[mock_m1, mock_m2]):
                 app.update_autocomplete("/model set ")
                 self.assertTrue(autolist.display)
                 self.assertEqual(autolist.option_count, 2)
@@ -586,7 +590,10 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
                 app.accept_completion(0)
                 self.assertEqual(inp.text, "/model set llama3.2:latest ")
 
-            with patch("ollama_agent.interfaces.tui.app._list_models_sync", side_effect=OSError("Connection refused")):
+            with patch(
+                "ollama_agent.interfaces.tui.completion._list_models_sync",
+                side_effect=OSError("Connection refused"),
+            ):
                 app.update_autocomplete("/model set ")
                 self.assertFalse(autolist.display)
                 self.assertEqual(autolist.option_count, 0)
@@ -603,7 +610,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         async with app.run_test():
             inp = app.query_one(ReplInput)
             inp.text = "Look at @"
-            with patch.object(app, "_file_completions", return_value=[("src/main.py", "1.2 KB")]):
+            with patch("ollama_agent.interfaces.tui.app.file_completions", return_value=[("src/main.py", "1.2 KB")]):
                 app.update_autocomplete("Look at @")
                 app.accept_completion(0)
                 self.assertEqual(inp.text, "Look at @src/main.py ")
@@ -615,11 +622,6 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
         repl_mock._rag_ctx = None
         repl_mock.runtime.yolo_mode = False
-
-        def _handle_new_session() -> None:
-            pass
-
-        repl_mock._handle_new_session = _handle_new_session
 
         def _toggle_yolo(args):
             repl_mock.runtime.yolo_mode = not repl_mock.runtime.yolo_mode
@@ -639,40 +641,32 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             chat_scroll = app.query_one("#chat-scroll")
             await chat_scroll.mount(UserMessage("clear me"))
             await pilot.pause()
-            with patch("ollama_agent.interfaces.tui.repl.new_session", return_value="newsess12345678"):
-
-                def _handle_new(_tid: str = "newsess12345678") -> None:
-                    repl_mock.runtime.thread_id = _tid
-
-                repl_mock._handle_new_session = _handle_new
-                await app._run_slash_command("/clear")
+            with patch("ollama_agent.interfaces.tui.repl.new_session", return_value="newsess12345678") as mock_new:
+                await run_slash_command(app, "/clear")
                 await pilot.pause()
                 self.assertEqual(len(list(chat_scroll.query(UserMessage))), 0)
+                mock_new.assert_called_once()
                 self.assertEqual(repl_mock.runtime.thread_id, "newsess12345678")
 
             # 1b. /new
             await chat_scroll.mount(UserMessage("new me"))
             await pilot.pause()
-            with patch("ollama_agent.interfaces.tui.repl.new_session", return_value="newsess87654321"):
-
-                def _handle_new2(_tid: str = "newsess87654321") -> None:
-                    repl_mock.runtime.thread_id = _tid
-
-                repl_mock._handle_new_session = _handle_new2
-                await app._run_slash_command("/new")
+            with patch("ollama_agent.interfaces.tui.repl.new_session", return_value="newsess87654321") as mock_new2:
+                await run_slash_command(app, "/new")
                 await pilot.pause()
                 self.assertEqual(len(list(chat_scroll.query(UserMessage))), 0)
+                mock_new2.assert_called_once()
                 self.assertEqual(repl_mock.runtime.thread_id, "newsess87654321")
 
             # 2. Unknown command
-            await app._run_slash_command("/unknown-cmd")
+            await run_slash_command(app, "/unknown-cmd")
             self.assertEqual(len(list(chat_scroll.query(".system-message"))), 0)
             sys_out = app.query_one(SystemOutputWidget)
             self.assertTrue(sys_out.display)
             self.assertIn("Unknown command", str(sys_out.render()))
 
             # 3. /yolo command
-            await app._run_slash_command("/yolo")
+            await run_slash_command(app, "/yolo")
             self.assertTrue(repl_mock.runtime.yolo_mode)
 
             # 4. /session resume command (mounting previous conversation)
@@ -682,7 +676,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             repl_mock.runtime.count_effective_tokens = AsyncMock(return_value=42)
 
             with patch("ollama_agent.interfaces.tui.commands.resume_session", return_value="sess12345678"):
-                await app._run_slash_command("/session resume sess12345678")
+                await run_slash_command(app, "/session resume sess12345678")
                 await pilot.pause()
                 self.assertEqual(len(list(chat_scroll.query(UserMessage))), 1)
                 self.assertEqual(len(list(chat_scroll.query(AgentResponse))), 1)
@@ -691,13 +685,13 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
 
             # 5. /effort command updates header
             with patch.object(app.query_one(AgentHeader), "update_header") as mock_update_header:
-                await app._run_slash_command("/effort high")
+                await run_slash_command(app, "/effort high")
                 mock_update_header.assert_called_once()
                 self.assertEqual(repl_mock.runtime.settings.model.reasoning_effort, "high")
 
             # 6. /task create conversational dispatch
             with patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream:
-                await app._run_slash_command("/task create my-new-task")
+                await run_slash_command(app, "/task create my-new-task")
                 mock_stream.assert_called_once()
                 prompt_arg = mock_stream.call_args[0][0]
                 self.assertIn("task-creator", prompt_arg)
@@ -705,7 +699,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
 
             # 7. /skill create conversational dispatch
             with patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream:
-                await app._run_slash_command("/skill create git-commit-helper")
+                await run_slash_command(app, "/skill create git-commit-helper")
                 mock_stream.assert_called_once()
                 prompt_arg = mock_stream.call_args[0][0]
                 self.assertIn("skill-creator", prompt_arg)
@@ -731,7 +725,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
                 patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream,
                 patch("ollama_agent.interfaces.tui.commands.apply_task_settings") as mock_apply,
             ):
-                await app._run_slash_command("/task run my-task -y")
+                await run_slash_command(app, "/task run my-task -y")
                 await pilot.pause()
 
             mock_apply.assert_called_once_with(repl_mock.runtime.settings, task)
@@ -762,7 +756,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         app = OllamaAgentApp(repl_mock)
         async with app.run_test() as pilot:
             with patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream:
-                await app._run_slash_command("/task run param-task file=src/app.py mode=strict")
+                await run_slash_command(app, "/task run param-task file=src/app.py mode=strict")
                 await pilot.pause()
 
             task.render.assert_called_once_with({"file": "src/app.py", "mode": "strict"})
@@ -788,7 +782,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
                 patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream,
                 patch.object(app, "show_system_notice") as mock_notice,
             ):
-                await app._run_slash_command("/task run param-task invalid_var")
+                await run_slash_command(app, "/task run param-task invalid_var")
                 await pilot.pause()
 
             mock_stream.assert_not_called()
@@ -815,7 +809,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
                 patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream,
                 patch.object(app, "show_system_notice") as mock_notice,
             ):
-                await app._run_slash_command("/task run param-task")
+                await run_slash_command(app, "/task run param-task")
                 await pilot.pause()
 
             mock_stream.assert_not_called()
@@ -899,215 +893,8 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
         await repl.cleanup()
         runtime_mock.aclose.assert_awaited_once()
 
-    def test_is_immediate_command(self) -> None:
-        # Immediate / safe commands
-        self.assertTrue(_is_immediate_command("/exit"))
-        self.assertTrue(_is_immediate_command("/quit"))
-        self.assertTrue(_is_immediate_command("/queue"))
-        self.assertTrue(_is_immediate_command("/queue clear"))
-        self.assertTrue(_is_immediate_command("/yolo"))
-        self.assertTrue(_is_immediate_command("/yolo on"))
-        self.assertTrue(_is_immediate_command("/yolo off"))
-        self.assertTrue(_is_immediate_command("/model"))
-        self.assertTrue(_is_immediate_command("/model list"))
-        self.assertTrue(_is_immediate_command("/effort"))
-        self.assertTrue(_is_immediate_command("/context"))
-        self.assertTrue(_is_immediate_command("/params"))
-        self.assertTrue(_is_immediate_command("/params list"))
-        self.assertTrue(_is_immediate_command("/session"))
-        self.assertTrue(_is_immediate_command("/session list"))
-        self.assertTrue(_is_immediate_command("/session search test"))
-        self.assertTrue(_is_immediate_command("/session export"))
-        self.assertTrue(_is_immediate_command("/session delete id123"))
-        self.assertTrue(_is_immediate_command("/task"))
-        self.assertTrue(_is_immediate_command("/task list"))
-        self.assertTrue(_is_immediate_command("/task delete id123"))
-        self.assertTrue(_is_immediate_command("/skill"))
-        self.assertTrue(_is_immediate_command("/skill list"))
-        self.assertTrue(_is_immediate_command("/skill show id123"))
-        self.assertTrue(_is_immediate_command("/skill delete id123"))
-        self.assertTrue(_is_immediate_command("/rag"))
-        self.assertTrue(_is_immediate_command("/rag status"))
-        self.assertTrue(_is_immediate_command("/rag list"))
-        self.assertTrue(_is_immediate_command("/rag create test_db"))
-        self.assertTrue(_is_immediate_command("/rag delete test_db"))
-        self.assertTrue(_is_immediate_command("/rag load test_db"))
-        self.assertTrue(_is_immediate_command("/rag unload"))
-        self.assertTrue(_is_immediate_command("/mcp"))
-        self.assertTrue(_is_immediate_command("/mcp list"))
-        self.assertTrue(_is_immediate_command("/agents"))
-        self.assertTrue(_is_immediate_command("/agents list"))
-
-        # Stateful / Agent-running commands
-        self.assertFalse(_is_immediate_command("normal prompt"))
-        self.assertFalse(_is_immediate_command("/model set llama3:latest"))
-        self.assertFalse(_is_immediate_command("/model llama3:latest"))
-        self.assertFalse(_is_immediate_command("/effort high"))
-        self.assertFalse(_is_immediate_command("/effort set high"))
-        self.assertFalse(_is_immediate_command("/context 8192"))
-        self.assertFalse(_is_immediate_command("/context set 8192"))
-        self.assertFalse(_is_immediate_command("/params set temperature 0.7"))
-        self.assertFalse(_is_immediate_command("/session resume 12345"))
-        self.assertFalse(_is_immediate_command("/session switch 12345"))
-        self.assertFalse(_is_immediate_command("/session new"))
-        self.assertFalse(_is_immediate_command("/clear"))
-        self.assertFalse(_is_immediate_command("/new"))
-        self.assertFalse(_is_immediate_command("/task create my_task"))
-        self.assertFalse(_is_immediate_command("/task run my_task"))
-        self.assertFalse(_is_immediate_command("/skill create my_skill"))
-        self.assertFalse(_is_immediate_command("/rag add file.txt"))
-        self.assertFalse(_is_immediate_command("/mcp reload"))
-
-    async def test_repl_queue_handler(self) -> None:
-        runtime_mock = MagicMock()
-        repl = OllamaREPL(runtime=runtime_mock)
-        repl.console = Console(file=io.StringIO())
-
-        # Empty queue
-        repl._handle_queue_cmd([])
-        self.assertIn("Prompt queue is empty", repl.console.file.getvalue())
-
-        # Setup app with queue items
-        app = OllamaAgentApp(repl)
-        async with app.run_test():
-            app._prompt_queue.append("Prompt 1")
-            app._prompt_queue.append("Prompt 2")
-
-            repl.console = Console(file=io.StringIO())
-            repl._handle_queue_cmd(["list"])
-            out = repl.console.file.getvalue()
-            self.assertIn("Queued prompts (2)", out)
-            self.assertIn("Prompt 1", out)
-            self.assertIn("Prompt 2", out)
-
-            # Clear queue
-            repl.console = Console(file=io.StringIO())
-            repl._handle_queue_cmd(["clear"])
-            out = repl.console.file.getvalue()
-            self.assertIn("Prompt queue cleared (2 removed)", out)
-            self.assertEqual(len(app._prompt_queue), 0)
-
-            # Invalid subcommand
-            repl.console = Console(file=io.StringIO())
-            repl._handle_queue_cmd(["invalid_sub"])
-            self.assertIn("Unknown queue subcommand", repl.console.file.getvalue())
-
-    async def test_app_queue_and_fifo_processing(self) -> None:
-        runtime_mock = MagicMock()
-        runtime_mock.settings.model.name = "qwen2.5-coder:32b"
-        runtime_mock.settings.model.reasoning_effort = "high"
-        runtime_mock.yolo_mode = False
-        repl = OllamaREPL(runtime=runtime_mock)
-        repl.console = Console(file=io.StringIO())
-
-        app = OllamaAgentApp(repl)
-        async with app.run_test():
-            inp = app.query_one(ReplInput)
-
-            # 1. Enqueue while generating
-            app._is_generating = True
-            app.on_repl_input_submitted(ReplInput.Submitted(inp, "First queued prompt"))
-            app.on_repl_input_submitted(ReplInput.Submitted(inp, "Second queued prompt"))
-
-            self.assertEqual(len(app._prompt_queue), 2)
-            self.assertEqual(app._prompt_queue[0], "First queued prompt")
-            self.assertEqual(app._prompt_queue[1], "Second queued prompt")
-
-            # Check footer queued count
-            footer = app.query_one(AgentFooter)
-            self.assertEqual(footer._queued_count, 2)
-
-            # 2. Immediate command during generating does not enqueue
-            app.on_repl_input_submitted(ReplInput.Submitted(inp, "/yolo"))
-            self.assertEqual(len(app._prompt_queue), 2)
-
-            # 3. Process next in queue
-            app._is_generating = False
-            with patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream:
-                app._process_next_in_queue()
-                self.assertEqual(len(app._prompt_queue), 1)
-                self.assertEqual(footer._queued_count, 1)
-                mock_stream.assert_called_once()
-                self.assertEqual(mock_stream.call_args[0][0], "First queued prompt")
-
-            # 4. /queue clear clears the queue without stopping execution
-            app._prompt_queue.append("Third prompt")
-            self.assertEqual(len(app._prompt_queue), 2)
-            repl._handle_queue_cmd(["clear"])
-            self.assertEqual(len(app._prompt_queue), 0)
-            self.assertEqual(footer._queued_count, 0)
-
-            # 5. Esc cancellation clears queue and stops generation
-            app._prompt_queue.append("Fourth prompt")
-            self.assertEqual(len(app._prompt_queue), 1)
-            app.action_cancel_generation()
-            self.assertEqual(len(app._prompt_queue), 0)
-            self.assertEqual(footer._queued_count, 0)
-
-    async def test_app_tool_approval_allows_queueing_and_resumes(self) -> None:
-        runtime_mock = MagicMock()
-        runtime_mock.settings.model.name = "qwen2.5-coder:32b"
-        runtime_mock.settings.model.reasoning_effort = "high"
-        runtime_mock.yolo_mode = False
-        repl = OllamaREPL(runtime=runtime_mock)
-
-        app = OllamaAgentApp(repl)
-        async with app.run_test():
-            inp = app.query_one(ReplInput)
-            footer = app.query_one(AgentFooter)
-
-            # Simulate approval pending
-            app._is_approval_pending = True
-            footer.set_approval(True)
-
-            # Verify input is NOT disabled
-            self.assertFalse(inp.disabled)
-
-            # Queue a prompt while approval is pending
-            app.on_repl_input_submitted(ReplInput.Submitted(inp, "Prompt during approval"))
-            self.assertEqual(len(app._prompt_queue), 1)
-            self.assertEqual(footer._queued_count, 1)
-
-            # Approval decision handled
-            agent_msg = AgentResponse()
-            scroll = app.query_one("#chat-scroll")
-            with patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream:
-                await app._handle_approval_decision([{"type": "approve"}], scroll, agent_msg)
-                self.assertFalse(app._is_approval_pending)
-                mock_stream.assert_awaited_once()
-
-    async def test_app_queue_slash_command_and_drain(self) -> None:
-        runtime_mock = MagicMock()
-        runtime_mock.settings.model.name = "qwen2.5-coder:32b"
-        runtime_mock.settings.model.reasoning_effort = "high"
-        runtime_mock.yolo_mode = False
-        repl = OllamaREPL(runtime=runtime_mock)
-
-        app = OllamaAgentApp(repl)
-        async with app.run_test():
-            inp = app.query_one(ReplInput)
-            footer = app.query_one(AgentFooter)
-
-            # Queue stateful slash command while generating
-            app._is_generating = True
-            app.on_repl_input_submitted(ReplInput.Submitted(inp, "/task run my_task"))
-            self.assertEqual(len(app._prompt_queue), 1)
-            self.assertEqual(app._prompt_queue[0], "/task run my_task")
-            self.assertEqual(footer._queued_count, 1)
-
-            # Drain queue
-            app._is_generating = False
-            with patch.object(app, "_run_slash_command", new_callable=AsyncMock) as mock_slash:
-                app._process_next_in_queue()
-                self.assertEqual(len(app._prompt_queue), 0)
-                self.assertEqual(footer._queued_count, 0)
-                mock_slash.assert_called_once_with("/task run my_task")
-
     async def test_slash_command_output_renders_in_system_output_not_in_chat(self) -> None:
-        runtime_mock = MagicMock()
-        runtime_mock.settings.model.name = "qwen2.5-coder:32b"
-        runtime_mock.settings.model.reasoning_effort = "high"
-        runtime_mock.yolo_mode = False
+        runtime_mock = make_mock_runtime()
         repl = OllamaREPL(runtime=runtime_mock)
         app = OllamaAgentApp(repl)
 
@@ -1119,7 +906,7 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
                 repl.console.print("Models: llama3, mistral")
 
             with patch.dict(app.repl._get_commands(), {"/model": fake_handler}):
-                await app._run_slash_command("/model list")
+                await run_slash_command(app, "/model list")
                 await pilot.pause()
 
             # Chat scroll MUST remain completely clean of system messages
@@ -1134,10 +921,7 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Models: llama3, mistral", rendered)
 
     async def test_esc_dismisses_system_output_when_idle(self) -> None:
-        runtime_mock = MagicMock()
-        runtime_mock.settings.model.name = "qwen2.5-coder:32b"
-        runtime_mock.settings.model.reasoning_effort = "high"
-        runtime_mock.yolo_mode = False
+        runtime_mock = make_mock_runtime()
         repl = OllamaREPL(runtime=runtime_mock)
         app = OllamaAgentApp(repl)
 
@@ -1151,14 +935,11 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(sys_out.display)
 
     async def test_submitting_new_prompt_dismisses_system_output(self) -> None:
-        runtime_mock = MagicMock()
-        runtime_mock.settings.model.name = "qwen2.5-coder:32b"
-        runtime_mock.settings.model.reasoning_effort = "high"
-        runtime_mock.yolo_mode = False
+        runtime_mock = make_mock_runtime()
         repl = OllamaREPL(runtime=runtime_mock)
         app = OllamaAgentApp(repl)
 
-        async with app.run_test():
+        async with app.run_test() as pilot:
             inp = app.query_one(ReplInput)
             sys_out = app.query_one(SystemOutputWidget)
 
@@ -1167,14 +948,12 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
 
             with patch.object(app, "_run_stream", new_callable=AsyncMock):
                 app.on_repl_input_submitted(ReplInput.Submitted(inp, "Hello agent"))
+                await pilot.pause()
 
             self.assertFalse(sys_out.display)
 
     async def test_esc_dismisses_system_output_without_cancelling_active_worker(self) -> None:
-        runtime_mock = MagicMock()
-        runtime_mock.settings.model.name = "qwen2.5-coder:32b"
-        runtime_mock.settings.model.reasoning_effort = "high"
-        runtime_mock.yolo_mode = False
+        runtime_mock = make_mock_runtime()
         repl = OllamaREPL(runtime=runtime_mock)
         app = OllamaAgentApp(repl)
 
@@ -1198,10 +977,7 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
             mock_worker.cancel.assert_called_once()
 
     async def test_widgets_adapt_height_without_limits(self) -> None:
-        runtime_mock = MagicMock()
-        runtime_mock.settings.model.name = "qwen2.5-coder:32b"
-        runtime_mock.settings.model.reasoning_effort = "high"
-        runtime_mock.yolo_mode = False
+        runtime_mock = make_mock_runtime()
         repl = OllamaREPL(runtime=runtime_mock)
         app = OllamaAgentApp(repl)
 
@@ -1225,7 +1001,10 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
         app = OllamaAgentApp(repl)
 
         with (
-            patch("ollama_agent.interfaces.tui.widgets.input.load_past_user_prompts", side_effect=HistoryError("Corrupt DB")),
+            patch(
+                "ollama_agent.interfaces.tui.widgets.input.load_past_user_prompts",
+                side_effect=HistoryError("Corrupt DB"),
+            ),
             patch.object(app, "show_system_notice") as mock_notice,
         ):
             async with app.run_test() as pilot:
@@ -1235,3 +1014,146 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
                 notice_text = mock_notice.call_args[0][0]
                 self.assertIn("Prompt history unavailable", notice_text)
                 self.assertEqual(input_widget._history, [])
+
+    async def test_immediate_command_does_not_drain_queue(self) -> None:
+        runtime_mock = make_mock_runtime()
+        repl = OllamaREPL(runtime=runtime_mock)
+        app = OllamaAgentApp(repl)
+
+        async with app.run_test():
+            app._prompt_queue.append("Pending prompt")
+            with patch.object(app, "_process_next_in_queue") as mock_drain:
+                await run_slash_command(app, "/yolo")
+                mock_drain.assert_not_called()
+
+    async def test_esc_cancels_mounted_approval_widget_buttons(self) -> None:
+        runtime_mock = make_mock_runtime()
+        repl = OllamaREPL(runtime=runtime_mock)
+        app = OllamaAgentApp(repl)
+
+        async with app.run_test() as pilot:
+            chat_scroll = app.query_one("#chat-scroll")
+            agent_msg = AgentResponse()
+            await chat_scroll.mount(agent_msg)
+            widget = ToolApprovalWidget(
+                action_requests=[{"name": "execute", "args": {"cmd": "rm -rf"}}],
+                app_ref=app,
+                scroll=chat_scroll,
+                agent_msg=agent_msg,
+            )
+            await chat_scroll.mount(widget)
+            await pilot.pause()
+
+            app._is_approval_pending = True
+            with patch.object(app, "_handle_approval_decision", new_callable=AsyncMock):
+                app.action_cancel_generation()
+                self.assertTrue(widget._decided)
+                self.assertIsNone(widget.buttons_container)
+
+    async def test_enter_submits_when_input_already_matches_highlighted_completion(self) -> None:
+        runtime_mock = make_mock_runtime()
+        repl = OllamaREPL(runtime=runtime_mock)
+        app = OllamaAgentApp(repl)
+
+        async with app.run_test() as pilot:
+            inp = app.query_one(ReplInput)
+            autolist = app.query_one("#autocomplete-list", OptionList)
+
+            # Complete a no-arg command -> popup should stay hidden
+            inp.text = "/cl"
+            app.update_autocomplete("/cl")
+            self.assertTrue(autolist.display)
+            app.accept_completion(0)
+            await pilot.pause()
+            self.assertEqual(inp.text, "/clear")
+            self.assertFalse(autolist.display)
+
+            # When popup is open and text matches highlighted option, Enter submits directly
+            inp.text = "/model"
+            app.update_autocomplete("/model")
+            self.assertTrue(autolist.display)
+            with patch.object(inp, "post_message") as mock_post:
+                inp.on_key(events.Key("enter", "\r"))
+                self.assertFalse(autolist.display)
+                mock_post.assert_called_once()
+                submitted_msg = mock_post.call_args[0][0]
+                self.assertIsInstance(submitted_msg, ReplInput.Submitted)
+                self.assertEqual(submitted_msg.value, "/model")
+
+    def test_file_completions_subdirectory_prefix(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            subdir = root / "src"
+            subdir.mkdir()
+            (subdir / "main.py").write_text("print(1)", encoding="utf-8")
+            (subdir / "other.py").write_text("print(2)", encoding="utf-8")
+
+            with patch("pathlib.Path.cwd", return_value=root):
+                results = list(file_completions("src/m"))
+                paths = [p for p, _ in results]
+                self.assertIn("src/main.py", paths)
+                self.assertNotIn("src/other.py", paths)
+
+    async def test_thinking_after_text_flushes_text_in_order(self) -> None:
+        class OrderTestApp(App):
+            def __init__(self) -> None:
+                super().__init__()
+                self.repl = MagicMock()
+                self.repl.runtime.settings.runtime.collapse_thinking = True
+
+            def compose(self) -> ComposeResult:
+                yield AgentResponse()
+
+        app = OrderTestApp()
+        async with app.run_test():
+            agent_msg = app.query_one(AgentResponse)
+            agent_msg.append_text("First text block")
+            text_widget = agent_msg.current_text_widget
+            self.assertIsNotNone(text_widget)
+            # Appending thinking after text must flush the buffered text first
+            with patch.object(agent_msg, "flush_text", wraps=agent_msg.flush_text) as mock_flush:
+                agent_msg.append_thinking("Second thinking block")
+                mock_flush.assert_called_once()
+            self.assertIsNone(agent_msg.current_text_widget)
+            self.assertIsNotNone(agent_msg.current_thinking)
+
+    async def test_multiline_history_navigation_places_cursor_at_end(self) -> None:
+        class HistoryCursorApp(App):
+            def compose(self) -> ComposeResult:
+                yield OptionList(id="autocomplete-list")
+                yield ReplInput(id="repl-input")
+
+        app = HistoryCursorApp()
+        with patch("ollama_agent.interfaces.tui.widgets.input.load_past_user_prompts", return_value=[]):
+            async with app.run_test() as pilot:
+                await pilot.pause()
+                inp = app.query_one(ReplInput)
+                inp.add_history_entry("line one\nline two longer")
+                inp._handle_history_key(events.Key("up", "up"))
+                self.assertEqual(inp.cursor_location, (1, len("line two longer")))
+
+    def test_main_screen_forward_event_catches_detached_widget_region_error(self) -> None:
+        screen = MainScreen()
+        screen._select_state = MagicMock(end=None)
+        with (
+            patch(
+                "textual.screen.Screen._forward_event",
+                side_effect=AttributeError("'NoneType' object has no attribute 'region'"),
+            ),
+            patch("ollama_agent.interfaces.tui.screens.logging.warning") as mock_warn,
+        ):
+            screen._forward_event(MagicMock())
+            self.assertIsNone(screen._select_state)
+            mock_warn.assert_called_once()
+
+    def test_main_screen_forward_event_reraises_other_attribute_errors(self) -> None:
+        screen = MainScreen()
+        with (
+            patch(
+                "textual.screen.Screen._forward_event",
+                side_effect=AttributeError("some other attribute error"),
+            ),
+            self.assertRaises(AttributeError),
+        ):
+            screen._forward_event(MagicMock())
+

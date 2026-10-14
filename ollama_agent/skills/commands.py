@@ -10,7 +10,7 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
-from ..core.resource_manager import require_text
+from ..core import require_text
 from ..i18n import _
 from .manager import SkillInfo, SkillManager
 
@@ -47,11 +47,6 @@ class SkillsContext:
             validation_error=ValidationError,
         )
 
-    _resolve_skill = resolve_skill
-
-    def _require(self, value: str, name: str) -> str:
-        return require_text(value, name, ValidationError)
-
 
 def list_skills(ctx: SkillsContext) -> None:
     """List all skills in the managed directory."""
@@ -83,9 +78,9 @@ def create_skill(
     force: bool = False,
 ) -> None:
     """Create a new skill."""
-    name = ctx._require(name, _("Name"))
-    description = ctx._require(description, _("Description"))
-    instructions = ctx._require(instructions, _("Instructions"))
+    name = require_text(name, _("Name"), ValidationError)
+    description = require_text(description, _("Description"), ValidationError)
+    instructions = require_text(instructions, _("Instructions"), ValidationError)
     try:
         created = ctx.skill_manager.create(
             skill_id,

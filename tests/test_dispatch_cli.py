@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import io
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 from rich.console import Console
 
@@ -13,7 +13,6 @@ from ollama_agent.core import (
     ModelContextWindowError,
     OllamaVersionError,
 )
-from ollama_agent.i18n import set_locale
 from ollama_agent.interfaces.cli import create_argument_parser, handle_subcommand
 from ollama_agent.interfaces.commands.dispatch import (
     build_cli_handlers,
@@ -26,19 +25,15 @@ from ollama_agent.settings import RAGSettings, Settings
 from ollama_agent.skills.commands import SkillsContext
 from ollama_agent.tasks.commands import TasksContext
 
-from conftest import make_repl_environment
-
-
-def _console() -> Console:
-    return Console(file=io.StringIO())
+from conftest import make_repl_environment, recording_console
 
 
 def _build_cli_handlers(args: argparse.Namespace) -> dict[tuple[str, str], object]:
     return build_cli_handlers(
         args,
-        task_ctx=TasksContext(console=_console()),
-        rag_ctx=RAGContext(rag_manager=RAGManager(RAGSettings()), console=_console()),
-        skills_ctx=SkillsContext(console=_console()),
+        task_ctx=TasksContext(console=recording_console()),
+        rag_ctx=RAGContext(rag_manager=RAGManager(RAGSettings()), console=recording_console()),
+        skills_ctx=SkillsContext(console=recording_console()),
         settings=Settings(),
     )
 
@@ -140,9 +135,9 @@ class TestDispatchAndCLI(unittest.TestCase):
     def test_build_cli_handlers_requires_settings(self) -> None:
         parser = create_argument_parser()
         args = parser.parse_args(["task", "list"])
-        task_ctx = TasksContext(console=_console())
-        rag_ctx = RAGContext(rag_manager=RAGManager(RAGSettings()), console=_console())
-        skills_ctx = SkillsContext(console=_console())
+        task_ctx = TasksContext(console=recording_console())
+        rag_ctx = RAGContext(rag_manager=RAGManager(RAGSettings()), console=recording_console())
+        skills_ctx = SkillsContext(console=recording_console())
         with self.assertRaises(TypeError):
             build_cli_handlers(
                 args,
@@ -254,7 +249,7 @@ class TestDispatchAndCLI(unittest.TestCase):
         ):
             main()
             mock_check_version.assert_called_once_with(mock_settings.model.base_url)
-            mock_ensure.assert_called_once_with(mock_settings)
+            mock_ensure.assert_called_once_with(mock_settings, console=ANY)
             self.assertEqual(mock_settings.model.name, "qwen3:32b")
             self.assertEqual(mock_settings.model.reasoning_effort, "high")
             self.assertEqual(mock_settings.runtime.builtin_tool_timeout, 40)
@@ -274,7 +269,7 @@ class TestDispatchAndCLI(unittest.TestCase):
         ):
             main()
             mock_check_version.assert_called_once_with(mock_settings.model.base_url)
-            mock_ensure.assert_called_once_with(mock_settings)
+            mock_ensure.assert_called_once_with(mock_settings, console=ANY)
             mock_prompt_session.assert_called_once()
 
     def test_main_model_capability_error_exits(self) -> None:
@@ -463,15 +458,12 @@ class TestDispatchAndCLI(unittest.TestCase):
 
     def test_main_help_localization(self) -> None:
         stdout = io.StringIO()
-        try:
-            with patch("sys.argv", ["ollama-agent", "-l", "es", "--help"]), patch("sys.stdout", stdout):
-                with self.assertRaises(SystemExit) as cm:
-                    main()
-                self.assertEqual(cm.exception.code, 0)
-            output = stdout.getvalue()
-            self.assertIn("Agente de IA", output)
-        finally:
-            set_locale("en")
+        with patch("sys.argv", ["ollama-agent", "-l", "es", "--help"]), patch("sys.stdout", stdout):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 0)
+        output = stdout.getvalue()
+        self.assertIn("Agente de IA", output)
 
 
 if __name__ == "__main__":
