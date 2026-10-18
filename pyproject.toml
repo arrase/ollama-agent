@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ollama-agent"
-version = "1.0.0"
+version = "1.0.1"
 description = "AI agent to interact with local language models through Ollama"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "deepagents==0.7.25",
     "langchain==1.4.5",
-    "langchain-core==1.6.7",
+    "langchain-core==1.6.12",
     "langchain-ollama==1.1.0",
     "langgraph==1.2.15",
     "langgraph-checkpoint-sqlite==3.1.2",
