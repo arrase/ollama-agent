@@ -1,12 +1,75 @@
-# Ollama Agent — Your Autonomous Local AI Assistant {: #ollama-agent }
+---
+hide:
+  - toc
+---
 
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/)
-[![DeepAgents](https://img.shields.io/badge/Framework-DeepAgents-purple.svg)](https://docs.langchain.com/oss/python/deepagents/overview)
-[![LangChain](https://img.shields.io/badge/LLM-LangChain-green.svg)](https://github.com/langchain-ai/langchain)
-[![Ollama](https://img.shields.io/badge/Backend-Ollama-black.svg)](https://ollama.com/)
+<div class="hero-section">
+  <div class="hero-eyebrow">
+    <i class="fa-solid fa-robot" aria-hidden="true"></i>
+    <span>Autonomous Local AI Assistant</span>
+  </div>
+  <h1>Ollama Agent</h1>
+  <p class="hero-subtitle">
+    An autonomous, local-first AI assistant running entirely on your machine via Ollama. Features an interactive terminal REPL, one-shot CLI, Model Context Protocol (MCP) tools, specialized subagents, local RAG, and persistent memory.
+  </p>
+  <div class="hero-badges">
+    <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
+    <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11%2B-blue.svg" alt="Python 3.11+"></a>
+    <a href="https://docs.langchain.com/oss/python/deepagents/overview"><img src="https://img.shields.io/badge/Framework-DeepAgents-purple.svg" alt="DeepAgents"></a>
+    <a href="https://github.com/langchain-ai/langchain"><img src="https://img.shields.io/badge/LLM-LangChain-green.svg" alt="LangChain"></a>
+    <a href="https://ollama.com/"><img src="https://img.shields.io/badge/Backend-Ollama-black.svg" alt="Ollama"></a>
+  </div>
+</div>
 
-**Ollama Agent** is an autonomous, local-first AI assistant running entirely on your machine via [Ollama](https://ollama.com/). It provides an interactive terminal user interface (REPL) and a one-shot command-line interface (CLI) to tackle daily tasks—from deep research, document analysis, and system automation to software development. With zero cloud dependency, no subscriptions, and total data privacy, you stay in complete control of your tools, your prompts, and your data.
+<div class="section-header">
+  <h2>Key Features</h2>
+  <span>Local-first intelligence &amp; extensible tooling</span>
+</div>
+
+<div class="projects-grid">
+  <div class="feature-card">
+    <div>
+      <i class="fa-solid fa-terminal feature-icon" aria-hidden="true"></i>
+      <h3>Interactive CLI &amp; REPL</h3>
+      <p>Rich terminal UI with live syntax-highlighted streaming, multiline editing, 3-level tab autocompletion, and one-shot CLI mode (<code>-p</code>) for shell automation.</p>
+    </div>
+  </div>
+  <div class="feature-card">
+    <div>
+      <i class="fa-solid fa-plug feature-icon" aria-hidden="true"></i>
+      <h3>Model Context Protocol (MCP)</h3>
+      <p>Connect seamlessly to external MCP tool servers over <code>stdio</code>, <code>http</code>, or <code>sse</code> with live tool discovery and runtime management.</p>
+    </div>
+  </div>
+  <div class="feature-card">
+    <div>
+      <i class="fa-solid fa-sitemap feature-icon" aria-hidden="true"></i>
+      <h3>Specialized Subagents</h3>
+      <p>Delegate complex workflows to custom subagents with isolated context windows, dedicated models, tailored system prompts, and exclusive MCP toolsets.</p>
+    </div>
+  </div>
+  <div class="feature-card">
+    <div>
+      <i class="fa-solid fa-database feature-icon" aria-hidden="true"></i>
+      <h3>Local RAG Engine</h3>
+      <p>Index local documentation and codebases into an embedded vector store powered by Ollama embeddings for fast, private semantic search.</p>
+    </div>
+  </div>
+  <div class="feature-card">
+    <div>
+      <i class="fa-solid fa-wand-magic-sparkles feature-icon" aria-hidden="true"></i>
+      <h3>Persistent Memory &amp; Skills</h3>
+      <p>Retain user preferences across sessions (<code>MEMORY.md</code>), auto-discover project guidelines (<code>AGENTS.md</code>), and equip reusable Agent Skills and Saved Tasks.</p>
+    </div>
+  </div>
+  <div class="feature-card">
+    <div>
+      <i class="fa-solid fa-shield-halved feature-icon" aria-hidden="true"></i>
+      <h3>100% Local &amp; Private</h3>
+      <p>Built natively for Ollama with automatic context detection, creator hyperparameter discovery, human-in-the-loop safety gates, and zero cloud dependency.</p>
+    </div>
+  </div>
+</div>
 
 ---
 
@@ -134,63 +197,6 @@ flowchart LR
 
 ---
 
-## Key Features
-
-<div class="projects-grid">
-  <div class="feature-card">
-    <i class="fa-solid fa-terminal feature-icon"></i>
-    <h3>Interactive REPL</h3>
-    <p>Rich terminal UI with live syntax-highlighted streaming, multiline editing (<code>\ + Enter</code>), 3-level tab autocompletion, and real-time status updates.</p>
-  </div>
-  <div class="feature-card">
-    <i class="fa-solid fa-bolt feature-icon"></i>
-    <h3>Non-Interactive CLI</h3>
-    <p>Execute single prompts directly from your shell (<code>-p</code>) for automation, scripting, CI/CD pipelines, and quick command-line queries.</p>
-  </div>
-  <div class="feature-card">
-    <i class="fa-solid fa-list-check feature-icon"></i>
-    <h3>Saved Tasks</h3>
-    <p>Store, parameterize, and run repeatable prompt workflows with dynamic variables, dedicated model choices, and custom reasoning levels.</p>
-  </div>
-  <div class="feature-card">
-    <i class="fa-solid fa-wand-magic-sparkles feature-icon"></i>
-    <h3>Agent Skills</h3>
-    <p>Equip your assistant with specialized procedural capabilities following the open Agent Skills standard with progressive disclosure.</p>
-  </div>
-  <div class="feature-card">
-    <i class="fa-solid fa-plug feature-icon"></i>
-    <h3>MCP Tool Support</h3>
-    <p>Connect seamlessly to any external Model Context Protocol server over <code>stdio</code>, <code>http</code>, or <code>sse</code> with live discovery and management.</p>
-  </div>
-  <div class="feature-card">
-    <i class="fa-solid fa-database feature-icon"></i>
-    <h3>Local RAG Engine</h3>
-    <p>Index local documentation and codebases into an embedded vector store powered by Ollama embeddings for instant semantic search.</p>
-  </div>
-  <div class="feature-card">
-    <i class="fa-solid fa-book-bookmark feature-icon"></i>
-    <h3>Memory & AGENTS.md</h3>
-    <p>Persistent user preferences across sessions (<code>MEMORY.md</code>) and hierarchical auto-discovery of project guidelines (<code>AGENTS.md</code>).</p>
-  </div>
-  <div class="feature-card">
-    <i class="fa-solid fa-sitemap feature-icon"></i>
-    <h3>Custom Subagents</h3>
-    <p>Delegate specialized workflows to subagents with isolated context windows, dedicated system prompts, and exclusive MCP toolsets.</p>
-  </div>
-  <div class="feature-card">
-    <i class="fa-solid fa-clipboard feature-icon"></i>
-    <h3>Clipboard Integration</h3>
-    <p>Cross-platform clipboard support across Linux (Wayland/X11), macOS, and Windows to quickly pull snippets into prompts or copy responses.</p>
-  </div>
-  <div class="feature-card">
-    <i class="fa-solid fa-language feature-icon"></i>
-    <h3>Multi-Language UI</h3>
-    <p>Fully localized terminal experience across 16 languages with automatic system locale detection and explicit runtime overrides (<code>-l</code>).</p>
-  </div>
-</div>
-
----
-
 ## Practical Everyday Recipes
 
 ### 1. Codebase Audit & Refactoring
@@ -262,26 +268,110 @@ ollama-agent -p "Read the JSON on my clipboard and convert it into a typed Pydan
 !!! tip "4. Automatic Context Compaction"
     During long troubleshooting or exploratory sessions, Ollama Agent tracks your token usage against your model's context window. When usage exceeds 85%, background compaction summarizes past turns while preserving essential working memory. You can also trigger this manually in the REPL with `/context compact`.
 
----
+<div class="section-header">
+  <h2>Documentation</h2>
+  <span>Guides, extensibility &amp; system architecture</span>
+</div>
 
-## Documentation Roadmap
-
-Dive deeper into Ollama Agent with our dedicated guides:
-
-### User Guides
-* **[CLI & REPL Interface Guide](cli_repl.md)**: Master the interactive terminal, slash commands, multiline editor, `@`-file attachments, and CLI automation.
-
-### Extensibility & Tools
-* **[Saved Tasks & Automation](tasks.md)**: Build and automate repeatable prompt templates with dynamic Jinja2 variables.
-* **[Agent Skills Standard](skills.md)**: Extend capabilities with custom procedural workflows and progressive skill discovery.
-* **[Model Context Protocol (MCP)](mcp.md)**: Connect external tool servers over `stdio`, `http`, or `sse` with hot-reloading.
-* **[Specialized Custom Subagents](subagents.md)**: Configure dedicated subagents with tailored prompts, models, and isolated contexts.
-
-### Knowledge & Memory
-* **[Memory, Sessions & Guidelines](memory.md)**: Leverage `AGENTS.md` project guidelines, persistent user memory (`MEMORY.md`), and session history.
-* **[Local RAG Engine](rag.md)**: Build, embed, and query private vector databases from your local files.
-
-### Reference & Internals
-* **[Configuration Reference](configuration.md)**: Complete guide to `settings.yaml`, environment variables, and parameter tuning.
-* **[System Architecture](architecture.md)**: In-depth breakdown of state graphs, persistence, tool middleware, and streaming pipelines.
-* **[Developer Guide](developer_guide.md)**: Development environment setup, testing procedures, and contribution guidelines.
+<div class="projects-grid">
+  <a href="cli_repl/" class="feature-card">
+    <div>
+      <div class="card-top">
+        <i class="fa-solid fa-terminal feature-icon" aria-hidden="true"></i>
+        <span class="card-badge">Read →</span>
+      </div>
+      <h3>CLI &amp; REPL Interface</h3>
+      <p>Master the interactive terminal, slash commands, multiline editor, <code>@</code>-file attachments, and CLI automation.</p>
+    </div>
+  </a>
+  <a href="skills/" class="feature-card">
+    <div>
+      <div class="card-top">
+        <i class="fa-solid fa-wand-magic-sparkles feature-icon" aria-hidden="true"></i>
+        <span class="card-badge">Read →</span>
+      </div>
+      <h3>Agent Skills</h3>
+      <p>Extend capabilities with custom procedural workflows and progressive skill discovery following the Agent Skills standard.</p>
+    </div>
+  </a>
+  <a href="tasks/" class="feature-card">
+    <div>
+      <div class="card-top">
+        <i class="fa-solid fa-list-check feature-icon" aria-hidden="true"></i>
+        <span class="card-badge">Read →</span>
+      </div>
+      <h3>Saved Tasks</h3>
+      <p>Build and automate repeatable prompt templates with dynamic Jinja2 variables and model overrides.</p>
+    </div>
+  </a>
+  <a href="mcp/" class="feature-card">
+    <div>
+      <div class="card-top">
+        <i class="fa-solid fa-plug feature-icon" aria-hidden="true"></i>
+        <span class="card-badge">Read →</span>
+      </div>
+      <h3>Model Context Protocol (MCP)</h3>
+      <p>Connect external tool servers over <code>stdio</code>, <code>http</code>, or <code>sse</code> with hot-reloading and runtime inspection.</p>
+    </div>
+  </a>
+  <a href="subagents/" class="feature-card">
+    <div>
+      <div class="card-top">
+        <i class="fa-solid fa-sitemap feature-icon" aria-hidden="true"></i>
+        <span class="card-badge">Read →</span>
+      </div>
+      <h3>Specialized Subagents</h3>
+      <p>Configure dedicated subagents with tailored prompts, models, MCP tools, and isolated context windows.</p>
+    </div>
+  </a>
+  <a href="memory/" class="feature-card">
+    <div>
+      <div class="card-top">
+        <i class="fa-solid fa-book-bookmark feature-icon" aria-hidden="true"></i>
+        <span class="card-badge">Read →</span>
+      </div>
+      <h3>Memory &amp; Guidelines</h3>
+      <p>Leverage <code>AGENTS.md</code> project guidelines, persistent user memory (<code>MEMORY.md</code>), and SQLite session history.</p>
+    </div>
+  </a>
+  <a href="rag/" class="feature-card">
+    <div>
+      <div class="card-top">
+        <i class="fa-solid fa-database feature-icon" aria-hidden="true"></i>
+        <span class="card-badge">Read →</span>
+      </div>
+      <h3>Local RAG Engine</h3>
+      <p>Build, embed, and query private vector databases from your local documentation and source files.</p>
+    </div>
+  </a>
+  <a href="configuration/" class="feature-card">
+    <div>
+      <div class="card-top">
+        <i class="fa-solid fa-sliders feature-icon" aria-hidden="true"></i>
+        <span class="card-badge">Read →</span>
+      </div>
+      <h3>Configuration Reference</h3>
+      <p>Complete guide to <code>settings.yaml</code>, environment variables, context sizing, and model parameter tuning.</p>
+    </div>
+  </a>
+  <a href="architecture/" class="feature-card">
+    <div>
+      <div class="card-top">
+        <i class="fa-solid fa-diagram-project feature-icon" aria-hidden="true"></i>
+        <span class="card-badge">Read →</span>
+      </div>
+      <h3>System Architecture</h3>
+      <p>In-depth breakdown of state graphs, persistence, tool middleware, and real-time streaming pipelines.</p>
+    </div>
+  </a>
+  <a href="developer_guide/" class="feature-card">
+    <div>
+      <div class="card-top">
+        <i class="fa-solid fa-code feature-icon" aria-hidden="true"></i>
+        <span class="card-badge">Read →</span>
+      </div>
+      <h3>Developer Guide</h3>
+      <p>Development environment setup, codebase structure, testing procedures, and contribution guidelines.</p>
+    </div>
+  </a>
+</div>
