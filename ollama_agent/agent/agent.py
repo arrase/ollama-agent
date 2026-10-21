@@ -315,6 +315,27 @@ class AgentRuntime:
 
         return {"messages": [user_msg]}, mention_warnings
 
+    def _handle_stream_event(
+        self,
+        mode: str,
+        event: Any,
+        parser: ThinkTagParser,
+        *,
+        hide_reasoning: bool,
+    ) -> list[dict[str, Any]]:
+        if mode == "custom":
+            flushed = parser.flush(hide_reasoning=hide_reasoning) if event["type"] == "tool_call" else []
+            return [*flushed, event]
+        if mode == "messages":
+            chunk, metadata = event
+            if metadata.get("langgraph_node") == "tools":
+                return []
+            meta = chunk.response_metadata
+            if "prompt_eval_count" in meta:
+                self.last_context_tokens = int(meta.get("eval_count", 0)) + int(meta["prompt_eval_count"])
+            return parser.process_chunk(chunk, hide_reasoning=hide_reasoning)
+        return []
+
     async def run_streamed(
         self,
         prompt: str | Command[Any],
@@ -341,21 +362,8 @@ class AgentRuntime:
             config,
             stream_mode=["messages", "custom"],
         ):
-            if mode == "custom":
-                if event["type"] == "tool_call":
-                    for result in parser.flush(hide_reasoning=hide_reasoning):
-                        yield result
-                yield event
-                continue
-            if mode == "messages":
-                chunk, metadata = event
-                if metadata.get("langgraph_node") == "tools":
-                    continue
-                meta = chunk.response_metadata
-                if "prompt_eval_count" in meta:
-                    self.last_context_tokens = int(meta.get("eval_count", 0)) + int(meta["prompt_eval_count"])
-                for result in parser.process_chunk(chunk, hide_reasoning=hide_reasoning):
-                    yield result
+            for result in self._handle_stream_event(mode, event, parser, hide_reasoning=hide_reasoning):
+                yield result
 
         for result in parser.flush(hide_reasoning=hide_reasoning):
             yield result

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Iterator, Sequence
+from itertools import islice
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -439,6 +440,20 @@ def _iter_file_completions(
             yield item
 
 
+def _iter_walk_completions(
+    search_dir: Path,
+    cwd: Path,
+    prefix_lower: str,
+    show_hidden: bool,
+) -> Iterator[tuple[str, str]]:
+    for root, dirs, files in os.walk(search_dir):
+        root_path = Path(root)
+        candidate_dirs = _collect_dir_candidates(dirs, root_path, cwd, prefix_lower, show_hidden)
+        dirs[:] = [d[0] for d in candidate_dirs]
+        yield from _iter_dir_completions(candidate_dirs, prefix_lower)
+        yield from _iter_file_completions(files, root_path, cwd, prefix_lower, show_hidden)
+
+
 def file_completions(token: str, max_completions: int = 15) -> Iterator[tuple[str, Text]]:
     """Yield `@`-mention file and directory completions matching *token*."""
     cwd = Path.cwd()
@@ -460,31 +475,11 @@ def file_completions(token: str, max_completions: int = 15) -> Iterator[tuple[st
 
     show_hidden = prefix.startswith(".")
     prefix_lower = ("" if rel_dir == Path(".") else f"{rel_dir.as_posix().lower()}/") + prefix.lower()
-    count = 0
+    matches = _iter_walk_completions(search_dir, cwd, prefix_lower, show_hidden)
 
-    for root, dirs, files in os.walk(search_dir):
-        root_path = Path(root)
-        candidate_dirs = _collect_dir_candidates(dirs, root_path, cwd, prefix_lower, show_hidden)
-        dirs[:] = [d[0] for d in candidate_dirs]
-
-        for rel, meta in _iter_dir_completions(candidate_dirs, prefix_lower):
-            escaped_rel = escape(rel)
-            item = (
-                rel,
-                Text.from_markup(f"[bold #38bdf8]{escaped_rel:<30}[/bold #38bdf8] [dim #8b949e]{meta}[/dim #8b949e]"),
-            )
-            if count >= max_completions:
-                return
-            count += 1
-            yield item
-
-        for rel, meta in _iter_file_completions(files, root_path, cwd, prefix_lower, show_hidden):
-            escaped_rel = escape(rel)
-            item = (
-                rel,
-                Text.from_markup(f"[bold #38bdf8]{escaped_rel:<30}[/bold #38bdf8] [dim #8b949e]{meta}[/dim #8b949e]"),
-            )
-            if count >= max_completions:
-                return
-            count += 1
-            yield item
+    for rel, meta in islice(matches, max_completions):
+        escaped_rel = escape(rel)
+        yield (
+            rel,
+            Text.from_markup(f"[bold #38bdf8]{escaped_rel:<30}[/bold #38bdf8] [dim #8b949e]{meta}[/dim #8b949e]"),
+        )

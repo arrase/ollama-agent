@@ -25,6 +25,9 @@ MIN_OLLAMA_VERSION = "0.34.3"
 REASONING_OFF_VALUES = ("false", "0", "disabled", "off", "hide")
 REASONING_ON_VALUES = ("true", "1", "enabled", "on")
 
+_REASONING_EFFORT_NAME = "Reasoning effort"
+_EMPTY_FIELD_MSG = "{name} cannot be empty."
+
 # Reasoning effort is forwarded verbatim to Ollama's "think" parameter and written to
 # settings.yaml, so it is restricted to a short opaque token.
 _REASONING_EFFORT_RE = re.compile(r"[A-Za-z0-9_.:+-]{1,32}")
@@ -470,10 +473,10 @@ def validate_reasoning_effort(effort: Any) -> ReasoningEffortValue:
     if isinstance(effort, bool):
         return "true" if effort else "false"
     if not isinstance(effort, str):
-        raise ValueError(_("{name} cannot be empty.", name="Reasoning effort"))
+        raise ValueError(_(_EMPTY_FIELD_MSG, name=_REASONING_EFFORT_NAME))
     normalized = effort.strip()
     if not normalized:
-        raise ValueError(_("{name} cannot be empty.", name="Reasoning effort"))
+        raise ValueError(_(_EMPTY_FIELD_MSG, name=_REASONING_EFFORT_NAME))
     if not _REASONING_EFFORT_RE.fullmatch(normalized):
         raise ValueError(
             _(
@@ -486,7 +489,36 @@ def validate_reasoning_effort(effort: Any) -> ReasoningEffortValue:
 
 
 def _format_thinking_val(val: Any) -> str:
-    return ("true" if val else "false") if isinstance(val, bool) else str(val)
+    if isinstance(val, bool):
+        return "true" if val else "false"
+    return str(val)
+
+
+def _resolve_off_effort(
+    effort_lower: str,
+    values: list[Any],
+    model_name: str,
+) -> tuple[str | None, str | None]:
+    if effort_lower == "hide":
+        return "hide", None
+    if any(v is False for v in values):
+        return "false", None
+    return (
+        None,
+        _(
+            "Model '{model}' is a thinking-only model. reasoning_effort='disabled' is not supported; "
+            "thinking will remain enabled.",
+            model=model_name,
+        ),
+    )
+
+
+def _resolve_on_effort(thinking_cfg: dict[str, Any], values: list[Any]) -> str:
+    if any(v is True for v in values):
+        return "true"
+    if "default" in thinking_cfg:
+        return _format_thinking_val(thinking_cfg["default"])
+    return "default"
 
 
 def validate_and_normalize_effort(
@@ -501,7 +533,7 @@ def validate_and_normalize_effort(
     """
     norm_effort = effort.strip()
     if not norm_effort:
-        return None, _("{name} cannot be empty.", name="Reasoning effort")
+        return None, _(_EMPTY_FIELD_MSG, name=_REASONING_EFFORT_NAME)
     if norm_effort.lower() == "default":
         return "default", None
     if not (thinking_cfg and thinking_cfg.get("values")):
@@ -510,25 +542,10 @@ def validate_and_normalize_effort(
     values = thinking_cfg["values"]
     effort_lower = norm_effort.lower()
     if effort_lower in REASONING_OFF_VALUES:
-        if effort_lower == "hide":
-            return "hide", None
-        if any(v is False for v in values):
-            return "false", None
-        return (
-            None,
-            _(
-                "Model '{model}' is a thinking-only model. reasoning_effort='disabled' is not supported; "
-                "thinking will remain enabled.",
-                model=model_name,
-            ),
-        )
+        return _resolve_off_effort(effort_lower, values, model_name)
 
     if effort_lower in REASONING_ON_VALUES:
-        if any(v is True for v in values):
-            return "true", None
-        if "default" in thinking_cfg:
-            return _format_thinking_val(thinking_cfg["default"]), None
-        return "default", None
+        return _resolve_on_effort(thinking_cfg, values), None
 
     for v in values:
         if str(v).lower() == effort_lower:

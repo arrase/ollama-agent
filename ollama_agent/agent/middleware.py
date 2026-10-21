@@ -20,6 +20,43 @@ from ..i18n import _
 from .builtin_tools import get_tool_timeout
 
 
+def _compute_output_len(result: Any) -> int:
+    content = getattr(result, "content", None)
+    if content is None and isinstance(result, Command) and isinstance(result.update, dict):
+        messages = result.update.get("messages")
+        if messages:
+            content = getattr(messages[-1], "content", None)
+    if content is None:
+        return len(result) if isinstance(result, str) else 0
+    return len(str(content))
+
+
+async def _invoke_with_timeout(
+    request: Any,
+    handler: Any,
+    tool_name: str,
+    tool_call_id: str,
+) -> Any:
+    if tool_name == "task":
+        return await handler(request)
+
+    timeout_s = get_tool_timeout()
+    try:
+        async with asyncio.timeout(timeout_s) as timer:
+            return await handler(request)
+    except TimeoutError:
+        # Since 3.11 asyncio.TimeoutError is TimeoutError, so a TimeoutError raised by
+        # the tool itself would otherwise be misreported as our own deadline expiring.
+        if not timer.expired():
+            raise
+        return ToolMessage(
+            content=_("Tool '{tool_name}' timed out after {timeout_s}s", tool_name=tool_name, timeout_s=timeout_s),
+            tool_call_id=tool_call_id,
+            name=tool_name,
+            status="error",
+        )
+
+
 async def _stream_tool_events(request: Any, handler: Any) -> Any:
     """Emit tool_call / tool_output events and enforce tool timeout."""
     tool_call = request.tool_call
@@ -33,35 +70,9 @@ async def _stream_tool_events(request: Any, handler: Any) -> Any:
         event["agent_name"] = agent_name
     request.runtime.stream_writer(event)
 
-    if tool_name == "task":
-        result = await handler(request)
-    else:
-        timeout_s = get_tool_timeout()
-        try:
-            async with asyncio.timeout(timeout_s) as timer:
-                result = await handler(request)
-        except TimeoutError:
-            # Since 3.11 asyncio.TimeoutError is TimeoutError, so a TimeoutError raised by
-            # the tool itself would otherwise be misreported as our own deadline expiring.
-            if not timer.expired():
-                raise
-            result = ToolMessage(
-                content=_("Tool '{tool_name}' timed out after {timeout_s}s", tool_name=tool_name, timeout_s=timeout_s),
-                tool_call_id=tool_call_id,
-                name=tool_name,
-                status="error",
-            )
+    result = await _invoke_with_timeout(request, handler, tool_name, tool_call_id)
 
-    content = getattr(result, "content", None)
-    if content is None and isinstance(result, Command) and isinstance(result.update, dict):
-        messages = result.update.get("messages")
-        if messages:
-            content = getattr(messages[-1], "content", None)
-    if content is None:
-        output_len = len(result) if isinstance(result, str) else 0
-    else:
-        output_len = len(str(content))
-    out_event: dict[str, Any] = {"type": "tool_output", "output_len": output_len}
+    out_event: dict[str, Any] = {"type": "tool_output", "output_len": _compute_output_len(result)}
     if agent_name:
         out_event["agent_name"] = agent_name
     request.runtime.stream_writer(out_event)

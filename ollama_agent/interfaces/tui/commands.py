@@ -99,6 +99,17 @@ def _is_immediate_command(val: str) -> bool:
     return (cmd, "*") in IMMEDIATE_COMMANDS or (cmd, sub) in IMMEDIATE_COMMANDS
 
 
+def _mount_history_messages(scroll: Any, messages: list[Any]) -> None:
+    for msg in messages:
+        content = extract_text(msg.content)
+        if not content:
+            continue
+        if msg.type in ("human", "user"):
+            scroll.mount(UserMessage(content))
+        elif msg.type in ("ai", "assistant"):
+            scroll.mount(AgentResponse(initial_text=content))
+
+
 async def _resume_slash_session(app: OllamaAgentApp, args: list[str], scroll: Any) -> None:
     if len(args) < 2:
         usage_msg = _("Usage: /session resume <session_id>")
@@ -110,32 +121,25 @@ async def _resume_slash_session(app: OllamaAgentApp, args: list[str], scroll: An
     except HistoryError as exc:
         app.show_system_notice(f"[red]{escape(str(exc))}[/red]")
         return
-    if resolved:
-        app.repl.runtime.thread_id = resolved
-        await scroll.remove_children()
-        messages = await app.repl.runtime.get_thread_messages(resolved)
-        app.repl.runtime.last_context_tokens = await app.repl.runtime.count_effective_tokens(resolved)
-        for msg in messages:
-            role = msg.type
-            content = extract_text(msg.content)
-            if not content:
-                continue
-            if role in ("human", "user"):
-                scroll.mount(UserMessage(content))
-            elif role in ("ai", "assistant"):
-                scroll.mount(AgentResponse(initial_text=content))
-        resumed_label = escape(f"{resolved[:8]} ({resolved})")
-        notice = _("Resumed session: {session_id}", session_id=resumed_label)
-        app.show_system_notice(f"[bold #38bdf8]✓ {notice}[/bold #38bdf8]")
-        app.query_one(AgentHeader).update_header()
-        app._deferred_scroll()
-    else:
+    if not resolved:
         err_output = capture.get().strip()
         if err_output:
             app.show_system_notice(Text.from_ansi(err_output))
         else:
             not_found = _("Session not found: {session_id}", session_id=escape(args[1]))
             app.show_system_notice(f"[bold #f87171]✕ {not_found}[/bold #f87171]")
+        return
+
+    app.repl.runtime.thread_id = resolved
+    await scroll.remove_children()
+    messages = await app.repl.runtime.get_thread_messages(resolved)
+    app.repl.runtime.last_context_tokens = await app.repl.runtime.count_effective_tokens(resolved)
+    _mount_history_messages(scroll, messages)
+    resumed_label = escape(f"{resolved[:8]} ({resolved})")
+    notice = _("Resumed session: {session_id}", session_id=resumed_label)
+    app.show_system_notice(f"[bold #38bdf8]✓ {notice}[/bold #38bdf8]")
+    app.query_one(AgentHeader).update_header()
+    app._deferred_scroll()
 
 
 async def _export_slash_session(app: OllamaAgentApp, args: list[str]) -> None:
@@ -184,78 +188,84 @@ async def _handle_slash_session(app: OllamaAgentApp, cmd: str, args: list[str], 
     return False
 
 
+async def _handle_task_create(app: OllamaAgentApp, cmd_line: str, sub_args: list[str], scroll: Any) -> None:
+    task_info = " ".join(sub_args)
+    if task_info:
+        prompt_text = (
+            f"[System Instruction: The user executed '/task create {task_info}'. "
+            f"Use your 'task-creator' instructions to guide the user or draft the task, "
+            f"generate a clear and self-contained YAML task file, and save it in /tasks/<task_id>.yaml.]"
+        )
+    else:
+        prompt_text = (
+            "[System Instruction: The user executed '/task create'. "
+            "Use your 'task-creator' instructions to ask what repeatable workflow or prompt "
+            "they want to save as a task, and guide them through creating it in /tasks/<task_id>.yaml.]"
+        )
+    scroll.mount(UserMessage(cmd_line))
+    agent_msg = AgentResponse()
+    scroll.mount(agent_msg)
+    app._deferred_scroll()
+    await app._run_stream(prompt_text, scroll, agent_msg)
+
+
+async def _handle_task_run(app: OllamaAgentApp, cmd_line: str, sub_args: list[str], scroll: Any) -> None:
+    positional = [a for a in sub_args if not a.startswith("-")]
+    if not positional:
+        app.show_system_notice(f"[bold #f87171]✕ {_('Usage: /task run <id> [-y]')}[/bold #f87171]")
+        return
+    target_id = positional[0]
+    var_args = positional[1:]
+    try:
+        variables = parse_var_assignments(var_args)
+        _tid, t, rendered_prompt = prepare_task_run(app.repl._task_ctx, target_id, variables)
+    except TaskError as exc:
+        app.show_system_notice(f"[red]{escape(str(exc))}[/red]")
+        return
+
+    scroll.mount(UserMessage(cmd_line))
+    agent_msg = AgentResponse()
+    scroll.mount(agent_msg)
+    app._deferred_scroll()
+
+    settings = app.repl.runtime.settings
+    prev_model = settings.model.name
+    prev_effort = settings.model.reasoning_effort
+    prev_yolo = app.repl.runtime.yolo_mode
+
+    async def _restore_task_settings() -> None:
+        settings.model.name = prev_model
+        settings.model.reasoning_effort = prev_effort
+        app.repl.runtime.yolo_mode = prev_yolo
+        await app.repl.runtime.reload()
+        app.update_mode_ui()
+
+    app._post_stream_cleanup = _restore_task_settings
+    try:
+        apply_task_settings(settings, t)
+        if "-y" in sub_args or "--yolo" in sub_args:
+            app.repl.runtime.yolo_mode = True
+        await app.repl.runtime.reload()
+        app.update_mode_ui()
+        await app._run_stream(rendered_prompt, scroll, agent_msg)
+    finally:
+        if not app._is_approval_pending and app._post_stream_cleanup is not None:
+            cleanup = app._post_stream_cleanup
+            app._post_stream_cleanup = None
+            await cleanup()
+
+
 async def _handle_slash_task(app: OllamaAgentApp, cmd_line: str, args: list[str], scroll: Any) -> bool:
     cmd = cmd_line.split()[0].lower()
     if cmd != CMD_TASK or not args:
         return False
 
     if args[0] == "create":
-        sub_args = args[1:]
-        task_info = " ".join(sub_args)
-        if task_info:
-            prompt_text = (
-                f"[System Instruction: The user executed '/task create {task_info}'. "
-                f"Use your 'task-creator' instructions to guide the user or draft the task, "
-                f"generate a clear and self-contained YAML task file, and save it in /tasks/<task_id>.yaml.]"
-            )
-        else:
-            prompt_text = (
-                "[System Instruction: The user executed '/task create'. "
-                "Use your 'task-creator' instructions to ask what repeatable workflow or prompt "
-                "they want to save as a task, and guide them through creating it in /tasks/<task_id>.yaml.]"
-            )
-        scroll.mount(UserMessage(cmd_line))
-        agent_msg = AgentResponse()
-        scroll.mount(agent_msg)
-        app._deferred_scroll()
-        await app._run_stream(prompt_text, scroll, agent_msg)
+        await _handle_task_create(app, cmd_line, args[1:], scroll)
         return True
 
     if args[0] == "run":
-        sub_args = args[1:]
-        positional = [a for a in sub_args if not a.startswith("-")]
-        if not positional:
-            app.show_system_notice(f"[bold #f87171]✕ {_('Usage: /task run <id> [-y]')}[/bold #f87171]")
-            return True
-        target_id = positional[0]
-        var_args = positional[1:]
-        try:
-            variables = parse_var_assignments(var_args)
-            _tid, t, rendered_prompt = prepare_task_run(app.repl._task_ctx, target_id, variables)
-        except TaskError as exc:
-            app.show_system_notice(f"[red]{escape(str(exc))}[/red]")
-            return True
-
-        scroll.mount(UserMessage(cmd_line))
-        agent_msg = AgentResponse()
-        scroll.mount(agent_msg)
-        app._deferred_scroll()
-
-        settings = app.repl.runtime.settings
-        prev_model = settings.model.name
-        prev_effort = settings.model.reasoning_effort
-        prev_yolo = app.repl.runtime.yolo_mode
-
-        async def _restore_task_settings() -> None:
-            settings.model.name = prev_model
-            settings.model.reasoning_effort = prev_effort
-            app.repl.runtime.yolo_mode = prev_yolo
-            await app.repl.runtime.reload()
-            app.update_mode_ui()
-
-        app._post_stream_cleanup = _restore_task_settings
-        try:
-            apply_task_settings(settings, t)
-            if "-y" in sub_args or "--yolo" in sub_args:
-                app.repl.runtime.yolo_mode = True
-            await app.repl.runtime.reload()
-            app.update_mode_ui()
-            await app._run_stream(rendered_prompt, scroll, agent_msg)
-        finally:
-            if not app._is_approval_pending and app._post_stream_cleanup is not None:
-                cleanup = app._post_stream_cleanup
-                app._post_stream_cleanup = None
-                await cleanup()
+        await _handle_task_run(app, cmd_line, args[1:], scroll)
         return True
 
     return False
@@ -290,6 +300,41 @@ async def _handle_slash_skill(app: OllamaAgentApp, cmd_line: str, args: list[str
     return True
 
 
+async def _execute_repl_command(
+    app: OllamaAgentApp,
+    cmd_line: str,
+    cmd: str,
+    args: list[str],
+    scroll: Any,
+) -> None:
+    commands = app.repl._get_commands()
+    if cmd not in commands:
+        notice = escape(_("Unknown command: {cmd}", cmd=cmd))
+        app.show_system_notice(f"[bold #f87171]✕ {notice}[/bold #f87171]")
+        return
+
+    handler = commands[cmd]
+    console = app.repl.console
+    prev_width, prev_height = console.width, console.height
+    scroll_w = scroll.size.width if scroll.size.width > 10 else app.size.width
+    console.width = max(40, scroll_w - 6)
+    try:
+        with console.capture() as capture:
+            await safe_call(handler, args, console=console)
+    finally:
+        console.width, console.height = prev_width, prev_height
+    output = capture.get()
+    if output:
+        app.show_system_output(Text.from_ansi(output), title=cmd_line)
+
+    if cmd in (CMD_YOLO, CMD_STEALTH):
+        app.update_mode_ui()
+    elif cmd == CMD_QUEUE:
+        app._update_queue_ui()
+    elif cmd in (CMD_MODEL, CMD_EFFORT, CMD_CONTEXT, CMD_RAG):
+        app.query_one(AgentHeader).update_header()
+
+
 async def run_slash_command(app: OllamaAgentApp, cmd_line: str) -> None:
     """Execute a user-typed slash command in the TUI.
 
@@ -319,32 +364,7 @@ async def run_slash_command(app: OllamaAgentApp, cmd_line: str) -> None:
         if await _handle_slash_skill(app, cmd_line, args, scroll):
             return
 
-        commands = app.repl._get_commands()
-        if cmd not in commands:
-            notice = escape(_("Unknown command: {cmd}", cmd=cmd))
-            app.show_system_notice(f"[bold #f87171]✕ {notice}[/bold #f87171]")
-            return
-
-        handler = commands[cmd]
-        console = app.repl.console
-        prev_width, prev_height = console.width, console.height
-        scroll_w = scroll.size.width if scroll.size.width > 10 else app.size.width
-        console.width = max(40, scroll_w - 6)
-        try:
-            with console.capture() as capture:
-                await safe_call(handler, args, console=console)
-        finally:
-            console.width, console.height = prev_width, prev_height
-        output = capture.get()
-        if output:
-            app.show_system_output(Text.from_ansi(output), title=cmd_line)
-
-        if cmd in (CMD_YOLO, CMD_STEALTH):
-            app.update_mode_ui()
-        elif cmd == CMD_QUEUE:
-            app._update_queue_ui()
-        elif cmd in (CMD_MODEL, CMD_EFFORT, CMD_CONTEXT, CMD_RAG):
-            app.query_one(AgentHeader).update_header()
+        await _execute_repl_command(app, cmd_line, cmd, args, scroll)
     except asyncio.CancelledError:
         raise
     # A slash command must never kill the app.

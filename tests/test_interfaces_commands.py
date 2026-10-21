@@ -846,18 +846,20 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
 
     def test_ensure_model_configured_no_models_raises(self) -> None:
         settings = Settings()
+        console = Console(file=io.StringIO())
 
         with patch("ollama_agent.interfaces.commands.models._list_models", AsyncMock(return_value=[])):
             with self.assertRaises(ModelCapabilityError) as cm:
-                ensure_model_configured(settings, console=Console(file=io.StringIO()))
+                ensure_model_configured(settings, console=console)
             self.assertIn("No models found in Ollama", str(cm.exception))
 
     def test_ensure_model_configured_connection_error_raises(self) -> None:
         settings = Settings()
+        console = Console(file=io.StringIO())
 
         with patch("ollama_agent.interfaces.commands.models._list_models", AsyncMock(side_effect=ConnectionError("Refused"))):
             with self.assertRaises(ModelCapabilityError) as cm:
-                ensure_model_configured(settings, console=Console(file=io.StringIO()))
+                ensure_model_configured(settings, console=console)
             self.assertIn("Could not connect to Ollama", str(cm.exception))
 
     def test_repl_subcommands_error_and_edge_cases(self) -> None:
