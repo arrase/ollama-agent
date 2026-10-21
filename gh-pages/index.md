@@ -19,6 +19,18 @@ hide:
     <a href="https://github.com/langchain-ai/langchain"><img src="https://img.shields.io/badge/LLM-LangChain-green.svg" alt="LangChain"></a>
     <a href="https://ollama.com/"><img src="https://img.shields.io/badge/Backend-Ollama-black.svg" alt="Ollama"></a>
   </div>
+  <div class="hero-badges">
+    <a href="https://sonarcloud.io/summary/new_code?id=arrase_ollama-agent"><img src="https://img.shields.io/sonar/quality_gate/arrase_ollama-agent?server=https%3A%2F%2Fsonarcloud.io&amp;logo=sonarcloud" alt="Quality Gate Status"></a>
+    <a href="https://sonarcloud.io/summary/new_code?id=arrase_ollama-agent"><img src="https://img.shields.io/sonar/coverage/arrase_ollama-agent?server=https%3A%2F%2Fsonarcloud.io&amp;logo=sonarcloud" alt="Coverage"></a>
+    <a href="https://sonarcloud.io/summary/new_code?id=arrase_ollama-agent"><img src="https://img.shields.io/sonar/bugs/arrase_ollama-agent?server=https%3A%2F%2Fsonarcloud.io&amp;logo=sonarcloud" alt="Bugs"></a>
+    <a href="https://sonarcloud.io/summary/new_code?id=arrase_ollama-agent"><img src="https://img.shields.io/sonar/vulnerabilities/arrase_ollama-agent?server=https%3A%2F%2Fsonarcloud.io&amp;logo=sonarcloud" alt="Vulnerabilities"></a>
+    <a href="https://sonarcloud.io/summary/new_code?id=arrase_ollama-agent"><img src="https://img.shields.io/sonar/code_smells/arrase_ollama-agent?server=https%3A%2F%2Fsonarcloud.io&amp;logo=sonarcloud" alt="Code Smells"></a>
+    <a href="https://sonarcloud.io/summary/new_code?id=arrase_ollama-agent"><img src="https://img.shields.io/sonar/tech_debt/arrase_ollama-agent?server=https%3A%2F%2Fsonarcloud.io&amp;logo=sonarcloud" alt="Tech Debt"></a>
+    <a href="https://sonarcloud.io/summary/new_code?id=arrase_ollama-agent"><img src="https://img.shields.io/sonar/duplicated_lines_density/arrase_ollama-agent?server=https%3A%2F%2Fsonarcloud.io&amp;logo=sonarcloud" alt="Duplicated Lines"></a>
+    <a href="https://sonarcloud.io/summary/new_code?id=arrase_ollama-agent"><img src="https://img.shields.io/sonar/security_rating/arrase_ollama-agent?server=https%3A%2F%2Fsonarcloud.io&amp;logo=sonarcloud" alt="Security Rating"></a>
+    <a href="https://sonarcloud.io/summary/new_code?id=arrase_ollama-agent"><img src="https://img.shields.io/sonar/reliability_rating/arrase_ollama-agent?server=https%3A%2F%2Fsonarcloud.io&amp;logo=sonarcloud" alt="Reliability Rating"></a>
+    <a href="https://sonarcloud.io/summary/new_code?id=arrase_ollama-agent"><img src="https://img.shields.io/sonar/sqale_rating/arrase_ollama-agent?server=https%3A%2F%2Fsonarcloud.io&amp;logo=sonarcloud" alt="Maintainability Rating"></a>
+  </div>
 </div>
 
 <div class="section-header">
