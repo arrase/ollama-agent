@@ -1148,12 +1148,11 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
 
     def test_main_screen_forward_event_reraises_other_attribute_errors(self) -> None:
         screen = MainScreen()
-        with (
-            patch(
-                "textual.screen.Screen._forward_event",
-                side_effect=AttributeError("some other attribute error"),
-            ),
-            self.assertRaises(AttributeError),
+        event = MagicMock()
+        with patch(
+            "textual.screen.Screen._forward_event",
+            side_effect=AttributeError("some other attribute error"),
         ):
-            screen._forward_event(MagicMock())
+            with self.assertRaises(AttributeError):
+                screen._forward_event(event)
 

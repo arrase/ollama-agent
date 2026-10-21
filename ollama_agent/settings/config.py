@@ -182,27 +182,45 @@ def _coerce_union(name: str, value: Any, hint: Any) -> Any:
     raise ValueError(_("Invalid value for '{name}': {detail}", name=name, detail="; ".join(errors) or _("wrong type")))
 
 
+def _coerce_bool(value: Any) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(_("expected a boolean, got {t}", t=type(value).__name__))
+    return value
+
+
+def _coerce_int(value: Any) -> int:
+    # bool is a subclass of int; context_window: true must not become num_ctx=1.
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(_("expected an integer, got {t}", t=type(value).__name__))
+    return value
+
+
+def _coerce_float(value: Any) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(_("expected a number, got {t}", t=type(value).__name__))
+    return float(value)
+
+
+def _coerce_str(value: Any) -> str:
+    if not isinstance(value, str):
+        raise ValueError(_("expected a string, got {t}", t=type(value).__name__))
+    return value
+
+
+_SCALAR_COERCERS: dict[Any, Any] = {
+    bool: _coerce_bool,
+    int: _coerce_int,
+    float: _coerce_float,
+    str: _coerce_str,
+}
+
+
 def _coerce_value(value: Any, hint: Any) -> Any:
     origin = get_origin(hint) or hint
     if is_dataclass(origin):
         return _dataclass_from_dict(cast(type[Any], origin), value)
-    if origin is bool:
-        if not isinstance(value, bool):
-            raise ValueError(_("expected a boolean, got {t}", t=type(value).__name__))
-        return value
-    if origin is int:
-        # bool is a subclass of int; context_window: true must not become num_ctx=1.
-        if isinstance(value, bool) or not isinstance(value, int):
-            raise ValueError(_("expected an integer, got {t}", t=type(value).__name__))
-        return value
-    if origin is float:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise ValueError(_("expected a number, got {t}", t=type(value).__name__))
-        return float(value)
-    if origin is str:
-        if not isinstance(value, str):
-            raise ValueError(_("expected a string, got {t}", t=type(value).__name__))
-        return value
+    if origin in _SCALAR_COERCERS:
+        return _SCALAR_COERCERS[origin](value)
     if origin is list:
         if not isinstance(value, list):
             raise ValueError(f"expected a list, got {type(value).__name__}")

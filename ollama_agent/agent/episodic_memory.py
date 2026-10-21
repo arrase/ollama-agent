@@ -18,6 +18,7 @@ from ..i18n import _
 from ..settings.paths import HISTORY_DB_PATH
 
 _serializer = JsonPlusSerializer()
+_READ_DB_ERR_MSG = "Failed to read history database {db_path}: {e}"
 
 
 class HistoryError(RuntimeError):
@@ -73,7 +74,7 @@ def load_past_user_prompts(db_path: Path = HISTORY_DB_PATH) -> list[str]:
                             seen.add(text)
                             prompts.append(text)
     except (sqlite3.Error, OSError, ValueError, KeyError, TypeError, AttributeError) as e:
-        raise HistoryError(_("Failed to read history database {db_path}: {e}", db_path=db_path, e=e)) from e
+        raise HistoryError(_(_READ_DB_ERR_MSG, db_path=db_path, e=e)) from e
     return prompts
 
 
@@ -95,7 +96,7 @@ def load_session_timestamps(db_path: Path = HISTORY_DB_PATH) -> list[tuple[str, 
                 c = _serializer.loads_typed((typ, chk))
                 results.append((tid, format_iso_timestamp(str(c["ts"]))))
     except (sqlite3.Error, OSError, ValueError, KeyError, TypeError, AttributeError) as e:
-        raise HistoryError(_("Failed to read history database {db_path}: {e}", db_path=db_path, e=e)) from e
+        raise HistoryError(_(_READ_DB_ERR_MSG, db_path=db_path, e=e)) from e
     return results
 
 
@@ -135,7 +136,7 @@ def load_past_conversations(
             cursor = conn.cursor()
             thread_messages = _read_history_messages(cursor, exclude_thread_id)
     except (sqlite3.Error, OSError, ValueError, KeyError, TypeError, AttributeError) as e:
-        raise HistoryError(_("Failed to read history database {db_path}: {e}", db_path=db_path, e=e)) from e
+        raise HistoryError(_(_READ_DB_ERR_MSG, db_path=db_path, e=e)) from e
 
     conversations: dict[str, dict[str, Any]] = {}
     for tid, msgs in thread_messages.items():

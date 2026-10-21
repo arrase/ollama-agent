@@ -205,12 +205,14 @@ class TestInterruptHandling(unittest.IsolatedAsyncioTestCase):
         """Ctrl-C on the prompt propagates KeyboardInterrupt to the caller."""
         renderer, _console = self._make_renderer()
         fake_stdin = SimpleNamespace(isatty=lambda: True)
+        event = self._interrupt_event()
+        runtime = MagicMock()
         with (
             patch("ollama_agent.streaming.console_renderer.sys.stdin", new=fake_stdin),
             patch("builtins.input", side_effect=KeyboardInterrupt),
-            self.assertRaises(KeyboardInterrupt),
         ):
-            await renderer.handle_interrupt(self._interrupt_event(), MagicMock())
+            with self.assertRaises(KeyboardInterrupt):
+                await renderer.handle_interrupt(event, runtime)
 
     async def test_stream_agent_events_propagates_keyboard_interrupt(self) -> None:
         mock_runtime = MagicMock()

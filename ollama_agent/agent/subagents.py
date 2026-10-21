@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -45,17 +44,10 @@ async def build_subagents(
     should_interrupt_tool: Callable[[Any], bool] = _default_should_interrupt,
 ) -> list[dict[str, Any]]:
     """Convert ``SubAgentSettings`` into dicts for ``create_deep_agent(subagents=...)``."""
-    try:
-        async with asyncio.TaskGroup() as tg:
-            tasks = [
-                tg.create_task(
-                    _build_spec(sa, model_settings=model_settings, should_interrupt_tool=should_interrupt_tool)
-                )
-                for sa in subagent_settings
-            ]
-    except ExceptionGroup as eg:
-        raise eg.exceptions[0] from None
-    return [t.result() for t in tasks]
+    return [
+        await _build_spec(sa, model_settings=model_settings, should_interrupt_tool=should_interrupt_tool)
+        for sa in subagent_settings
+    ]
 
 
 async def _build_spec(
