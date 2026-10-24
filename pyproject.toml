@@ -38,7 +38,7 @@ test = [
 ]
 dev = [
     "ollama-agent[test]",
-    "ruff==0.17.0",
+    "ruff==0.17.1",
     "mypy>=2.4.0",
 ]
 docs = ["mkdocs-material>=9.7.7"]
