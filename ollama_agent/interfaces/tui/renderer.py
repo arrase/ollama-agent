@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ...streaming import StreamingRenderer
 from .widgets.messages import AgentResponse
-
-if TYPE_CHECKING:
-    from .app import OllamaAgentApp
 
 
 class _TUIStreamingRenderer(StreamingRenderer):
     """Bridge connecting streaming event callbacks to Textual TUI widgets."""
 
-    def __init__(self, app: OllamaAgentApp, scroll: Any, widget: AgentResponse):
+    def __init__(self, app: Any, scroll: Any, widget: AgentResponse):
         self.app = app
         self.scroll = scroll
         self.widget = widget

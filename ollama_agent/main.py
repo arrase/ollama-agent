@@ -12,7 +12,6 @@ from rich.markup import escape
 
 from .agent import AgentRuntime
 from .agent.builtin_tools import set_tool_timeout
-from .agent.episodic_memory import HistoryError
 from .core import (
     ModelCapabilityError,
     ModelContextWindowError,
@@ -22,13 +21,10 @@ from .core import (
 )
 from .i18n import SUPPORTED_LOCALES, _, set_locale
 from .interfaces.cli import create_argument_parser, handle_subcommand, run_prompt_session
+from .interfaces.commands.dispatch import DOMAIN_ERRORS
 from .interfaces.commands.models import ensure_model_configured
 from .interfaces.tui import OllamaREPL
-from .mcp import MCPConfigError
-from .rag import RAGError
 from .settings import Settings, load_settings, reset_config
-from .skills import SkillError
-from .tasks import TaskError
 
 # Silence only the known third-party noise, not all deprecations.
 warnings.filterwarnings(
@@ -129,7 +125,7 @@ def main() -> None:
         raise SystemExit(1) from None
     except SystemExit:
         raise
-    except (SkillError, TaskError, RAGError, HistoryError, MCPConfigError) as exc:
+    except DOMAIN_ERRORS as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
         raise SystemExit(1) from None
 

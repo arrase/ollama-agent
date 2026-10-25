@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import gc
 import tempfile
 import unittest
 from pathlib import Path
 
 from jinja2.exceptions import UndefinedError
 
+from ollama_agent.settings.config import Settings, _task_model_overrides
+from ollama_agent.tasks.commands import apply_task_settings
 from ollama_agent.tasks.manager import Task, TaskInput, TaskManager
 
 
@@ -430,6 +433,75 @@ class TestTaskManager(unittest.TestCase):
             Task.from_dict(raw)
         self.assertIn("bad_param", str(ctx.exception))
 
+    def test_task_from_dict_invalid_input_type_or_required_raises(self) -> None:
+        raw_bad_type = {
+            "title": "BadType",
+            "prompt": "prompt",
+            "model": "m",
+            "inputs": {"count": {"type": "integer"}},
+        }
+        with self.assertRaisesRegex(ValueError, "Unsupported input type 'integer'"):
+            Task.from_dict(raw_bad_type)
+
+        raw_bad_req = {
+            "title": "BadReq",
+            "prompt": "prompt",
+            "model": "m",
+            "inputs": {"flag": {"type": "boolean", "required": "yes"}},
+        }
+        with self.assertRaisesRegex(ValueError, "Invalid input definition for 'flag'"):
+            Task.from_dict(raw_bad_req)
+
+    def test_apply_task_settings_does_not_leak_to_serialized_settings(self) -> None:
+        settings = Settings()
+        settings.model.name = "original-model:latest"
+        settings.model.reasoning_effort = "low"
+        task = Task(title="T", prompt="P", model="task-override:70b", reasoning_effort="high")
+
+        restore = apply_task_settings(settings, task)
+        self.assertEqual(settings.model.name, "task-override:70b")
+        self.assertEqual(settings.model.reasoning_effort, "high")
+
+        # Serializing settings while a task is active must preserve the original model settings
+        serialized = settings.to_dict()
+        self.assertEqual(serialized["model"]["name"], "original-model:latest")
+        self.assertEqual(serialized["model"]["reasoning_effort"], "low")
+
+        restore()
+        self.assertEqual(settings.model.name, "original-model:latest")
+        self.assertEqual(settings.model.reasoning_effort, "low")
+        serialized_after = settings.to_dict()
+        self.assertEqual(serialized_after["model"]["name"], "original-model:latest")
+        self.assertEqual(serialized_after["model"]["reasoning_effort"], "low")
+
+    def test_apply_task_settings_preserves_mid_task_user_changes_and_cleans_up_on_gc(self) -> None:
+        settings = Settings()
+        settings.model.name = "original-model:latest"
+        settings.model.reasoning_effort = "low"
+        task = Task(title="T", prompt="P", model="task-override:70b", reasoning_effort="high")
+
+        restore = apply_task_settings(settings, task)
+        # User explicitly changes model mid-task (e.g. while paused at HITL approval)
+        settings.model.name = "user-chosen:latest"
+        serialized = settings.to_dict()
+        self.assertEqual(serialized["model"]["name"], "user-chosen:latest")
+        self.assertEqual(serialized["model"]["reasoning_effort"], "low")
+
+        restore()
+        self.assertEqual(settings.model.name, "user-chosen:latest")
+        self.assertEqual(settings.model.reasoning_effort, "low")
+
+        # Verify weakref cleanup when Settings is garbage-collected without calling restore()
+        transient = Settings()
+        transient.model.name = "orig"
+        key = id(transient.model)
+        apply_task_settings(transient, task)
+        self.assertIn(key, _task_model_overrides)
+        del transient
+        gc.collect()
+        self.assertNotIn(key, _task_model_overrides)
+
 
 if __name__ == "__main__":
     unittest.main()
+

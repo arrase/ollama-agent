@@ -14,8 +14,8 @@ Each task is saved as a single YAML file: `/tasks/<task_id>.yaml`.
 ```yaml
 title: "Clear, descriptive title of the task"
 prompt: "Jinja2 prompt template with {{ variable }}, {% if %}, {% for %}, and @mentions..."
-model: "" # Optional specific model name, or empty string to use the active model
-reasoning_effort: "default" # Optional reasoning effort (as advertised by the model in Ollama /api/show, e.g. "max", "low", "false"), or "default"
+model: "gemma4:26b" # Required non-empty model name (e.g. the active model or a specific model)
+reasoning_effort: "default" # Required reasoning effort (as advertised by the model in Ollama /api/show, e.g. "max", "low", "false", "hide"), or "default"
 inputs:
   target_file:
     description: "Target file to analyze"
@@ -31,8 +31,8 @@ inputs:
 
 - `title` (string, required): Short descriptive title for display in `/task list`.
 - `prompt` (string, required): Jinja2-compatible prompt template. Because tasks run autonomously, the prompt should provide all necessary context, step-by-step instructions, and expected deliverables.
-- `model` (string, optional): Specific Ollama model name, or `""` to use the session's active model.
-- `reasoning_effort` (string, optional): Reasoning effort supported by the target model in Ollama (advertised in `/api/show`), or `"default"` to use the model's default.
+- `model` (string, required): Non-empty Ollama model name (e.g. `"gemma4:26b"` or the session's active model). Must not be empty (`""`).
+- `reasoning_effort` (string, required): Non-empty reasoning effort supported by the target model in Ollama (advertised in `/api/show`), or `"default"` to use the model's default.
 - `inputs` (mapping, optional): Dictionary of input parameter definitions:
   - `description` (string, optional): Human-readable explanation of the input parameter.
   - `type` (string, optional): Data type for value coercion (`string`, `boolean`, `number`). Default is `string`.
@@ -71,7 +71,7 @@ prompt: |
   {% else %}
   Focus primarily on critical defects and architectural concerns.
   {% endif %}
-model: ""
+model: "gemma4:26b"
 reasoning_effort: "high"
 inputs:
   target_file:

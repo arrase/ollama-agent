@@ -16,11 +16,12 @@ from rich.table import Table
 from ...agent import AgentRuntime
 from ...agent.episodic_memory import (
     HistoryError,
+    _read_session_timestamps,
     connect_history,
-    load_session_timestamps,
     search_past_conversations_in_db,
 )
 from ...core.common import extract_text
+from ...core.resource_manager import resolve_unique_match
 from ...i18n import _
 from ...settings.paths import HISTORY_DB_PATH
 
@@ -54,10 +55,10 @@ def get_available_sessions(db_path: Path = HISTORY_DB_PATH) -> list[dict[str, An
     if not db_path.exists():
         return []
 
-    timestamps = dict(load_session_timestamps(db_path))
     try:
         with connect_history(db_path) as conn:
             cursor = conn.cursor()
+            timestamps = dict(_read_session_timestamps(cursor))
             cursor.execute(
                 "SELECT thread_id, COUNT(*) as steps FROM checkpoints GROUP BY thread_id ORDER BY MAX(rowid) DESC"
             )
@@ -70,7 +71,7 @@ def get_available_sessions(db_path: Path = HISTORY_DB_PATH) -> list[dict[str, An
                 }
                 for row in rows
             ]
-    except (sqlite3.Error, OSError) as exc:
+    except (sqlite3.Error, OSError, ValueError) as exc:
         raise HistoryError(_("Failed to read history database {db_path}: {e}", db_path=db_path, e=exc)) from exc
 
 
@@ -104,21 +105,63 @@ def list_sessions(
     return sessions
 
 
+def _match_session_pairs(target_id: str, available_sessions: list[dict[str, Any]]) -> list[tuple[str, dict[str, Any]]]:
+    clean_id = target_id.strip()
+    if not clean_id:
+        return []
+    return [(s["thread_id"], s) for s in available_sessions if s["thread_id"].startswith(clean_id)]
+
+
 def resolve_session_id(target_id: str, available_sessions: list[dict[str, Any]]) -> str | None:
     """Resolve target_id by exact match or unambiguous prefix."""
-    target_id = target_id.strip()
-    if not target_id:
+    clean_id = target_id.strip()
+    if not clean_id:
+        return None
+    try:
+        resolved, _session = resolve_unique_match(
+            _match_session_pairs(clean_id, available_sessions),
+            clean_id,
+            label="Session",
+            not_found_error=LookupError,
+            ambiguous_error=ValueError,
+        )
+        return resolved
+    except (LookupError, ValueError):
         return None
 
-    # Exact match
-    for s in available_sessions:
-        if s["thread_id"] == target_id:
-            return target_id
 
-    # Prefix match
-    matches = [s["thread_id"] for s in available_sessions if s["thread_id"].startswith(target_id)]
-    if len(matches) == 1:
-        return matches[0]
+def _resolve_or_report_session(
+    console: Console,
+    target_id: str,
+    sessions: list[dict[str, Any]],
+) -> str | None:
+    """Resolve *target_id* against *sessions* or print an error for missing/ambiguous IDs."""
+    clean_id = target_id.strip()
+    matches = _match_session_pairs(clean_id, sessions)
+    if not clean_id:
+        not_found_msg = _(_SESSION_NOT_FOUND_MSG, target_id=target_id)
+        console.print(f"[red]{escape(not_found_msg)}[/red]")
+        return None
+    try:
+        resolved, _session = resolve_unique_match(
+            matches,
+            clean_id,
+            label="Session",
+            not_found_error=LookupError,
+            ambiguous_error=ValueError,
+        )
+        return resolved
+    except ValueError:
+        matches_str = ", ".join(tid for tid, _ in matches[:5])
+        ambiguous_msg = _(
+            "Ambiguous session ID '{target_id}'. Matches: {matches}",
+            target_id=target_id,
+            matches=matches_str,
+        )
+        console.print(f"[red]{escape(ambiguous_msg)}[/red]")
+    except LookupError:
+        not_found_msg = _(_SESSION_NOT_FOUND_MSG, target_id=target_id)
+        console.print(f"[red]{escape(not_found_msg)}[/red]")
     return None
 
 
@@ -134,20 +177,8 @@ def resume_session(
         console.print(f"[red]{_('No sessions available to resume.')}[/red]")
         return None
 
-    resolved = resolve_session_id(target_id, sessions)
+    resolved = _resolve_or_report_session(console, target_id, sessions)
     if resolved is None:
-        prefix_matches = [s["thread_id"] for s in sessions if s["thread_id"].startswith(target_id)]
-        if len(prefix_matches) > 1:
-            matches_str = ", ".join(prefix_matches[:5])
-            ambiguous_msg = _(
-                "Ambiguous session ID '{target_id}'. Matches: {matches}",
-                target_id=target_id,
-                matches=matches_str,
-            )
-            console.print(f"[red]{escape(ambiguous_msg)}[/red]")
-        else:
-            not_found_msg = _(_SESSION_NOT_FOUND_MSG, target_id=target_id)
-            console.print(f"[red]{escape(not_found_msg)}[/red]")
         return None
 
     switched_msg = _("Switched to session: {resolved}", resolved=f"{resolved[:8]} ({resolved})")
@@ -162,10 +193,8 @@ def delete_session(
 ) -> bool:
     """Delete a session from the SQLite checkpoint database."""
     sessions = get_available_sessions(db_path)
-    resolved = resolve_session_id(target_id, sessions)
+    resolved = _resolve_or_report_session(console, target_id, sessions)
     if resolved is None:
-        not_found_msg = _(_SESSION_NOT_FOUND_MSG, target_id=target_id)
-        console.print(f"[red]{escape(not_found_msg)}[/red]")
         return False
 
     try:
@@ -230,13 +259,13 @@ async def export_session(
     resolved = resolve_session_id(target_id, sessions)
     if (
         resolved is None
-        and runtime.stealth_mode is True
+        and runtime.stealth_mode
         and (not target_id.strip() or is_current(target_id.strip(), runtime.thread_id))
     ):
         resolved = runtime.thread_id
     if resolved is None:
-        not_found_msg = _(_SESSION_NOT_FOUND_MSG, target_id=target_id)
-        console.print(f"[red]{escape(not_found_msg)}[/red]")
+        resolved = _resolve_or_report_session(console, target_id, sessions)
+    if resolved is None:
         return None
 
     messages = await runtime.get_thread_messages(resolved)

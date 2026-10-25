@@ -24,6 +24,12 @@ _KNOWN_TRANSPORTS = {"sse", "websocket", "http", "streamable_http", "streamable-
 DEFAULT_MCP_TIMEOUT: float = 10.0
 
 _orig_stdio_client = mcp.client.stdio.stdio_client
+_stdio_patch_depth = 0
+
+
+def _open_mcp_log() -> Any:
+    MCP_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    return MCP_LOG_PATH.open("a", encoding="utf-8")
 
 
 @contextlib.asynccontextmanager
@@ -34,14 +40,39 @@ async def _mcp_stdio_client(server: Any, errlog: Any = None) -> Any:
             yield streams
         return
 
-    MCP_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with MCP_LOG_PATH.open("a", encoding="utf-8") as f:
+    f = await asyncio.to_thread(_open_mcp_log)
+    try:
         async with _orig_stdio_client(server, errlog=f) as streams:
             yield streams
+    finally:
+        await asyncio.to_thread(f.close)
 
 
-mcp.client.stdio.stdio_client = _mcp_stdio_client
-langchain_mcp_adapters.sessions.stdio_client = _mcp_stdio_client
+@contextlib.contextmanager
+def _patched_stdio_client() -> Any:
+    global _stdio_patch_depth
+    if _stdio_patch_depth == 0:
+        mcp.client.stdio.stdio_client = _mcp_stdio_client
+        langchain_mcp_adapters.sessions.stdio_client = _mcp_stdio_client
+    _stdio_patch_depth += 1
+    try:
+        yield
+    finally:
+        _stdio_patch_depth -= 1
+        if _stdio_patch_depth == 0:
+            mcp.client.stdio.stdio_client = _orig_stdio_client
+            langchain_mcp_adapters.sessions.stdio_client = _orig_stdio_client
+
+
+def _wrap_tool_stdio(tool: Any) -> None:
+    orig_coro = tool.coroutine
+    if orig_coro is not None:
+
+        async def _patched_coro(*args: Any, **kwargs: Any) -> Any:
+            with _patched_stdio_client():
+                return await orig_coro(*args, **kwargs)
+
+        tool.coroutine = _patched_coro
 
 
 class MCPConfigError(RuntimeError):
@@ -102,7 +133,7 @@ def _build_stdio_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, 
 
 
 def _build_url_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, Any]:
-    url = cfg["url"]
+    url = cfg["url"] if "url" in cfg else cfg.get("httpUrl")
     if not isinstance(url, str) or not url.strip():
         raise MCPConfigError(_("MCP server '{name}': 'url' must be a non-empty string", name=server_name))
     if "transport" in cfg:
@@ -122,6 +153,8 @@ def _build_url_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, An
         )
     out: dict[str, Any] = {"transport": transport, "url": _resolve_env_str(url, server_name)}
     if "headers" in cfg:
+        if not isinstance(cfg["headers"], dict):
+            raise MCPConfigError(_("MCP server '{name}': 'headers' must be an object", name=server_name))
         out["headers"] = {str(k): _resolve_env_str(str(v), server_name) for k, v in cfg["headers"].items()}
     for k in ("timeout", "sse_read_timeout", "session_kwargs"):
         if k in cfg:
@@ -137,7 +170,7 @@ def _build_mcp_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, An
     """
     if "command" in cfg:
         return _build_stdio_connection(server_name, cfg)
-    if "url" in cfg:
+    if "url" in cfg or "httpUrl" in cfg:
         return _build_url_connection(server_name, cfg)
     raise MCPConfigError(_("MCP server '{name}': requires either 'command' or 'url'", name=server_name))
 
@@ -189,9 +222,10 @@ async def _connect_and_load(name: str, conn: dict[str, Any]) -> list[Any]:
     Raises MCPConfigError when the connection or tool loading fails.
     """
     try:
-        async with asyncio.timeout(DEFAULT_MCP_TIMEOUT):
-            client = MultiServerMCPClient({name: conn})  # type: ignore[dict-item,arg-type]
-            tools = await client.get_tools()
+        with _patched_stdio_client():
+            async with asyncio.timeout(DEFAULT_MCP_TIMEOUT):
+                client = MultiServerMCPClient({name: conn})  # type: ignore[dict-item,arg-type]
+                tools = await client.get_tools()
     except TimeoutError as exc:
         # str(TimeoutError()) is empty, so the generic handler would report no reason.
         raise MCPConfigError(
@@ -203,6 +237,8 @@ async def _connect_and_load(name: str, conn: dict[str, Any]) -> list[Any]:
         ) from exc
     except Exception as exc:
         raise MCPConfigError(_("Failed to load tools from MCP server '{name}': {exc}", name=name, exc=exc)) from exc
+    for tool in tools:
+        _wrap_tool_stdio(tool)
     _log.info("Loaded %d MCP tools from server '%s'", len(tools), name)
     return tools
 
@@ -248,16 +284,13 @@ async def load_main_mcp_tools() -> list[Any]:
     return await _load_tools_from_connections(connections)
 
 
-async def load_subagent_mcp_tools(
+def validate_subagent_mcp_servers(
     subagent_name: str,
     mcp_servers: list[SubAgentMCPServer],
-) -> list[Any]:
-    """Load MCP tools for a subagent's MCP servers (one client per server).
-
-    Raises MCPConfigError when any server entry is malformed or fails to connect.
-    """
+) -> list[tuple[str, dict[str, Any]]]:
+    """Validate subagent MCP server names and return ``(name, connection_config)`` pairs."""
     seen_names: set[str] = set()
-    connections: dict[str, dict[str, Any]] = {}
+    entries: list[tuple[str, dict[str, Any]]] = []
     for srv in mcp_servers:
         name = srv.name.strip()
         if not name:
@@ -273,7 +306,22 @@ async def load_subagent_mcp_tools(
                 )
             )
         seen_names.add(name)
-        connections[name] = _build_mcp_connection(name, srv.to_connection_config())
+        entries.append((name, srv.to_connection_config()))
+    return entries
+
+
+async def load_subagent_mcp_tools(
+    subagent_name: str,
+    mcp_servers: list[SubAgentMCPServer],
+) -> list[Any]:
+    """Load MCP tools for a subagent's MCP servers (one client per server).
+
+    Raises MCPConfigError when any server entry is malformed or fails to connect.
+    """
+    connections: dict[str, dict[str, Any]] = {
+        name: _build_mcp_connection(name, cfg)
+        for name, cfg in validate_subagent_mcp_servers(subagent_name, mcp_servers)
+    }
 
     tools = await _load_tools_from_connections(connections)
     _log.info("Subagent '%s': loaded %d MCP tools", subagent_name, len(tools))

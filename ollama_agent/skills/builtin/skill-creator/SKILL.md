@@ -50,7 +50,7 @@ Organize the body of `SKILL.md` cleanly:
 - `## When to Use`: Specific triggers, keywords, file patterns, or scenarios.
 - `## Prerequisites & Tools`: Required environment variables, packages, or tools.
 - `## Step-by-Step Workflow`: Clear, numbered, deterministic steps for the agent to follow.
-- `## Helper Scripts`: If `scripts/` exist, document the exact execution commands (e.g. `python /skills/<skill-id>/scripts/<script_name>.py <args>`), expected parameters, and output format.
+- `## Helper Scripts`: If `scripts/` exist, document the exact execution commands using the real host path (e.g. `python ~/.ollama-agent/skills/<skill-id>/scripts/<script_name>.py <args>`), expected parameters, and output format. Note that `/skills/<skill-id>/...` is a virtual mount for file tools (`read_file`, `write_file`, `edit_file`, `ls`, `glob`, `grep`), whereas the `execute` shell tool runs on the host filesystem (`~/.ollama-agent/skills/<skill-id>/...`).
 - `## Examples & Edge Cases`: Concrete examples of typical inputs, expected outputs, and common pitfalls.
 
 ## Interactive Creation Workflow for the Agent

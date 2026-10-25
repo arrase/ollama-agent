@@ -12,6 +12,7 @@ from typing import Any, AsyncGenerator, Self
 
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
+from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
 from deepagents.middleware.summarization import create_summarization_tool_middleware
 from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.checkpoint.memory import MemorySaver
@@ -19,9 +20,10 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
 
 from ..core import (
-    REASONING_OFF_VALUES,
+    REASONING_HIDE_VALUES,
     OllamaChatModel,
     PromptProcessingError,
+    ThinkTagParser,
     create_ollama_chat_model,
     ensure_model_supports_tools,
     process_prompt_mentions,
@@ -42,7 +44,6 @@ from ..settings import (
     load_instructions,
     save_settings,
 )
-from ..streaming.parsers import ThinkTagParser
 from .builtin_tools import (
     BUILTIN_TOOLS,
     get_rag_manager,
@@ -61,7 +62,6 @@ def _ensure_agent_dirs() -> None:
     """Create the agent-owned directories and seed MEMORY.md (blocking I/O)."""
     SKILLS_DIR.mkdir(parents=True, exist_ok=True)
     TASKS_DIR.mkdir(parents=True, exist_ok=True)
-    BUILTIN_SKILLS_DIR.mkdir(parents=True, exist_ok=True)
     ensure_memory_file(MEMORY_PATH)
 
 
@@ -92,7 +92,7 @@ class AgentRuntime:
     """Stateful agent runtime wrapping DeepAgents create_deep_agent."""
 
     settings: Settings = field(default_factory=Settings)
-    thread_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    thread_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     yolo_mode: bool = field(default=False)
     stealth_mode: bool = field(default=False)
     auto_approved_tools: set[str] = field(default_factory=set)
@@ -122,10 +122,6 @@ class AgentRuntime:
         """
         async with self._init_lock:
             self.graph = await self._build_graph()
-
-    async def warmup(self) -> None:
-        """Build the graph (if needed) and resolve the default thread."""
-        await self._ensure_graph()
 
     async def _build_graph(self) -> Any:
         ms = self.settings.model
@@ -236,6 +232,14 @@ class AgentRuntime:
         rag_mgr = get_rag_manager()
         rag_tools = [rag_search] if rag_mgr and rag_mgr.current_database else []
         tools: list[Any] = [*BUILTIN_TOOLS, *rag_tools, *mcp_tools]
+        if not any(sa_spec.get("name") == "general-purpose" for sa_spec in subagents):
+            subagents.append(
+                {
+                    **GENERAL_PURPOSE_SUBAGENT,
+                    "middleware": [stream_tool_events_mw],
+                    "skills": SKILL_ROOTS,
+                }
+            )
 
         summarization_tool_mw = create_summarization_tool_middleware(model, backend)
 
@@ -253,9 +257,8 @@ class AgentRuntime:
             ],
             "name": "ollama-agent",
             "interrupt_on": interrupt_on,
+            "subagents": subagents,
         }
-        if subagents:
-            kwargs["subagents"] = subagents
 
         return create_deep_agent(**kwargs)
 
@@ -345,7 +348,7 @@ class AgentRuntime:
         """Stream agent events for the given prompt."""
         graph, thread, config = await self._ensure_graph(thread_id)
         set_active_thread_id(thread)
-        hide_reasoning = self.settings.model.reasoning_effort.lower() in REASONING_OFF_VALUES
+        hide_reasoning = self.settings.model.reasoning_effort.lower() in REASONING_HIDE_VALUES
 
         try:
             inputs, mention_warnings = self._prepare_stream_inputs(prompt)

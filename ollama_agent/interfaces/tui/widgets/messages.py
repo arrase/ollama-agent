@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any
 
 from rich.markup import escape
 from rich.text import Text
@@ -13,9 +13,6 @@ from textual.timer import Timer
 from textual.widgets import Collapsible, Markdown, Static
 
 from ....i18n import _
-
-if TYPE_CHECKING:
-    from ..app import OllamaAgentApp
 
 
 class UserMessage(Container):
@@ -79,7 +76,7 @@ class AgentResponse(Container):
         self.flush_text()
         self.current_text_widget = None
         if self.current_thinking is None:
-            app = cast("OllamaAgentApp", self.app)
+            app: Any = self.app
             collapse_default = app.repl.runtime.settings.runtime.collapse_thinking
             self.current_thinking_text = Static("", classes="msg-content thinking-body")
             self._thinking_chunks = []

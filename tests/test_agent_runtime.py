@@ -15,7 +15,7 @@ from langgraph.types import Command
 
 from ollama_agent.agent.agent import AgentRuntime, _prepare_instructions
 from ollama_agent.agent.builtin_tools import rag_search, set_rag_manager
-from ollama_agent.agent.middleware import _stream_tool_events
+from ollama_agent.agent.middleware import _stream_tool_events, stream_tool_events_mw
 from ollama_agent.core.prompt_processor import PromptProcessingError
 from ollama_agent.rag.manager import RAGNotLoadedError
 from ollama_agent.settings.config import (
@@ -739,7 +739,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
 
             # Subagent interrupt_on
             subagents = kwargs["subagents"]
-            self.assertEqual(len(subagents), 1)
+            self.assertEqual(len(subagents), 2)
             sub_spec = subagents[0]
             self.assertIn("interrupt_on", sub_spec)
             sub_interrupt_on = sub_spec["interrupt_on"]
@@ -748,6 +748,12 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             self.assertIn("write_file", sub_interrupt_on)
             self.assertIn("edit_file", sub_interrupt_on)
             self.assertEqual(sub_interrupt_on["git_diff"]["allowed_decisions"], ["approve", "reject"])
+
+            gp_spec = subagents[1]
+            self.assertEqual(gp_spec["name"], "general-purpose")
+            self.assertEqual(gp_spec["middleware"], [stream_tool_events_mw])
+            self.assertNotIn("tools", gp_spec)
+            self.assertNotIn("interrupt_on", gp_spec)
 
             # When predicate: normal HITL
             req_main = MagicMock(tool_call={"name": "main_fetch"})

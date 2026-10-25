@@ -118,13 +118,11 @@ def _load_validated_file(
         )
     kind = classify_multimodal_file(file_path)
     if kind:
-        b64_data = base64.b64encode(file_path.read_bytes()).decode("utf-8")
+        b64_data = read_binary_file_b64(file_path, max_file_size)
         mime = get_file_type(file_path) or _MIME_FALLBACKS[kind]
         attachments.append({"type": kind, "base64": b64_data, "mime_type": mime})
         return size
-    if is_binary_file(file_path):
-        raise PromptProcessingError(_("Cannot read binary file as text: {file_path}", file_path=file_path))
-    text_contents[file_path] = file_path.read_text(encoding="utf-8", errors="replace")
+    text_contents[file_path] = read_file_content(file_path, max_file_size)
     return size
 
 

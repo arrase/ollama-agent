@@ -22,7 +22,8 @@ _log = logging.getLogger(__name__)
 
 MIN_OLLAMA_VERSION = "0.34.3"
 
-REASONING_OFF_VALUES = ("false", "0", "disabled", "off", "hide")
+REASONING_OFF_VALUES = ("false", "0", "disabled", "off")
+REASONING_HIDE_VALUES = (*REASONING_OFF_VALUES, "hide")
 REASONING_ON_VALUES = ("true", "1", "enabled", "on")
 
 _REASONING_EFFORT_NAME = "Reasoning effort"
@@ -141,10 +142,6 @@ async def get_model_capabilities(
     """Extract capabilities for a model."""
     response = show_info if show_info is not None else await _show_model(model, base_url)
     caps = response.capabilities
-    if isinstance(caps, dict):
-        # Older servers nest the list under "capabilities"; a malformed payload must
-        # reach the ModelCapabilityError below rather than raising KeyError.
-        caps = caps.get("capabilities")
     if isinstance(caps, list):
         return {str(c).lower() for c in caps}
     raise ModelCapabilityError(
@@ -251,6 +248,69 @@ async def resolve_context_window(
     )
 
 
+def format_thinking_value(val: Any) -> str:
+    """Format an Ollama thinking control value as a normalized string."""
+    if isinstance(val, bool):
+        return "true" if val else "false"
+    return str(val)
+
+
+_format_thinking_val = format_thinking_value
+
+
+def _match_thinking_effort(
+    effort_clean: str,
+    thinking_cfg: dict[str, Any],
+    model_name: str,
+) -> tuple[bool, Any, str | None]:
+    """Match an effort token against Ollama thinking metadata.
+
+    Returns ``(matched, resolved_value, warning_msg)``.
+    """
+    raw_values = thinking_cfg.get("values")
+    values: list[Any] = list(raw_values) if isinstance(raw_values, (list, tuple)) else []
+    default: Any = thinking_cfg.get("default")
+    effort_lower = effort_clean.lower()
+
+    if not effort_clean or effort_lower in ("default", "hide"):
+        return True, default, None
+
+    is_off = effort_lower in REASONING_OFF_VALUES
+    is_on = effort_lower in REASONING_ON_VALUES
+
+    for v in values:
+        if v is False and is_off:
+            return True, False, None
+        if v is True and is_on:
+            return True, True, None
+        if not isinstance(v, bool) and str(v).lower() == effort_lower:
+            return True, v, None
+
+    if is_on:
+        return True, default, None
+
+    if is_off:
+        return (
+            False,
+            default,
+            _(
+                "Model '{model}' is a thinking-only model. reasoning_effort='disabled' is not supported; "
+                "thinking will remain enabled.",
+                model=model_name,
+            ),
+        )
+
+    return (
+        False,
+        default,
+        _(
+            "Invalid reasoning effort '{effort}'. Allowed values are: {allowed}",
+            effort=effort_clean,
+            allowed=", ".join(format_thinking_value(v) for v in values),
+        ),
+    )
+
+
 def _resolve_thinking_from_cfg(
     thinking_cfg: dict[str, Any],
     effort_clean: str,
@@ -258,47 +318,12 @@ def _resolve_thinking_from_cfg(
     model: str,
     warn_callback: Callable[[str], None],
 ) -> bool | str | None:
-    # Server metadata is untrusted: "values" must be a sequence, not e.g. a dict/str.
-    raw_values = thinking_cfg.get("values")
-    values: list[Any] = list(raw_values) if isinstance(raw_values, (list, tuple)) else []
-    default: Any = thinking_cfg.get("default")
-
     if is_default:
-        return default
-
-    effort_lower = effort_clean.lower()
-    is_off = effort_lower in REASONING_OFF_VALUES
-    is_on = effort_lower in REASONING_ON_VALUES
-
-    for v in values:
-        if v is False and is_off:
-            return False
-        if v is True and is_on:
-            return True
-        if not isinstance(v, bool) and str(v).lower() == effort_lower:
-            return v
-
-    if is_on or effort_lower == "hide":
-        return default
-
-    if is_off:
-        warn_callback(
-            _(
-                "Model '{model}' is a thinking-only model. reasoning_effort='disabled' is not supported; "
-                "thinking will remain enabled.",
-                model=model,
-            )
-        )
-        return default
-
-    warn_callback(
-        _(
-            "Invalid reasoning effort '{effort}'. Allowed values are: {allowed}",
-            effort=effort_clean,
-            allowed=", ".join(str(v) for v in values),
-        )
-    )
-    return default
+        return thinking_cfg.get("default")
+    matched, resolved, msg = _match_thinking_effort(effort_clean, thinking_cfg, model)
+    if not matched and msg is not None:
+        warn_callback(msg)
+    return resolved
 
 
 async def resolve_ollama_reasoning(
@@ -314,7 +339,8 @@ async def resolve_ollama_reasoning(
     thinking_cfg = get_model_thinking_config(response)
 
     effort_clean = "" if effort is None else str(effort).strip()
-    is_default = not effort_clean or effort_clean.lower() == "default"
+    effort_lower = effort_clean.lower()
+    is_default = not effort_clean or effort_lower in ("default", "hide")
 
     if thinking_cfg is not None:
         return _resolve_thinking_from_cfg(thinking_cfg, effort_clean, is_default, model, warn_callback)
@@ -324,7 +350,6 @@ async def resolve_ollama_reasoning(
 
     if is_default:
         return True
-    effort_lower = effort_clean.lower()
     if effort_lower in REASONING_OFF_VALUES:
         return False
     if effort_lower in REASONING_ON_VALUES:
@@ -488,39 +513,6 @@ def validate_reasoning_effort(effort: Any) -> ReasoningEffortValue:
     return normalized
 
 
-def _format_thinking_val(val: Any) -> str:
-    if isinstance(val, bool):
-        return "true" if val else "false"
-    return str(val)
-
-
-def _resolve_off_effort(
-    effort_lower: str,
-    values: list[Any],
-    model_name: str,
-) -> tuple[str | None, str | None]:
-    if effort_lower == "hide":
-        return "hide", None
-    if any(v is False for v in values):
-        return "false", None
-    return (
-        None,
-        _(
-            "Model '{model}' is a thinking-only model. reasoning_effort='disabled' is not supported; "
-            "thinking will remain enabled.",
-            model=model_name,
-        ),
-    )
-
-
-def _resolve_on_effort(thinking_cfg: dict[str, Any], values: list[Any]) -> str:
-    if any(v is True for v in values):
-        return "true"
-    if "default" in thinking_cfg:
-        return _format_thinking_val(thinking_cfg["default"])
-    return "default"
-
-
 def validate_and_normalize_effort(
     effort: str,
     thinking_cfg: dict[str, Any] | None,
@@ -534,29 +526,16 @@ def validate_and_normalize_effort(
     norm_effort = effort.strip()
     if not norm_effort:
         return None, _(_EMPTY_FIELD_MSG, name=_REASONING_EFFORT_NAME)
-    if norm_effort.lower() == "default":
-        return "default", None
+    effort_lower = norm_effort.lower()
+    if effort_lower in ("default", "hide"):
+        return effort_lower, None
     if not (thinking_cfg and thinking_cfg.get("values")):
         return norm_effort, None
 
-    values = thinking_cfg["values"]
-    effort_lower = norm_effort.lower()
-    if effort_lower in REASONING_OFF_VALUES:
-        return _resolve_off_effort(effort_lower, values, model_name)
-
-    if effort_lower in REASONING_ON_VALUES:
-        return _resolve_on_effort(thinking_cfg, values), None
-
-    for v in values:
-        if str(v).lower() == effort_lower:
-            return _format_thinking_val(v), None
-
-    return (
-        None,
-        _(
-            "Invalid reasoning effort '{effort}'. Allowed values are: {allowed}",
-            effort=norm_effort,
-            allowed=", ".join(_format_thinking_val(v) for v in values),
-        ),
-    )
+    matched, resolved, msg = _match_thinking_effort(norm_effort, thinking_cfg, model_name)
+    if not matched:
+        return None, msg
+    if resolved is None:
+        return "default", None
+    return format_thinking_value(resolved), None
 

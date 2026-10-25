@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from ollama_agent.core.common import DEFAULT_REASONING_EFFORT
 from ollama_agent.core.models import (
+    REASONING_HIDE_VALUES,
+    REASONING_OFF_VALUES,
     ExtendedShowResponse,
     ModelCapabilityError,
     ModelContextWindowError,
@@ -78,17 +80,11 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
 
     @patch("ollama_agent.core.models._show_model")
     async def test_get_model_capabilities_unknown_shape_raises(self, mock_show: AsyncMock) -> None:
-        for bad_caps in ("tools", None, 42):
+        for bad_caps in ("tools", None, 42, {"capabilities": ["tools"]}):
             with self.subTest(caps=bad_caps):
                 mock_show.return_value = MagicMock(capabilities=bad_caps)
                 with self.assertRaises(ModelCapabilityError):
                     await get_model_capabilities("test-model", "http://localhost:11434")
-
-    @patch("ollama_agent.core.models._show_model")
-    async def test_get_model_capabilities_dict_shape(self, mock_show: AsyncMock) -> None:
-        mock_show.return_value = MagicMock(capabilities={"capabilities": ["tools"]})
-        caps = await get_model_capabilities("test-model", "http://localhost:11434")
-        self.assertEqual(caps, {"tools"})
 
     def test_get_model_info(self) -> None:
         response = ExtendedShowResponse.model_validate({"model_info": {"llama.context_length": 4096}})
@@ -558,6 +554,30 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(OllamaVersionError):
             check_ollama_version("http://localhost:11434", min_version="0.41.0")
+
+    @patch("ollama_agent.core.models.get_model_capabilities")
+    async def test_resolve_ollama_reasoning_hide_keeps_thinking_enabled(self, mock_caps: AsyncMock) -> None:
+        self.assertNotIn("hide", REASONING_OFF_VALUES)
+        self.assertIn("hide", REASONING_HIDE_VALUES)
+
+        warnings_log: list[str] = []
+        qwen_show = MagicMock(
+            thinking={"values": [False, "low", "medium", "xhigh"], "default": "medium"},
+            capabilities=["tools", "thinking"],
+        )
+        res = await resolve_ollama_reasoning(
+            "qwen3.8:27b", "hide", "http://localhost:11434", warnings_log.append, show_info=qwen_show
+        )
+        self.assertEqual(res, "medium")
+        self.assertEqual(warnings_log, [])
+
+        mock_caps.return_value = {"thinking"}
+        legacy_show = MagicMock(thinking=None, capabilities=["thinking"])
+        res_legacy = await resolve_ollama_reasoning(
+            "custom-model", "hide", "http://localhost:11434", warnings_log.append, show_info=legacy_show
+        )
+        self.assertTrue(res_legacy)
+        self.assertEqual(warnings_log, [])
 
 
 if __name__ == "__main__":

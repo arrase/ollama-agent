@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from langgraph.types import Overwrite
 
 from ..core.common import extract_text
 from ..i18n import _
@@ -53,6 +54,35 @@ def format_iso_timestamp(ts: str) -> str:
     return dt.strftime("%Y-%m-%d %H:%M UTC")
 
 
+def _unwrap_messages(raw: Any) -> tuple[list[Any], bool]:
+    """Unwrap deserialized message write payload and detect Overwrite."""
+    if isinstance(raw, Overwrite):
+        val = raw.value
+        return (val if isinstance(val, list) else [val]), True
+    if isinstance(raw, dict) and "__overwrite__" in raw:
+        val = raw["__overwrite__"]
+        return (val if isinstance(val, list) else [val]), True
+    return (raw if isinstance(raw, list) else [raw]), False
+
+
+def _deserialize_messages(typ: str, val: bytes) -> tuple[list[Any], bool]:
+    try:
+        msg_list, is_overwrite = _unwrap_messages(_serializer.loads_typed((typ, val)))
+        for msg in msg_list:
+            _ = msg.type, msg.content, msg.id
+        return msg_list, is_overwrite
+    except (ValueError, KeyError, TypeError, AttributeError) as exc:
+        raise ValueError(str(exc)) from exc
+
+
+def _deserialize_checkpoint_ts(typ: str, chk: bytes) -> str:
+    try:
+        c = _serializer.loads_typed((typ, chk))
+        return format_iso_timestamp(str(c["ts"]))
+    except (ValueError, KeyError, TypeError, AttributeError) as exc:
+        raise ValueError(str(exc)) from exc
+
+
 def load_past_user_prompts(db_path: Path = HISTORY_DB_PATH) -> list[str]:
     """Load past user prompt strings from the SQLite history database in chronological order."""
     if not db_path.exists():
@@ -65,17 +95,28 @@ def load_past_user_prompts(db_path: Path = HISTORY_DB_PATH) -> list[str]:
             cursor = conn.cursor()
             cursor.execute("SELECT type, value FROM writes WHERE channel = 'messages' ORDER BY rowid ASC")
             for typ, val in cursor.fetchall():
-                msgs = _serializer.loads_typed((typ, val))
-                msg_list = msgs if isinstance(msgs, list) else [msgs]
+                msg_list, _ = _deserialize_messages(typ, val)
                 for msg in msg_list:
                     if msg.type in ("human", "user"):
                         text = extract_text(msg.content).strip()
                         if text and text not in seen:
                             seen.add(text)
                             prompts.append(text)
-    except (sqlite3.Error, OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+    except (sqlite3.Error, OSError, ValueError) as e:
         raise HistoryError(_(_READ_DB_ERR_MSG, db_path=db_path, e=e)) from e
     return prompts
+
+
+def _read_session_timestamps(cursor: sqlite3.Cursor) -> list[tuple[str, str]]:
+    cursor.execute(
+        "SELECT thread_id, type, checkpoint FROM checkpoints "
+        "WHERE rowid IN (SELECT MAX(rowid) FROM checkpoints GROUP BY thread_id) "
+        "ORDER BY rowid ASC"
+    )
+    return [
+        (tid, _deserialize_checkpoint_ts(typ, chk))
+        for tid, typ, chk in cursor.fetchall()
+    ]
 
 
 def load_session_timestamps(db_path: Path = HISTORY_DB_PATH) -> list[tuple[str, str]]:
@@ -83,34 +124,31 @@ def load_session_timestamps(db_path: Path = HISTORY_DB_PATH) -> list[tuple[str, 
     if not db_path.exists():
         return []
 
-    results: list[tuple[str, str]] = []
     try:
         with connect_history(db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT thread_id, type, checkpoint FROM checkpoints "
-                "WHERE rowid IN (SELECT MAX(rowid) FROM checkpoints GROUP BY thread_id) "
-                "ORDER BY rowid ASC"
-            )
-            for tid, typ, chk in cursor.fetchall():
-                c = _serializer.loads_typed((typ, chk))
-                results.append((tid, format_iso_timestamp(str(c["ts"]))))
-    except (sqlite3.Error, OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+            return _read_session_timestamps(conn.cursor())
+    except (sqlite3.Error, OSError, ValueError) as e:
         raise HistoryError(_(_READ_DB_ERR_MSG, db_path=db_path, e=e)) from e
-    return results
 
 
 def _read_history_messages(cursor: sqlite3.Cursor, exclude_thread_id: str) -> defaultdict[str, list[Any]]:
     thread_messages: defaultdict[str, list[Any]] = defaultdict(list)
+    seen_ids: defaultdict[str, set[str]] = defaultdict(set)
     cursor.execute("SELECT thread_id, type, value FROM writes WHERE channel = 'messages' ORDER BY rowid ASC")
     for tid, typ, val in cursor.fetchall():
         if exclude_thread_id and tid.startswith(exclude_thread_id):
             continue
-        msgs = _serializer.loads_typed((typ, val))
-        if isinstance(msgs, list):
-            thread_messages[tid].extend(msgs)
-        else:
-            thread_messages[tid].append(msgs)
+        msg_list, is_overwrite = _deserialize_messages(typ, val)
+        if is_overwrite:
+            thread_messages[tid].clear()
+            seen_ids[tid].clear()
+        for msg in msg_list:
+            msg_id = msg.id
+            if isinstance(msg_id, str) and msg_id:
+                if msg_id in seen_ids[tid]:
+                    continue
+                seen_ids[tid].add(msg_id)
+            thread_messages[tid].append(msg)
     return thread_messages
 
 
@@ -125,17 +163,16 @@ def load_past_conversations(
     if not db_path.exists():
         return {}
 
-    thread_timestamps = {
-        tid: ts
-        for tid, ts in load_session_timestamps(db_path)
-        if not (exclude_thread_id and tid.startswith(exclude_thread_id))
-    }
-
     try:
         with connect_history(db_path) as conn:
             cursor = conn.cursor()
+            thread_timestamps = {
+                tid: ts
+                for tid, ts in _read_session_timestamps(cursor)
+                if not (exclude_thread_id and tid.startswith(exclude_thread_id))
+            }
             thread_messages = _read_history_messages(cursor, exclude_thread_id)
-    except (sqlite3.Error, OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+    except (sqlite3.Error, OSError, ValueError) as e:
         raise HistoryError(_(_READ_DB_ERR_MSG, db_path=db_path, e=e)) from e
 
     conversations: dict[str, dict[str, Any]] = {}

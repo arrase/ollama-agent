@@ -13,16 +13,14 @@ from rich.markup import escape
 
 from ..agent import AgentRuntime
 from ..agent.builtin_tools import set_rag_manager
-from ..agent.episodic_memory import HistoryError
 from ..core import DEFAULT_REASONING_EFFORT, ModelContextWindowError, parse_context_window_input
 from ..i18n import SUPPORTED_LOCALES, _
-from ..mcp import MCPConfigError
 from ..rag import RAGContext, RAGError, RAGManager, load_rag_database
 from ..settings import Settings
-from ..skills import SkillError, SkillManager, SkillsContext
+from ..skills import SkillManager, SkillsContext
 from ..streaming import run_non_interactive
-from ..tasks.commands import TaskError, TasksContext
-from .commands.dispatch import build_cli_handlers
+from ..tasks.commands import TasksContext
+from .commands.dispatch import DOMAIN_ERRORS, build_cli_handlers
 
 
 def _positive_seconds(value: str) -> int:
@@ -179,6 +177,34 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         default=argparse.SUPPRESS,
         help=_("Enable YOLO mode (bypasses all tool execution confirmation prompts)"),
     )
+    task_run.add_argument(
+        "-s",
+        "--stealth",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help=_("Enable stealth mode (do not save conversation to SQLite history)"),
+    )
+    task_run.add_argument(
+        "--rag",
+        type=str,
+        default=argparse.SUPPRESS,
+        metavar="DATABASE",
+        help=_("Load a RAG database for the session"),
+    )
+    task_run.add_argument(
+        "-m",
+        "--model",
+        type=str,
+        default=argparse.SUPPRESS,
+        help=_("Specify the AI model to use"),
+    )
+    task_run.add_argument(
+        "-e",
+        "--effort",
+        type=str,
+        default=argparse.SUPPRESS,
+        help=_("Set reasoning effort level supported by the model, or 'default'"),
+    )
 
     task_delete = task_sub.add_parser("delete", help=_("Delete a saved task"))
     task_delete.add_argument("task_id", type=str, help=_("Task ID or prefix to delete"))
@@ -325,7 +351,7 @@ def handle_subcommand(args: argparse.Namespace, settings: Settings) -> None:
         if inspect.isawaitable(result):
             # The handler is an async function, so the awaitable is always a coroutine.
             result = asyncio.run(cast("Coroutine[Any, Any, Any]", result))
-    except (SkillError, TaskError, RAGError, HistoryError, MCPConfigError) as exc:
+    except DOMAIN_ERRORS as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
         raise SystemExit(1) from exc
     finally:

@@ -10,6 +10,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import langchain_mcp_adapters.sessions
+import mcp.client.stdio
 from rich.console import Console
 
 import ollama_agent.mcp as mcp_pkg
@@ -22,8 +24,10 @@ from ollama_agent.mcp.loader import (
     DEFAULT_MCP_TIMEOUT,
     MCPConfigError,
     _build_mcp_connection,
+    _connect_and_load,
     _load_tools_from_connections,
     _mcp_stdio_client,
+    _orig_stdio_client,
     _read_main_config,
     _resolve_env,
     load_main_mcp_tools,
@@ -546,3 +550,47 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             async with _mcp_stdio_client(server_dummy, errlog=custom_stream) as streams:
                 self.assertEqual(streams, ("read_stream", "write_stream"))
             self.assertEqual(captured_errlog, custom_stream)
+
+    def test_http_url_alias_and_invalid_headers(self) -> None:
+        conn = _build_mcp_connection("remote", {"httpUrl": "https://example.com/mcp", "headers": {"X-Key": "val"}})
+        self.assertEqual(conn["url"], "https://example.com/mcp")
+        self.assertEqual(conn["transport"], "http")
+        self.assertEqual(conn["headers"], {"X-Key": "val"})
+
+        with self.assertRaisesRegex(MCPConfigError, "'headers' must be an object"):
+            _build_mcp_connection("remote", {"url": "https://example.com/mcp", "headers": ["bad"]})
+
+    async def test_stdio_client_patch_scoped_to_load_and_execution(self) -> None:
+        self.assertIs(mcp.client.stdio.stdio_client, _orig_stdio_client)
+        self.assertIs(langchain_mcp_adapters.sessions.stdio_client, _orig_stdio_client)
+
+        seen_during_load: list[object] = []
+        seen_during_exec: list[object] = []
+
+        async def raw_tool_coro() -> str:
+            seen_during_exec.append(mcp.client.stdio.stdio_client)
+            return "ok"
+
+        mock_tool = MagicMock()
+        mock_tool.coroutine = raw_tool_coro
+
+        async def fake_get_tools() -> list[object]:
+            seen_during_load.append(mcp.client.stdio.stdio_client)
+            return [mock_tool]
+
+        mock_client = MagicMock()
+        mock_client.get_tools = fake_get_tools
+
+        with patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client):
+            tools = await _connect_and_load("srv", {"transport": "stdio", "command": "npx", "args": []})
+
+        self.assertEqual(seen_during_load, [_mcp_stdio_client])
+        self.assertIs(mcp.client.stdio.stdio_client, _orig_stdio_client)
+        self.assertIs(langchain_mcp_adapters.sessions.stdio_client, _orig_stdio_client)
+
+        res = await tools[0].coroutine()
+        self.assertEqual(res, "ok")
+        self.assertEqual(seen_during_exec, [_mcp_stdio_client])
+        self.assertIs(mcp.client.stdio.stdio_client, _orig_stdio_client)
+        self.assertIs(langchain_mcp_adapters.sessions.stdio_client, _orig_stdio_client)
+

@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from langgraph.types import Overwrite
 
 from ollama_agent.agent.builtin_tools import (
     get_tool_timeout,
@@ -337,6 +338,37 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(HistoryError):
             load_past_conversations(self.db_path)
+
+    def test_overwrite_and_message_deduplication(self) -> None:
+        self._seed_db()
+        conn = sqlite3.connect(str(self.db_path))
+        cur = conn.cursor()
+        chk_typ, chk_val = self.serializer.dumps_typed({"ts": "2026-08-23T12:00:00"})
+        cur.execute(
+            "INSERT INTO checkpoints (thread_id, checkpoint_id, type, checkpoint) VALUES (?, ?, ?, ?)",
+            ("thread-ow", "cp-ow", chk_typ, chk_val),
+        )
+        msg1 = HumanMessage(content="Before overwrite", id="msg-1")
+        msg2 = HumanMessage(content="After overwrite", id="msg-2")
+        msg2_dup = HumanMessage(content="After overwrite", id="msg-2")
+        t1, v1 = self.serializer.dumps_typed([msg1])
+        t2, v2 = self.serializer.dumps_typed(Overwrite(value=[msg2]))
+        t3, v3 = self.serializer.dumps_typed([msg2_dup])
+        cur.executemany(
+            "INSERT INTO writes (thread_id, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("thread-ow", "cp-ow", "t1", 0, "messages", t1, v1),
+                ("thread-ow", "cp-ow", "t2", 1, "messages", t2, v2),
+                ("thread-ow", "cp-ow", "t3", 2, "messages", t3, v3),
+            ],
+        )
+        conn.commit()
+        conn.close()
+
+        prompts = load_past_user_prompts(self.db_path)
+        self.assertIn("After overwrite", prompts)
+        convs = load_past_conversations(self.db_path)
+        self.assertEqual([m.content for m in convs["thread-ow"]["messages"]], ["After overwrite"])
 
 
 if __name__ == "__main__":

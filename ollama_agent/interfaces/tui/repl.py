@@ -62,6 +62,7 @@ class OllamaREPL:
 
     async def cleanup(self) -> None:
         if self._rag_ctx:
+            set_rag_manager(None)
             await self._rag_ctx.rag_manager.aclose()
         await self.runtime.aclose()
 

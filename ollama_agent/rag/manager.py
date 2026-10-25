@@ -280,13 +280,12 @@ class RAGManager:
         if not path.is_file():
             raise RAGError(_("Not a file: {file_path}", file_path=file_path))
 
-        # Read file content
-        content = self._read_file(path)
+        # Read file content and chunk off the event loop
+        content = await asyncio.to_thread(self._read_file, path)
         if not content.strip():
             raise RAGError(_("File is empty: {file_path}", file_path=file_path))
 
-        # Chunk the content
-        chunks = self._chunk_text(content)
+        chunks = await asyncio.to_thread(self._chunk_text, content)
 
         await self._index_chunks(client, path, chunks)
 
@@ -312,11 +311,9 @@ class RAGManager:
             raise RAGError(_("Not a directory: {dir_path}", dir_path=dir_path))
 
         results: dict[str, int] = {"added": 0, "failed": 0, "skipped": 0}
+        files = await asyncio.to_thread(lambda: [p for p in sorted(path.rglob("*")) if p.is_file()])
 
-        for file_path in sorted(path.rglob("*")):
-            if not file_path.is_file():
-                continue
-
+        for file_path in files:
             if file_path.suffix.lower() not in extensions:
                 results["skipped"] += 1
                 continue
@@ -328,11 +325,11 @@ class RAGManager:
             # Isolate per-file failures: one bad file (or a transient embedder error)
             # must not abort the whole batch after a partial ingest.
             try:
-                content = self._read_file(file_path, allowed_extensions=extensions)
+                content = await asyncio.to_thread(self._read_file, file_path, extensions)
                 if not content.strip():
                     results["skipped"] += 1
                     continue
-                chunks = self._chunk_text(content)
+                chunks = await asyncio.to_thread(self._chunk_text, content)
                 await self._index_chunks(client, file_path, chunks)
             except RAGError as e:
                 logger.warning("Failed to index %s: %s", file_path, e)

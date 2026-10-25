@@ -7,20 +7,16 @@ from typing import Any
 
 from langchain_core.tools import BaseTool
 
-from ..core import create_ollama_chat_model, render_prompt_template
+from ..core import create_ollama_chat_model, ensure_model_supports_tools, render_prompt_template
 from ..i18n import _
 from ..mcp.loader import load_subagent_mcp_tools
 from ..settings import (
     ModelSettings,
     SubAgentSettings,
 )
-from .builtin_tools import BUILTIN_TOOLS
+from .builtin_tools import BUILTIN_TOOLS, get_rag_manager, rag_search
 from .environment import SKILL_ROOTS, environment_block
 from .middleware import stream_tool_events_mw
-
-
-def _default_should_interrupt(_request: Any) -> bool:
-    return True
 
 
 def build_interrupt_config(
@@ -41,7 +37,7 @@ async def build_subagents(
     subagent_settings: list[SubAgentSettings],
     *,
     model_settings: ModelSettings,
-    should_interrupt_tool: Callable[[Any], bool] = _default_should_interrupt,
+    should_interrupt_tool: Callable[[Any], bool],
 ) -> list[dict[str, Any]]:
     """Convert ``SubAgentSettings`` into dicts for ``create_deep_agent(subagents=...)``."""
     return [
@@ -54,7 +50,7 @@ async def _build_spec(
     sa: SubAgentSettings,
     *,
     model_settings: ModelSettings,
-    should_interrupt_tool: Callable[[Any], bool] = _default_should_interrupt,
+    should_interrupt_tool: Callable[[Any], bool],
 ) -> dict[str, Any]:
     """Build a single subagent spec dict."""
     if not sa.name:
@@ -76,6 +72,9 @@ async def _build_spec(
         "middleware": [stream_tool_events_mw],
     }
 
+    if sa.model and sa.model != model_settings.name:
+        await ensure_model_supports_tools(sa.model, model_settings.base_url)
+
     spec["model"] = await create_ollama_chat_model(
         model=sa.model or model_settings.name,
         base_url=model_settings.base_url,
@@ -88,13 +87,12 @@ async def _build_spec(
         presence_penalty=model_settings.presence_penalty,
         repeat_penalty=model_settings.repeat_penalty,
     )
-
     spec["skills"] = SKILL_ROOTS
 
-    if sa.mcp_servers:
-        tools = await load_subagent_mcp_tools(sa.name, sa.mcp_servers)
-        if tools:
-            spec["tools"] = [*BUILTIN_TOOLS, *tools]
-            spec["interrupt_on"] = build_interrupt_config(tools, should_interrupt_tool)
+    tools = await load_subagent_mcp_tools(sa.name, sa.mcp_servers) if sa.mcp_servers else []
+    rag_mgr = get_rag_manager()
+    rag_tools = [rag_search] if rag_mgr and rag_mgr.current_database else []
+    spec["tools"] = [*BUILTIN_TOOLS, *rag_tools, *tools]
+    spec["interrupt_on"] = build_interrupt_config(tools, should_interrupt_tool)
 
     return spec

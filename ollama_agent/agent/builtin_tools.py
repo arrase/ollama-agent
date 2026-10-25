@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextvars import ContextVar
 from typing import Any, TypedDict
 
 from langchain_core.tools import BaseTool, tool
@@ -21,38 +22,49 @@ class RAGToolResult(TypedDict, total=False):
     error: str
 
 
-_tool_timeout: int = 30
-_rag_manager: RAGManager | None = None
-_active_thread_id: str = ""
+_UNSET: Any = object()
+_default_tool_timeout: int = 30
+_default_rag_manager: RAGManager | None = None
+_default_active_thread_id: str = ""
+
+_tool_timeout_var: ContextVar[Any] = ContextVar("tool_timeout", default=_UNSET)
+_rag_manager_var: ContextVar[Any] = ContextVar("rag_manager", default=_UNSET)
+_active_thread_id_var: ContextVar[Any] = ContextVar("active_thread_id", default=_UNSET)
 
 
 def set_tool_timeout(timeout: int) -> None:
-    global _tool_timeout
+    global _default_tool_timeout
     if timeout <= 0:
         raise ValueError(_("Tool timeout must be greater than 0, got {timeout_s}", timeout_s=timeout))
-    _tool_timeout = timeout
+    _default_tool_timeout = timeout
+    _tool_timeout_var.set(timeout)
 
 
 def get_tool_timeout() -> int:
-    return _tool_timeout
+    val = _tool_timeout_var.get()
+    return _default_tool_timeout if val is _UNSET else val
 
 
 def set_rag_manager(mgr: RAGManager | None) -> None:
-    global _rag_manager
-    _rag_manager = mgr
+    global _default_rag_manager
+    _default_rag_manager = mgr
+    _rag_manager_var.set(mgr)
 
 
 def get_rag_manager() -> RAGManager | None:
-    return _rag_manager
+    val = _rag_manager_var.get()
+    return _default_rag_manager if val is _UNSET else val
 
 
 def set_active_thread_id(thread_id: str) -> None:
-    global _active_thread_id
-    _active_thread_id = thread_id
+    global _default_active_thread_id
+    _default_active_thread_id = thread_id
+    _active_thread_id_var.set(thread_id)
 
 
 def get_active_thread_id() -> str:
-    return _active_thread_id
+    val = _active_thread_id_var.get()
+    return _default_active_thread_id if val is _UNSET else val
 
 
 @tool

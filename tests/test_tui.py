@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -15,9 +16,12 @@ from rich.console import Console
 from ollama_agent.agent.episodic_memory import HistoryError
 from ollama_agent.interfaces.tui import OllamaAgentApp, OllamaREPL
 from ollama_agent.interfaces.tui.commands import run_slash_command
-from ollama_agent.interfaces.tui.completion import file_completions
+from ollama_agent.interfaces.tui.completion import _get_cached_models, _model_cache, file_completions
 from ollama_agent.interfaces.tui.renderer import _TUIStreamingRenderer
 from ollama_agent.interfaces.tui.screens import MainScreen
+from ollama_agent.settings.config import Settings, load_settings, save_settings
+from ollama_agent.tasks.commands import apply_task_settings
+from ollama_agent.tasks.manager import Task
 from ollama_agent.interfaces.tui.widgets import (
     AgentFooter,
     AgentHeader,
@@ -307,12 +311,11 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(decisions, [{"type": "approve"}])
 
     async def test_tool_approval_widget_navigation_and_shortcuts(self) -> None:
-        # Test single direct shortcuts (y, n, a, c)
+        # Test single direct shortcuts (y, n, a)
         for shortcut, expected_type in [
             ("y", "approve"),
             ("n", "reject"),
             ("a", "approve"),
-            ("c", "reject"),
         ]:
             app_ref_mock = MagicMock()
             app_ref_mock.repl.runtime.auto_approved_tools = set()
@@ -335,6 +338,26 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(decisions[0]["type"], expected_type)
                 if shortcut == "a":
                     self.assertIn("execute", app_ref_mock.repl.runtime.auto_approved_tools)
+
+        # Test shortcut 'c' (cancel) calls cancel_approval directly without a reject decision
+        app_ref_mock = MagicMock()
+        widget = ToolApprovalWidget(
+            action_requests=[{"name": "execute", "args": {"cmd": "ls"}}],
+            app_ref=app_ref_mock,
+            scroll=MagicMock(),
+            agent_msg=AgentResponse(),
+        )
+
+        class CancelShortcutApp(App):
+            def compose(self) -> ComposeResult:
+                yield widget
+
+        cancel_app = CancelShortcutApp()
+        async with cancel_app.run_test():
+            widget.on_key(events.Key("c", "c"))
+            app_ref_mock._handle_approval_decision.assert_not_called()
+            app_ref_mock.cancel_approval.assert_called_once()
+            app_ref_mock.run_worker.assert_called_once()
 
         # Test arrow key navigation between buttons
         app_ref_mock = MagicMock()
@@ -386,10 +409,9 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
 
             # Press Enter on focused button (cancel-btn)
             widget.on_key(events.Key("enter", "\r"))
-            app_ref_mock._handle_approval_decision.assert_called_once()
-            decisions = app_ref_mock._handle_approval_decision.call_args[0][0]
-            self.assertEqual(decisions[0]["type"], "reject")
-            self.assertEqual(decisions[0]["message"], "User cancelled the execution.")
+            app_ref_mock._handle_approval_decision.assert_not_called()
+            app_ref_mock.cancel_approval.assert_called_once()
+            app_ref_mock.run_worker.assert_called_once()
 
 
 class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
@@ -494,7 +516,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock._skills_ctx.skill_manager.list_all.return_value = [("test-skill", mock_skill)]
 
         mock_rag_mgr = MagicMock()
-        mock_rag_mgr.list_databases.return_value = [{"name": "docs-db", "chunks": 5}]
+        mock_rag_mgr.list_database_names.return_value = ["docs-db"]
         repl_mock._get_rag_ctx.return_value.rag_manager = mock_rag_mgr
 
         app = OllamaAgentApp(repl_mock)
@@ -723,7 +745,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         async with app.run_test() as pilot:
             with (
                 patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream,
-                patch("ollama_agent.interfaces.tui.commands.apply_task_settings") as mock_apply,
+                patch("ollama_agent.interfaces.tui.commands.apply_task_settings", wraps=apply_task_settings) as mock_apply,
             ):
                 await run_slash_command(app, "/task run my-task -y")
                 await pilot.pause()
@@ -1045,10 +1067,11 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
 
             app._is_approval_pending = True
-            with patch.object(app, "_handle_approval_decision", new_callable=AsyncMock):
-                app.action_cancel_generation()
-                self.assertTrue(widget._decided)
-                self.assertIsNone(widget.buttons_container)
+            app.action_cancel_generation()
+            await pilot.pause()
+            self.assertTrue(widget._decided)
+            self.assertIsNone(widget.buttons_container)
+            self.assertFalse(app._is_approval_pending)
 
     async def test_enter_submits_when_input_already_matches_highlighted_completion(self) -> None:
         runtime_mock = make_mock_runtime()
@@ -1155,4 +1178,126 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
         ):
             with self.assertRaises(AttributeError):
                 screen._forward_event(event)
+
+    async def test_approval_cancel_aborts_without_resuming_stream_and_runs_cleanup(self) -> None:
+        runtime_mock = make_mock_runtime()
+        repl = OllamaREPL(runtime=runtime_mock)
+        app = OllamaAgentApp(repl)
+
+        async with app.run_test() as pilot:
+            chat_scroll = app.query_one("#chat-scroll")
+            agent_msg = AgentResponse()
+            await chat_scroll.mount(agent_msg)
+            await pilot.pause()
+
+            cleanup_mock = AsyncMock()
+            app._post_stream_cleanup = cleanup_mock
+            app._is_approval_pending = True
+
+            with (
+                patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_run_stream,
+                patch.object(app, "show_system_notice") as mock_notice,
+            ):
+                await app.cancel_approval()
+                mock_run_stream.assert_not_awaited()
+                cleanup_mock.assert_awaited_once()
+                self.assertFalse(app._is_approval_pending)
+                self.assertIsNone(app._post_stream_cleanup)
+                mock_notice.assert_called_once()
+                self.assertIn("Approval cancelled", str(mock_notice.call_args[0][0]))
+
+    async def test_slash_session_delete_current_resets_session(self) -> None:
+        runtime_mock = make_mock_runtime()
+        runtime_mock.thread_id = "abcd1234"
+        repl = OllamaREPL(runtime=runtime_mock)
+        app = OllamaAgentApp(repl)
+
+        async with app.run_test() as pilot:
+            chat_scroll = app.query_one("#chat-scroll")
+            await chat_scroll.mount(UserMessage("Hello"))
+            await pilot.pause()
+
+            def fake_delete(args: list[str]) -> None:
+                repl.console.print(f"[green]✓ Deleted session: {args[1]}[/green]")
+
+            repl._commands = {"/session": fake_delete}
+            await run_slash_command(app, "/session delete abcd1234")
+            self.assertNotEqual(runtime_mock.thread_id, "abcd1234")
+            self.assertEqual(len(chat_scroll.children), 0)
+
+    async def test_task_run_hitl_approval_save_settings_and_cancel_restores_settings(self) -> None:
+        runtime_mock = make_mock_runtime()
+        runtime_mock.settings = Settings()
+        runtime_mock.settings.model.name = "base-model:latest"
+        runtime_mock.settings.model.reasoning_effort = "low"
+        repl = OllamaREPL(runtime=runtime_mock)
+        task = Task(title="Deploy", prompt="Run deploy", model="task-model:70b", reasoning_effort="high")
+        repl._task_ctx.task_manager.save("deploy", task)
+        app = OllamaAgentApp(repl)
+
+        async def fake_stream_events(rt: object, _prompt: object, renderer: object, **_kw: object) -> None:
+            interrupt_obj = MagicMock()
+            interrupt_obj.value = {"action_requests": [{"name": "execute", "args": {"cmd": "deploy.sh"}}]}
+            await renderer.handle_interrupt({"interrupts": [interrupt_obj]}, rt)  # type: ignore[attr-defined]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            settings_file = Path(tmp_dir) / "settings.yaml"
+            save_settings(runtime_mock.settings, settings_file)
+
+            async with app.run_test() as pilot:
+                with patch("ollama_agent.interfaces.tui.app.stream_agent_events", side_effect=fake_stream_events):
+                    await run_slash_command(app, "/task run deploy")
+                    await pilot.pause()
+
+                # Task override is active in runtime while paused at HITL approval
+                self.assertTrue(app._is_approval_pending)
+                self.assertEqual(runtime_mock.settings.model.name, "task-model:70b")
+                self.assertEqual(runtime_mock.settings.model.reasoning_effort, "high")
+
+                # Concurrent save_settings (e.g. /params set) must not persist temporary task model/effort
+                runtime_mock.settings.model.temperature = 0.4
+                save_settings(runtime_mock.settings, settings_file)
+                persisted = load_settings(settings_file)
+                self.assertEqual(persisted.model.name, "base-model:latest")
+                self.assertEqual(persisted.model.reasoning_effort, "low")
+                self.assertEqual(persisted.model.temperature, 0.4)
+
+                # Cancel approval via Escape -> restores runtime model/effort and calls _begin_cancel_approval once
+                with patch.object(app, "_begin_cancel_approval", wraps=app._begin_cancel_approval) as spy_begin:
+                    app.action_cancel_generation()
+                    await pilot.pause()
+                    self.assertEqual(spy_begin.call_count, 1)
+
+                self.assertFalse(app._is_approval_pending)
+                self.assertEqual(runtime_mock.settings.model.name, "base-model:latest")
+                self.assertEqual(runtime_mock.settings.model.reasoning_effort, "low")
+
+    def test_model_autocomplete_negative_cache_and_background_refresh(self) -> None:
+        mock_m1 = MagicMock(model="qwen3:8b", size=4 * 1024**3)
+        mock_m2 = MagicMock(model="gemma4:26b", size=8 * 1024**3)
+
+        # 1. Negative caching: connection error is cached so subsequent keystrokes don't re-fetch
+        with patch(
+            "ollama_agent.interfaces.tui.completion._list_models_sync",
+            side_effect=OSError("Connection refused"),
+        ) as mock_fetch_err:
+            self.assertEqual(_get_cached_models("http://unreachable:11434"), [])
+            self.assertEqual(_get_cached_models("http://unreachable:11434"), [])
+            self.assertEqual(mock_fetch_err.call_count, 1)
+
+        # 2. Expired TTL returns cached value immediately and refreshes in background thread
+        with patch(
+            "ollama_agent.interfaces.tui.completion._list_models_sync",
+            return_value=[mock_m2],
+        ) as mock_fetch_refresh:
+            key = ("http://localhost:11434", mock_fetch_refresh)
+            _model_cache[key] = (time.monotonic() - 20.0, [mock_m1])
+            immediate = _get_cached_models("http://localhost:11434")
+            self.assertEqual(immediate, [mock_m1])
+            for _ in range(20):
+                if _model_cache[key][1] == [mock_m2]:
+                    break
+                time.sleep(0.005)
+            self.assertEqual(_model_cache[key][1], [mock_m2])
+
 

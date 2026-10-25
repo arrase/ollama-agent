@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from rich.markup import escape
 from textual import events
@@ -14,9 +14,6 @@ from ....i18n import _
 from ....streaming import build_approval_decisions
 from .footer import AgentFooter
 from .messages import AgentResponse
-
-if TYPE_CHECKING:
-    from ..app import OllamaAgentApp
 
 
 class ToolApprovalWidget(Container):
@@ -34,7 +31,7 @@ class ToolApprovalWidget(Container):
     def __init__(
         self,
         action_requests: list[dict[str, Any]],
-        app_ref: OllamaAgentApp,
+        app_ref: Any,
         scroll: Any,
         agent_msg: AgentResponse,
         **kwargs: Any,
@@ -115,17 +112,6 @@ class ToolApprovalWidget(Container):
         for child in self.buttons_container.query(Button):
             child.disabled = True
 
-        if decision_type == "approve-btn":
-            decisions = build_approval_decisions(self.action_requests, "approve")
-        elif decision_type == "reject-btn":
-            decisions = build_approval_decisions(self.action_requests, "reject")
-        elif decision_type == "allow-btn":
-            decisions = build_approval_decisions(self.action_requests, "allow", runtime=self.app_ref.repl.runtime)
-        else:
-            decisions = build_approval_decisions(
-                self.action_requests, "reject", reject_message=_("User cancelled the execution.")
-            )
-
         self.buttons_container.remove()
         self.buttons_container = None
 
@@ -141,6 +127,18 @@ class ToolApprovalWidget(Container):
         footer = self.app_ref.query_one(AgentFooter)
         footer.set_approval(False)
         self.app_ref._is_approval_pending = False
+
+        if decision_type == "cancel-btn":
+            self.app_ref._current_worker = self.app_ref.run_worker(self.app_ref.cancel_approval())
+            return
+
+        if decision_type == "approve-btn":
+            decisions = build_approval_decisions(self.action_requests, "approve")
+        elif decision_type == "reject-btn":
+            decisions = build_approval_decisions(self.action_requests, "reject")
+        else:
+            decisions = build_approval_decisions(self.action_requests, "allow", runtime=self.app_ref.repl.runtime)
+
         self.app_ref._is_generating = True
         footer.set_generating(True)
 
