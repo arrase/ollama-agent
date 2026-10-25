@@ -4,17 +4,19 @@ from __future__ import annotations
 
 import os
 import re
+import threading
+import time
 from collections.abc import Iterator, Sequence
 from itertools import islice
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import ollama
 from rich.markup import escape
 from rich.text import Text
 
 from ...agent.episodic_memory import HistoryError
-from ...core.models import get_model_thinking_config
+from ...core.models import format_thinking_value, get_model_thinking_config
 from ...i18n import _
 from ...rag import RAGError
 from ...skills import SkillError
@@ -22,9 +24,6 @@ from ...tasks import TaskError
 from ..commands.models import format_model_size
 from ..commands.sessions import get_available_sessions
 from .widgets.system import format_queue_preview
-
-if TYPE_CHECKING:
-    from .repl import OllamaREPL
 
 # @-mention regex: matches @"quoted", @'quoted', or @bare at word boundaries.
 _AT_MENTION_RE = re.compile(r"""(?:^|[\s\(\[\{<])@(?:"([^"]*)|'([^']*)|([^\s"'\(\[\{<>,;]*))$""")
@@ -49,13 +48,50 @@ CMD_QUIT = "/quit"
 NO_ARG_COMMANDS: frozenset[str] = frozenset({CMD_CLEAR, CMD_NEW, CMD_EXIT, CMD_QUIT})
 _CHAT_SCROLL_ID = "#chat-scroll"
 _AUTOCOMPLETE_LIST_ID = "#autocomplete-list"
+_MODEL_CACHE_TTL = 10.0
+_model_cache: dict[tuple[str, Any], tuple[float, list[Any]]] = {}
+_model_refresh_inflight: set[tuple[str, Any]] = set()
 
 
 def _list_models_sync(base_url: str) -> list[Any]:
     """Fetch the list of available Ollama models synchronously."""
-    client = ollama.Client(host=base_url)
+    client = ollama.Client(host=base_url, timeout=2.0)
     response = client.list()
     return list(response.models)
+
+
+def _refresh_models_in_background(base_url: str, *, wait: bool) -> None:
+    fn = _list_models_sync
+    key = (base_url, fn)
+    if key in _model_refresh_inflight:
+        return
+    _model_refresh_inflight.add(key)
+
+    def _worker() -> None:
+        try:
+            models = fn(base_url)
+        except Exception:  # noqa: BLE001
+            models = []
+        finally:
+            _model_refresh_inflight.discard(key)
+        _model_cache[key] = (time.monotonic(), models)
+
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
+    if wait:
+        thread.join(timeout=0.05)
+
+
+def _get_cached_models(base_url: str) -> list[Any]:
+    now = time.monotonic()
+    key = (base_url, _list_models_sync)
+    if key in _model_cache:
+        ts, models = _model_cache[key]
+        if now - ts >= _MODEL_CACHE_TTL:
+            _refresh_models_in_background(base_url, wait=False)
+        return models
+    _refresh_models_in_background(base_url, wait=True)
+    return _model_cache[key][1] if key in _model_cache else []
 
 
 def _get_root_commands() -> list[tuple[str, str]]:
@@ -159,12 +195,7 @@ def _complete_root_commands(token: str) -> list[tuple[str, Text]]:
     ]
 
 
-def _format_thinking_value(v: Any) -> str:
-    if v is False:
-        return "false"
-    if v is True:
-        return "true"
-    return str(v)
+_format_thinking_value = format_thinking_value
 
 
 def _complete_effort(sub_token: str, runtime_model: Any) -> list[tuple[str, Text]]:
@@ -214,10 +245,7 @@ def _complete_subcommands(root_cmd: str, sub_token: str) -> list[tuple[str, Text
 
 
 def _complete_model_args(root_cmd: str, sub_cmd: str, arg_token: str, base_url: str) -> list[tuple[str, Text]]:
-    try:
-        models = _list_models_sync(base_url)
-    except Exception:  # noqa: BLE001
-        return []
+    models = _get_cached_models(base_url)
     results = []
     for m in models:
         if not (m.model and m.model.startswith(arg_token)):
@@ -241,7 +269,7 @@ def _complete_context_args(root_cmd: str, sub_cmd: str, arg_token: str) -> list[
     ]
 
 
-def _complete_task_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: OllamaREPL) -> list[tuple[str, Text]]:
+def _complete_task_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: Any) -> list[tuple[str, Text]]:
     try:
         tasks = repl._task_ctx.task_manager.list_all()
     except (OSError, ValueError, TaskError):
@@ -258,7 +286,7 @@ def _complete_task_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: Ollam
     ]
 
 
-def _complete_skill_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: OllamaREPL) -> list[tuple[str, Text]]:
+def _complete_skill_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: Any) -> list[tuple[str, Text]]:
     try:
         skills = repl._skills_ctx.skill_manager.list_all()
     except (OSError, ValueError, SkillError):
@@ -295,22 +323,18 @@ def _complete_session_args(root_cmd: str, sub_cmd: str, arg_token: str) -> list[
     ]
 
 
-def _complete_rag_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: OllamaREPL) -> list[tuple[str, Text]]:
+def _complete_rag_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: Any) -> list[tuple[str, Text]]:
     try:
-        dbs = repl._get_rag_ctx().rag_manager.list_databases()
+        names = repl._get_rag_ctx().rag_manager.list_database_names()
     except (RAGError, OSError):
         return []
-    chunks_label = _("chunks")
     return [
         (
-            f"{root_cmd} {sub_cmd} {d['name']}",
-            Text.from_markup(
-                f"[bold #e6edf3]{escape(d['name']):<20}[/bold #e6edf3] "
-                f"[dim #8b949e]{d['chunks'] if d['chunks'] is not None else 0} {chunks_label}[/dim #8b949e]"
-            ),
+            f"{root_cmd} {sub_cmd} {name}",
+            Text.from_markup(f"[bold #e6edf3]{escape(name):<20}[/bold #e6edf3]"),
         )
-        for d in dbs
-        if d["name"].startswith(arg_token)
+        for name in names
+        if name.startswith(arg_token)
     ]
 
 
@@ -333,7 +357,7 @@ def _complete_queue_args(
 
 
 def _complete_arguments(
-    root_cmd: str, sub_cmd: str, arg_token: str, repl: OllamaREPL, prompt_queue: Sequence[str]
+    root_cmd: str, sub_cmd: str, arg_token: str, repl: Any, prompt_queue: Sequence[str]
 ) -> list[tuple[str, Text]]:
     if root_cmd == CMD_MODEL and sub_cmd == "set":
         return _complete_model_args(root_cmd, sub_cmd, arg_token, repl.runtime.settings.model.base_url)
@@ -352,7 +376,7 @@ def _complete_arguments(
     return []
 
 
-def slash_completions(text: str, repl: OllamaREPL, prompt_queue: Sequence[str]) -> list[tuple[str, Text]]:
+def slash_completions(text: str, repl: Any, prompt_queue: Sequence[str]) -> list[tuple[str, Text]]:
     """Build slash-command autocomplete candidates for the current input *text*."""
     parts = text.split(" ")
     num_parts = len(parts)
@@ -367,6 +391,11 @@ def slash_completions(text: str, repl: OllamaREPL, prompt_queue: Sequence[str]) 
 
     # Level 1: Subcommands (e.g., "/task " or "/task r")
     if num_parts == 2:
+        if root_cmd == CMD_MODEL:
+            base_url = repl.runtime.settings.model.base_url
+            key = (base_url, _list_models_sync)
+            if key not in _model_cache or time.monotonic() - _model_cache[key][0] >= _MODEL_CACHE_TTL:
+                _refresh_models_in_background(base_url, wait=False)
         return _complete_subcommands(root_cmd, parts[1])
 
     # Level 2: Arguments / Dynamic entities (e.g., "/task run ")

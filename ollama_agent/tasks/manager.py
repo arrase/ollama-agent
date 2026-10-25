@@ -76,6 +76,9 @@ class TaskInput:
         raise ValueError(_("Unsupported input type '{type}' for input '{name}'", type=self.type, name=name))
 
 
+_VALID_TASK_INPUT_TYPES = ("string", "boolean", "number")
+
+
 def _task_input_from_dict(name: str, inp: Any, valid_input_keys: set[str]) -> TaskInput:
     """Build a single TaskInput from its persisted mapping form."""
     if not isinstance(inp, dict):
@@ -83,6 +86,11 @@ def _task_input_from_dict(name: str, inp: Any, valid_input_keys: set[str]) -> Ta
     unknown = set(inp) - valid_input_keys
     if unknown:
         raise ValueError(_("Unknown input keys for '{name}': {keys}", name=name, keys=", ".join(sorted(unknown))))
+    inp_type = inp.get("type", "string")
+    if not isinstance(inp_type, str) or inp_type not in _VALID_TASK_INPUT_TYPES:
+        raise ValueError(_("Unsupported input type '{type}' for input '{name}'", type=inp_type, name=name))
+    if "required" in inp and not isinstance(inp["required"], bool):
+        raise ValueError(_("Invalid input definition for '{name}'", name=name))
     return TaskInput(**inp)
 
 

@@ -7,7 +7,7 @@ import logging
 from collections import deque
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from langgraph.types import Command
 from rich.markup import escape
@@ -45,9 +45,6 @@ from .widgets import (
     UserMessage,
 )
 
-if TYPE_CHECKING:
-    from .repl import OllamaREPL
-
 _log = logging.getLogger(__name__)
 
 
@@ -84,11 +81,8 @@ class OllamaAgentApp(App):
                 if not w._decided:
                     w._handle_decision("cancel-btn")
                     return
-            self._is_approval_pending = False
-            footer = self.query_one(AgentFooter)
-            footer.set_approval(False)
-            self.show_system_notice(f"[bold #f87171]🛑 {_('Approval cancelled.')}[/bold #f87171]")
-            self._process_next_in_queue()
+            self._begin_cancel_approval()
+            self.run_worker(self._finish_cancel_approval())
 
     def action_cancel_or_quit(self) -> None:
         if self._is_generating or self._is_approval_pending or self._prompt_queue:
@@ -124,7 +118,7 @@ class OllamaAgentApp(App):
     def get_default_screen(self) -> Screen:
         return MainScreen(id="_default")
 
-    def __init__(self, repl: OllamaREPL) -> None:
+    def __init__(self, repl: Any) -> None:
         super().__init__()
         self.repl = repl
         self.repl.app = self
@@ -162,7 +156,7 @@ class OllamaAgentApp(App):
 
     async def _warmup_agent(self) -> None:
         try:
-            await self.repl.runtime.warmup()
+            await self.repl.runtime._ensure_graph()
         except asyncio.CancelledError:
             raise
         # Startup failures are reported in the TUI instead of killing it.
@@ -241,13 +235,18 @@ class OllamaAgentApp(App):
             self.query_one(AgentFooter).set_generating(True)
         self._current_worker = self.run_worker(run_slash_command(self, cmd_line))
 
-    def _start_stream(self, prompt: str) -> None:
-        """Mount the prompt widgets and schedule a streaming worker (see _start_slash)."""
-        scroll = self.query_one(_CHAT_SCROLL_ID)
-        scroll.mount(UserMessage(prompt))
+    def mount_turn_widgets(self, user_text: str, scroll: Any = None) -> tuple[Any, AgentResponse]:
+        if scroll is None:
+            scroll = self.query_one(_CHAT_SCROLL_ID)
+        scroll.mount(UserMessage(user_text))
         agent_msg = AgentResponse()
         scroll.mount(agent_msg)
         self._deferred_scroll()
+        return scroll, agent_msg
+
+    def _start_stream(self, prompt: str) -> None:
+        """Mount the prompt widgets and schedule a streaming worker (see _start_slash)."""
+        scroll, agent_msg = self.mount_turn_widgets(prompt)
         self._is_generating = True
         self.query_one(AgentFooter).set_generating(True)
         self._current_worker = self.run_worker(self._run_stream(prompt, scroll, agent_msg))
@@ -277,7 +276,12 @@ class OllamaAgentApp(App):
         match = _AT_MENTION_RE.search(text)
         if match:
             token = match.group(1) or match.group(2) or match.group(3) or ""
-            items = list(file_completions(token))
+            items = list(
+                file_completions(
+                    token,
+                    max_completions=self.repl.runtime.settings.mentions.max_completions,
+                )
+            )
             if items:
                 autolist.clear_options()
                 for insert_val, display_markup in items:
@@ -334,6 +338,27 @@ class OllamaAgentApp(App):
 
     # ── Streaming chat ────────────────────────────────────────────────────
 
+    async def _run_post_stream_cleanup(self) -> None:
+        if self._post_stream_cleanup is not None:
+            cleanup = self._post_stream_cleanup
+            self._post_stream_cleanup = None
+            await cleanup()
+
+    def _begin_cancel_approval(self) -> None:
+        self._is_approval_pending = False
+        self.query_one(AgentFooter).set_approval(False)
+        self.show_system_notice(f"[bold #f87171]🛑 {_('Approval cancelled.')}[/bold #f87171]")
+        self.query_one(ReplInput).focus()
+
+    async def _finish_cancel_approval(self) -> None:
+        await self._run_post_stream_cleanup()
+        self.query_one(AgentHeader).update_header()
+        self._process_next_in_queue()
+
+    async def cancel_approval(self) -> None:
+        self._begin_cancel_approval()
+        await self._finish_cancel_approval()
+
     async def _handle_approval_decision(
         self, decisions: list[dict[str, Any]], scroll: Any, agent_msg: AgentResponse
     ) -> None:
@@ -387,10 +412,8 @@ class OllamaAgentApp(App):
                 self.query_one(ReplInput).focus()
         finally:
             try:
-                if not self._is_approval_pending and self._post_stream_cleanup is not None:
-                    cleanup = self._post_stream_cleanup
-                    self._post_stream_cleanup = None
-                    await cleanup()
+                if not self._is_approval_pending:
+                    await self._run_post_stream_cleanup()
             finally:
                 self._is_generating = False
                 self.query_one(AgentFooter).set_generating(False)

@@ -190,7 +190,7 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
 
     async def test_export_session_not_found(self) -> None:
         console = Console(file=io.StringIO(), record=True)
-        runtime_mock = MagicMock()
+        runtime_mock = MagicMock(stealth_mode=False)
         runtime_mock.get_thread_messages = AsyncMock(return_value=[])
 
         res = await export_session(console, runtime_mock, "nonexistent-id", db_path=self.db_path)
@@ -275,6 +275,18 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Tool: test_tool", content)
         self.assertIn("val1", content)
         self.assertIn("tool output result", content)
+
+    async def test_delete_and_export_session_ambiguous_prefix(self) -> None:
+        self._init_sample_db()
+        console_del = Console(file=io.StringIO(), record=True)
+        self.assertFalse(delete_session(console_del, "session-", db_path=self.db_path))
+        self.assertIn("Ambiguous session ID", console_del.export_text())
+
+        console_exp = Console(file=io.StringIO(), record=True)
+        runtime_mock = MagicMock(stealth_mode=False)
+        res = await export_session(console_exp, runtime_mock, "session-", db_path=self.db_path)
+        self.assertIsNone(res)
+        self.assertIn("Ambiguous session ID", console_exp.export_text())
 
 
 if __name__ == "__main__":

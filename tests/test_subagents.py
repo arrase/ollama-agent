@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import jinja2
 from rich.console import Console
 
-from ollama_agent.agent.builtin_tools import BUILTIN_TOOLS
+from ollama_agent.agent.builtin_tools import BUILTIN_TOOLS, rag_search, set_rag_manager
 from ollama_agent.agent.middleware import stream_tool_events_mw
 from ollama_agent.agent.subagents import build_subagents
 from ollama_agent.interfaces.commands.models import list_subagents
@@ -44,7 +44,7 @@ class TestSubAgents(unittest.IsolatedAsyncioTestCase):
         mock_model = MagicMock()
 
         with patch("ollama_agent.agent.subagents.create_ollama_chat_model", AsyncMock(return_value=mock_model)):
-            specs = await build_subagents(sa_list, model_settings=ms)
+            specs = await build_subagents(sa_list, model_settings=ms, should_interrupt_tool=lambda _: True)
             self.assertEqual(len(specs), 1)
             self.assertEqual(specs[0]["name"], "researcher")
             self.assertEqual(specs[0]["description"], "Web research analyst")
@@ -67,7 +67,7 @@ class TestSubAgents(unittest.IsolatedAsyncioTestCase):
             )
         ]
         with self.assertRaises(jinja2.UndefinedError):
-            await build_subagents(sa_list, model_settings=ms)
+            await build_subagents(sa_list, model_settings=ms, should_interrupt_tool=lambda _: True)
 
     async def test_build_subagents_valid(self) -> None:
         ms = ModelSettings(name="gemma4:26b", base_url="http://localhost:11434")
@@ -83,7 +83,7 @@ class TestSubAgents(unittest.IsolatedAsyncioTestCase):
         with patch(
             "ollama_agent.agent.subagents.create_ollama_chat_model", AsyncMock(return_value=mock_model)
         ) as mock_create:
-            specs = await build_subagents(sa_list, model_settings=ms)
+            specs = await build_subagents(sa_list, model_settings=ms, should_interrupt_tool=lambda _: True)
             self.assertEqual(len(specs), 1)
             self.assertEqual(specs[0]["name"], "coder")
             self.assertEqual(specs[0]["description"], "Writes code")
@@ -103,11 +103,15 @@ class TestSubAgents(unittest.IsolatedAsyncioTestCase):
         ]
         mock_model = MagicMock()
 
-        with patch(
-            "ollama_agent.agent.subagents.create_ollama_chat_model", AsyncMock(return_value=mock_model)
-        ) as mock_create:
-            specs = await build_subagents(sa_list, model_settings=ms)
+        with (
+            patch("ollama_agent.agent.subagents.ensure_model_supports_tools", AsyncMock()) as mock_ensure,
+            patch(
+                "ollama_agent.agent.subagents.create_ollama_chat_model", AsyncMock(return_value=mock_model)
+            ) as mock_create,
+        ):
+            specs = await build_subagents(sa_list, model_settings=ms, should_interrupt_tool=lambda _: True)
             self.assertEqual(len(specs), 1)
+            mock_ensure.assert_awaited_once_with("deepseek-r1:70b", "http://localhost:11434")
             kwargs = mock_create.call_args.kwargs
             self.assertEqual(kwargs["model"], "deepseek-r1:70b")
             self.assertEqual(kwargs["context_window"], 32768)
@@ -132,7 +136,7 @@ class TestSubAgents(unittest.IsolatedAsyncioTestCase):
                 "ollama_agent.agent.subagents.load_subagent_mcp_tools", AsyncMock(return_value=[mock_tool])
             ) as mock_mcp,
         ):
-            specs = await build_subagents(sa_list, model_settings=ms)
+            specs = await build_subagents(sa_list, model_settings=ms, should_interrupt_tool=lambda _: True)
             self.assertEqual(len(specs), 1)
             self.assertIn("tools", specs[0])
             self.assertEqual(specs[0]["tools"], [*BUILTIN_TOOLS, mock_tool])
@@ -148,6 +152,28 @@ class TestSubAgents(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(interrupt_on["git_status"]["allowed_decisions"], ["approve", "reject"])
             self.assertTrue(callable(interrupt_on["git_status"]["when"]))
             self.assertTrue(interrupt_on["git_status"]["when"](MagicMock()))
+
+    async def test_build_subagents_with_zero_tool_mcp_server_still_wires_interrupt_on(self) -> None:
+        ms = ModelSettings(name="gemma4:26b")
+        sa_list = [
+            SubAgentSettings(
+                name="mcp_agent",
+                description="Agent with failing/empty MCP server",
+                system_prompt="MCP instructions.",
+                mcp_servers=[SubAgentMCPServer(name="empty", command="npx")],
+            )
+        ]
+        mock_model = MagicMock()
+
+        with (
+            patch("ollama_agent.agent.subagents.create_ollama_chat_model", AsyncMock(return_value=mock_model)),
+            patch("ollama_agent.agent.subagents.load_subagent_mcp_tools", AsyncMock(return_value=[])),
+        ):
+            specs = await build_subagents(sa_list, model_settings=ms, should_interrupt_tool=lambda _: True)
+            self.assertEqual(len(specs), 1)
+            self.assertEqual(specs[0]["tools"], list(BUILTIN_TOOLS))
+            self.assertIn("interrupt_on", specs[0])
+            self.assertIn("execute", specs[0]["interrupt_on"])
 
     async def test_build_subagents_with_custom_should_interrupt(self) -> None:
         ms = ModelSettings(name="gemma4:26b")
@@ -180,7 +206,7 @@ class TestSubAgents(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(when_fn(mock_req))
             custom_policy.assert_called_once_with(mock_req)
 
-    async def test_build_subagents_without_mcp_servers_no_interrupt_on(self) -> None:
+    async def test_build_subagents_without_mcp_servers_always_wires_tools_and_interrupt_on(self) -> None:
         ms = ModelSettings(name="gemma4:26b")
         sa_list = [
             SubAgentSettings(
@@ -193,28 +219,31 @@ class TestSubAgents(unittest.IsolatedAsyncioTestCase):
         mock_model = MagicMock()
 
         with patch("ollama_agent.agent.subagents.create_ollama_chat_model", AsyncMock(return_value=mock_model)):
-            specs = await build_subagents(sa_list, model_settings=ms)
+            specs = await build_subagents(sa_list, model_settings=ms, should_interrupt_tool=lambda _: True)
             self.assertEqual(len(specs), 1)
-            self.assertNotIn("interrupt_on", specs[0])
-            self.assertNotIn("tools", specs[0])
+            self.assertEqual(specs[0]["tools"], list(BUILTIN_TOOLS))
+            self.assertIn("interrupt_on", specs[0])
+            self.assertIn("execute", specs[0]["interrupt_on"])
+            self.assertIn("write_file", specs[0]["interrupt_on"])
+            self.assertIn("edit_file", specs[0]["interrupt_on"])
 
     async def test_build_subagents_invalid_name_raises(self) -> None:
         ms = ModelSettings(name="gemma4:26b")
         sa_list = [SubAgentSettings(name="", description="Missing name", system_prompt="prompt")]
         with self.assertRaises(ValueError):
-            await build_subagents(sa_list, model_settings=ms)
+            await build_subagents(sa_list, model_settings=ms, should_interrupt_tool=lambda _: True)
 
     async def test_build_subagents_empty_description_raises(self) -> None:
         ms = ModelSettings(name="gemma4:26b")
         sa_list = [SubAgentSettings(name="coder", description="", system_prompt="prompt")]
         with self.assertRaises(ValueError):
-            await build_subagents(sa_list, model_settings=ms)
+            await build_subagents(sa_list, model_settings=ms, should_interrupt_tool=lambda _: True)
 
     async def test_build_subagents_missing_system_prompt_raises(self) -> None:
         ms = ModelSettings(name="gemma4:26b")
         sa_list = [SubAgentSettings(name="coder", description="Writes code", system_prompt="")]
         with self.assertRaises(ValueError):
-            await build_subagents(sa_list, model_settings=ms)
+            await build_subagents(sa_list, model_settings=ms, should_interrupt_tool=lambda _: True)
 
     def test_list_subagents_empty(self) -> None:
         console = Console(file=io.StringIO(), record=True, width=120)
@@ -271,6 +300,38 @@ class TestSubAgents(unittest.IsolatedAsyncioTestCase):
         self.assertIn("qwen3.8:27b (inherited)", output)
         self.assertIn("10000 (inherited)", output)
         self.assertIn("-", output)
+
+    async def test_build_subagents_with_mcp_includes_active_rag_tool(self) -> None:
+        ms = ModelSettings(name="gemma4:26b")
+        sa_list = [
+            SubAgentSettings(
+                name="researcher",
+                description="Researcher",
+                system_prompt="Prompt",
+                mcp_servers=[SubAgentMCPServer(name="srv", command="npx")],
+            )
+        ]
+        mock_rag = MagicMock()
+        mock_rag.current_database = "docs"
+        mock_mcp_tool = MagicMock(name="mcp_tool")
+        set_rag_manager(mock_rag)
+        try:
+            with (
+                patch(
+                    "ollama_agent.agent.subagents.create_ollama_chat_model",
+                    AsyncMock(return_value=MagicMock()),
+                ),
+                patch(
+                    "ollama_agent.agent.subagents.load_subagent_mcp_tools",
+                    AsyncMock(return_value=[mock_mcp_tool]),
+                ),
+            ):
+                specs = await build_subagents(sa_list, model_settings=ms, should_interrupt_tool=lambda _: True)
+                self.assertEqual(len(specs), 1)
+                self.assertIn(rag_search, specs[0]["tools"])
+                self.assertIn(mock_mcp_tool, specs[0]["tools"])
+        finally:
+            set_rag_manager(None)
 
 
 if __name__ == "__main__":

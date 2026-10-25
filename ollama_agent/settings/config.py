@@ -3,13 +3,23 @@
 from __future__ import annotations
 
 import os
-from dataclasses import asdict, dataclass, field, fields, is_dataclass
+import weakref
+from dataclasses import asdict, dataclass, field
 from importlib import resources
 from pathlib import Path
-from types import UnionType
-from typing import Any, Self, TypeVar, Union, cast, get_args, get_origin, get_type_hints
+from typing import Any, Self, TypeVar
 
 import yaml  # type: ignore[import-untyped]
+from pydantic import (
+    ConfigDict,
+    StrictBool,
+    StrictFloat,
+    StrictInt,
+    StrictStr,
+    TypeAdapter,
+    ValidationError,
+    with_config,
+)
 
 from ..core import (
     DEFAULT_REASONING_EFFORT,
@@ -23,57 +33,64 @@ from .paths import (
     SETTINGS_PATH,
 )
 
+_FORBID_EXTRA = ConfigDict(extra="forbid")
+_task_model_overrides: dict[int, tuple[weakref.ref[ModelSettings], str, str, str, str]] = {}
+
 # ---------------------------------------------------------------------------
 # Settings dataclasses (CUD-inspired)
 # ---------------------------------------------------------------------------
 
 
-@dataclass(slots=True)
+@with_config(_FORBID_EXTRA)
+@dataclass(slots=True, weakref_slot=True)
 class ModelSettings:
-    name: str = ""
-    base_url: str = "http://localhost:11434"
-    temperature: float | None = None
-    top_p: float | None = None
-    top_k: int | None = None
-    min_p: float | None = None
-    presence_penalty: float | None = None
-    repeat_penalty: float | None = None
-    context_window: int | str = 10000
-    reasoning_effort: str = DEFAULT_REASONING_EFFORT
+    name: StrictStr = ""
+    base_url: StrictStr = "http://localhost:11434"
+    temperature: StrictFloat | StrictInt | None = None
+    top_p: StrictFloat | StrictInt | None = None
+    top_k: StrictInt | None = None
+    min_p: StrictFloat | StrictInt | None = None
+    presence_penalty: StrictFloat | StrictInt | None = None
+    repeat_penalty: StrictFloat | StrictInt | None = None
+    context_window: StrictInt | StrictStr = 10000
+    reasoning_effort: StrictStr = DEFAULT_REASONING_EFFORT
 
 
+@with_config(_FORBID_EXTRA)
 @dataclass(slots=True)
 class RuntimeSettings:
-    allow_traversal: bool = False
-    builtin_tool_timeout: int = 30
-    collapse_thinking: bool = True
-    inherit_env: bool = True
-    language: str = ""
+    allow_traversal: StrictBool = False
+    builtin_tool_timeout: StrictInt = 30
+    collapse_thinking: StrictBool = True
+    inherit_env: StrictBool = True
+    language: StrictStr = ""
 
 
+@with_config(_FORBID_EXTRA)
 @dataclass(slots=True)
 class RAGSettings:
-    rag_dir: str = str(RAG_DIR)
-    embedder_model: str = "embeddinggemma-2:740m"
-    embedder_base_url: str = "http://localhost:11434"
-    embedding_dims: int = 768
-    default_top_k: int = 5
-    chunk_size: int = 500
-    chunk_overlap: int = 50
+    rag_dir: StrictStr = str(RAG_DIR)
+    embedder_model: StrictStr = "embeddinggemma-2:740m"
+    embedder_base_url: StrictStr = "http://localhost:11434"
+    embedding_dims: StrictInt = 768
+    default_top_k: StrictInt = 5
+    chunk_size: StrictInt = 500
+    chunk_overlap: StrictInt = 50
 
     def __post_init__(self) -> None:
         if not self.rag_dir.strip():
             raise ValueError(_("Setting 'rag.rag_dir' must be a non-empty string"))
 
 
+@with_config(_FORBID_EXTRA)
 @dataclass(slots=True)
 class SubAgentMCPServer:
     """An MCP server attached to a subagent."""
 
-    name: str = ""
-    command: str = ""
-    args: list[str] = field(default_factory=list)
-    env: dict[str, str] = field(default_factory=dict)
+    name: StrictStr = ""
+    command: StrictStr = ""
+    args: list[StrictStr] = field(default_factory=list)
+    env: dict[StrictStr, StrictStr] = field(default_factory=dict)
 
     def to_connection_config(self) -> dict[str, Any]:
         return {
@@ -83,36 +100,40 @@ class SubAgentMCPServer:
         }
 
 
+@with_config(_FORBID_EXTRA)
 @dataclass(slots=True)
 class SubAgentSettings:
     """A custom subagent with its own model, skills, and MCP servers."""
 
-    name: str = ""
-    description: str = ""
-    system_prompt: str = ""
-    model: str = ""
-    context_window: int | str = 0
+    name: StrictStr = ""
+    description: StrictStr = ""
+    system_prompt: StrictStr = ""
+    model: StrictStr = ""
+    context_window: StrictInt | StrictStr = 0
     mcp_servers: list[SubAgentMCPServer] = field(default_factory=list)
 
 
+@with_config(_FORBID_EXTRA)
 @dataclass(slots=True)
 class LangSmithSettings:
-    api_key: str = ""
-    tracing: bool = False
-    project: str = ""
-    endpoint: str = ""
+    api_key: StrictStr = ""
+    tracing: StrictBool = False
+    project: StrictStr = ""
+    endpoint: StrictStr = ""
 
 
+@with_config(_FORBID_EXTRA)
 @dataclass(slots=True)
 class MentionSettings:
     """Configuration for @-mention file/directory context injection."""
 
-    max_file_size: int = 1_048_576  # 1 MB
-    max_files: int = 100
-    max_total_size: int = 10_485_760  # 10 MB
-    max_completions: int = 200
+    max_file_size: StrictInt = 1_048_576  # 1 MB
+    max_files: StrictInt = 100
+    max_total_size: StrictInt = 10_485_760  # 10 MB
+    max_completions: StrictInt = 200
 
 
+@with_config(_FORBID_EXTRA)
 @dataclass(slots=True)
 class Settings:
     model: ModelSettings = field(default_factory=ModelSettings)
@@ -128,6 +149,14 @@ class Settings:
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
+        key = id(self.model)
+        if key in _task_model_overrides:
+            ref, orig_name, orig_effort, applied_name, applied_effort = _task_model_overrides[key]
+            if ref() is self.model:
+                if self.model.name == applied_name:
+                    d["model"]["name"] = orig_name
+                if self.model.reasoning_effort == applied_effort:
+                    d["model"]["reasoning_effort"] = orig_effort
         d["model"] = {k: v for k, v in d["model"].items() if v is not None}
         ls = d["langsmith"]
         if not any(ls.values()):
@@ -154,107 +183,11 @@ class Settings:
 T = TypeVar("T")
 
 
-def _coerce_setting(name: str, value: Any, hint: Any) -> Any:
-    """Validate one untrusted YAML value against its dataclass field annotation.
-
-    Without this, ``context_window: true`` reaches Ollama as ``num_ctx=1`` and
-    ``temperature: "hot"`` surfaces much later as a pydantic error from deep inside
-    the model constructor.
-    """
-    origin = get_origin(hint)
-    if origin is Union or origin is UnionType:
-        return _coerce_union(name, value, hint)
-    return _coerce_value(value, hint)
-
-
-def _coerce_union(name: str, value: Any, hint: Any) -> Any:
-    """Validate against each union member in turn; a union is accepted if any member validates."""
-    errors: list[str] = []
-    for arg in get_args(hint):
-        if arg is type(None):
-            if value is None:
-                return None
-            continue
-        try:
-            return _coerce_value(value, arg)
-        except ValueError as exc:
-            errors.append(str(exc))
-    raise ValueError(_("Invalid value for '{name}': {detail}", name=name, detail="; ".join(errors) or _("wrong type")))
-
-
-def _coerce_bool(value: Any) -> bool:
-    if not isinstance(value, bool):
-        raise ValueError(_("expected a boolean, got {t}", t=type(value).__name__))
-    return value
-
-
-def _coerce_int(value: Any) -> int:
-    # bool is a subclass of int; context_window: true must not become num_ctx=1.
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(_("expected an integer, got {t}", t=type(value).__name__))
-    return value
-
-
-def _coerce_float(value: Any) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(_("expected a number, got {t}", t=type(value).__name__))
-    return float(value)
-
-
-def _coerce_str(value: Any) -> str:
-    if not isinstance(value, str):
-        raise ValueError(_("expected a string, got {t}", t=type(value).__name__))
-    return value
-
-
-_SCALAR_COERCERS: dict[Any, Any] = {
-    bool: _coerce_bool,
-    int: _coerce_int,
-    float: _coerce_float,
-    str: _coerce_str,
-}
-
-
-def _coerce_value(value: Any, hint: Any) -> Any:
-    origin = get_origin(hint) or hint
-    if is_dataclass(origin):
-        return _dataclass_from_dict(cast(type[Any], origin), value)
-    if origin in _SCALAR_COERCERS:
-        return _SCALAR_COERCERS[origin](value)
-    if origin is list:
-        if not isinstance(value, list):
-            raise ValueError(f"expected a list, got {type(value).__name__}")
-        (item_hint,) = get_args(hint)
-        return [_coerce_value(item, item_hint) for item in value]
-    if origin is dict:
-        if not isinstance(value, dict):
-            raise ValueError(f"expected a dict, got {type(value).__name__}")
-        key_hint, val_hint = get_args(hint)
-        return {_coerce_value(k, key_hint): _coerce_value(v, val_hint) for k, v in value.items()}
-    return value
-
-
 def _dataclass_from_dict(cls: type[T], raw: Any) -> T:
-    if not isinstance(raw, dict):
-        raise ValueError(
-            _("Expected mapping for '{name}', got {type_name}", name=cls.__name__, type_name=type(raw).__name__)
-        )
-    dataclass_fields = fields(cast(Any, cls))
-    valid = {f.name for f in dataclass_fields}
-    unknown = set(raw) - valid
-    if unknown:
-        raise ValueError(_("Unknown setting keys: {keys}", keys=sorted(unknown)))
-
-    hints = get_type_hints(cast(Any, cls))
-    kwargs: dict[str, Any] = {}
-    for f in dataclass_fields:
-        if f.name not in raw:
-            continue
-        try:
-            kwargs[f.name] = _coerce_setting(f.name, raw[f.name], hints[f.name])
-        except ValueError as exc:
-            raise ValueError(_("Invalid value for '{name}.{key}': {exc}", name=cls.__name__, key=f.name, exc=exc))
-    return cls(**kwargs)
+    try:
+        return TypeAdapter(cls).validate_python(raw)
+    except ValidationError as exc:
+        raise ValueError(str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import threading
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from rich.console import Console
 from rich.live import Live
@@ -16,9 +16,6 @@ from rich.padding import Padding
 from ..i18n import _
 from .base import StreamingRenderer
 from .interrupts import build_approval_decisions, extract_action_requests
-
-if TYPE_CHECKING:
-    from ..agent import AgentRuntime
 
 
 class ConsoleStreamingRenderer(StreamingRenderer):
@@ -125,7 +122,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         threading.Thread(target=_read, daemon=True, name="ollama-agent-approval").start()
         return await future
 
-    async def handle_interrupt(self, event: dict[str, Any], runtime: AgentRuntime) -> list[dict[str, Any]] | None:
+    async def handle_interrupt(self, event: dict[str, Any], runtime: Any) -> list[dict[str, Any]] | None:
         self._toggle_live(False)
         self._end_reasoning()
 

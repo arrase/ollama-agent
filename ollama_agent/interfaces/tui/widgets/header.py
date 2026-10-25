@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from rich.markup import escape
 from textual.widgets import Static
 
 from ....i18n import _
-
-if TYPE_CHECKING:
-    from ..repl import OllamaREPL
 
 
 def _format_context_info(tokens: int, eff_ctx: int, ms_context_window: int | str) -> str:
@@ -45,7 +42,7 @@ def _format_context_info(tokens: int, eff_ctx: int, ms_context_window: int | str
 class AgentHeader(Static):
     """Dynamic TUI Header displaying agent status information."""
 
-    def __init__(self, repl: OllamaREPL, **kwargs: Any) -> None:
+    def __init__(self, repl: Any, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.repl = repl
 

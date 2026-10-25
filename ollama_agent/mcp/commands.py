@@ -14,7 +14,13 @@ from rich.table import Table
 from ..agent.agent import AgentRuntime
 from ..i18n import _
 from ..settings import MCP_PATH, Settings
-from .loader import MCPConfigError, _build_mcp_connection, _connect_and_load, _read_main_config
+from .loader import (
+    MCPConfigError,
+    _build_mcp_connection,
+    _connect_and_load,
+    _read_main_config,
+    validate_subagent_mcp_servers,
+)
 
 
 @dataclass(slots=True)
@@ -66,8 +72,8 @@ async def list_mcp_servers(
 
     all_servers: list[tuple[str, dict[str, Any]]] = list(servers_cfg.items())
     for sa in settings.subagents:
-        for srv in sa.mcp_servers:
-            all_servers.append((f"{srv.name} ({sa.name})", srv.to_connection_config()))
+        for name, cfg in validate_subagent_mcp_servers(sa.name, sa.mcp_servers):
+            all_servers.append((f"{name} ({sa.name})", cfg))
 
     if not all_servers:
         console.print(

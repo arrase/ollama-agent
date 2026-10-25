@@ -3,19 +3,24 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from ..agent import AgentRuntime
+from typing import Any
 
 
 class StreamingRenderer(ABC):
     """Abstract base class for streaming renderers."""
 
     def on_event(self, event: dict[str, Any]) -> None:
-        """Dispatch event to type-specific handler (on_<type>)."""
-        handler = getattr(self, f"on_{event['type']}", None)
-        if handler:
+        """Dispatch event to type-specific handler."""
+        handlers = {
+            "text_delta": self.on_text_delta,
+            "reasoning_delta": self.on_reasoning_delta,
+            "tool_call": self.on_tool_call,
+            "tool_output": self.on_tool_output,
+            "error": self.on_error,
+            "warning": self.on_warning,
+        }
+        handler = handlers.get(event["type"])
+        if handler is not None:
             handler(event)
 
     def on_text_delta(self, event: dict[str, Any]) -> None:
@@ -38,7 +43,7 @@ class StreamingRenderer(ABC):
     def on_warning(self, event: dict[str, Any]) -> None:
         """Handle a warning event."""
 
-    async def handle_interrupt(self, event: dict[str, Any], runtime: AgentRuntime) -> list[dict[str, Any]] | None:
+    async def handle_interrupt(self, event: dict[str, Any], runtime: Any) -> list[dict[str, Any]] | None:
         """Handle an interrupt event. Returning None aborts the run."""
 
     @abstractmethod

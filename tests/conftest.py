@@ -48,12 +48,12 @@ def _reset_global_state() -> Iterator[None]:
 def make_mock_runtime(**overrides: Any) -> MagicMock:
     """A mocked AgentRuntime whose async surface is genuinely awaitable.
 
-    ``MagicMock()`` auto-creates *sync* children, so a real ``await runtime.warmup()``
+    ``MagicMock()`` auto-creates *sync* children, so a real ``await runtime._ensure_graph()``
     would raise TypeError. Every coroutine the app awaits is pre-wired here so the
     TUI exercises its real control flow instead of silently skipping it.
     """
     runtime = MagicMock()
-    runtime.warmup = AsyncMock()
+    runtime._ensure_graph = AsyncMock()
     runtime.reload = AsyncMock()
     runtime.graph.aget_state = AsyncMock(return_value=MagicMock(interrupts=[]))
     runtime.get_thread_messages = AsyncMock(return_value=[])

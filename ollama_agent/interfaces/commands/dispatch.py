@@ -58,6 +58,7 @@ from .sessions import (
 
 CLIHandler = Callable[[], Any]
 REPLHandler = Callable[[list[str]], object]
+DOMAIN_ERRORS = (SkillError, TaskError, RAGError, HistoryError, MCPConfigError)
 
 _log = logging.getLogger(__name__)
 
@@ -79,7 +80,7 @@ async def safe_call(
         result = fn(*args, **kwargs)
         if inspect.isawaitable(result):
             await result
-    except (SkillError, TaskError, RAGError, HistoryError, MCPConfigError) as exc:
+    except DOMAIN_ERRORS as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
     # A command must never crash the caller.
     except Exception as exc:  # noqa: BLE001
@@ -117,7 +118,16 @@ def build_cli_handlers(
     async def task_run() -> None:
         raw_vars = list(args.vars) + list(args.flag_vars)
         variables = parse_var_assignments(raw_vars)
-        await run_task(task_ctx, args.task_id, variables=variables, yolo=args.yolo)
+        await run_task(
+            task_ctx,
+            args.task_id,
+            variables=variables,
+            yolo=args.yolo,
+            stealth=args.stealth,
+            rag=args.rag,
+            preserve_model=bool(args.model),
+            preserve_effort=bool(args.effort),
+        )
 
     async def rag_add() -> None:
         ctx = _get_rag_ctx()

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
+import weakref
 
 from jinja2.exceptions import TemplateError
 from rich.console import Console
@@ -11,9 +13,12 @@ from rich.markup import escape
 from rich.table import Table
 
 from ..agent import AgentRuntime
+from ..agent.builtin_tools import set_rag_manager
 from ..core import DEFAULT_REASONING_EFFORT, ReasoningEffortValue, check_ollama_version, require_text
 from ..i18n import _
+from ..rag import RAGContext, RAGManager, load_rag_database
 from ..settings import Settings
+from ..settings.config import _task_model_overrides
 from ..streaming import run_non_interactive
 from .manager import Task, TaskManager
 
@@ -66,10 +71,37 @@ def parse_var_assignments(args: list[str]) -> dict[str, str]:
     return result
 
 
-def apply_task_settings(settings: Settings, task: Task) -> None:
-    """Apply the task's model and reasoning effort onto *settings*."""
-    settings.model.name = task.model
-    settings.model.reasoning_effort = task.reasoning_effort
+def apply_task_settings(
+    settings: Settings,
+    task: Task,
+    *,
+    preserve_model: bool = False,
+    preserve_effort: bool = False,
+) -> Callable[[], None]:
+    """Apply the task's model and reasoning effort onto *settings* and return a restore callback."""
+    model_settings = settings.model
+    key = id(model_settings)
+    if key in _task_model_overrides and _task_model_overrides[key][0]() is model_settings:
+        orig_name, orig_effort = _task_model_overrides[key][1], _task_model_overrides[key][2]
+    else:
+        orig_name, orig_effort = model_settings.name, model_settings.reasoning_effort
+    if not preserve_model and task.model:
+        model_settings.name = task.model
+    if not preserve_effort and task.reasoning_effort:
+        model_settings.reasoning_effort = task.reasoning_effort
+    applied_name = model_settings.name
+    applied_effort = model_settings.reasoning_effort
+    ref = weakref.ref(model_settings, lambda _: _task_model_overrides.pop(key, None))
+    _task_model_overrides[key] = (ref, orig_name, orig_effort, applied_name, applied_effort)
+
+    def _restore() -> None:
+        _task_model_overrides.pop(key, None)
+        if model_settings.name == applied_name:
+            model_settings.name = orig_name
+        if model_settings.reasoning_effort == applied_effort:
+            model_settings.reasoning_effort = orig_effort
+
+    return _restore
 
 
 def list_tasks(ctx: TasksContext) -> None:
@@ -109,31 +141,46 @@ async def run_task(
     *,
     variables: dict[str, Any] | None = None,
     yolo: bool = False,
+    stealth: bool = False,
+    rag: str | None = None,
+    preserve_model: bool = False,
+    preserve_effort: bool = False,
 ) -> None:
     tid, t, rendered_prompt = prepare_task_run(ctx, task_id, variables)
     check_ollama_version(ctx.settings.model.base_url)
+    model_settings = ctx.settings.model
+    restore_settings = apply_task_settings(
+        ctx.settings,
+        t,
+        preserve_model=preserve_model,
+        preserve_effort=preserve_effort,
+    )
     ctx.console.print(
         _(
             "Executing: {title} ({tid})\nPrompt: {prompt}\nModel: {model} | Effort: {effort}",
             title=escape(t.title),
             tid=escape(tid),
             prompt=escape(rendered_prompt),
-            model=escape(t.model),
-            effort=escape(t.reasoning_effort),
+            model=escape(model_settings.name),
+            effort=escape(model_settings.reasoning_effort),
         )
     )
-    # apply_task_settings mutates the *shared* Settings object, so the previous model and
-    # effort are restored afterwards (the TUI path does this inline).
-    model_settings = ctx.settings.model
-    previous = (model_settings.name, model_settings.reasoning_effort)
-    apply_task_settings(ctx.settings, t)
-    runtime = AgentRuntime(settings=ctx.settings, yolo_mode=yolo)
+    runtime = AgentRuntime(settings=ctx.settings, yolo_mode=yolo, stealth_mode=stealth)
+    rag_manager: RAGManager | None = None
     try:
         async with runtime:
+            if rag:
+                rag_manager = RAGManager(ctx.settings.rag)
+                rag_ctx = RAGContext(rag_manager=rag_manager, console=ctx.console)
+                set_rag_manager(rag_manager)
+                load_rag_database(rag_ctx, rag)
             if not await run_non_interactive(runtime, rendered_prompt):
                 raise TaskError(_("Task execution failed: {tid}", tid=tid))
     finally:
-        model_settings.name, model_settings.reasoning_effort = previous
+        if rag_manager is not None:
+            set_rag_manager(None)
+            await rag_manager.aclose()
+        restore_settings()
 
 
 def delete_task(ctx: TasksContext, task_id: str) -> None:

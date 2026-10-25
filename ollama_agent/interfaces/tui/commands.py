@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any
+import shlex
+from typing import Any
 
 from rich.markup import escape
 from rich.text import Text
@@ -21,6 +22,7 @@ from ...tasks import (
 from ..commands.dispatch import safe_call
 from ..commands.sessions import (
     export_session,
+    is_current,
     resume_session,
 )
 from .completion import (
@@ -46,9 +48,6 @@ from .completion import (
 from .widgets.footer import AgentFooter
 from .widgets.header import AgentHeader
 from .widgets.messages import AgentResponse, UserMessage
-
-if TYPE_CHECKING:
-    from .app import OllamaAgentApp
 
 _log = logging.getLogger(__name__)
 
@@ -110,7 +109,7 @@ def _mount_history_messages(scroll: Any, messages: list[Any]) -> None:
             scroll.mount(AgentResponse(initial_text=content))
 
 
-async def _resume_slash_session(app: OllamaAgentApp, args: list[str], scroll: Any) -> None:
+async def _resume_slash_session(app: Any, args: list[str], scroll: Any) -> None:
     if len(args) < 2:
         usage_msg = _("Usage: /session resume <session_id>")
         app.show_system_notice(f"[bold #f87171]✕ {usage_msg}[/bold #f87171]")
@@ -142,7 +141,7 @@ async def _resume_slash_session(app: OllamaAgentApp, args: list[str], scroll: An
     app._deferred_scroll()
 
 
-async def _export_slash_session(app: OllamaAgentApp, args: list[str]) -> None:
+async def _export_slash_session(app: Any, args: list[str]) -> None:
     try:
         with app.repl.console.capture() as capture:
             out_file = await export_session(
@@ -165,7 +164,7 @@ async def _export_slash_session(app: OllamaAgentApp, args: list[str]) -> None:
             app.show_system_notice(f"[bold #f87171]✕ {_('Failed to export session.')}[/bold #f87171]")
 
 
-async def _handle_slash_session(app: OllamaAgentApp, cmd: str, args: list[str], scroll: Any) -> bool:
+async def _handle_slash_session(app: Any, cmd: str, args: list[str], scroll: Any) -> bool:
     if cmd in (CMD_CLEAR, CMD_NEW) or (cmd == CMD_SESSION and args and args[0] == "new"):
         app.repl._handle_new_session()
         await scroll.remove_children()
@@ -188,29 +187,59 @@ async def _handle_slash_session(app: OllamaAgentApp, cmd: str, args: list[str], 
     return False
 
 
-async def _handle_task_create(app: OllamaAgentApp, cmd_line: str, sub_args: list[str], scroll: Any) -> None:
-    task_info = " ".join(sub_args)
-    if task_info:
-        prompt_text = (
-            f"[System Instruction: The user executed '/task create {task_info}'. "
-            f"Use your 'task-creator' instructions to guide the user or draft the task, "
-            f"generate a clear and self-contained YAML task file, and save it in /tasks/<task_id>.yaml.]"
-        )
+async def _run_creator_skill(
+    app: Any,
+    cmd_line: str,
+    sub_args: list[str],
+    scroll: Any,
+    cmd_prefix: str,
+    with_args_instructions: str,
+    without_args_instructions: str,
+) -> None:
+    info = " ".join(sub_args)
+    if info:
+        prompt_text = f"[System Instruction: The user executed '{cmd_prefix} {info}'. {with_args_instructions}]"
     else:
-        prompt_text = (
-            "[System Instruction: The user executed '/task create'. "
-            "Use your 'task-creator' instructions to ask what repeatable workflow or prompt "
-            "they want to save as a task, and guide them through creating it in /tasks/<task_id>.yaml.]"
-        )
-    scroll.mount(UserMessage(cmd_line))
-    agent_msg = AgentResponse()
-    scroll.mount(agent_msg)
-    app._deferred_scroll()
+        prompt_text = f"[System Instruction: The user executed '{cmd_prefix}'. {without_args_instructions}]"
+    scroll, agent_msg = app.mount_turn_widgets(cmd_line, scroll)
     await app._run_stream(prompt_text, scroll, agent_msg)
 
 
-async def _handle_task_run(app: OllamaAgentApp, cmd_line: str, sub_args: list[str], scroll: Any) -> None:
-    positional = [a for a in sub_args if not a.startswith("-")]
+async def _handle_task_create(app: Any, cmd_line: str, sub_args: list[str], scroll: Any) -> None:
+    await _run_creator_skill(
+        app,
+        cmd_line,
+        sub_args,
+        scroll,
+        "/task create",
+        (
+            "Use your 'task-creator' instructions to guide the user or draft the task, "
+            "generate a clear and self-contained YAML task file, and save it in /tasks/<task_id>.yaml."
+        ),
+        (
+            "Use your 'task-creator' instructions to ask what repeatable workflow or prompt "
+            "they want to save as a task, and guide them through creating it in /tasks/<task_id>.yaml."
+        ),
+    )
+
+
+async def _handle_task_run(app: Any, cmd_line: str, sub_args: list[str], scroll: Any) -> None:
+    positional: list[str] = []
+    yolo_requested = False
+    idx = 0
+    while idx < len(sub_args):
+        token = sub_args[idx]
+        if token in ("-y", "--yolo"):
+            yolo_requested = True
+        elif token == "--var" and idx + 1 < len(sub_args):
+            positional.append(sub_args[idx + 1])
+            idx += 1
+        elif token.startswith("--var="):
+            positional.append(token.split("=", 1)[1])
+        elif not token.startswith("-"):
+            positional.append(token)
+        idx += 1
+
     if not positional:
         app.show_system_notice(f"[bold #f87171]✕ {_('Usage: /task run <id> [-y]')}[/bold #f87171]")
         return
@@ -223,39 +252,31 @@ async def _handle_task_run(app: OllamaAgentApp, cmd_line: str, sub_args: list[st
         app.show_system_notice(f"[red]{escape(str(exc))}[/red]")
         return
 
-    scroll.mount(UserMessage(cmd_line))
-    agent_msg = AgentResponse()
-    scroll.mount(agent_msg)
-    app._deferred_scroll()
+    scroll, agent_msg = app.mount_turn_widgets(cmd_line, scroll)
 
     settings = app.repl.runtime.settings
-    prev_model = settings.model.name
-    prev_effort = settings.model.reasoning_effort
     prev_yolo = app.repl.runtime.yolo_mode
+    restore_settings = apply_task_settings(settings, t)
 
     async def _restore_task_settings() -> None:
-        settings.model.name = prev_model
-        settings.model.reasoning_effort = prev_effort
+        restore_settings()
         app.repl.runtime.yolo_mode = prev_yolo
         await app.repl.runtime.reload()
         app.update_mode_ui()
 
     app._post_stream_cleanup = _restore_task_settings
     try:
-        apply_task_settings(settings, t)
-        if "-y" in sub_args or "--yolo" in sub_args:
+        if yolo_requested:
             app.repl.runtime.yolo_mode = True
         await app.repl.runtime.reload()
         app.update_mode_ui()
         await app._run_stream(rendered_prompt, scroll, agent_msg)
     finally:
-        if not app._is_approval_pending and app._post_stream_cleanup is not None:
-            cleanup = app._post_stream_cleanup
-            app._post_stream_cleanup = None
-            await cleanup()
+        if not app._is_approval_pending:
+            await app._run_post_stream_cleanup()
 
 
-async def _handle_slash_task(app: OllamaAgentApp, cmd_line: str, args: list[str], scroll: Any) -> bool:
+async def _handle_slash_task(app: Any, cmd_line: str, args: list[str], scroll: Any) -> bool:
     cmd = cmd_line.split()[0].lower()
     if cmd != CMD_TASK or not args:
         return False
@@ -271,37 +292,33 @@ async def _handle_slash_task(app: OllamaAgentApp, cmd_line: str, args: list[str]
     return False
 
 
-async def _handle_slash_skill(app: OllamaAgentApp, cmd_line: str, args: list[str], scroll: Any) -> bool:
+async def _handle_slash_skill(app: Any, cmd_line: str, args: list[str], scroll: Any) -> bool:
     cmd = cmd_line.split()[0].lower()
     if cmd != CMD_SKILL or not args or args[0] != "create":
         return False
 
-    sub_args = args[1:]
-    skill_info = " ".join(sub_args)
-    if skill_info:
-        prompt_text = (
-            f"[System Instruction: The user executed '/skill create {skill_info}'. "
-            f"Use your 'skill-creator' instructions to guide the user, gather requirements, "
-            f"evaluate whether helper scripts in scripts/ are needed, write the SKILL.md and any scripts "
-            f"to /skills/<skill_id>/, and confirm when created.]"
-        )
-    else:
-        prompt_text = (
-            "[System Instruction: The user executed '/skill create'. "
+    await _run_creator_skill(
+        app,
+        cmd_line,
+        args[1:],
+        scroll,
+        "/skill create",
+        (
+            "Use your 'skill-creator' instructions to guide the user, gather requirements, "
+            "evaluate whether helper scripts in scripts/ are needed, write the SKILL.md and any scripts "
+            "to /skills/<skill_id>/, and confirm when created."
+        ),
+        (
             "Use your 'skill-creator' instructions to ask what capability or workflow they want to teach "
             "the agent, evaluate whether helper scripts are needed, and guide them step-by-step through "
-            "creating the skill in /skills/<skill_id>/.]"
-        )
-    scroll.mount(UserMessage(cmd_line))
-    agent_msg = AgentResponse()
-    scroll.mount(agent_msg)
-    app._deferred_scroll()
-    await app._run_stream(prompt_text, scroll, agent_msg)
+            "creating the skill in /skills/<skill_id>/."
+        ),
+    )
     return True
 
 
 async def _execute_repl_command(
-    app: OllamaAgentApp,
+    app: Any,
     cmd_line: str,
     cmd: str,
     args: list[str],
@@ -333,9 +350,19 @@ async def _execute_repl_command(
         app._update_queue_ui()
     elif cmd in (CMD_MODEL, CMD_EFFORT, CMD_CONTEXT, CMD_RAG):
         app.query_one(AgentHeader).update_header()
+    elif (
+        cmd == CMD_SESSION
+        and len(args) > 1
+        and args[0] == "delete"
+        and is_current(args[1].strip(), app.repl.runtime.thread_id)
+        and "✓" in output
+    ):
+        app.repl._handle_new_session()
+        await scroll.remove_children()
+        app.query_one(AgentHeader).update_header()
 
 
-async def run_slash_command(app: OllamaAgentApp, cmd_line: str) -> None:
+async def run_slash_command(app: Any, cmd_line: str) -> None:
     """Execute a user-typed slash command in the TUI.
 
     Never propagates: a slash command that fails must surface the error in the UI,
@@ -346,7 +373,10 @@ async def run_slash_command(app: OllamaAgentApp, cmd_line: str) -> None:
         app._is_generating = True
         app.query_one(AgentFooter).set_generating(True)
     try:
-        parts = cmd_line.split()
+        try:
+            parts = shlex.split(cmd_line)
+        except ValueError:
+            parts = cmd_line.split()
         cmd = parts[0].lower()
         args = parts[1:]
         scroll = app.query_one(_CHAT_SCROLL_ID)
