@@ -4,6 +4,8 @@ import httpx
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from langchain_core.messages import HumanMessage
+
 from ollama_agent.core.common import DEFAULT_REASONING_EFFORT
 from ollama_agent.core.models import (
     REASONING_HIDE_VALUES,
@@ -11,6 +13,7 @@ from ollama_agent.core.models import (
     ExtendedShowResponse,
     ModelCapabilityError,
     ModelContextWindowError,
+    OllamaChatModel,
     OllamaVersionError,
     _get_model_info,
     _model_context_length,
@@ -22,6 +25,8 @@ from ollama_agent.core.models import (
     get_model_capabilities,
     get_model_thinking_config,
     get_ollama_version,
+    has_audio_capability,
+    model_supports_audio,
     model_supports_thinking,
     model_supports_tools,
     resolve_context_window,
@@ -578,6 +583,55 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(res_legacy)
         self.assertEqual(warnings_log, [])
+
+    def test_has_audio_capability(self) -> None:
+        self.assertFalse(has_audio_capability(None))
+        self.assertFalse(has_audio_capability(MagicMock(capabilities=None)))
+        self.assertFalse(has_audio_capability(MagicMock(capabilities=["tools", "thinking"])))
+        self.assertTrue(has_audio_capability(MagicMock(capabilities=["tools", "audio"])))
+        self.assertTrue(has_audio_capability(MagicMock(capabilities=["AUDIO"])))
+
+    @patch("ollama_agent.core.models.get_model_capabilities")
+    async def test_model_supports_audio(self, mock_caps: AsyncMock) -> None:
+        mock_caps.return_value = {"tools", "audio"}
+        self.assertTrue(await model_supports_audio("gemma4:e4b", "http://localhost:11434"))
+
+        mock_caps.return_value = {"tools"}
+        self.assertFalse(await model_supports_audio("gemma4:26b", "http://localhost:11434"))
+
+    def test_convert_messages_with_audio_blocks(self) -> None:
+        model = OllamaChatModel(model="gemma4:e4b", base_url="http://localhost:11434", num_ctx=8192)
+        msg_audio_only = HumanMessage(
+            content=[
+                {
+                    "type": "audio",
+                    "base64": "UklGRg==",
+                    "mime_type": "audio/wav",
+                    "badge": "◉ Audio ▂▅▇█ (1.2s)",
+                }
+            ]
+        )
+        msg_audio_and_text = HumanMessage(
+            content=[
+                {
+                    "type": "audio",
+                    "base64": "UklGRg==",
+                    "mime_type": "audio/wav",
+                    "badge": "◉ Audio ▂▅▇█ (1.2s)",
+                },
+                {"type": "text", "text": "Transcribe and summarize"},
+            ]
+        )
+
+        converted = list(model._convert_messages_to_ollama_messages([msg_audio_only, msg_audio_and_text]))
+        self.assertEqual(len(converted), 2)
+        self.assertEqual(converted[0]["role"], "user")
+        self.assertEqual(converted[0]["content"], "")
+        self.assertEqual(converted[0]["images"], ["UklGRg=="])
+
+        self.assertEqual(converted[1]["role"], "user")
+        self.assertEqual(converted[1]["content"], "Transcribe and summarize")
+        self.assertEqual(converted[1]["images"], ["UklGRg=="])
 
 
 if __name__ == "__main__":

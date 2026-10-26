@@ -14,12 +14,12 @@ from ....core import shorten
 from ....i18n import _
 
 
-def format_queue_preview(item: str) -> str:
+def format_queue_preview(item: Any) -> str:
     """Return a single-line, truncated, Rich-markup-escaped preview of a queued prompt."""
-    return escape(shorten(item))
+    return escape(shorten(str(item)))
 
 
-def format_queue_line(index: int, item: str) -> str:
+def format_queue_line(index: int, item: Any) -> str:
     """Format a numbered queue entry line for console and widget display."""
     return f"  [dim]#{index}[/dim] {format_queue_preview(item)}"
 
@@ -29,7 +29,7 @@ class PromptQueueWidget(Static):
 
     can_focus = False
 
-    def update_queue(self, queue: Sequence[str]) -> None:
+    def update_queue(self, queue: Sequence[Any]) -> None:
         if not queue:
             self.display = False
             return

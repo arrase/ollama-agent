@@ -42,9 +42,11 @@ from ...tasks import (
 )
 from .models import list_models, list_subagents, set_model
 from .params import (
+    set_audio_max_duration,
     set_context_window,
     set_effort,
     set_model_param,
+    show_audio_settings,
     show_context_window,
     show_effort,
     show_model_params,
@@ -277,6 +279,14 @@ class REPLEnvironment:
             on_switch=lambda size: set_context_window(self.console, size, runtime=self.runtime),
         )
 
+    def handle_audio(self, args: list[str]) -> object:
+        return self._dispatch_switch(
+            args,
+            usage=_("Usage: /audio [set <seconds>]"),
+            on_show=lambda: show_audio_settings(self.console, self.runtime),
+            on_switch=lambda seconds: set_audio_max_duration(self.console, seconds, runtime=self.runtime),
+        )
+
     def handle_params(self, args: list[str]) -> object:
         if not args or args[0] == "list":
             show_model_params(self.console, self.runtime)
@@ -417,6 +427,7 @@ def build_repl_handlers(env: REPLEnvironment) -> dict[str, REPLHandler]:
         "/model": env.handle_model,
         "/effort": env.handle_effort,
         "/context": env.handle_context,
+        "/audio": env.handle_audio,
         "/params": env.handle_params,
         "/task": env.handle_task,
         "/skill": env.handle_skill,

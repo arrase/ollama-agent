@@ -1,5 +1,16 @@
 """Core module with types, models and shared utilities."""
 
+from .audio import (
+    AUDIO_BADGE_PREFIX,
+    AudioPrompt,
+    AudioRecorder,
+    encode_wav_bytes,
+    format_audio_badge,
+    is_silent,
+    render_waveform,
+    speech_frame_mask,
+    trim_silence,
+)
 from .common import (
     DEFAULT_REASONING_EFFORT,
     ReasoningEffortValue,
@@ -23,6 +34,8 @@ from .models import (
     ensure_model_supports_tools,
     format_thinking_value,
     get_model_thinking_config,
+    has_audio_capability,
+    model_supports_audio,
     model_supports_tools,
     parse_context_window_input,
     validate_and_normalize_effort,
@@ -44,6 +57,16 @@ from .resource_manager import (
 )
 
 __all__ = [
+    # Audio
+    "AUDIO_BADGE_PREFIX",
+    "AudioPrompt",
+    "AudioRecorder",
+    "encode_wav_bytes",
+    "format_audio_badge",
+    "is_silent",
+    "render_waveform",
+    "speech_frame_mask",
+    "trim_silence",
     # Types
     "BaseFileStoreManager",
     "DEFAULT_REASONING_EFFORT",
@@ -62,6 +85,8 @@ __all__ = [
     "ensure_model_supports_tools",
     "format_thinking_value",
     "get_model_thinking_config",
+    "has_audio_capability",
+    "model_supports_audio",
     "model_supports_tools",
     "parse_context_window_input",
     "validate_and_normalize_effort",

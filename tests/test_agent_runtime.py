@@ -16,6 +16,7 @@ from langgraph.types import Command
 from ollama_agent.agent.agent import AgentRuntime, _prepare_instructions
 from ollama_agent.agent.builtin_tools import rag_search, set_rag_manager
 from ollama_agent.agent.middleware import _stream_tool_events, stream_tool_events_mw
+from ollama_agent.core import AudioPrompt
 from ollama_agent.core.prompt_processor import PromptProcessingError
 from ollama_agent.rag.manager import RAGNotLoadedError
 from ollama_agent.settings.config import (
@@ -694,6 +695,98 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
 
             await runtime.set_context_window("max")
             self.assertEqual(runtime.settings.model.context_window, "max")
+
+    async def test_agent_runtime_set_audio_max_duration(self) -> None:
+        runtime = AgentRuntime(settings=Settings())
+
+        with patch("ollama_agent.agent.agent.save_settings") as mock_save:
+            await runtime.set_audio_max_duration(25)
+            self.assertEqual(runtime.settings.audio.max_duration, 25)
+            mock_save.assert_called_once_with(runtime.settings)
+
+            for invalid in (0, -1, 301, True, False):
+                with self.subTest(invalid=invalid):
+                    with self.assertRaises(ValueError):
+                        await runtime.set_audio_max_duration(invalid)
+
+    async def test_build_graph_sets_supports_audio_and_aclose_resets(self) -> None:
+        runtime = AgentRuntime(settings=Settings())
+        mock_model = MagicMock(
+            num_ctx=8192,
+            effective_params={},
+            show_info=MagicMock(capabilities=["completion", "tools", "audio"]),
+        )
+        with (
+            patch("ollama_agent.agent.agent.load_instructions", return_value="base"),
+            patch("ollama_agent.agent.agent.ensure_model_supports_tools", AsyncMock()),
+            patch("ollama_agent.agent.agent.create_ollama_chat_model", AsyncMock(return_value=mock_model)),
+            patch("ollama_agent.agent.agent.create_summarization_tool_middleware", return_value=MagicMock()),
+            patch("ollama_agent.agent.agent.load_main_mcp_tools", AsyncMock(return_value=[])),
+            patch("ollama_agent.agent.agent.create_deep_agent", return_value=MagicMock()),
+            patch.object(AgentRuntime, "_sqlite_checkpointer", AsyncMock(return_value=MagicMock())),
+        ):
+            await runtime._build_graph()
+            self.assertTrue(runtime.supports_audio)
+
+        await runtime.aclose()
+        self.assertFalse(runtime.supports_audio)
+
+    def test_prepare_stream_inputs_with_audio_prompt(self) -> None:
+        runtime = AgentRuntime(settings=Settings())
+
+        # Audio only
+        audio_only = AudioPrompt(
+            wav_base64="UklGRg==",
+            duration=2.4,
+            waveform="▂▄▆█",
+            text="",
+        )
+        inputs, warnings = runtime._prepare_stream_inputs(audio_only)
+        self.assertEqual(warnings, [])
+        assert isinstance(inputs, dict)
+        self.assertEqual(
+            inputs["messages"],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "audio",
+                            "base64": "UklGRg==",
+                            "mime_type": "audio/wav",
+                            "badge": audio_only.badge,
+                        }
+                    ],
+                }
+            ],
+        )
+
+        # Audio + text with @file mention
+        with patch(
+            "ollama_agent.agent.agent.process_prompt_mentions",
+            return_value=(
+                "Explain @note.txt\n\n<attached_context><file path='note.txt'>hi</file></attached_context>",
+                [{"type": "image_url", "image_url": {"url": "data:image/png;base64,AAA"}}],
+                ["warn1"],
+            ),
+        ) as mock_mentions:
+            audio_with_text = AudioPrompt(
+                wav_base64="UklGRg==",
+                duration=3.0,
+                waveform="▂▄▆█",
+                text="Explain @note.txt",
+            )
+            inputs2, warnings2 = runtime._prepare_stream_inputs(audio_with_text)
+            mock_mentions.assert_called_once()
+            self.assertEqual(warnings2, ["warn1"])
+            assert isinstance(inputs2, dict)
+            content = inputs2["messages"][0]["content"]
+            self.assertEqual(len(content), 3)
+            self.assertEqual(content[0]["type"], "text")
+            self.assertIn("Explain @note.txt", content[0]["text"])
+            self.assertEqual(content[1]["type"], "audio")
+            self.assertEqual(content[1]["base64"], "UklGRg==")
+            self.assertEqual(content[2]["type"], "image_url")
 
     async def test_build_graph_mcp_tools_and_subagent_mcp_tools_in_interrupt_on(self) -> None:
         settings = Settings()

@@ -463,5 +463,21 @@
   "Unknown input keys for '{name}': {keys}": "Unbekannte Eingabeschlüssel für '{name}': {keys}",
   "Cannot expand home directory in path '{path_str}': {exc}": "Das Benutzerverzeichnis kann in Pfad '{path_str}' nicht aufgelöst werden: {exc}",
   "'{norm_name}' must be between {low} and {high}.": "'{norm_name}' muss zwischen {low} und {high} liegen.",
-  "Failed to export session to {target_file}: {exc}": "Session konnte nicht nach {target_file} exportiert werden: {exc}"
+  "Failed to export session to {target_file}: {exc}": "Session konnte nicht nach {target_file} exportiert werden: {exc}",
+  "Setting 'audio.max_duration' must be between {min_s} and {max_s} seconds.": "Die Einstellung 'audio.max_duration' muss zwischen {min_s} und {max_s} Sekunden liegen.",
+  "Show or set audio recording max duration": "Maximale Audioaufnahmedauer anzeigen oder festlegen",
+  "Set maximum audio recording duration in seconds (e.g. 10, 15, 30)": "Maximale Audioaufnahmedauer in Sekunden festlegen (z. B. 10, 15, 30)",
+  "Usage: /audio [set <seconds>]": "Verwendung: /audio [set <Sekunden>]",
+  "supported": "unterstützt",
+  "not supported": "nicht unterstützt",
+  "Audio max recording duration: {duration}s (model: {model}, audio: {capability})\nUsage: /audio [set <seconds>] ({min_s}-{max_s}s)": "Maximale Audioaufnahmedauer: {duration}s (Modell: {model}, Audio: {capability})\nVerwendung: /audio [set <Sekunden>] ({min_s}-{max_s}s)",
+  "Invalid audio max duration '{value}'. Expected an integer between {min_s} and {max_s} seconds.": "Ungültige maximale Audiodauer '{value}'. Erwartet wird eine ganze Zahl zwischen {min_s} und {max_s} Sekunden.",
+  "Already using audio max duration '{duration}s'.": "Maximale Audiodauer '{duration}s' wird bereits verwendet.",
+  "Set audio max recording duration to {duration}s.": "Maximale Audioaufnahmedauer auf {duration}s festgelegt.",
+  "seconds": "Sekunden",
+  "Record audio prompt (max {seconds}s)": "Audio-Prompt aufnehmen (max. {seconds}s)",
+  "Recording audio...": "Audio wird aufgenommen...",
+  "Could not start audio recording: {exc}": "Audioaufnahme konnte nicht gestartet werden: {exc}",
+  "No speech detected in audio recording.": "Keine Sprache in der Audioaufnahme erkannt.",
+  "Audio recording cancelled.": "Audioaufnahme abgebrochen."
 }

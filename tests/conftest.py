@@ -62,6 +62,9 @@ def make_mock_runtime(**overrides: Any) -> MagicMock:
     runtime.settings.model.reasoning_effort = "high"
     runtime.settings.model.context_window = 16384
     runtime.settings.runtime.collapse_thinking = True
+    runtime.settings.audio.max_duration = 10
+    runtime.supports_audio = False
+    runtime.set_audio_max_duration = AsyncMock()
     runtime.effective_context_window = 16384
     runtime.thread_id = "session_001"
     runtime.last_context_tokens = 512

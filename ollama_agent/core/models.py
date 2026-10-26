@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Sequence
 from typing import Any, Callable
 
 import httpx
@@ -157,6 +158,23 @@ async def model_supports_tools(
 ) -> bool:
     """Check if a model supports tool calls."""
     return "tools" in await get_model_capabilities(model, base_url, show_info=show_info)
+
+
+def has_audio_capability(show_info: ExtendedShowResponse | None) -> bool:
+    """Return whether Ollama show metadata advertises audio support."""
+    if show_info is None or not isinstance(show_info.capabilities, list):
+        return False
+    return any(str(c).lower() == "audio" for c in show_info.capabilities)
+
+
+async def model_supports_audio(
+    model: str,
+    base_url: str,
+    *,
+    show_info: ExtendedShowResponse | None = None,
+) -> bool:
+    """Check if a model supports audio input."""
+    return "audio" in await get_model_capabilities(model, base_url, show_info=show_info)
 
 
 async def ensure_model_supports_tools(
@@ -424,6 +442,36 @@ class OllamaChatModel(ChatOllama):
     presence_penalty: float | None = None
     effective_params: dict[str, tuple[Any, str]] = Field(default_factory=dict)
     show_info: Any = Field(default=None, exclude=True)
+
+    def _convert_messages_to_ollama_messages(
+        self,
+        messages: list[Any],
+    ) -> Sequence[Any]:
+        normalized_messages: list[Any] = []
+        for message in messages:
+            if isinstance(message.content, list) and any(
+                isinstance(part, dict) and part.get("type") == "audio" and "base64" in part
+                for part in message.content
+            ):
+                normalized_parts = [
+                    {
+                        "type": "image",
+                        "base64": part["base64"],
+                        "mime_type": part.get("mime_type", "audio/wav"),
+                    }
+                    if isinstance(part, dict) and part.get("type") == "audio" and "base64" in part
+                    else part
+                    for part in message.content
+                ]
+                normalized_messages.append(message.model_copy(update={"content": normalized_parts}))
+            else:
+                normalized_messages.append(message)
+
+        ollama_msgs = super()._convert_messages_to_ollama_messages(normalized_messages)
+        for msg in ollama_msgs:
+            if isinstance(msg, dict) and msg.get("images") and isinstance(msg.get("content"), str):
+                msg["content"] = msg["content"].lstrip("\n")
+        return ollama_msgs
 
     def _chat_params(
         self,

@@ -142,6 +142,13 @@ class TestI18nTranslations(unittest.TestCase):
         self.assertEqual(_("Interrupt"), "Interrumpir")
         self.assertEqual(_("Show or clear the prompt queue"), "Mostrar o limpiar la cola de prompts")
         self.assertEqual(_("Approval cancelled."), "Aprobación cancelada.")
+        self.assertEqual(
+            _("Show or set audio recording max duration"),
+            "Mostrar o establecer la duración máxima de grabación de audio",
+        )
+        self.assertEqual(_("No speech detected in audio recording."), "No se detectó voz en la grabación de audio.")
+        self.assertEqual(_("Audio recording cancelled."), "Grabación de audio cancelada.")
+        self.assertEqual(_("Recording audio..."), "Grabando audio...")
 
     def test_french_translation(self) -> None:
         set_locale("fr")
@@ -296,6 +303,14 @@ class TestI18nTranslations(unittest.TestCase):
         self.assertEqual(
             _("Queued ({count})", count=4),
             "En cola (4)",
+        )
+        self.assertEqual(
+            _("Set audio max recording duration to {duration}s.", duration=15),
+            "Duración máxima de grabación de audio establecida en 15s.",
+        )
+        self.assertEqual(
+            _("Record audio prompt (max {seconds}s)", seconds=10),
+            "Grabar prompt de audio (máx. 10s)",
         )
 
     def test_unknown_string_in_english_is_source_language(self) -> None:

@@ -463,5 +463,21 @@
   "Unknown input keys for '{name}': {keys}": "Неизвестные ключи ввода для '{name}': {keys}",
   "Cannot expand home directory in path '{path_str}': {exc}": "Не удалось развернуть домашний каталог в пути '{path_str}': {exc}",
   "'{norm_name}' must be between {low} and {high}.": "'{norm_name}' должно быть между {low} и {high}.",
-  "Failed to export session to {target_file}: {exc}": "Не удалось экспортировать сессию в {target_file}: {exc}"
+  "Failed to export session to {target_file}: {exc}": "Не удалось экспортировать сессию в {target_file}: {exc}",
+  "Setting 'audio.max_duration' must be between {min_s} and {max_s} seconds.": "Параметр 'audio.max_duration' должен быть от {min_s} до {max_s} секунд.",
+  "Show or set audio recording max duration": "Показать или задать максимальную длительность записи аудио",
+  "Set maximum audio recording duration in seconds (e.g. 10, 15, 30)": "Задать максимальную длительность записи аудио в секундах (напр. 10, 15, 30)",
+  "Usage: /audio [set <seconds>]": "Использование: /audio [set <секунды>]",
+  "supported": "поддерживается",
+  "not supported": "не поддерживается",
+  "Audio max recording duration: {duration}s (model: {model}, audio: {capability})\nUsage: /audio [set <seconds>] ({min_s}-{max_s}s)": "Макс. длительность записи аудио: {duration}с (модель: {model}, аудио: {capability})\nИспользование: /audio [set <секунды>] ({min_s}-{max_s}с)",
+  "Invalid audio max duration '{value}'. Expected an integer between {min_s} and {max_s} seconds.": "Недопустимая макс. длительность аудио '{value}'. Ожидается целое число от {min_s} до {max_s} секунд.",
+  "Already using audio max duration '{duration}s'.": "Макс. длительность аудио '{duration}с' уже используется.",
+  "Set audio max recording duration to {duration}s.": "Макс. длительность записи аудио установлена на {duration}с.",
+  "seconds": "секунд",
+  "Record audio prompt (max {seconds}s)": "Записать голосовой промпт (макс. {seconds}с)",
+  "Recording audio...": "Запись аудио...",
+  "Could not start audio recording: {exc}": "Не удалось начать запись аудио: {exc}",
+  "No speech detected in audio recording.": "В аудиозаписи не обнаружена речь.",
+  "Audio recording cancelled.": "Запись аудио отменена."
 }

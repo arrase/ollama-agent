@@ -463,5 +463,21 @@
   "Unknown input keys for '{name}': {keys}": "'{name}' için bilinmeyen giriş anahtarları: {keys}",
   "Cannot expand home directory in path '{path_str}': {exc}": "'{path_str}' yolunda ana dizin genişletilemiyor: {exc}",
   "'{norm_name}' must be between {low} and {high}.": "'{norm_name}' değeri {low} ile {high} arasında olmalıdır.",
-  "Failed to export session to {target_file}: {exc}": "Oturum {target_file} dosyasına aktarılamadı: {exc}"
+  "Failed to export session to {target_file}: {exc}": "Oturum {target_file} dosyasına aktarılamadı: {exc}",
+  "Setting 'audio.max_duration' must be between {min_s} and {max_s} seconds.": "'audio.max_duration' ayarı {min_s} ile {max_s} saniye arasında olmalıdır.",
+  "Show or set audio recording max duration": "Maksimum ses kaydı süresini göster veya ayarla",
+  "Set maximum audio recording duration in seconds (e.g. 10, 15, 30)": "Maksimum ses kaydı süresini saniye cinsinden ayarlayın (örn. 10, 15, 30)",
+  "Usage: /audio [set <seconds>]": "Kullanım: /audio [set <saniye>]",
+  "supported": "destekleniyor",
+  "not supported": "desteklenmiyor",
+  "Audio max recording duration: {duration}s (model: {model}, audio: {capability})\nUsage: /audio [set <seconds>] ({min_s}-{max_s}s)": "Maksimum ses kaydı süresi: {duration}s (model: {model}, ses: {capability})\nKullanım: /audio [set <saniye>] ({min_s}-{max_s}s)",
+  "Invalid audio max duration '{value}'. Expected an integer between {min_s} and {max_s} seconds.": "Geçersiz maksimum ses süresi '{value}'. {min_s} ile {max_s} saniye arasında bir tam sayı bekleniyor.",
+  "Already using audio max duration '{duration}s'.": "Zaten '{duration}s' maksimum ses süresi kullanılıyor.",
+  "Set audio max recording duration to {duration}s.": "Maksimum ses kaydı süresi {duration}s olarak ayarlandı.",
+  "seconds": "saniye",
+  "Record audio prompt (max {seconds}s)": "Sesli istem kaydet (maks. {seconds}s)",
+  "Recording audio...": "Ses kaydediliyor...",
+  "Could not start audio recording: {exc}": "Ses kaydı başlatılamadı: {exc}",
+  "No speech detected in audio recording.": "Ses kaydında konuşma algılanmadı.",
+  "Audio recording cancelled.": "Ses kaydı iptal edildi."
 }

@@ -10,6 +10,8 @@ import jinja2
 
 from ollama_agent.core import render_prompt_template
 from ollama_agent.settings.config import (
+    DEFAULT_AUDIO_MAX_DURATION,
+    AudioSettings,
     LangSmithSettings,
     ModelSettings,
     RuntimeSettings,
@@ -47,6 +49,7 @@ class TestConfigManagement(unittest.TestCase):
         self.assertIsNone(s.model.repeat_penalty)
         self.assertEqual(s.runtime.builtin_tool_timeout, 30)
         self.assertEqual(s.mentions.max_files, 100)
+        self.assertEqual(s.audio.max_duration, DEFAULT_AUDIO_MAX_DURATION)
         self.assertEqual(s.rag.default_top_k, 5)
         self.assertEqual(s.rag.embedder_model, "embeddinggemma-2:740m")
         self.assertEqual(s.rag.embedding_dims, 768)
@@ -342,6 +345,17 @@ class TestConfigManagement(unittest.TestCase):
             self.settings_file.write_text(val, encoding="utf-8")
             with self.assertRaises(ValueError):
                 load_settings(self.settings_file)
+
+    def test_audio_settings_validation_and_serialization(self) -> None:
+        s = Settings(audio=AudioSettings(max_duration=30))
+        save_settings(s, self.settings_file)
+        loaded = load_settings(self.settings_file)
+        self.assertEqual(loaded.audio.max_duration, 30)
+
+        for invalid_val in (0, -5, 301, "10", 10.5, True):
+            with self.subTest(invalid_val=invalid_val):
+                with self.assertRaises(ValueError):
+                    Settings.from_dict({"audio": {"max_duration": invalid_val}})
 
 
 if __name__ == "__main__":

@@ -463,5 +463,21 @@
   "Unknown input keys for '{name}': {keys}": "'{name}' の未知の入力キー: {keys}",
   "Cannot expand home directory in path '{path_str}': {exc}": "パス '{path_str}' でホームディレクトリを展開できません: {exc}",
   "'{norm_name}' must be between {low} and {high}.": "'{norm_name}' は {low} から {high} の間でなければなりません",
-  "Failed to export session to {target_file}: {exc}": "セッションの {target_file} へのエクスポートに失敗しました: {exc}"
+  "Failed to export session to {target_file}: {exc}": "セッションの {target_file} へのエクスポートに失敗しました: {exc}",
+  "Setting 'audio.max_duration' must be between {min_s} and {max_s} seconds.": "設定 'audio.max_duration' は {min_s} から {max_s} 秒の間である必要があります。",
+  "Show or set audio recording max duration": "音声録音の最大時間を表示または設定",
+  "Set maximum audio recording duration in seconds (e.g. 10, 15, 30)": "音声録音の最大時間を秒単位で設定 (例: 10, 15, 30)",
+  "Usage: /audio [set <seconds>]": "使用法: /audio [set <秒数>]",
+  "supported": "対応",
+  "not supported": "非対応",
+  "Audio max recording duration: {duration}s (model: {model}, audio: {capability})\nUsage: /audio [set <seconds>] ({min_s}-{max_s}s)": "音声録音の最大時間: {duration}s (モデル: {model}, 音声: {capability})\n使用法: /audio [set <秒数>] ({min_s}-{max_s}s)",
+  "Invalid audio max duration '{value}'. Expected an integer between {min_s} and {max_s} seconds.": "無効な音声最大時間 '{value}' です。{min_s} から {max_s} 秒の間の整数を指定してください。",
+  "Already using audio max duration '{duration}s'.": "既に音声最大時間 '{duration}s' を使用中です。",
+  "Set audio max recording duration to {duration}s.": "音声録音の最大時間を {duration}s に設定しました。",
+  "seconds": "秒",
+  "Record audio prompt (max {seconds}s)": "音声プロンプトを録音 (最大 {seconds}s)",
+  "Recording audio...": "音声を録音中...",
+  "Could not start audio recording: {exc}": "音声録音を開始できませんでした: {exc}",
+  "No speech detected in audio recording.": "録音された音声に発話が検出されませんでした。",
+  "Audio recording cancelled.": "音声録音がキャンセルされました。"
 }

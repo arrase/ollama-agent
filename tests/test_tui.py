@@ -14,9 +14,10 @@ from textual.widgets import OptionList
 from rich.console import Console
 
 from ollama_agent.agent.episodic_memory import HistoryError
+from ollama_agent.core import AudioPrompt
 from ollama_agent.interfaces.tui import OllamaAgentApp, OllamaREPL
 from ollama_agent.interfaces.tui.commands import run_slash_command
-from ollama_agent.interfaces.tui.completion import _get_cached_models, _model_cache, file_completions
+from ollama_agent.interfaces.tui.completion import _get_cached_models, _model_cache, file_completions, slash_completions
 from ollama_agent.interfaces.tui.renderer import _TUIStreamingRenderer
 from ollama_agent.interfaces.tui.screens import MainScreen
 from ollama_agent.settings.config import Settings, load_settings, save_settings
@@ -26,6 +27,7 @@ from ollama_agent.interfaces.tui.widgets import (
     AgentFooter,
     AgentHeader,
     AgentResponse,
+    AudioRecordButton,
     PromptQueueWidget,
     ReplInput,
     SystemOutputWidget,
@@ -122,12 +124,76 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
         footer.set_queued_count(0)
         self.assertNotIn("queued", str(footer.render()))
 
+        footer.set_recording(True)
+        rec_text = str(footer.render())
+        self.assertIn("Recording audio...", rec_text)
+        self.assertIn("enter/click", rec_text)
+        self.assertIn("cancel", rec_text)
+
+        footer.set_recording(False)
+        self.assertNotIn("Recording audio...", str(footer.render()))
+
+    def test_audio_record_button_states_and_click(self) -> None:
+        btn = AudioRecordButton()
+        self.assertIn("● REC", str(btn.render()))
+        self.assertFalse(btn.has_class("recording"))
+
+        btn.set_recording(True, 10.0)
+        self.assertTrue(btn.has_class("recording"))
+        self.assertIn("00:10", str(btn.render()))
+
+        btn.set_recording(True, 4.2)
+        self.assertIn("00:05", str(btn.render()))
+
+        btn.set_recording(True, 2.1)
+        self.assertIn("00:03", str(btn.render()))
+
+        btn.set_recording(False)
+        self.assertFalse(btn.has_class("recording"))
+        self.assertIn("● REC", str(btn.render()))
+
+        click_event = MagicMock(spec=events.Click)
+        with patch.object(btn, "post_message") as mock_post:
+            btn.on_click(click_event)
+            click_event.stop.assert_called_once()
+            mock_post.assert_called_once()
+            self.assertIsInstance(mock_post.call_args[0][0], AudioRecordButton.ToggleRequested)
+
     def test_user_message_compose(self) -> None:
         msg = UserMessage("How do I build a minimal CLI?")
         composed = list(msg.compose())
         self.assertEqual(len(composed), 2)
         self.assertIn("you", str(composed[0].render()))
         self.assertEqual(str(composed[1].render()), "How do I build a minimal CLI?")
+
+    def test_user_message_compose_audio_prompt_and_restored_badge(self) -> None:
+        audio_only = AudioPrompt(text="", wav_base64="dGVzdA==", duration=2.4, waveform="▁▂▃▄▅▆▇█▆▅▃▂")
+        msg_only = UserMessage(audio_only)
+        composed_only = list(msg_only.compose())
+        self.assertEqual(len(composed_only), 2)
+        self.assertIn("◉ Audio", str(composed_only[1].render()))
+        self.assertIn("▁▂▃▄▅▆▇█▆▅▃▂", str(composed_only[1].render()))
+        self.assertIn("(2.4s)", str(composed_only[1].render()))
+
+        audio_with_text = AudioPrompt(
+            text="Explain this recording",
+            wav_base64="dGVzdA==",
+            duration=3.1,
+            waveform="▁▂▃▄▅▆▇█▆▅▃▂",
+        )
+        msg_with_text = UserMessage(audio_with_text)
+        composed_with_text = list(msg_with_text.compose())
+        self.assertEqual(len(composed_with_text), 3)
+        self.assertIn("◉ Audio", str(composed_with_text[1].render()))
+        self.assertIn("(3.1s)", str(composed_with_text[1].render()))
+        self.assertEqual(str(composed_with_text[2].render()), "Explain this recording")
+
+        restored = UserMessage("◉ Audio ▁▂▃▄▅▆▇█▆▅▃▂ (1.8s)\nRestored companion text")
+        composed_restored = list(restored.compose())
+        self.assertEqual(len(composed_restored), 3)
+        self.assertIn("◉ Audio", str(composed_restored[1].render()))
+        self.assertIn("(1.8s)", str(composed_restored[1].render()))
+        self.assertEqual(str(composed_restored[2].render()), "Restored companion text")
 
     def test_tool_call_and_output_messages(self) -> None:
         tc = ToolCallMessage("read_file", agent_name="researcher")
@@ -227,6 +293,8 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
 
     async def test_repl_input_multiline_and_keys(self) -> None:
         class InputApp(App):
+            _is_recording = False
+
             def compose(self) -> ComposeResult:
                 yield OptionList(id="autocomplete-list")
                 yield ReplInput(id="repl-input")
@@ -1299,5 +1367,144 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
                     break
                 time.sleep(0.005)
             self.assertEqual(_model_cache[key][1], [mock_m2])
+
+    async def test_audio_record_button_visibility_by_capability(self) -> None:
+        runtime_mock = make_mock_runtime(supports_audio=False)
+        repl = OllamaREPL(runtime=runtime_mock)
+        app = OllamaAgentApp(repl)
+
+        async with app.run_test():
+            audio_btn = app.query_one("#audio-record-btn", AudioRecordButton)
+            self.assertFalse(audio_btn.display)
+            self.assertIsNone(audio_btn.tooltip)
+
+            runtime_mock.supports_audio = True
+            runtime_mock.settings.audio.max_duration = 15
+            app.update_mode_ui()
+            self.assertTrue(audio_btn.display)
+            self.assertIn("15s", str(audio_btn.tooltip))
+
+    async def test_audio_recording_lifecycle_start_stop_silent_cancel_timeout_error_and_queue(self) -> None:
+        runtime_mock = make_mock_runtime(supports_audio=True)
+        runtime_mock.settings.audio.max_duration = 10
+        repl = OllamaREPL(runtime=runtime_mock)
+        app = OllamaAgentApp(repl)
+
+        sample_prompt = AudioPrompt(
+            text="Companion note",
+            wav_base64="dGVzdA==",
+            duration=1.5,
+            waveform="▁▂▃▄▅▆▇█▆▅▃▂",
+        )
+
+        async with app.run_test() as pilot:
+            inp = app.query_one(ReplInput)
+            audio_btn = app.query_one("#audio-record-btn", AudioRecordButton)
+            input_container = app.query_one("#input-container")
+            footer = app.query_one(AgentFooter)
+            sys_out = app.query_one(SystemOutputWidget)
+
+            # 1. Start and submit valid speech with companion text
+            mock_rec = MagicMock()
+            mock_rec.is_silent = False
+            mock_rec.build_prompt.return_value = sample_prompt
+            with (
+                patch("ollama_agent.interfaces.tui.app.AudioRecorder", return_value=mock_rec),
+                patch.object(app, "_start_stream") as mock_start_stream,
+            ):
+                app.start_audio_recording()
+                self.assertTrue(app._is_recording)
+                self.assertTrue(input_container.has_class("recording-mode"))
+                self.assertTrue(audio_btn.has_class("recording"))
+                self.assertIn("Recording audio...", str(footer.render()))
+                mock_rec.start.assert_called_once()
+
+                inp.text = "Companion note"
+                inp.on_key(events.Key("enter", "\r"))
+                self.assertFalse(app._is_recording)
+                self.assertFalse(input_container.has_class("recording-mode"))
+                self.assertEqual(inp.text, "")
+                mock_rec.stop.assert_called_once()
+                mock_rec.build_prompt.assert_called_once_with("Companion note")
+                mock_start_stream.assert_called_once_with(sample_prompt)
+
+            # 2. Silent recording shows notice and does not submit
+            mock_silent_rec = MagicMock()
+            mock_silent_rec.is_silent = True
+            with (
+                patch("ollama_agent.interfaces.tui.app.AudioRecorder", return_value=mock_silent_rec),
+                patch.object(app, "_start_stream") as mock_start_stream,
+            ):
+                app.start_audio_recording()
+                app.stop_and_submit_audio()
+                mock_start_stream.assert_not_called()
+                self.assertTrue(sys_out.display)
+                self.assertIn("No speech detected", str(sys_out.render()))
+
+            # 3. Escape cancels active recording
+            mock_cancel_rec = MagicMock()
+            with patch("ollama_agent.interfaces.tui.app.AudioRecorder", return_value=mock_cancel_rec):
+                app.start_audio_recording()
+                self.assertTrue(app._is_recording)
+                inp.on_key(events.Key("escape", "escape"))
+                self.assertFalse(app._is_recording)
+                mock_cancel_rec.stop.assert_called_once()
+                self.assertTrue(sys_out.display)
+                self.assertIn("Audio recording cancelled", str(sys_out.render()))
+
+            # 4. Auto-stop when max_duration elapses in _on_recording_tick
+            mock_timeout_rec = MagicMock()
+            mock_timeout_rec.is_silent = False
+            mock_timeout_rec.build_prompt.return_value = sample_prompt
+            with (
+                patch("ollama_agent.interfaces.tui.app.AudioRecorder", return_value=mock_timeout_rec),
+                patch.object(app, "_start_stream") as mock_start_stream,
+            ):
+                app.start_audio_recording()
+                app._recording_started_at = time.monotonic() - 15.0
+                app._on_recording_tick()
+                self.assertFalse(app._is_recording)
+                mock_start_stream.assert_called_once_with(sample_prompt)
+
+            # 5. Error when AudioRecorder.start() raises
+            mock_err_rec = MagicMock()
+            mock_err_rec.start.side_effect = RuntimeError("No microphone device")
+            with patch("ollama_agent.interfaces.tui.app.AudioRecorder", return_value=mock_err_rec):
+                app.start_audio_recording()
+                self.assertFalse(app._is_recording)
+                self.assertTrue(sys_out.display)
+                self.assertIn("Could not start audio recording", str(sys_out.render()))
+                self.assertIn("No microphone device", str(sys_out.render()))
+
+            # 6. Queues AudioPrompt when _is_generating is True
+            mock_queue_rec = MagicMock()
+            mock_queue_rec.is_silent = False
+            mock_queue_rec.build_prompt.return_value = sample_prompt
+            app._is_generating = True
+            with (
+                patch("ollama_agent.interfaces.tui.app.AudioRecorder", return_value=mock_queue_rec),
+                patch.object(app, "_start_stream") as mock_start_stream,
+            ):
+                app.start_audio_recording()
+                app.stop_and_submit_audio()
+                await pilot.pause()
+                mock_start_stream.assert_not_called()
+                self.assertEqual(len(app._prompt_queue), 1)
+                self.assertIs(app._prompt_queue[0], sample_prompt)
+
+    def test_audio_slash_completions(self) -> None:
+        runtime_mock = make_mock_runtime()
+        repl = OllamaREPL(runtime=runtime_mock)
+
+        root_comps = dict(slash_completions("/au", repl, []))
+        self.assertIn("/audio", root_comps)
+
+        sub_comps = dict(slash_completions("/audio ", repl, []))
+        self.assertIn("/audio set", sub_comps)
+
+        arg_comps = dict(slash_completions("/audio set ", repl, []))
+        for preset in ("5", "10", "15", "30", "60"):
+            self.assertIn(f"/audio set {preset}", arg_comps)
+
 
 

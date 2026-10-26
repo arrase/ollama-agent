@@ -33,6 +33,8 @@ def extract_text(content: Any) -> str:
         for key in ("text", "content"):
             if key in content:
                 return extract_text(content[key])
+        if "badge" in content and isinstance(content["badge"], str):
+            return content["badge"]
         if "type" in content:
             return ""
         raise TypeError("Unsupported dict content for extract_text: missing 'text' or 'content' key")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections import deque
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -16,10 +17,12 @@ from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, ScrollableContainer
 from textual.screen import Screen
+from textual.timer import Timer
 from textual.widgets import OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 from textual.worker import Worker
 
+from ...core import AudioPrompt, AudioRecorder
 from ...i18n import _
 from ...streaming import extract_action_requests, stream_agent_events
 from ..clipboard import ClipboardError, copy_to_system_clipboard, get_system_clipboard
@@ -38,6 +41,7 @@ from .widgets import (
     AgentFooter,
     AgentHeader,
     AgentResponse,
+    AudioRecordButton,
     PromptQueueWidget,
     ReplInput,
     SystemOutputWidget,
@@ -63,8 +67,13 @@ class OllamaAgentApp(App):
 
     _is_generating: bool
     _is_approval_pending: bool
+    _is_recording: bool
 
     def action_cancel_generation(self) -> None:
+        if self._is_recording:
+            self.cancel_audio_recording()
+            return
+
         sys_out = self.query_one(SystemOutputWidget)
         if sys_out.display:
             self.clear_system_output()
@@ -85,7 +94,7 @@ class OllamaAgentApp(App):
             self.run_worker(self._finish_cancel_approval())
 
     def action_cancel_or_quit(self) -> None:
-        if self._is_generating or self._is_approval_pending or self._prompt_queue:
+        if self._is_recording or self._is_generating or self._is_approval_pending or self._prompt_queue:
             self.action_cancel_generation()
         else:
             self.exit()
@@ -124,7 +133,12 @@ class OllamaAgentApp(App):
         self.repl.app = self
         self._is_generating = False
         self._is_approval_pending = False
-        self._prompt_queue: deque[str] = deque()
+        self._is_recording = False
+        self._recorder: AudioRecorder | None = None
+        self._recording_timer: Timer | None = None
+        self._recording_started_at = 0.0
+        self._recording_max_duration = 0.0
+        self._prompt_queue: deque[str | AudioPrompt] = deque()
         self._current_worker: Worker | None = None
         self._post_stream_cleanup: Callable[[], Awaitable[None]] | None = None
 
@@ -137,6 +151,7 @@ class OllamaAgentApp(App):
         with Container(id="input-container"), Horizontal(id="input-bar"):
             yield Static("❯ ", id="prompt-char")
             yield ReplInput(id="repl-input")
+            yield AudioRecordButton(id="audio-record-btn")
         yield AgentFooter()
 
     def show_system_output(self, content: str | Text, title: str | None = None) -> None:
@@ -154,6 +169,10 @@ class OllamaAgentApp(App):
         # exit_on_error=False: a startup failure must be reported in the UI, not crash the app.
         self.run_worker(self._warmup_agent(), group="warmup", exit_on_error=False)
 
+    def on_unmount(self) -> None:
+        if self._is_recording:
+            self._stop_recorder()
+
     async def _warmup_agent(self) -> None:
         try:
             await self.repl.runtime._ensure_graph()
@@ -165,7 +184,7 @@ class OllamaAgentApp(App):
             notice = escape(_("Agent startup failed: {exc}", exc=exc))
             self.show_system_notice(f"[bold #f87171]✕ {notice}[/bold #f87171]")
             return
-        self.query_one(AgentHeader).update_header()
+        self.update_mode_ui()
 
     def update_mode_ui(self) -> None:
         prompt_char = self.query_one("#prompt-char")
@@ -185,6 +204,17 @@ class OllamaAgentApp(App):
         else:
             prompt_char.styles.color = "#38bdf8"  # Sky Blue
 
+        audio_btn = self.query_one(AudioRecordButton)
+        supports_audio = bool(self.repl.runtime.supports_audio)
+        audio_btn.display = supports_audio
+        if supports_audio:
+            max_s = self.repl.runtime.settings.audio.max_duration
+            audio_btn.tooltip = _("Record audio prompt (max {seconds}s)", seconds=max_s)
+        else:
+            audio_btn.tooltip = None
+            if self._is_recording:
+                self.cancel_audio_recording()
+
         header = self.query_one(AgentHeader)
         header.update_header()
 
@@ -192,6 +222,95 @@ class OllamaAgentApp(App):
         footer = self.query_one(AgentFooter)
         footer.set_queued_count(len(self._prompt_queue))
         self.query_one(PromptQueueWidget).update_queue(self._prompt_queue)
+
+    # ── Audio recording ───────────────────────────────────────────────────
+
+    def on_audio_record_button_toggle_requested(self, event: AudioRecordButton.ToggleRequested) -> None:
+        if self._is_recording:
+            self.stop_and_submit_audio()
+        else:
+            self.start_audio_recording()
+
+    def start_audio_recording(self) -> None:
+        if self._is_recording or not self.repl.runtime.supports_audio:
+            return
+        self.clear_system_output()
+        recorder = AudioRecorder()
+        try:
+            recorder.start()
+        except Exception as exc:  # noqa: BLE001
+            _log.warning("Failed to start audio recording: %s", exc)
+            notice = escape(_("Could not start audio recording: {exc}", exc=exc))
+            self.show_system_notice(f"[bold #f87171]✕ {notice}[/bold #f87171]")
+            return
+
+        self._recorder = recorder
+        self._is_recording = True
+        self._recording_max_duration = float(self.repl.runtime.settings.audio.max_duration)
+        self._recording_started_at = time.monotonic()
+
+        self.query_one("#input-container").add_class("recording-mode")
+        self.query_one(AudioRecordButton).set_recording(True, self._recording_max_duration)
+        self.query_one(AgentFooter).set_recording(True)
+        self._recording_timer = self.set_interval(0.1, self._on_recording_tick)
+        self.query_one(ReplInput).focus()
+
+    def _stop_recorder(self) -> AudioRecorder | None:
+        if self._recording_timer is not None:
+            self._recording_timer.stop()
+            self._recording_timer = None
+        self._is_recording = False
+        self.query_one("#input-container").remove_class("recording-mode")
+        self.query_one(AudioRecordButton).set_recording(False)
+        self.query_one(AgentFooter).set_recording(False)
+        recorder, self._recorder = self._recorder, None
+        if recorder is not None:
+            try:
+                recorder.stop()
+            except Exception as exc:  # noqa: BLE001
+                _log.warning("Error stopping audio recorder: %s", exc)
+        return recorder
+
+    def _on_recording_tick(self) -> None:
+        if not self._is_recording:
+            return
+        elapsed = time.monotonic() - self._recording_started_at
+        remaining = max(0.0, self._recording_max_duration - elapsed)
+        self.query_one(AudioRecordButton).set_recording(True, remaining)
+        if elapsed >= self._recording_max_duration:
+            self.stop_and_submit_audio()
+
+    def cancel_audio_recording(self) -> None:
+        if not self._is_recording:
+            return
+        self._stop_recorder()
+        self.show_system_notice(f"[bold #f87171]🛑 {escape(_('Audio recording cancelled.'))}[/bold #f87171]")
+
+    def stop_and_submit_audio(self) -> None:
+        if not self._is_recording:
+            return
+        recorder = self._stop_recorder()
+        if recorder is None:
+            return
+        if recorder.is_silent:
+            self.show_system_notice(
+                f"[bold #fbbf24]⚠ {escape(_('No speech detected in audio recording.'))}[/bold #fbbf24]"
+            )
+            return
+
+        inp = self.query_one(ReplInput)
+        text = inp.text.strip()
+        inp.text = ""
+        if text:
+            inp.add_history_entry(text)
+        audio_prompt = recorder.build_prompt(text)
+
+        if self._is_generating or self._is_approval_pending:
+            self._prompt_queue.append(audio_prompt)
+            self._update_queue_ui()
+            return
+
+        self._start_stream(audio_prompt)
 
     # ── Input events ──────────────────────────────────────────────────────
 
@@ -235,7 +354,9 @@ class OllamaAgentApp(App):
             self.query_one(AgentFooter).set_generating(True)
         self._current_worker = self.run_worker(run_slash_command(self, cmd_line))
 
-    def mount_turn_widgets(self, user_text: str, scroll: Any = None) -> tuple[Any, AgentResponse]:
+    def mount_turn_widgets(
+        self, user_text: str | AudioPrompt, scroll: Any = None
+    ) -> tuple[Any, AgentResponse]:
         if scroll is None:
             scroll = self.query_one(_CHAT_SCROLL_ID)
         scroll.mount(UserMessage(user_text))
@@ -244,7 +365,7 @@ class OllamaAgentApp(App):
         self._deferred_scroll()
         return scroll, agent_msg
 
-    def _start_stream(self, prompt: str) -> None:
+    def _start_stream(self, prompt: str | AudioPrompt) -> None:
         """Mount the prompt widgets and schedule a streaming worker (see _start_slash)."""
         scroll, agent_msg = self.mount_turn_widgets(prompt)
         self._is_generating = True
@@ -256,7 +377,7 @@ class OllamaAgentApp(App):
             return
         item = self._prompt_queue.popleft()
         self._update_queue_ui()
-        if item.startswith("/"):
+        if isinstance(item, str) and item.startswith("/"):
             self._start_slash(item)
         else:
             self._start_stream(item)
@@ -366,7 +487,9 @@ class OllamaAgentApp(App):
         command: Command[Any] = Command(resume={"decisions": decisions})
         await self._run_stream(command, scroll, agent_msg)
 
-    async def _run_stream(self, prompt: str | Command[Any], scroll: Any, agent_msg: AgentResponse) -> None:
+    async def _run_stream(
+        self, prompt: str | AudioPrompt | Command[Any], scroll: Any, agent_msg: AgentResponse
+    ) -> None:
         """Stream one agent turn, reporting failures in the message widget.
 
         A run that raises must not propagate: ``run_worker`` defaults to

@@ -463,5 +463,21 @@
   "Unknown input keys for '{name}': {keys}": "Onbekende invoersleutels voor '{name}': {keys}",
   "Cannot expand home directory in path '{path_str}': {exc}": "Kan de thuismap niet worden uitgebreid in pad '{path_str}': {exc}",
   "'{norm_name}' must be between {low} and {high}.": "'{norm_name}' moet tussen {low} en {high} liggen.",
-  "Failed to export session to {target_file}: {exc}": "Exporteren van sessie naar {target_file} mislukt: {exc}"
+  "Failed to export session to {target_file}: {exc}": "Exporteren van sessie naar {target_file} mislukt: {exc}",
+  "Setting 'audio.max_duration' must be between {min_s} and {max_s} seconds.": "Instelling 'audio.max_duration' moet tussen {min_s} en {max_s} seconden liggen.",
+  "Show or set audio recording max duration": "Toon of stel de maximale audio-opnameduur in",
+  "Set maximum audio recording duration in seconds (e.g. 10, 15, 30)": "Maximale audio-opnameduur in seconden instellen (bijv. 10, 15, 30)",
+  "Usage: /audio [set <seconds>]": "Gebruik: /audio [set <seconden>]",
+  "supported": "ondersteund",
+  "not supported": "niet ondersteund",
+  "Audio max recording duration: {duration}s (model: {model}, audio: {capability})\nUsage: /audio [set <seconds>] ({min_s}-{max_s}s)": "Maximale audio-opnameduur: {duration}s (model: {model}, audio: {capability})\nGebruik: /audio [set <seconden>] ({min_s}-{max_s}s)",
+  "Invalid audio max duration '{value}'. Expected an integer between {min_s} and {max_s} seconds.": "Ongeldige maximale audioduur '{value}'. Verwacht wordt een geheel getal tussen {min_s} en {max_s} seconden.",
+  "Already using audio max duration '{duration}s'.": "Maximale audioduur '{duration}s' wordt al gebruikt.",
+  "Set audio max recording duration to {duration}s.": "Maximale audio-opnameduur ingesteld op {duration}s.",
+  "seconds": "seconden",
+  "Record audio prompt (max {seconds}s)": "Audioprompt opnemen (max. {seconds}s)",
+  "Recording audio...": "Audio opnemen...",
+  "Could not start audio recording: {exc}": "Kan audio-opname niet starten: {exc}",
+  "No speech detected in audio recording.": "Geen spraak gedetecteerd in audio-opname.",
+  "Audio recording cancelled.": "Audio-opname geannuleerd."
 }

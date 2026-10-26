@@ -111,6 +111,19 @@ class TestCommonUtilities(unittest.TestCase):
         self.assertEqual(extract_text(["hello", "", None, "world"]), "hello world")
         self.assertEqual(extract_text([{"text": "foo"}, {"text": ""}, {"text": "bar"}]), "foo bar")
 
+    def test_extract_text_with_audio_badge_block(self) -> None:
+        audio_block = {
+            "type": "audio",
+            "base64": "UklGRg==",
+            "mime_type": "audio/wav",
+            "badge": "◉ Audio ▂▅▇█ (2.5s)",
+        }
+        self.assertEqual(extract_text([audio_block]), "◉ Audio ▂▅▇█ (2.5s)")
+        self.assertEqual(
+            extract_text([audio_block, {"type": "text", "text": "Explain this"}]),
+            "◉ Audio ▂▅▇█ (2.5s) Explain this",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,17 +4,53 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from typing import Any
 
 from rich.markup import escape
 from textual import events
 from textual.message import Message
-from textual.widgets import OptionList, TextArea
+from textual.widgets import OptionList, Static, TextArea
 
 from ....agent.episodic_memory import HistoryError, load_past_user_prompts
 from ....i18n import _
 
 _log = logging.getLogger(__name__)
+
+
+class AudioRecordButton(Static):
+    """Clickable recorder button with live recording countdown."""
+
+    IDLE_LABEL = "[bold #f87171]●[/bold #f87171] [bold #e6edf3]REC[/bold #e6edf3]"
+
+    class ToggleRequested(Message):
+        """Emitted when the user clicks the audio record button."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(self.IDLE_LABEL, **kwargs)
+        self._is_recording = False
+
+    def set_recording(self, is_recording: bool, remaining: float = 0.0) -> None:
+        self._is_recording = is_recording
+        self.set_class(is_recording, "recording")
+        if not is_recording:
+            self.update(self.IDLE_LABEL)
+            return
+        secs = max(0, math.ceil(remaining))
+        time_str = f"{secs // 60:02d}:{secs % 60:02d}"
+        if remaining <= 3.0:
+            tier_color = "#f87171"
+        elif remaining <= 5.0:
+            tier_color = "#fbbf24"
+        else:
+            tier_color = "#e6edf3"
+        self.update(
+            f"[bold #f87171]●[/bold #f87171] [bold {tier_color}]{time_str}[/bold {tier_color}] [bold #f87171]■[/bold #f87171]"
+        )
+
+    def on_click(self, event: events.Click) -> None:
+        event.stop()
+        self.post_message(self.ToggleRequested())
 
 
 class ReplInput(TextArea):
@@ -186,6 +222,18 @@ class ReplInput(TextArea):
 
     def on_key(self, event: events.Key) -> None:
         app: Any = self.app
+        if app._is_recording:
+            if event.key == "escape":
+                event.stop()
+                event.prevent_default()
+                app.cancel_audio_recording()
+                return
+            if event.key == "enter":
+                event.stop()
+                event.prevent_default()
+                app.stop_and_submit_audio()
+                return
+
         autolist = app.query_one("#autocomplete-list", OptionList)
         if autolist.display:
             if self._handle_autocomplete_key(event, app, autolist):

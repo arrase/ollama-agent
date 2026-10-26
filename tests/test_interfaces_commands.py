@@ -18,9 +18,11 @@ from ollama_agent.interfaces.commands.models import (
     set_model,
 )
 from ollama_agent.interfaces.commands.params import (
+    set_audio_max_duration,
     set_context_window,
     set_effort,
     set_model_param,
+    show_audio_settings,
     show_context_window,
     show_effort,
     show_model_params,
@@ -401,6 +403,82 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             # /context max
             await safe_call(handlers["/context"], ["max"], console=console)
             mock_set_ctx.assert_awaited_with(console, "max", runtime=runtime)
+
+    def test_show_audio_settings(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.settings.audio.max_duration = 15
+        runtime.settings.model.name = "gemma4:e4b"
+        runtime.supports_audio = True
+
+        show_audio_settings(console, runtime)
+        out = console.export_text()
+        self.assertIn("Audio max recording duration: 15s", out)
+        self.assertIn("gemma4:e4b", out)
+        self.assertIn("supported", out)
+
+        console2 = Console(file=io.StringIO(), record=True)
+        runtime.supports_audio = False
+        show_audio_settings(console2, runtime)
+        self.assertIn("not supported", console2.export_text())
+
+    async def test_set_audio_max_duration_cases(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.settings.audio.max_duration = 10
+        runtime.set_audio_max_duration = AsyncMock()
+
+        # Invalid non-int
+        res_bad = await set_audio_max_duration(console, "abc", runtime=runtime)
+        self.assertIsNone(res_bad)
+        self.assertIn("Invalid audio max duration", console.export_text())
+
+        # Out of range
+        console = Console(file=io.StringIO(), record=True)
+        res_zero = await set_audio_max_duration(console, "0", runtime=runtime)
+        self.assertIsNone(res_zero)
+        self.assertIn("Invalid audio max duration", console.export_text())
+
+        console = Console(file=io.StringIO(), record=True)
+        res_high = await set_audio_max_duration(console, "301", runtime=runtime)
+        self.assertIsNone(res_high)
+        self.assertIn("Invalid audio max duration", console.export_text())
+
+        # Already using same value
+        console = Console(file=io.StringIO(), record=True)
+        res_same = await set_audio_max_duration(console, "10", runtime=runtime)
+        self.assertEqual(res_same, 10)
+        self.assertIn("Already using audio max duration '10s'.", console.export_text())
+        runtime.set_audio_max_duration.assert_not_awaited()
+
+        # Valid new value
+        console = Console(file=io.StringIO(), record=True)
+        res_ok = await set_audio_max_duration(console, "20", runtime=runtime)
+        self.assertEqual(res_ok, 20)
+        runtime.set_audio_max_duration.assert_awaited_once_with(20)
+        self.assertIn("Set audio max recording duration to 20s.", console.export_text())
+
+    async def test_audio_dispatch(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.settings.audio.max_duration = 10
+        runtime.settings.model.name = "gemma4:e4b"
+        runtime.supports_audio = True
+
+        handlers = _repl_handlers(console=console, runtime=runtime)
+
+        handlers["/audio"]([])
+        self.assertIn("Audio max recording duration: 10s", console.export_text())
+
+        with patch("ollama_agent.interfaces.commands.dispatch.set_audio_max_duration", AsyncMock()) as mock_set_audio:
+            await safe_call(handlers["/audio"], ["set", "15"], console=console)
+            mock_set_audio.assert_awaited_with(console, "15", runtime=runtime)
+
+            await safe_call(handlers["/audio"], ["20"], console=console)
+            mock_set_audio.assert_awaited_with(console, "20", runtime=runtime)
+
+        handlers["/audio"](["set"])
+        self.assertIn("Usage: /audio", console.export_text())
 
     def test_show_model_params(self) -> None:
         console = Console(file=io.StringIO(), record=True)

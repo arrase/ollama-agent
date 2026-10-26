@@ -1,6 +1,10 @@
 """Settings package for application configuration."""
 
 from .config import (
+    DEFAULT_AUDIO_MAX_DURATION,
+    MAX_AUDIO_MAX_DURATION,
+    MIN_AUDIO_MAX_DURATION,
+    AudioSettings,
     LangSmithSettings,
     MentionSettings,
     ModelSettings,
@@ -48,7 +52,11 @@ __all__ = [
     "SKILLS_DIR",
     "TASKS_DIR",
     # Settings
+    "AudioSettings",
+    "DEFAULT_AUDIO_MAX_DURATION",
     "LangSmithSettings",
+    "MAX_AUDIO_MAX_DURATION",
+    "MIN_AUDIO_MAX_DURATION",
     "MentionSettings",
     "ModelSettings",
     "RAGSettings",

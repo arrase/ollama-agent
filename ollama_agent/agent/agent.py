@@ -21,21 +21,26 @@ from langgraph.types import Command
 
 from ..core import (
     REASONING_HIDE_VALUES,
+    AudioPrompt,
     OllamaChatModel,
     PromptProcessingError,
     ThinkTagParser,
     create_ollama_chat_model,
     ensure_model_supports_tools,
+    has_audio_capability,
     process_prompt_mentions,
     render_prompt_template,
     validate_reasoning_effort,
 )
+from ..i18n import _
 from ..mcp.loader import load_main_mcp_tools
 from ..settings import (
     AGENTS_PATH,
     BUILTIN_SKILLS_DIR,
     HISTORY_DB_PATH,
+    MAX_AUDIO_MAX_DURATION,
     MEMORY_PATH,
+    MIN_AUDIO_MAX_DURATION,
     SKILLS_DIR,
     TASKS_DIR,
     Settings,
@@ -99,6 +104,7 @@ class AgentRuntime:
     last_context_tokens: int = field(default=0, init=False)
     effective_context_window: int = field(default=0, init=False)
     effective_model_params: dict[str, tuple[Any, str]] = field(default_factory=dict, init=False)
+    supports_audio: bool = field(default=False, init=False)
     model: OllamaChatModel | None = field(default=None, init=False, repr=False)
     graph: Any = field(default=None, init=False, repr=False)
     _checkpointer: AsyncSqliteSaver | None = field(default=None, init=False, repr=False)
@@ -169,6 +175,7 @@ class AgentRuntime:
         )
 
         self.model = model
+        self.supports_audio = has_audio_capability(model.show_info)
         self.effective_context_window = model.num_ctx
         self.effective_model_params = model.effective_params
 
@@ -291,12 +298,40 @@ class AgentRuntime:
 
     def _prepare_stream_inputs(
         self,
-        prompt: str | Command[Any],
+        prompt: str | AudioPrompt | Command[Any],
     ) -> tuple[dict[str, Any] | Command[Any], list[str]]:
         if isinstance(prompt, Command):
             return prompt, []
 
         mentions_cfg = self.settings.mentions
+        if isinstance(prompt, AudioPrompt):
+            if prompt.text:
+                processed_prompt, mention_attachments, mention_warnings = process_prompt_mentions(
+                    prompt.text,
+                    max_file_size=mentions_cfg.max_file_size,
+                    max_files=mentions_cfg.max_files,
+                    max_total_size=mentions_cfg.max_total_size,
+                    allow_traversal=self.settings.runtime.allow_traversal,
+                )
+            else:
+                processed_prompt, mention_attachments, mention_warnings = "", [], []
+
+            for warning in mention_warnings:
+                _log.warning(warning)
+
+            audio_block: dict[str, Any] = {
+                "type": "audio",
+                "base64": prompt.wav_base64,
+                "mime_type": "audio/wav",
+                "badge": prompt.badge,
+            }
+            content_blocks: list[dict[str, Any]] = []
+            if processed_prompt:
+                content_blocks.append({"type": "text", "text": processed_prompt})
+            content_blocks.append(audio_block)
+            content_blocks.extend(mention_attachments)
+            return {"messages": [{"role": "user", "content": content_blocks}]}, mention_warnings
+
         processed_prompt, attachments, mention_warnings = process_prompt_mentions(
             prompt,
             max_file_size=mentions_cfg.max_file_size,
@@ -341,7 +376,7 @@ class AgentRuntime:
 
     async def run_streamed(
         self,
-        prompt: str | Command[Any],
+        prompt: str | AudioPrompt | Command[Any],
         *,
         thread_id: str = "",
     ) -> AsyncGenerator[dict[str, Any], None]:
@@ -411,10 +446,25 @@ class AgentRuntime:
         await asyncio.to_thread(save_settings, self.settings)
         await self.reload()
 
+    async def set_audio_max_duration(self, max_duration: int) -> None:
+        if isinstance(max_duration, bool) or not isinstance(max_duration, int) or not (
+            MIN_AUDIO_MAX_DURATION <= max_duration <= MAX_AUDIO_MAX_DURATION
+        ):
+            raise ValueError(
+                _(
+                    "Setting 'audio.max_duration' must be between {min_s} and {max_s} seconds.",
+                    min_s=MIN_AUDIO_MAX_DURATION,
+                    max_s=MAX_AUDIO_MAX_DURATION,
+                )
+            )
+        self.settings.audio.max_duration = max_duration
+        await asyncio.to_thread(save_settings, self.settings)
+
     async def aclose(self) -> None:
         await self._checkpointer_stack.aclose()
         self._checkpointer_stack = contextlib.AsyncExitStack()
         self._checkpointer = None
         self._memory_checkpointer = None
         self.model = None
+        self.supports_audio = False
         self.graph = None

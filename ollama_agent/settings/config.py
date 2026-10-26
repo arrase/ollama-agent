@@ -36,6 +36,10 @@ from .paths import (
 _FORBID_EXTRA = ConfigDict(extra="forbid")
 _task_model_overrides: dict[int, tuple[weakref.ref[ModelSettings], str, str, str, str]] = {}
 
+DEFAULT_AUDIO_MAX_DURATION = 10
+MIN_AUDIO_MAX_DURATION = 1
+MAX_AUDIO_MAX_DURATION = 300
+
 # ---------------------------------------------------------------------------
 # Settings dataclasses (CUD-inspired)
 # ---------------------------------------------------------------------------
@@ -135,11 +139,30 @@ class MentionSettings:
 
 @with_config(_FORBID_EXTRA)
 @dataclass(slots=True)
+class AudioSettings:
+    """Configuration for microphone audio prompt recording."""
+
+    max_duration: StrictInt = DEFAULT_AUDIO_MAX_DURATION
+
+    def __post_init__(self) -> None:
+        if not (MIN_AUDIO_MAX_DURATION <= self.max_duration <= MAX_AUDIO_MAX_DURATION):
+            raise ValueError(
+                _(
+                    "Setting 'audio.max_duration' must be between {min_s} and {max_s} seconds.",
+                    min_s=MIN_AUDIO_MAX_DURATION,
+                    max_s=MAX_AUDIO_MAX_DURATION,
+                )
+            )
+
+
+@with_config(_FORBID_EXTRA)
+@dataclass(slots=True)
 class Settings:
     model: ModelSettings = field(default_factory=ModelSettings)
     runtime: RuntimeSettings = field(default_factory=RuntimeSettings)
     rag: RAGSettings = field(default_factory=RAGSettings)
     mentions: MentionSettings = field(default_factory=MentionSettings)
+    audio: AudioSettings = field(default_factory=AudioSettings)
     subagents: list[SubAgentSettings] = field(default_factory=list)
     langsmith: LangSmithSettings = field(default_factory=LangSmithSettings)
 

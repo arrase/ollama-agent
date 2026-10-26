@@ -463,5 +463,21 @@
   "Unknown input keys for '{name}': {keys}": "'{name}' के लिए अज्ञात इनपुट कुंजियाँ: {keys}",
   "Cannot expand home directory in path '{path_str}': {exc}": "पथ '{path_str}' में होम निर्देशिका विस्तारित नहीं की जा सकी: {exc}",
   "'{norm_name}' must be between {low} and {high}.": "'{norm_name}' {low} और {high} के बीच होना चाहिए।",
-  "Failed to export session to {target_file}: {exc}": "सत्र को {target_file} में निर्यात करना विफल: {exc}"
+  "Failed to export session to {target_file}: {exc}": "सत्र को {target_file} में निर्यात करना विफल: {exc}",
+  "Setting 'audio.max_duration' must be between {min_s} and {max_s} seconds.": "सेटिंग 'audio.max_duration' {min_s} और {max_s} सेकंड के बीच होनी चाहिए।",
+  "Show or set audio recording max duration": "ऑडियो रिकॉर्डिंग की अधिकतम अवधि दिखाएं या सेट करें",
+  "Set maximum audio recording duration in seconds (e.g. 10, 15, 30)": "सेकंड में अधिकतम ऑडियो रिकॉर्डिंग अवधि सेट करें (उदा. 10, 15, 30)",
+  "Usage: /audio [set <seconds>]": "उपयोग: /audio [set <seconds>]",
+  "supported": "समर्थित",
+  "not supported": "असमर्थित",
+  "Audio max recording duration: {duration}s (model: {model}, audio: {capability})\nUsage: /audio [set <seconds>] ({min_s}-{max_s}s)": "ऑडियो अधिकतम रिकॉर्डिंग अवधि: {duration}s (मॉडल: {model}, ऑडियो: {capability})\nउपयोग: /audio [set <seconds>] ({min_s}-{max_s}s)",
+  "Invalid audio max duration '{value}'. Expected an integer between {min_s} and {max_s} seconds.": "अमान्य ऑडियो अधिकतम अवधि '{value}'। {min_s} और {max_s} सेकंड के बीच एक पूर्णांक अपेक्षित है।",
+  "Already using audio max duration '{duration}s'.": "पहले से ही ऑडियो अधिकतम अवधि '{duration}s' का उपयोग कर रहे हैं।",
+  "Set audio max recording duration to {duration}s.": "ऑडियो अधिकतम रिकॉर्डिंग अवधि {duration}s पर सेट की गई।",
+  "seconds": "सेकंड",
+  "Record audio prompt (max {seconds}s)": "ऑडियो प्रॉम्प्ट रिकॉर्ड करें (अधिकतम {seconds}s)",
+  "Recording audio...": "ऑडियो रिकॉर्ड हो रहा है...",
+  "Could not start audio recording: {exc}": "ऑडियो रिकॉर्डिंग शुरू नहीं हो सकी: {exc}",
+  "No speech detected in audio recording.": "ऑडियो रिकॉर्डिंग में कोई आवाज़ नहीं मिली।",
+  "Audio recording cancelled.": "ऑडियो रिकॉर्डिंग रद्द की गई।"
 }

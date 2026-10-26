@@ -463,5 +463,21 @@
   "Unknown input keys for '{name}': {keys}": "مفاتيح إدخال غير معروفة لـ '{name}': {keys}",
   "Cannot expand home directory in path '{path_str}': {exc}": "تعذر توسيع دليل المستخدم في المسار '{path_str}': {exc}",
   "'{norm_name}' must be between {low} and {high}.": "يجب أن يكون '{norm_name}' بين {low} و{high}.",
-  "Failed to export session to {target_file}: {exc}": "فشل تصدير الجلسة إلى {target_file}: {exc}"
+  "Failed to export session to {target_file}: {exc}": "فشل تصدير الجلسة إلى {target_file}: {exc}",
+  "Setting 'audio.max_duration' must be between {min_s} and {max_s} seconds.": "يجب أن يكون الإعداد 'audio.max_duration' بين {min_s} و{max_s} ثانية.",
+  "Show or set audio recording max duration": "عرض المدة القصوى لتسجيل الصوت أو ضبطها",
+  "Set maximum audio recording duration in seconds (e.g. 10, 15, 30)": "تعيين المدة القصوى لتسجيل الصوت بالثواني (مثال: 10, 15, 30)",
+  "Usage: /audio [set <seconds>]": "الاستخدام: /audio [set <ثوانٍ>]",
+  "supported": "مدعوم",
+  "not supported": "غير مدعوم",
+  "Audio max recording duration: {duration}s (model: {model}, audio: {capability})\nUsage: /audio [set <seconds>] ({min_s}-{max_s}s)": "المدة القصوى لتسجيل الصوت: {duration}ث (النموذج: {model}، الصوت: {capability})\nالاستخدام: /audio [set <ثوانٍ>] ({min_s}-{max_s}ث)",
+  "Invalid audio max duration '{value}'. Expected an integer between {min_s} and {max_s} seconds.": "المدة القصوى للصوت غير صالحة '{value}'. يُتوقع عدد صحيح بين {min_s} و{max_s} ثانية.",
+  "Already using audio max duration '{duration}s'.": "تستخدم بالفعل المدة القصوى للصوت '{duration}ث'.",
+  "Set audio max recording duration to {duration}s.": "تم ضبط المدة القصوى لتسجيل الصوت على {duration}ث.",
+  "seconds": "ثوانٍ",
+  "Record audio prompt (max {seconds}s)": "تسجيل مطالبة صوتية (الحد الأقصى {seconds}ث)",
+  "Recording audio...": "جارٍ تسجيل الصوت...",
+  "Could not start audio recording: {exc}": "تعذر بدء تسجيل الصوت: {exc}",
+  "No speech detected in audio recording.": "لم يتم اكتشاف كلام في التسجيل الصوتي.",
+  "Audio recording cancelled.": "تم إلغاء تسجيل الصوت."
 }

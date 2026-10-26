@@ -16,6 +16,7 @@ class AgentFooter(Static):
         super().__init__(**kwargs)
         self._is_generating = False
         self._is_approval = False
+        self._is_recording = False
         self._queued_count = 0
 
     def on_mount(self) -> None:
@@ -29,6 +30,10 @@ class AgentFooter(Static):
         self._is_approval = is_approval
         self.update_footer()
 
+    def set_recording(self, is_recording: bool) -> None:
+        self._is_recording = is_recording
+        self.update_footer()
+
     def set_queued_count(self, count: int) -> None:
         self._queued_count = count
         self.update_footer()
@@ -39,7 +44,14 @@ class AgentFooter(Static):
             if self._queued_count > 0
             else ""
         )
-        if self._is_approval:
+        if self._is_recording:
+            self.update(
+                f"[bold #f87171]● {_('Recording audio...')}[/bold #f87171]   "
+                f"[bold #7d8590]enter/click[/bold #7d8590] [#c9d1d9]{_('send')}[/#c9d1d9]   "
+                f"[bold #7d8590]esc[/bold #7d8590] [#c9d1d9]{_('cancel')}[/#c9d1d9]"
+                f"{queue_info}"
+            )
+        elif self._is_approval:
             self.update(
                 f"[bold #fbbf24]⚠ {_('Approval required:')}[/bold #fbbf24]   "
                 f"[bold #7d8590]y[/bold #7d8590] [#c9d1d9]{_('approve')}[/#c9d1d9]   "

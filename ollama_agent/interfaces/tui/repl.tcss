@@ -104,6 +104,11 @@ SystemOutputWidget, #system-output {
     border: round #fbbf24;
 }
 
+#input-container.recording-mode,
+#input-container.recording-mode:focus-within {
+    border: round #f87171;
+}
+
 #input-bar {
     height: auto;
     min-height: 1;
@@ -118,6 +123,30 @@ SystemOutputWidget, #system-output {
     content-align: left top;
     padding: 0;
     margin: 0;
+}
+
+#audio-record-btn {
+    display: none;
+    width: auto;
+    min-width: 7;
+    height: 1;
+    content-align: center middle;
+    padding: 0 1;
+    margin: 0 0 0 1;
+    background: #21262d;
+    color: #e6edf3;
+}
+
+#audio-record-btn:hover {
+    background: #30363d;
+}
+
+#audio-record-btn.recording {
+    background: rgba(248, 113, 113, 0.2);
+}
+
+#audio-record-btn.recording:hover {
+    background: rgba(248, 113, 113, 0.32);
 }
 
 ReplInput {
@@ -195,6 +224,11 @@ UserMessage {
 
 .user-content {
     color: #f0f6fc;
+}
+
+.user-audio-badge {
+    color: #38bdf8;
+    margin-bottom: 0;
 }
 
 /* ── Agent Response ────────────────────────────────────────────────────── */

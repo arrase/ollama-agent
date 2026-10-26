@@ -12,22 +12,53 @@ from textual.containers import Container
 from textual.timer import Timer
 from textual.widgets import Collapsible, Markdown, Static
 
+from ....core import AUDIO_BADGE_PREFIX, AudioPrompt
 from ....i18n import _
+
+
+def _split_audio_badge(prompt: str | AudioPrompt) -> tuple[str | None, str]:
+    if isinstance(prompt, AudioPrompt):
+        return prompt.badge, prompt.text
+    if prompt.startswith(f"{AUDIO_BADGE_PREFIX} "):
+        first_line, _, rest = prompt.partition("\n")
+        return first_line.strip(), rest.strip()
+    return None, prompt
+
+
+def _format_audio_pill_markup(badge: str) -> str:
+    body = badge.removeprefix(AUDIO_BADGE_PREFIX).strip()
+    waveform, sep, duration_part = body.rpartition(" ")
+    if sep and duration_part.startswith("(") and duration_part.endswith(")"):
+        return (
+            f"[bold #38bdf8]{AUDIO_BADGE_PREFIX}[/bold #38bdf8]  "
+            f"[bold #38bdf8]{escape(waveform)}[/bold #38bdf8]  "
+            f"[dim #8b949e]{escape(duration_part)}[/dim #8b949e]"
+        )
+    return f"[bold #38bdf8]{AUDIO_BADGE_PREFIX}[/bold #38bdf8]  [bold #38bdf8]{escape(body)}[/bold #38bdf8]"
 
 
 class UserMessage(Container):
     """Rendered user prompt."""
 
-    def __init__(self, text: str, **kwargs: Any) -> None:
+    def __init__(self, text: str | AudioPrompt, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.text = text
+        self.badge, self.body_text = _split_audio_badge(text)
+        self.text = text.display_text if isinstance(text, AudioPrompt) else text
 
     def compose(self) -> ComposeResult:
         yield Static(
             f"[bold #38bdf8]❯ {_('you')}[/bold #38bdf8]",
             classes="msg-role user-role",
         )
-        yield Static(self.text, markup=False, classes="msg-content user-content")
+        if self.badge is not None:
+            yield Static(
+                _format_audio_pill_markup(self.badge),
+                classes="msg-content user-audio-badge",
+            )
+            if self.body_text:
+                yield Static(self.body_text, markup=False, classes="msg-content user-content")
+        else:
+            yield Static(self.text, markup=False, classes="msg-content user-content")
 
 
 class AgentResponse(Container):

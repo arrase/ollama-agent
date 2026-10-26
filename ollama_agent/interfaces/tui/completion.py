@@ -32,6 +32,7 @@ CMD_MODEL = "/model"
 CMD_EFFORT = "/effort"
 CMD_CONTEXT = "/context"
 CMD_PARAMS = "/params"
+CMD_AUDIO = "/audio"
 CMD_SESSION = "/session"
 CMD_TASK = "/task"
 CMD_SKILL = "/skill"
@@ -100,6 +101,7 @@ def _get_root_commands() -> list[tuple[str, str]]:
         (CMD_EFFORT, _("Show or set reasoning/thinking effort")),
         (CMD_CONTEXT, _("Show or set context window size (num_ctx)")),
         (CMD_PARAMS, _("Manage model sampling parameters")),
+        (CMD_AUDIO, _("Show or set audio recording max duration")),
         (CMD_SESSION, _("Manage chat sessions")),
         (CMD_TASK, _("Manage saved tasks")),
         (CMD_SKILL, _("Manage skills")),
@@ -129,6 +131,9 @@ def _get_subcommands() -> dict[str, list[tuple[str, str]]]:
         CMD_PARAMS: [
             ("list", _("Show active model parameters and resolution sources")),
             ("set", _("Set a parameter value (e.g. /params set temperature 0.7)")),
+        ],
+        CMD_AUDIO: [
+            ("set", _("Set maximum audio recording duration in seconds (e.g. 10, 15, 30)")),
         ],
         CMD_SESSION: [
             ("list", _("List all past sessions")),
@@ -269,6 +274,19 @@ def _complete_context_args(root_cmd: str, sub_cmd: str, arg_token: str) -> list[
     ]
 
 
+def _complete_audio_args(root_cmd: str, sub_cmd: str, arg_token: str) -> list[tuple[str, Text]]:
+    presets = ["5", "10", "15", "30", "60"]
+    sec_label = _("seconds")
+    return [
+        (
+            f"{root_cmd} {sub_cmd} {p}",
+            Text.from_markup(f"[bold #e6edf3]{p:<10}[/bold #e6edf3] [dim #8b949e]{sec_label}[/dim #8b949e]"),
+        )
+        for p in presets
+        if p.startswith(arg_token)
+    ]
+
+
 def _complete_task_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: Any) -> list[tuple[str, Text]]:
     try:
         tasks = repl._task_ctx.task_manager.list_all()
@@ -339,7 +357,7 @@ def _complete_rag_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: Any) -
 
 
 def _complete_queue_args(
-    root_cmd: str, sub_cmd: str, arg_token: str, prompt_queue: Sequence[str]
+    root_cmd: str, sub_cmd: str, arg_token: str, prompt_queue: Sequence[Any]
 ) -> list[tuple[str, Text]]:
     clean_arg = arg_token.lstrip("#")
     items = []
@@ -357,12 +375,14 @@ def _complete_queue_args(
 
 
 def _complete_arguments(
-    root_cmd: str, sub_cmd: str, arg_token: str, repl: Any, prompt_queue: Sequence[str]
+    root_cmd: str, sub_cmd: str, arg_token: str, repl: Any, prompt_queue: Sequence[Any]
 ) -> list[tuple[str, Text]]:
     if root_cmd == CMD_MODEL and sub_cmd == "set":
         return _complete_model_args(root_cmd, sub_cmd, arg_token, repl.runtime.settings.model.base_url)
     if root_cmd == CMD_CONTEXT and sub_cmd == "set":
         return _complete_context_args(root_cmd, sub_cmd, arg_token)
+    if root_cmd == CMD_AUDIO and sub_cmd == "set":
+        return _complete_audio_args(root_cmd, sub_cmd, arg_token)
     if root_cmd == CMD_TASK and sub_cmd in ("run", "delete"):
         return _complete_task_args(root_cmd, sub_cmd, arg_token, repl)
     if root_cmd == CMD_SKILL and sub_cmd in ("show", "delete"):
@@ -376,7 +396,7 @@ def _complete_arguments(
     return []
 
 
-def slash_completions(text: str, repl: Any, prompt_queue: Sequence[str]) -> list[tuple[str, Text]]:
+def slash_completions(text: str, repl: Any, prompt_queue: Sequence[Any]) -> list[tuple[str, Text]]:
     """Build slash-command autocomplete candidates for the current input *text*."""
     parts = text.split(" ")
     num_parts = len(parts)

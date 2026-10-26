@@ -463,5 +463,21 @@
   "Unknown input keys for '{name}': {keys}": "Nieznane klucze wejściowe dla '{name}': {keys}",
   "Cannot expand home directory in path '{path_str}': {exc}": "Nie można rozwinąć katalogu domowego w ścieżce '{path_str}': {exc}",
   "'{norm_name}' must be between {low} and {high}.": "'{norm_name}' musi zawierać się między {low} a {high}.",
-  "Failed to export session to {target_file}: {exc}": "Nie udało się wyeksportować sesji do {target_file}: {exc}"
+  "Failed to export session to {target_file}: {exc}": "Nie udało się wyeksportować sesji do {target_file}: {exc}",
+  "Setting 'audio.max_duration' must be between {min_s} and {max_s} seconds.": "Ustawienie 'audio.max_duration' musi zawierać się między {min_s} a {max_s} s.",
+  "Show or set audio recording max duration": "Pokaż lub ustaw maksymalny czas nagrywania dźwięku",
+  "Set maximum audio recording duration in seconds (e.g. 10, 15, 30)": "Ustaw maksymalny czas nagrywania dźwięku w sekundach (np. 10, 15, 30)",
+  "Usage: /audio [set <seconds>]": "Użycie: /audio [set <sekundy>]",
+  "supported": "obsługiwane",
+  "not supported": "nieobsługiwane",
+  "Audio max recording duration: {duration}s (model: {model}, audio: {capability})\nUsage: /audio [set <seconds>] ({min_s}-{max_s}s)": "Maksymalny czas nagrywania dźwięku: {duration}s (model: {model}, dźwięk: {capability})\nUżycie: /audio [set <sekundy>] ({min_s}-{max_s}s)",
+  "Invalid audio max duration '{value}'. Expected an integer between {min_s} and {max_s} seconds.": "Nieprawidłowy maksymalny czas dźwięku '{value}'. Oczekiwano liczby całkowitej z zakresu od {min_s} do {max_s} sekund.",
+  "Already using audio max duration '{duration}s'.": "Już używasz maksymalnego czasu dźwięku '{duration}s'.",
+  "Set audio max recording duration to {duration}s.": "Ustawiono maksymalny czas nagrywania dźwięku na {duration}s.",
+  "seconds": "sekund",
+  "Record audio prompt (max {seconds}s)": "Nagraj monit głosowy (maks. {seconds}s)",
+  "Recording audio...": "Nagrywanie dźwięku...",
+  "Could not start audio recording: {exc}": "Nie udało się rozpocząć nagrywania dźwięku: {exc}",
+  "No speech detected in audio recording.": "Nie wykryto mowy w nagraniu dźwiękowym.",
+  "Audio recording cancelled.": "Nagrywanie dźwięku anulowane."
 }

@@ -147,7 +147,7 @@ class OllamaREPL:
         del queue[pos - 1]
         if self.app is not None:
             self.app._update_queue_ui()
-        msg = _("Removed #{pos} from prompt queue: {text}", pos=pos, text=shorten(item))
+        msg = _("Removed #{pos} from prompt queue: {text}", pos=pos, text=shorten(str(item)))
         self.console.print(f"[bold #34d399]✓ {escape(msg)}[/bold #34d399]")
 
     def _handle_queue_cmd(self, args: list[str]) -> None:

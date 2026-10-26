@@ -18,7 +18,7 @@ from ...core import (
     validate_and_normalize_effort,
 )
 from ...i18n import _
-from ...settings import save_settings
+from ...settings import MAX_AUDIO_MAX_DURATION, MIN_AUDIO_MAX_DURATION, save_settings
 
 VALID_SAMPLING_PARAMS: dict[str, type] = {
     "temperature": float,
@@ -256,3 +256,55 @@ async def set_model_param(
     await runtime.reload()
     success_msg = _("Set {norm_name} to {val}\nModel reloaded with updated parameters.", norm_name=norm_name, val=val)
     console.print(f"[green]✓ {escape(success_msg)}[/green]")
+
+
+def show_audio_settings(console: Console, runtime: AgentRuntime) -> None:
+    """Print the current audio recording settings and model audio capability."""
+    duration = runtime.settings.audio.max_duration
+    model = runtime.settings.model.name
+    capability = _("supported") if runtime.supports_audio else _("not supported")
+    console.print(
+        _(
+            "Audio max recording duration: {duration}s (model: {model}, audio: {capability})\n"
+            "Usage: /audio [set <seconds>] ({min_s}-{max_s}s)",
+            duration=duration,
+            model=model,
+            capability=capability,
+            min_s=MIN_AUDIO_MAX_DURATION,
+            max_s=MAX_AUDIO_MAX_DURATION,
+        )
+    )
+
+
+async def set_audio_max_duration(
+    console: Console,
+    duration_str: str,
+    *,
+    runtime: AgentRuntime,
+) -> int | None:
+    """Set the maximum audio recording duration and persist to settings."""
+    try:
+        val = int(duration_str.strip())
+    except ValueError:
+        val = 0
+
+    if not (MIN_AUDIO_MAX_DURATION <= val <= MAX_AUDIO_MAX_DURATION):
+        invalid_msg = _(
+            "Invalid audio max duration '{value}'. Expected an integer between {min_s} and {max_s} seconds.",
+            value=duration_str,
+            min_s=MIN_AUDIO_MAX_DURATION,
+            max_s=MAX_AUDIO_MAX_DURATION,
+        )
+        console.print(f"[red]{escape(invalid_msg)}[/red]")
+        return None
+
+    current = runtime.settings.audio.max_duration
+    if val == current:
+        already_msg = _("Already using audio max duration '{duration}s'.", duration=val)
+        console.print(f"[yellow]{escape(already_msg)}[/yellow]")
+        return val
+
+    await runtime.set_audio_max_duration(val)
+    success_msg = _("Set audio max recording duration to {duration}s.", duration=val)
+    console.print(f"[green]✓ {escape(success_msg)}[/green]")
+    return val

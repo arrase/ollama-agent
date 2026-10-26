@@ -11,13 +11,14 @@ from typing import Any
 from langgraph.types import Command
 from rich.console import Console
 
+from ..core import AudioPrompt
 from .base import StreamingRenderer
 from .console_renderer import ConsoleStreamingRenderer
 
 
 async def stream_agent_events(
     runtime: Any,
-    prompt: str | Command[Any],
+    prompt: str | AudioPrompt | Command[Any],
     renderer: StreamingRenderer,
     *,
     thread_id: str = "",
@@ -50,7 +51,12 @@ async def stream_agent_events(
     return completed
 
 
-async def run_non_interactive(runtime: Any, prompt: str | Command[Any], *, thread_id: str = "") -> bool:
+async def run_non_interactive(
+    runtime: Any,
+    prompt: str | AudioPrompt | Command[Any],
+    *,
+    thread_id: str = "",
+) -> bool:
     """Stream agent output to the console (non-interactive mode).
 
     Returns whether the run finished completely (no abort, cancellation or error).

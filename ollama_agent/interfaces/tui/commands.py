@@ -27,6 +27,7 @@ from ..commands.sessions import (
 )
 from .completion import (
     CMD_AGENTS,
+    CMD_AUDIO,
     CMD_CLEAR,
     CMD_CONTEXT,
     CMD_EFFORT,
@@ -58,6 +59,7 @@ IMMEDIATE_COMMANDS: frozenset[tuple[str, str]] = frozenset(
         (CMD_QUEUE, "*"),
         (CMD_YOLO, "*"),
         (CMD_STEALTH, "*"),
+        (CMD_AUDIO, "*"),
         (CMD_MODEL, ""),
         (CMD_MODEL, "list"),
         (CMD_EFFORT, ""),
@@ -344,11 +346,11 @@ async def _execute_repl_command(
     if output:
         app.show_system_output(Text.from_ansi(output), title=cmd_line)
 
-    if cmd in (CMD_YOLO, CMD_STEALTH):
+    if cmd in (CMD_YOLO, CMD_STEALTH, CMD_MODEL, CMD_AUDIO):
         app.update_mode_ui()
     elif cmd == CMD_QUEUE:
         app._update_queue_ui()
-    elif cmd in (CMD_MODEL, CMD_EFFORT, CMD_CONTEXT, CMD_RAG):
+    elif cmd in (CMD_EFFORT, CMD_CONTEXT, CMD_RAG):
         app.query_one(AgentHeader).update_header()
     elif (
         cmd == CMD_SESSION
