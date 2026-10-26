@@ -341,9 +341,8 @@ def handle_subcommand(args: argparse.Namespace, settings: Settings) -> None:
     if handler is None:
         if rag_ctx is not None:
             asyncio.run(rag_ctx.rag_manager.aclose())
-        console.print(
-            f"[red]{escape(_('Unknown command: {command} {subcommand}', command=args.command, subcommand=args.subcommand))}[/red]"
-        )
+        message = _("Unknown command: {command} {subcommand}", command=args.command, subcommand=args.subcommand)
+        console.print(f"[red]{escape(message)}[/red]")
         raise SystemExit(2)
 
     try:

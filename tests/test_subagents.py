@@ -193,9 +193,7 @@ class TestSubAgents(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("ollama_agent.agent.subagents.create_ollama_chat_model", AsyncMock(return_value=mock_model)),
-            patch(
-                "ollama_agent.agent.subagents.load_subagent_mcp_tools", AsyncMock(return_value=[mock_tool])
-            ),
+            patch("ollama_agent.agent.subagents.load_subagent_mcp_tools", AsyncMock(return_value=[mock_tool])),
         ):
             specs = await build_subagents(sa_list, model_settings=ms, should_interrupt_tool=custom_policy)
             self.assertEqual(len(specs), 1)

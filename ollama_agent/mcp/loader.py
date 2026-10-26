@@ -81,18 +81,19 @@ class MCPConfigError(RuntimeError):
 
 def _resolve_env_str(value: str, server_name: str) -> str:
     """Resolve ``${VAR}`` and ``%VAR%`` patterns in *value* against ``os.environ``."""
+
     def _replace(match: re.Match[str]) -> str:
         var = match.group(1) or match.group(2)
         try:
             return os.environ[var]
-        except KeyError:
+        except KeyError as exc:
             raise MCPConfigError(
                 _(
                     "MCP server '{name}': missing environment variable '{var}'",
                     name=server_name,
                     var=var,
                 )
-            )
+            ) from exc
 
     return _ENV_RE.sub(_replace, value)
 
@@ -264,7 +265,11 @@ async def _load_tools_from_connections(connections: dict[str, dict[str, Any]]) -
         raise failures[0]
     if failures:
         raise MCPConfigError(
-            _("Failed to load {count} MCP server(s): {details}", count=len(failures), details="; ".join(str(e) for e in failures))
+            _(
+                "Failed to load {count} MCP server(s): {details}",
+                count=len(failures),
+                details="; ".join(str(e) for e in failures),
+            )
         )
     return tools
 

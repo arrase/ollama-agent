@@ -101,7 +101,7 @@ class RAGDatabaseExistsError(RAGError):
 class RAGManager:
     """Manages RAG databases with Qdrant vector storage."""
 
-    __slots__ = ("settings", "_client", "_current_db", "_rag_dir", "_ollama_client")
+    __slots__ = ("_client", "_current_db", "_ollama_client", "_rag_dir", "settings")
 
     COLLECTION_NAME = "documents"
 
@@ -263,9 +263,7 @@ class RAGManager:
             for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=True))
         ]
         try:
-            await asyncio.to_thread(
-                client.upsert, collection_name=self.COLLECTION_NAME, points=points
-            )
+            await asyncio.to_thread(client.upsert, collection_name=self.COLLECTION_NAME, points=points)
         except Exception as e:
             raise RAGError(_("Failed to upsert points into vector database: {e}", e=e)) from e
 
@@ -371,14 +369,15 @@ class RAGManager:
         for hit in response.points:
             payload = hit.payload
             if not isinstance(payload, dict):
-                raise RAGError(
-                    _("Malformed payload in search result for point {id}", id=hit.id)
-                )
+                raise RAGError(_("Malformed payload in search result for point {id}", id=hit.id))
             missing = _REQUIRED_PAYLOAD_KEYS - payload.keys()
             if missing:
                 raise RAGError(
-                    _("Malformed payload in search result for point {id}: missing {keys}",
-                      id=hit.id, keys=", ".join(sorted(missing)))
+                    _(
+                        "Malformed payload in search result for point {id}: missing {keys}",
+                        id=hit.id,
+                        keys=", ".join(sorted(missing)),
+                    )
                 )
             results.append(
                 {

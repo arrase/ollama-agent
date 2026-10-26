@@ -383,9 +383,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         mock_graph.aget_state = AsyncMock(return_value=mock_state)
         runtime.graph = mock_graph
 
-        events = []
-        async for event in runtime.run_streamed("Hello agent"):
-            events.append(event)
+        events = [event async for event in runtime.run_streamed("Hello agent")]
 
         self.assertEqual(len(events), 2)
         self.assertEqual(events[0], {"type": "tool_call", "name": "test_tool"})
@@ -465,8 +463,10 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             captured_hide: list[bool] = []
 
             class DummyParser:
+                hide_flags = captured_hide
+
                 def process_chunk(self, chunk: Any, hide_reasoning: bool = False) -> list[Any]:
-                    captured_hide.append(hide_reasoning)
+                    self.hide_flags.append(hide_reasoning)
                     return []
 
                 def flush(self, hide_reasoning: bool = False) -> list[Any]:
@@ -501,9 +501,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         mock_graph.aget_state = AsyncMock(return_value=mock_state)
         runtime.graph = mock_graph
 
-        events = []
-        async for event in runtime.run_streamed("Do write"):
-            events.append(event)
+        events = [event async for event in runtime.run_streamed("Do write")]
 
         self.assertEqual(len(events), 2)
         self.assertEqual(events[0], {"type": "text_delta", "content": "Checking..."})
@@ -527,9 +525,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         runtime.graph = mock_graph
 
         cmd: Command[Any] = Command(resume={"decisions": [{"type": "approve"}]})
-        events = []
-        async for event in runtime.run_streamed(cmd):
-            events.append(event)
+        events = [event async for event in runtime.run_streamed(cmd)]
 
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0], {"type": "text_delta", "content": "Resumed"})
@@ -544,9 +540,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             "ollama_agent.agent.agent.process_prompt_mentions",
             side_effect=PromptProcessingError("Invalid file mention"),
         ):
-            events = []
-            async for event in runtime.run_streamed("@nonexistent_mention"):
-                events.append(event)
+            events = [event async for event in runtime.run_streamed("@nonexistent_mention")]
 
             self.assertEqual(len(events), 1)
             self.assertEqual(events[0]["type"], "error")
@@ -563,9 +557,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             outside_file = Path(tmpdir) / "secret.txt"
             outside_file.write_text("secret_data", encoding="utf-8")
 
-            events = []
-            async for event in runtime.run_streamed(f"Analyze @{outside_file}"):
-                events.append(event)
+            events = [event async for event in runtime.run_streamed(f"Analyze @{outside_file}")]
 
             self.assertEqual(len(events), 1)
             self.assertEqual(events[0]["type"], "error")
@@ -590,9 +582,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             outside_file = Path(tmpdir) / "secret.txt"
             outside_file.write_text("secret_data", encoding="utf-8")
 
-            events = []
-            async for event in runtime.run_streamed(f"Analyze @{outside_file}"):
-                events.append(event)
+            events = [event async for event in runtime.run_streamed(f"Analyze @{outside_file}")]
 
             self.assertEqual(len(events), 1)
             self.assertEqual(events[0]["type"], "text_delta")
@@ -715,7 +705,9 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         with (
             patch("ollama_agent.agent.agent.ensure_model_supports_tools", AsyncMock()),
             patch("ollama_agent.agent.agent.create_ollama_chat_model", AsyncMock(return_value=MagicMock(num_ctx=8192))),
-            patch("ollama_agent.agent.subagents.create_ollama_chat_model", AsyncMock(return_value=MagicMock(num_ctx=8192))),
+            patch(
+                "ollama_agent.agent.subagents.create_ollama_chat_model", AsyncMock(return_value=MagicMock(num_ctx=8192))
+            ),
             patch("ollama_agent.agent.agent.create_summarization_tool_middleware", return_value=MagicMock()),
             patch("ollama_agent.agent.agent.load_main_mcp_tools", AsyncMock(return_value=[mock_main_mcp_tool])),
             patch(
@@ -775,4 +767,3 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(sub_interrupt_on["git_diff"]["when"](req_sub))
 
         await runtime.aclose()
-

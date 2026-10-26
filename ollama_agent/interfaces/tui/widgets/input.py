@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, ClassVar
 
 from rich.markup import escape
 from textual import events
+from textual.binding import BindingType
 from textual.message import Message
 from textual.widgets import OptionList, TextArea
 
@@ -20,7 +21,7 @@ _log = logging.getLogger(__name__)
 class ReplInput(TextArea):
     """Interactive input field that captures Tab/arrow keys for autocomplete."""
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         ("ctrl+v", "paste", _("Paste")),
         ("super+v", "paste", _("Paste")),
         ("shift+insert", "paste", _("Paste")),
@@ -190,9 +191,8 @@ class ReplInput(TextArea):
         if autolist.display:
             if self._handle_autocomplete_key(event, app, autolist):
                 return
-        else:
-            if self._handle_history_key(event):
-                return
+        elif self._handle_history_key(event):
+            return
 
         if event.key == "enter":
             row, col = self.cursor_location

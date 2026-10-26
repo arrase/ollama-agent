@@ -7,13 +7,14 @@ import logging
 from collections import deque
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from langgraph.types import Command
 from rich.markup import escape
 from rich.text import Text
 from textual import events
 from textual.app import App, ComposeResult
+from textual.binding import BindingType
 from textual.containers import Container, Horizontal, ScrollableContainer
 from textual.screen import Screen
 from textual.widgets import OptionList, Static, TextArea
@@ -25,10 +26,10 @@ from ...streaming import extract_action_requests, stream_agent_events
 from ..clipboard import ClipboardError, copy_to_system_clipboard, get_system_clipboard
 from .commands import _is_immediate_command, run_slash_command
 from .completion import (
-    NO_ARG_COMMANDS,
     _AT_MENTION_RE,
     _AUTOCOMPLETE_LIST_ID,
     _CHAT_SCROLL_ID,
+    NO_ARG_COMMANDS,
     file_completions,
     slash_completions,
 )
@@ -51,7 +52,7 @@ _log = logging.getLogger(__name__)
 class OllamaAgentApp(App):
     """Main Textual Application representing the Agent's interactive TUI."""
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         ("escape", "cancel_generation", _("Interrupt")),
         ("ctrl+c", "cancel_or_quit", _("Interrupt/Quit")),
         ("super+c", "copy_selection", _("Copy")),
@@ -160,7 +161,7 @@ class OllamaAgentApp(App):
         except asyncio.CancelledError:
             raise
         # Startup failures are reported in the TUI instead of killing it.
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _log.exception("Agent warmup failed")
             notice = escape(_("Agent startup failed: {exc}", exc=exc))
             self.show_system_notice(f"[bold #f87171]✕ {notice}[/bold #f87171]")
@@ -389,7 +390,7 @@ class OllamaAgentApp(App):
                     self._update_queue_ui()
                 raise
             # Surface the failure in the transcript and keep the app alive.
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _log.exception("Agent run failed")
                 agent_msg.add_error(_("Run failed: {exc}", exc=exc))
                 self.query_one(ReplInput).focus()

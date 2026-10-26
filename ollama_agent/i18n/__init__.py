@@ -87,7 +87,7 @@ def get_locale() -> str:
 
 
 def get_text(message: str, **kwargs: Any) -> str:
-    text = _translations[message] if message in _translations else message
+    text = _translations.get(message, message)
     if not kwargs:
         return text
     try:

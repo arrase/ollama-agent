@@ -59,8 +59,7 @@ class AgentHeader(Static):
         rag_db = rag_ctx.rag_manager.current_database if rag_ctx else None
         rag_label = _("RAG:")
         rag_info = (
-            f"  [#30363d]│[/]  [bold #8b949e]{rag_label}[/bold #8b949e] "
-            f"[bold #a78bfa]{escape(rag_db)}[/bold #a78bfa]"
+            f"  [#30363d]│[/]  [bold #8b949e]{rag_label}[/bold #8b949e] [bold #a78bfa]{escape(rag_db)}[/bold #a78bfa]"
             if rag_db
             else ""
         )

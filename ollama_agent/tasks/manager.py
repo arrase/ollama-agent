@@ -133,7 +133,7 @@ class Task:
             title=d["title"],
             prompt=d["prompt"],
             model=d["model"],
-            reasoning_effort=d["reasoning_effort"] if "reasoning_effort" in d else DEFAULT_REASONING_EFFORT,
+            reasoning_effort=d.get("reasoning_effort", DEFAULT_REASONING_EFFORT),
             inputs=_task_inputs_from_dict(d["inputs"]) if "inputs" in d else {},
         )
 

@@ -287,7 +287,9 @@ def _resolve_mention_target(
     path = (resolved_base / expanded).resolve()
 
     if not allow_traversal and not path.is_relative_to(resolved_base):
-        raise PromptProcessingError(_("Access to path outside working directory is not allowed: '{path_str}'", path_str=path_str))
+        raise PromptProcessingError(
+            _("Access to path outside working directory is not allowed: '{path_str}'", path_str=path_str)
+        )
 
     if not path.exists():
         if is_quoted or "/" in path_str or "\\" in path_str or path_str.startswith(("./", "../")):
@@ -297,18 +299,22 @@ def _resolve_mention_target(
     return path
 
 
+def _context_path(path: Path, base: Path) -> str:
+    return (path.relative_to(base) if path.is_relative_to(base) else path).as_posix()
+
+
 def process_prompt_mentions(
     prompt: str,
     max_file_size: int = 1024 * 1024,
     max_files: int = 100,
     max_total_size: int = 10 * 1024 * 1024,
     allow_traversal: bool = True,
-    base_dir: Path = Path("."),
+    base_dir: Path = Path(),
 ) -> tuple[str, list[dict[str, Any]], list[str]]:
     """Resolve file @-mentions in prompt, returning updated prompt, attachments, and warnings."""
     resolved_base = base_dir.resolve()
 
-    pattern = re.compile(r'(?:^|(?<=[\s\(\[\{<]))@(?:\"([^\"]*)\"|\'([^\']*)\'|([^\s\"\'\(\[\{<>,;]+))')
+    pattern = re.compile(r"(?:^|(?<=[\s\(\[\{<]))@(?:\"([^\"]*)\"|\'([^\']*)\'|([^\s\"\'\(\[\{<>,;]+))")
 
     resolved_targets: set[Path] = set()
     seen_files: set[Path] = set()
@@ -354,7 +360,7 @@ def process_prompt_mentions(
 
     if text_contents:
         blocks = [
-            f'<context_file path="{p.relative_to(resolved_base).as_posix() if p.is_relative_to(resolved_base) else p.as_posix()}">\n{c}\n</context_file>'
+            f'<context_file path="{_context_path(p, resolved_base)}">\n{c}\n</context_file>'
             for p, c in sorted(text_contents.items())
         ]
         prompt = f"{prompt}\n\n--- Attached Context ---\n" + "\n\n".join(blocks) + "\n--- End of Attached Context ---"

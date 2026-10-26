@@ -92,7 +92,7 @@ def atomic_write_text(path: Path, text: str) -> None:
             tf.write(text)
             tf.flush()
             os.fsync(tf.fileno())
-        os.replace(tmp_path, path)
+        tmp_path.replace(path)
         tmp_path = None
     finally:
         if tmp_path is not None and tmp_path.exists():

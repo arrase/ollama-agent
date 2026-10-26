@@ -15,9 +15,9 @@ from .manager import Task, TaskManager
 
 __all__ = [
     "Task",
+    "TaskError",
     "TaskManager",
     "TasksContext",
-    "TaskError",
     "apply_task_settings",
     "create_task",
     "delete_task",

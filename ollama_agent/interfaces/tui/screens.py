@@ -7,6 +7,8 @@ import logging
 from textual import events
 from textual.screen import Screen
 
+_log = logging.getLogger(__name__)
+
 
 class MainScreen(Screen):
     """Default screen with a guard against Textual crashes when text selection
@@ -19,7 +21,7 @@ class MainScreen(Screen):
             if "'NoneType' object has no attribute 'region'" in str(err):
                 # Known upstream Textual crash: text selection released over a
                 # widget detached mid-drag. Keep observable via logging.
-                logging.warning("Worked around Textual detached-widget selection crash", exc_info=err)
+                _log.warning("Worked around Textual detached-widget selection crash", exc_info=err)
                 self._select_state = None
                 return
             raise

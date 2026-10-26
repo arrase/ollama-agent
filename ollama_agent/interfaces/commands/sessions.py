@@ -67,7 +67,7 @@ def get_available_sessions(db_path: Path = HISTORY_DB_PATH) -> list[dict[str, An
                 {
                     "thread_id": row[0],
                     "steps": row[1],
-                    "timestamp": timestamps[row[0]] if row[0] in timestamps else "-",
+                    "timestamp": timestamps.get(row[0], "-"),
                 }
                 for row in rows
             ]

@@ -50,9 +50,7 @@ class TestTaskManager(unittest.TestCase):
 
     def test_list_all_skips_corrupt_task(self) -> None:
         """One bad file must not break /task list for the healthy ones."""
-        (self.tasks_dir / "good.yaml").write_text(
-            "title: Good\nprompt: hi\nmodel: m\n", encoding="utf-8"
-        )
+        (self.tasks_dir / "good.yaml").write_text("title: Good\nprompt: hi\nmodel: m\n", encoding="utf-8")
         (self.tasks_dir / "broken.yaml").write_text("title: Broken\nmodel: m\n", encoding="utf-8")
         listed = dict(self.mgr.list_all())
         self.assertIn("good", listed)
@@ -504,4 +502,3 @@ class TestTaskManager(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

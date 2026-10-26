@@ -6,6 +6,7 @@ import io
 import unittest
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
+from conftest import make_repl_environment, recording_console
 from rich.console import Console
 
 from ollama_agent.core import (
@@ -19,13 +20,11 @@ from ollama_agent.interfaces.commands.dispatch import (
     build_repl_handlers,
 )
 from ollama_agent.main import _apply_cli_overrides, _extract_early_language, main
-from ollama_agent.rag.commands import RAGContext
 from ollama_agent.rag import RAGManager
+from ollama_agent.rag.commands import RAGContext
 from ollama_agent.settings import RAGSettings, Settings
 from ollama_agent.skills.commands import SkillsContext
 from ollama_agent.tasks.commands import TasksContext
-
-from conftest import make_repl_environment, recording_console
 
 
 def _build_cli_handlers(args: argparse.Namespace) -> dict[tuple[str, str], object]:
@@ -117,9 +116,8 @@ class TestDispatchAndCLI(unittest.TestCase):
         parser = create_argument_parser()
         args = parser.parse_args(["-l", "es"])
         self.assertEqual(args.language, "es")
-        with patch("sys.stderr", new_callable=io.StringIO):
-            with self.assertRaises(SystemExit):
-                parser.parse_args(["-l", "klingon"])
+        with patch("sys.stderr", new_callable=io.StringIO), self.assertRaises(SystemExit):
+            parser.parse_args(["-l", "klingon"])
 
     def test_build_cli_handlers_registry(self) -> None:
         parser = create_argument_parser()
@@ -230,9 +228,9 @@ class TestDispatchAndCLI(unittest.TestCase):
             patch("sys.argv", ["ollama-agent", "task", "list", "-p", "hello"]),
             patch("ollama_agent.main.set_locale", return_value="en"),
             patch("sys.stderr", new_callable=io.StringIO),
+            self.assertRaises(SystemExit) as cm,
         ):
-            with self.assertRaises(SystemExit) as cm:
-                main()
+            main()
         self.assertEqual(cm.exception.code, 2)
 
     def test_main_repl_flow(self) -> None:
@@ -293,10 +291,14 @@ class TestDispatchAndCLI(unittest.TestCase):
             settings,
             parser.parse_args(
                 [
-                    "-m", "llama3:8b",
-                    "-e", "high",
-                    "-c", "16384",
-                    "-t", "42",
+                    "-m",
+                    "llama3:8b",
+                    "-e",
+                    "high",
+                    "-c",
+                    "16384",
+                    "-t",
+                    "42",
                     "--allow-traversal",
                 ]
             ),
@@ -361,7 +363,9 @@ class TestDispatchAndCLI(unittest.TestCase):
             patch("ollama_agent.main.load_settings", return_value=Settings()),
             patch(
                 "ollama_agent.main.check_ollama_version",
-                side_effect=ModelCapabilityError("Could not connect to Ollama at 'http://localhost:11434': Connection refused"),
+                side_effect=ModelCapabilityError(
+                    "Could not connect to Ollama at 'http://localhost:11434': Connection refused"
+                ),
             ),
             patch("ollama_agent.main.ensure_model_configured") as mock_ensure,
         ):

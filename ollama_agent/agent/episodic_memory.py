@@ -7,7 +7,7 @@ import re
 import sqlite3
 from collections import defaultdict
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -50,7 +50,7 @@ def format_iso_timestamp(ts: str) -> str:
         # A blob written by another serde/version must not escape as a raw ValueError.
         raise HistoryError(_("Malformed timestamp in history database: {ts}", ts=ts)) from exc
     if dt.tzinfo is not None:
-        dt = dt.astimezone(timezone.utc)
+        dt = dt.astimezone(UTC)
     return dt.strftime("%Y-%m-%d %H:%M UTC")
 
 
@@ -113,10 +113,7 @@ def _read_session_timestamps(cursor: sqlite3.Cursor) -> list[tuple[str, str]]:
         "WHERE rowid IN (SELECT MAX(rowid) FROM checkpoints GROUP BY thread_id) "
         "ORDER BY rowid ASC"
     )
-    return [
-        (tid, _deserialize_checkpoint_ts(typ, chk))
-        for tid, typ, chk in cursor.fetchall()
-    ]
+    return [(tid, _deserialize_checkpoint_ts(typ, chk)) for tid, typ, chk in cursor.fetchall()]
 
 
 def load_session_timestamps(db_path: Path = HISTORY_DB_PATH) -> list[tuple[str, str]]:

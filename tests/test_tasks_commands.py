@@ -11,9 +11,9 @@ from rich.console import Console
 from ollama_agent.settings import Settings, load_settings
 from ollama_agent.tasks.commands import (
     AmbiguousTaskError,
-    TasksContext,
     TaskError,
     TaskNotFoundError,
+    TasksContext,
     ValidationError,
     apply_task_settings,
     create_task,

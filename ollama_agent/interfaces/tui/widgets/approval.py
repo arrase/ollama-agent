@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 from rich.markup import escape
 from textual import events
@@ -19,8 +19,8 @@ from .messages import AgentResponse
 class ToolApprovalWidget(Container):
     """Inline widget prompting the user for approval of sensitive tool calls."""
 
-    BUTTON_IDS = ["approve-btn", "reject-btn", "allow-btn", "cancel-btn"]
-    DECISION_KEYS = {
+    BUTTON_IDS = ("approve-btn", "reject-btn", "allow-btn", "cancel-btn")
+    DECISION_KEYS: ClassVar[dict[str, str]] = {
         "y": "approve-btn",
         "n": "reject-btn",
         "a": "allow-btn",

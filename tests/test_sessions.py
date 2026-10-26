@@ -75,7 +75,8 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         ]:
             typ, blob = _serializer.dumps_typed({"v": 1, "ts": ts})
             cursor.execute(
-                "INSERT INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, type, checkpoint) VALUES (?, '', ?, ?, ?)",
+                "INSERT INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, type, checkpoint) "
+                "VALUES (?, '', ?, ?, ?)",
                 (tid, f"cp-{tid}-{ts}", typ, blob),
             )
         conn.commit()
@@ -116,7 +117,8 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         cursor = conn.cursor()
         typ, blob = _serializer.dumps_typed({"v": 1})
         cursor.execute(
-            "INSERT INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, type, checkpoint) VALUES (?, '', ?, ?, ?)",
+            "INSERT INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, type, checkpoint) "
+            "VALUES (?, '', ?, ?, ?)",
             ("session-nots", "cp-session-nots", typ, blob),
         )
         conn.commit()
@@ -220,13 +222,15 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         conn = sqlite3.connect(str(self.db_path))
         cur = conn.cursor()
         cur.execute(
-            "CREATE TABLE IF NOT EXISTS checkpoints_new (thread_id TEXT, checkpoint_id TEXT, type TEXT, checkpoint BLOB);"
+            "CREATE TABLE IF NOT EXISTS checkpoints_new "
+            "(thread_id TEXT, checkpoint_id TEXT, type TEXT, checkpoint BLOB);"
         )
         cur.execute("DROP TABLE checkpoints;")
         cur.execute("ALTER TABLE checkpoints_new RENAME TO checkpoints;")
         cur.execute("INSERT INTO checkpoints VALUES ('session-12345678', 'cp-1', ?, ?);", (chk_typ, chk_val))
         cur.execute(
-            "CREATE TABLE IF NOT EXISTS writes_new (thread_id TEXT, checkpoint_id TEXT, task_id TEXT, idx INTEGER, channel TEXT, type TEXT, value BLOB);"
+            "CREATE TABLE IF NOT EXISTS writes_new (thread_id TEXT, checkpoint_id TEXT, task_id TEXT, "
+            "idx INTEGER, channel TEXT, type TEXT, value BLOB);"
         )
         cur.execute("DROP TABLE writes;")
         cur.execute("ALTER TABLE writes_new RENAME TO writes;")

@@ -143,13 +143,16 @@ class TestPromptProcessor(unittest.TestCase):
 
     def test_process_prompt_mentions_plain_prompt_without_mentions(self) -> None:
         prompt = "Hello agent, what is 2 + 2?"
-        processed, attachments, warnings = process_prompt_mentions(prompt)
+        processed, attachments, _warnings = process_prompt_mentions(prompt)
         self.assertEqual(processed, prompt)
         self.assertEqual(attachments, [])
 
     def test_process_prompt_mentions_ignores_decorators_as_literal_text(self) -> None:
-        prompt = "def func():\n    @staticmethod\n    @classmethod\n    @property\n    @app.route('/api')\n    @pytest.mark.asyncio\n    def helper(): pass"
-        processed, attachments, warnings = process_prompt_mentions(prompt)
+        prompt = (
+            "def func():\n    @staticmethod\n    @classmethod\n    @property\n"
+            "    @app.route('/api')\n    @pytest.mark.asyncio\n    def helper(): pass"
+        )
+        processed, attachments, _warnings = process_prompt_mentions(prompt)
         self.assertEqual(processed, prompt)
         self.assertEqual(attachments, [])
 
@@ -179,7 +182,7 @@ class TestPromptProcessor(unittest.TestCase):
 
         file_uri = file.as_uri()
         prompt = f"Analyze @{file_uri}"
-        processed, attachments, warnings = process_prompt_mentions(prompt)
+        processed, attachments, _warnings = process_prompt_mentions(prompt)
 
         self.assertIn("--- Attached Context ---", processed)
         self.assertIn("class Service: pass", processed)
@@ -419,4 +422,3 @@ class TestPromptProcessor(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

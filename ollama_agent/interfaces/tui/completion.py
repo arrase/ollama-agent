@@ -70,7 +70,7 @@ def _refresh_models_in_background(base_url: str, *, wait: bool) -> None:
     def _worker() -> None:
         try:
             models = fn(base_url)
-        except Exception:  # noqa: BLE001
+        except Exception:
             models = []
         finally:
             _model_refresh_inflight.discard(key)
@@ -503,7 +503,7 @@ def file_completions(token: str, max_completions: int = 15) -> Iterator[tuple[st
         return
 
     show_hidden = prefix.startswith(".")
-    prefix_lower = ("" if rel_dir == Path(".") else f"{rel_dir.as_posix().lower()}/") + prefix.lower()
+    prefix_lower = ("" if rel_dir == Path() else f"{rel_dir.as_posix().lower()}/") + prefix.lower()
     matches = _iter_walk_completions(search_dir, cwd, prefix_lower, show_hidden)
 
     for rel, meta in islice(matches, max_completions):

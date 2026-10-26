@@ -14,17 +14,17 @@ def streaming_text(content: Any) -> str:
     if isinstance(content, dict):
         return content["text"] if content.get("type") == "text" and "text" in content else ""
     if isinstance(content, list):
-        return "".join(
-            b["text"]
-            for b in content
-            if isinstance(b, dict) and b.get("type") == "text" and "text" in b
-        )
+        return "".join(b["text"] for b in content if isinstance(b, dict) and b.get("type") == "text" and "text" in b)
     return ""
 
 
 def streaming_reasoning(additional_kwargs: dict[str, Any]) -> str:
     """Extract reasoning text from a streaming chunk."""
-    if additional_kwargs and "reasoning_content" in additional_kwargs and isinstance(additional_kwargs["reasoning_content"], str):
+    if (
+        additional_kwargs
+        and "reasoning_content" in additional_kwargs
+        and isinstance(additional_kwargs["reasoning_content"], str)
+    ):
         return additional_kwargs["reasoning_content"]
     return ""
 

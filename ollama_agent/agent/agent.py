@@ -6,9 +6,10 @@ import asyncio
 import contextlib
 import logging
 import uuid
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, AsyncGenerator, Self
+from typing import Any, Self
 
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
@@ -311,7 +312,7 @@ class AgentRuntime:
         if attachments:
             user_msg: dict[str, Any] = {
                 "role": "user",
-                "content": [{"type": "text", "text": processed_prompt}] + attachments,
+                "content": [{"type": "text", "text": processed_prompt}, *attachments],
             }
         else:
             user_msg = {"role": "user", "content": processed_prompt}
@@ -392,7 +393,7 @@ class AgentRuntime:
         if event and "summary_message" in event and "cutoff_index" in event:
             cutoff = event["cutoff_index"]
             if 0 <= cutoff <= len(messages):
-                messages = [event["summary_message"]] + messages[cutoff:]
+                messages = [event["summary_message"], *messages[cutoff:]]
         return count_tokens_approximately(messages)
 
     async def set_model(self, model_name: str) -> None:
