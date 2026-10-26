@@ -162,9 +162,9 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
         with (
             patch("ollama_agent.rag.manager.QdrantClient", return_value=mock_client),
             patch("ollama_agent.rag.manager.shutil.rmtree", side_effect=fake_rmtree),
+            self.assertRaises(RAGError),
         ):
-            with self.assertRaises(RAGError):
-                self.manager.create_database("fail_db")
+            self.manager.create_database("fail_db")
 
         self.assertIn("close", calls)
         self.assertIn("rmtree", calls)
@@ -227,11 +227,13 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
         self.manager._client = MagicMock()
         self.manager._current_db = "test_db"
 
-        with patch.object(RAGManager, "_delete_source_points") as mock_delete:
-            with patch.object(RAGManager, "_get_embeddings", AsyncMock(side_effect=RAGError("Ollama down"))):
-                with self.assertRaises(RAGError):
-                    await self.manager.add_file(str(doc))
-                mock_delete.assert_not_called()
+        with (
+            patch.object(RAGManager, "_delete_source_points") as mock_delete,
+            patch.object(RAGManager, "_get_embeddings", AsyncMock(side_effect=RAGError("Ollama down"))),
+        ):
+            with self.assertRaises(RAGError):
+                await self.manager.add_file(str(doc))
+            mock_delete.assert_not_called()
 
     async def test_add_directory_and_errors(self) -> None:
         sub_dir = self.rag_dir / "docs_dir"

@@ -4,6 +4,7 @@ import subprocess
 import unittest
 from unittest.mock import MagicMock, patch
 
+from conftest import make_mock_repl
 from textual import events
 
 from ollama_agent.interfaces.clipboard import (
@@ -13,8 +14,6 @@ from ollama_agent.interfaces.clipboard import (
 )
 from ollama_agent.interfaces.tui import OllamaAgentApp
 from ollama_agent.interfaces.tui.widgets import UserMessage
-
-from conftest import make_mock_repl
 
 
 def _proc(returncode: int = 0, stdout: str = "", stderr: str = "") -> MagicMock:
@@ -149,9 +148,11 @@ class TestClipboard(unittest.TestCase):
         mock_k32.GlobalAlloc.return_value = 12345
         mock_k32.GlobalLock.return_value = 67890
 
-        with patch("ctypes.memmove", side_effect=RuntimeError("memmove crash")):
-            with self.assertRaises(RuntimeError):
-                copy_to_system_clipboard("hello windows")
+        with (
+            patch("ctypes.memmove", side_effect=RuntimeError("memmove crash")),
+            self.assertRaises(RuntimeError),
+        ):
+            copy_to_system_clipboard("hello windows")
         mock_k32.GlobalUnlock.assert_called_once_with(12345)
         mock_u32.CloseClipboard.assert_called_once()
 
@@ -167,9 +168,8 @@ class TestClipboard(unittest.TestCase):
         mock_k32.GlobalLock.return_value = 67890
         mock_u32.SetClipboardData.return_value = 0
 
-        with patch("ctypes.memmove"):
-            with self.assertRaises(ClipboardError):
-                copy_to_system_clipboard("hello windows")
+        with patch("ctypes.memmove"), self.assertRaises(ClipboardError):
+            copy_to_system_clipboard("hello windows")
         mock_k32.GlobalFree.assert_called_once_with(12345)
         mock_u32.CloseClipboard.assert_called_once()
 
@@ -248,9 +248,11 @@ class TestClipboard(unittest.TestCase):
         mock_u32.GetClipboardData.return_value = 12345
         mock_k32.GlobalLock.return_value = 67890
 
-        with patch("ctypes.c_wchar_p", side_effect=RuntimeError("wchar crash")):
-            with self.assertRaises(RuntimeError):
-                get_system_clipboard()
+        with (
+            patch("ctypes.c_wchar_p", side_effect=RuntimeError("wchar crash")),
+            self.assertRaises(RuntimeError),
+        ):
+            get_system_clipboard()
         mock_k32.GlobalUnlock.assert_called_once_with(12345)
         mock_u32.CloseClipboard.assert_called_once()
 
@@ -391,9 +393,11 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
         app = OllamaAgentApp(repl_mock)
         async with app.run_test():
             event = events.MouseDown(None, 5, 5, 0, 0, 1, False, False, False)
-            with patch(
-                "textual.screen.Screen._forward_event",
-                side_effect=AttributeError("'CustomType' object has no attribute 'something_else'"),
+            with (
+                patch(
+                    "textual.screen.Screen._forward_event",
+                    side_effect=AttributeError("'CustomType' object has no attribute 'something_else'"),
+                ),
+                self.assertRaises(AttributeError),
             ):
-                with self.assertRaises(AttributeError):
-                    app.screen._forward_event(event)
+                app.screen._forward_event(event)

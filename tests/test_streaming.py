@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import io
 import unittest
+from collections.abc import AsyncGenerator
 from types import SimpleNamespace
-from typing import Any, AsyncGenerator
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from rich.console import Console
@@ -210,9 +211,9 @@ class TestInterruptHandling(unittest.IsolatedAsyncioTestCase):
         with (
             patch("ollama_agent.streaming.console_renderer.sys.stdin", new=fake_stdin),
             patch("builtins.input", side_effect=KeyboardInterrupt),
+            self.assertRaises(KeyboardInterrupt),
         ):
-            with self.assertRaises(KeyboardInterrupt):
-                await renderer.handle_interrupt(event, runtime)
+            await renderer.handle_interrupt(event, runtime)
 
     async def test_stream_agent_events_propagates_keyboard_interrupt(self) -> None:
         mock_runtime = MagicMock()

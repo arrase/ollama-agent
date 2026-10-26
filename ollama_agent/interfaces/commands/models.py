@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import ollama
 from rich import box
@@ -51,21 +52,13 @@ def list_subagents(
     table.add_column(_("MCP Servers"), style="blue")
 
     for sa in settings.subagents:
-        model_str = (
-            escape(sa.model)
-            if sa.model
-            else f"[dim]{escape(settings.model.name)} ({_('inherited')})[/dim]"
-        )
+        model_str = escape(sa.model) if sa.model else f"[dim]{escape(settings.model.name)} ({_('inherited')})[/dim]"
         ctx_str = (
             escape(str(sa.context_window))
             if sa.context_window
             else f"[dim]{escape(str(settings.model.context_window))} ({_('inherited')})[/dim]"
         )
-        mcp_str = (
-            ", ".join(escape(srv.name) for srv in sa.mcp_servers)
-            if sa.mcp_servers
-            else "[dim]-[/dim]"
-        )
+        mcp_str = ", ".join(escape(srv.name) for srv in sa.mcp_servers) if sa.mcp_servers else "[dim]-[/dim]"
 
         table.add_row(
             escape(sa.name),

@@ -112,7 +112,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
             # SystemExit and stop the interpreter from unwinding.
             try:
                 value = input()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 loop.call_soon_threadsafe(future.set_exception, exc)
             except KeyboardInterrupt as exc:
                 loop.call_soon_threadsafe(future.set_exception, exc)

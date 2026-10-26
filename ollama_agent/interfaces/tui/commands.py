@@ -26,6 +26,7 @@ from ..commands.sessions import (
     resume_session,
 )
 from .completion import (
+    _CHAT_SCROLL_ID,
     CMD_AGENTS,
     CMD_CLEAR,
     CMD_CONTEXT,
@@ -43,7 +44,6 @@ from .completion import (
     CMD_STEALTH,
     CMD_TASK,
     CMD_YOLO,
-    _CHAT_SCROLL_ID,
 )
 from .widgets.footer import AgentFooter
 from .widgets.header import AgentHeader
@@ -228,16 +228,16 @@ async def _handle_task_run(app: Any, cmd_line: str, sub_args: list[str], scroll:
     yolo_requested = False
     idx = 0
     while idx < len(sub_args):
-        token = sub_args[idx]
-        if token in ("-y", "--yolo"):
+        arg = sub_args[idx]
+        if arg in ("-y", "--yolo"):
             yolo_requested = True
-        elif token == "--var" and idx + 1 < len(sub_args):
+        elif arg == "--var" and idx + 1 < len(sub_args):
             positional.append(sub_args[idx + 1])
             idx += 1
-        elif token.startswith("--var="):
-            positional.append(token.split("=", 1)[1])
-        elif not token.startswith("-"):
-            positional.append(token)
+        elif arg.startswith("--var="):
+            positional.append(arg.split("=", 1)[1])
+        elif not arg.startswith("-"):
+            positional.append(arg)
         idx += 1
 
     if not positional:
@@ -277,7 +277,7 @@ async def _handle_task_run(app: Any, cmd_line: str, sub_args: list[str], scroll:
 
 
 async def _handle_slash_task(app: Any, cmd_line: str, args: list[str], scroll: Any) -> bool:
-    cmd = cmd_line.split()[0].lower()
+    cmd = cmd_line.split(maxsplit=1)[0].lower()
     if cmd != CMD_TASK or not args:
         return False
 
@@ -293,7 +293,7 @@ async def _handle_slash_task(app: Any, cmd_line: str, args: list[str], scroll: A
 
 
 async def _handle_slash_skill(app: Any, cmd_line: str, args: list[str], scroll: Any) -> bool:
-    cmd = cmd_line.split()[0].lower()
+    cmd = cmd_line.split(maxsplit=1)[0].lower()
     if cmd != CMD_SKILL or not args or args[0] != "create":
         return False
 
@@ -398,7 +398,7 @@ async def run_slash_command(app: Any, cmd_line: str) -> None:
     except asyncio.CancelledError:
         raise
     # A slash command must never kill the app.
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         _log.exception("Unhandled error running slash command %r", cmd_line)
         notice = escape(_("Command failed: {exc}", exc=exc))
         app.show_system_notice(f"[bold #f87171]✕ {notice}[/bold #f87171]")

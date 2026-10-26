@@ -307,6 +307,7 @@ def get_user_session_defensive(session_id: str | None = None) -> Session | None:
         logger.warning(f"Failed to load: {e}")
         return None  # Bug masked!
 
+
 # ✅ RECOMMENDED: Fast, loud, and direct
 def get_user_session(session_id: str) -> Session:
     data = db.query(session_id)

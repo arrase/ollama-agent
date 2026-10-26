@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import httpx
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import httpx
 
 from ollama_agent.core.common import DEFAULT_REASONING_EFFORT
 from ollama_agent.core.models import (
@@ -147,38 +148,53 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         )
         # Exact level match
         self.assertEqual(
-            await resolve_ollama_reasoning("glm-5.3-flash:cloud", "max", "http://localhost:11434", warn, show_info=glm_show),
+            await resolve_ollama_reasoning(
+                "glm-5.3-flash:cloud", "max", "http://localhost:11434", warn, show_info=glm_show
+            ),
             "max",
         )
         self.assertEqual(
-            await resolve_ollama_reasoning("glm-5.3-flash:cloud", "low", "http://localhost:11434", warn, show_info=glm_show),
+            await resolve_ollama_reasoning(
+                "glm-5.3-flash:cloud", "low", "http://localhost:11434", warn, show_info=glm_show
+            ),
             "low",
         )
         # Empty effort or "default" uses advertised default without warnings
         warnings_log.clear()
         self.assertEqual(
-            await resolve_ollama_reasoning("glm-5.3-flash:cloud", "", "http://localhost:11434", warn, show_info=glm_show),
+            await resolve_ollama_reasoning(
+                "glm-5.3-flash:cloud", "", "http://localhost:11434", warn, show_info=glm_show
+            ),
             "max",
         )
         self.assertEqual(
-            await resolve_ollama_reasoning("glm-5.3-flash:cloud", "default", "http://localhost:11434", warn, show_info=glm_show),
+            await resolve_ollama_reasoning(
+                "glm-5.3-flash:cloud", "default", "http://localhost:11434", warn, show_info=glm_show
+            ),
             "max",
         )
         self.assertEqual(
-            await resolve_ollama_reasoning("glm-5.3-flash:cloud", DEFAULT_REASONING_EFFORT, "http://localhost:11434", warn, show_info=glm_show),
+            await resolve_ollama_reasoning(
+                "glm-5.3-flash:cloud", DEFAULT_REASONING_EFFORT, "http://localhost:11434", warn, show_info=glm_show
+            ),
             "max",
         )
         self.assertEqual(
-            await resolve_ollama_reasoning("glm-5.3-flash:cloud", None, "http://localhost:11434", warn, show_info=glm_show),
+            await resolve_ollama_reasoning(
+                "glm-5.3-flash:cloud", None, "http://localhost:11434", warn, show_info=glm_show
+            ),
             "max",
         )
         self.assertEqual(len(warnings_log), 0)
 
-        # Activation coercion on string levels (no booleans in values): true/1/enabled/on returns default without warnings
+        # Activation coercion on string levels (no booleans in values):
+        # true/1/enabled/on returns default without warnings
         for activate_val in ("true", "1", "enabled", "on", True):
             warnings_log.clear()
             self.assertEqual(
-                await resolve_ollama_reasoning("glm-5.3-flash:cloud", activate_val, "http://localhost:11434", warn, show_info=glm_show),
+                await resolve_ollama_reasoning(
+                    "glm-5.3-flash:cloud", activate_val, "http://localhost:11434", warn, show_info=glm_show
+                ),
                 "max",
             )
             self.assertEqual(len(warnings_log), 0)
@@ -189,7 +205,9 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
             capabilities=["tools", "thinking"],
         )
         self.assertEqual(
-            await resolve_ollama_reasoning("null-val-model", "default", "http://localhost:11434", warn, show_info=null_values_show),
+            await resolve_ollama_reasoning(
+                "null-val-model", "default", "http://localhost:11434", warn, show_info=null_values_show
+            ),
             "low",
         )
 
@@ -229,17 +247,23 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
             "xhigh",
         )
         self.assertEqual(
-            await resolve_ollama_reasoning("qwen3.8:27b", "medium", "http://localhost:11434", warn, show_info=qwen_show),
+            await resolve_ollama_reasoning(
+                "qwen3.8:27b", "medium", "http://localhost:11434", warn, show_info=qwen_show
+            ),
             "medium",
         )
         self.assertFalse(
             await resolve_ollama_reasoning("qwen3.8:27b", "false", "http://localhost:11434", warn, show_info=qwen_show)
         )
         self.assertFalse(
-            await resolve_ollama_reasoning("qwen3.8:27b", "disabled", "http://localhost:11434", warn, show_info=qwen_show)
+            await resolve_ollama_reasoning(
+                "qwen3.8:27b", "disabled", "http://localhost:11434", warn, show_info=qwen_show
+            )
         )
         self.assertEqual(
-            await resolve_ollama_reasoning("qwen3.8:27b", "default", "http://localhost:11434", warn, show_info=qwen_show),
+            await resolve_ollama_reasoning(
+                "qwen3.8:27b", "default", "http://localhost:11434", warn, show_info=qwen_show
+            ),
             "medium",
         )
         self.assertEqual(
@@ -272,17 +296,25 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         mock_caps.return_value = {"thinking"}
         legacy_show = MagicMock(thinking=None, capabilities=["thinking"])
         self.assertEqual(
-            await resolve_ollama_reasoning("custom-model", "high", "http://localhost:11434", warn, show_info=legacy_show),
+            await resolve_ollama_reasoning(
+                "custom-model", "high", "http://localhost:11434", warn, show_info=legacy_show
+            ),
             "high",
         )
         self.assertFalse(
-            await resolve_ollama_reasoning("custom-model", "false", "http://localhost:11434", warn, show_info=legacy_show)
+            await resolve_ollama_reasoning(
+                "custom-model", "false", "http://localhost:11434", warn, show_info=legacy_show
+            )
         )
         self.assertFalse(
-            await resolve_ollama_reasoning("custom-model", "disabled", "http://localhost:11434", warn, show_info=legacy_show)
+            await resolve_ollama_reasoning(
+                "custom-model", "disabled", "http://localhost:11434", warn, show_info=legacy_show
+            )
         )
         self.assertTrue(
-            await resolve_ollama_reasoning("custom-model", "default", "http://localhost:11434", warn, show_info=legacy_show)
+            await resolve_ollama_reasoning(
+                "custom-model", "default", "http://localhost:11434", warn, show_info=legacy_show
+            )
         )
         self.assertTrue(
             await resolve_ollama_reasoning("custom-model", "", "http://localhost:11434", warn, show_info=legacy_show)
@@ -410,11 +442,13 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(_parse_modelfile_param("", "temperature"))
 
     def test_extended_show_response(self) -> None:
-        resp = ExtendedShowResponse.model_validate({
-            "thinking": {"values": ["low", "high", "max"], "default": "max"},
-            "model_info": {},
-            "capabilities": ["tools", "thinking"],
-        })
+        resp = ExtendedShowResponse.model_validate(
+            {
+                "thinking": {"values": ["low", "high", "max"], "default": "max"},
+                "model_info": {},
+                "capabilities": ["tools", "thinking"],
+            }
+        )
         self.assertEqual(resp.thinking, {"values": ["low", "high", "max"], "default": "max"})
         self.assertEqual(resp.capabilities, ["tools", "thinking"])
 

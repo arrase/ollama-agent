@@ -7,11 +7,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from conftest import make_mock_repl, make_mock_runtime
+from rich.console import Console
 from textual import events
 from textual.app import App, ComposeResult
 from textual.widgets import OptionList
-
-from rich.console import Console
 
 from ollama_agent.agent.episodic_memory import HistoryError
 from ollama_agent.interfaces.tui import OllamaAgentApp, OllamaREPL
@@ -19,9 +19,6 @@ from ollama_agent.interfaces.tui.commands import run_slash_command
 from ollama_agent.interfaces.tui.completion import _get_cached_models, _model_cache, file_completions
 from ollama_agent.interfaces.tui.renderer import _TUIStreamingRenderer
 from ollama_agent.interfaces.tui.screens import MainScreen
-from ollama_agent.settings.config import Settings, load_settings, save_settings
-from ollama_agent.tasks.commands import apply_task_settings
-from ollama_agent.tasks.manager import Task
 from ollama_agent.interfaces.tui.widgets import (
     AgentFooter,
     AgentHeader,
@@ -34,8 +31,9 @@ from ollama_agent.interfaces.tui.widgets import (
     ToolOutputMessage,
     UserMessage,
 )
-
-from conftest import make_mock_repl, make_mock_runtime
+from ollama_agent.settings.config import Settings, load_settings, save_settings
+from ollama_agent.tasks.commands import apply_task_settings
+from ollama_agent.tasks.manager import Task
 
 
 class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
@@ -327,8 +325,10 @@ class TestTUIComponents(unittest.IsolatedAsyncioTestCase):
             )
 
             class ShortcutApp(App):
+                approval_widget = widget
+
                 def compose(self) -> ComposeResult:
-                    yield widget
+                    yield self.approval_widget
 
             app = ShortcutApp()
             async with app.run_test():
@@ -745,7 +745,9 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         async with app.run_test() as pilot:
             with (
                 patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream,
-                patch("ollama_agent.interfaces.tui.commands.apply_task_settings", wraps=apply_task_settings) as mock_apply,
+                patch(
+                    "ollama_agent.interfaces.tui.commands.apply_task_settings", wraps=apply_task_settings
+                ) as mock_apply,
             ):
                 await run_slash_command(app, "/task run my-task -y")
                 await pilot.pause()
@@ -1163,21 +1165,23 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
                 "textual.screen.Screen._forward_event",
                 side_effect=AttributeError("'NoneType' object has no attribute 'region'"),
             ),
-            patch("ollama_agent.interfaces.tui.screens.logging.warning") as mock_warn,
+            self.assertLogs("ollama_agent.interfaces.tui.screens", level="WARNING") as logs,
         ):
             screen._forward_event(MagicMock())
             self.assertIsNone(screen._select_state)
-            mock_warn.assert_called_once()
+        self.assertEqual(len(logs.records), 1)
 
     def test_main_screen_forward_event_reraises_other_attribute_errors(self) -> None:
         screen = MainScreen()
         event = MagicMock()
-        with patch(
-            "textual.screen.Screen._forward_event",
-            side_effect=AttributeError("some other attribute error"),
+        with (
+            patch(
+                "textual.screen.Screen._forward_event",
+                side_effect=AttributeError("some other attribute error"),
+            ),
+            self.assertRaises(AttributeError),
         ):
-            with self.assertRaises(AttributeError):
-                screen._forward_event(event)
+            screen._forward_event(event)
 
     async def test_approval_cancel_aborts_without_resuming_stream_and_runs_cleanup(self) -> None:
         runtime_mock = make_mock_runtime()
@@ -1299,5 +1303,3 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
                     break
                 time.sleep(0.005)
             self.assertEqual(_model_cache[key][1], [mock_m2])
-
-

@@ -5,6 +5,7 @@ import io
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from conftest import make_repl_environment
 from rich.console import Console
 
 from ollama_agent.agent.agent import AgentRuntime
@@ -31,8 +32,6 @@ from ollama_agent.rag import RAGError
 from ollama_agent.settings.config import Settings
 from ollama_agent.skills import SkillError
 from ollama_agent.tasks.commands import TaskError
-
-from conftest import make_repl_environment
 
 
 def _repl_handlers(**overrides: object) -> dict[str, REPLHandler]:
@@ -556,7 +555,9 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             handlers["/context"]([])
             mock_show_context.assert_called_once_with(console, runtime)
 
-        with patch("ollama_agent.interfaces.commands.dispatch.set_context_window", AsyncMock()) as switch_context_window:
+        with patch(
+            "ollama_agent.interfaces.commands.dispatch.set_context_window", AsyncMock()
+        ) as switch_context_window:
             await safe_call(handlers["/context"], ["set", "16384"], console=console)
             switch_context_window.assert_awaited_with(console, "16384", runtime=runtime)
 
@@ -703,22 +704,24 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
     def test_run_prompt_session(self) -> None:
         args = argparse.Namespace(command=None, prompt="hello world", yolo=True, stealth=False, rag=None)
         settings = Settings()
-        with patch("ollama_agent.interfaces.cli.run_non_interactive", AsyncMock()) as mock_run:
-            with patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()):
-                run_prompt_session(args, settings)
-                mock_run.assert_awaited_once()
+        with (
+            patch("ollama_agent.interfaces.cli.run_non_interactive", AsyncMock()) as mock_run,
+            patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()),
+        ):
+            run_prompt_session(args, settings)
+            mock_run.assert_awaited_once()
 
     def test_run_prompt_session_with_rag(self) -> None:
         args = argparse.Namespace(command=None, prompt="query with rag", yolo=False, stealth=False, rag="my_db")
         settings = Settings()
-        with patch("ollama_agent.interfaces.cli.run_non_interactive", AsyncMock()) as mock_run:
-            with (
-                patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()),
-                patch("ollama_agent.interfaces.cli.load_rag_database") as mock_load_rag,
-            ):
-                run_prompt_session(args, settings)
-                mock_load_rag.assert_called_once()
-                mock_run.assert_awaited_once()
+        with (
+            patch("ollama_agent.interfaces.cli.run_non_interactive", AsyncMock()) as mock_run,
+            patch("ollama_agent.agent.agent.AgentRuntime.reload", AsyncMock()),
+            patch("ollama_agent.interfaces.cli.load_rag_database") as mock_load_rag,
+        ):
+            run_prompt_session(args, settings)
+            mock_load_rag.assert_called_once()
+            mock_run.assert_awaited_once()
 
     def test_handle_subcommand_unknown_exits_2(self) -> None:
         args = argparse.Namespace(command="task", subcommand="nope", prompt=None, yolo=False, rag=None)
@@ -733,9 +736,11 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             command="session", subcommand="delete", session_id="bogus", prompt=None, yolo=False, rag=None
         )
         settings = Settings()
-        with patch("ollama_agent.interfaces.commands.dispatch.delete_session", return_value=False):
-            with self.assertRaises(SystemExit) as ctx:
-                handle_subcommand(args, settings)
+        with (
+            patch("ollama_agent.interfaces.commands.dispatch.delete_session", return_value=False),
+            self.assertRaises(SystemExit) as ctx,
+        ):
+            handle_subcommand(args, settings)
         self.assertEqual(ctx.exception.code, 1)
 
     def test_ensure_model_configured_already_available(self) -> None:
@@ -857,7 +862,9 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         settings = Settings()
         console = Console(file=io.StringIO())
 
-        with patch("ollama_agent.interfaces.commands.models._list_models", AsyncMock(side_effect=ConnectionError("Refused"))):
+        with patch(
+            "ollama_agent.interfaces.commands.models._list_models", AsyncMock(side_effect=ConnectionError("Refused"))
+        ):
             with self.assertRaises(ModelCapabilityError) as cm:
                 ensure_model_configured(settings, console=console)
             self.assertIn("Could not connect to Ollama", str(cm.exception))

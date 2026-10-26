@@ -18,12 +18,10 @@ from .manager import (
 )
 
 __all__ = [
-    # Manager
+    "RAGContext",
     "RAGError",
     "RAGManager",
     "RAGNotLoadedError",
-    # Commands
-    "RAGContext",
     "add_rag_directory",
     "add_rag_file",
     "create_rag_database",
@@ -33,4 +31,3 @@ __all__ = [
     "show_rag_status",
     "unload_rag_database",
 ]
-

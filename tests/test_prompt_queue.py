@@ -5,6 +5,7 @@ import unittest
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from conftest import make_mock_repl, recording_console
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.types import Command
 
@@ -19,8 +20,6 @@ from ollama_agent.interfaces.tui.widgets import (
     SystemOutputWidget,
     UserMessage,
 )
-
-from conftest import make_mock_repl, recording_console
 
 
 class TestPromptQueueWidget(unittest.TestCase):
@@ -516,9 +515,11 @@ class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
 
             agent_msg = AgentResponse()
 
-            with patch("ollama_agent.interfaces.tui.app.stream_agent_events", side_effect=asyncio.CancelledError()):
-                with self.assertRaises(asyncio.CancelledError):
-                    await app._run_stream("Trigger prompt", chat_scroll, agent_msg)
+            with (
+                patch("ollama_agent.interfaces.tui.app.stream_agent_events", side_effect=asyncio.CancelledError()),
+                self.assertRaises(asyncio.CancelledError),
+            ):
+                await app._run_stream("Trigger prompt", chat_scroll, agent_msg)
 
             self.assertEqual(len(app._prompt_queue), 0)
             self.assertEqual(footer._queued_count, 0)
@@ -574,9 +575,7 @@ class TestToolApprovalModalAndQueue(unittest.IsolatedAsyncioTestCase):
             mock_interrupt = MagicMock()
             mock_interrupt.value = {"action_requests": [{"name": "read_file", "args": {"path": "main.py"}}]}
 
-            async def fake_stream(
-                rt: object, prompt: object, renderer: Any, auto_close: bool = True
-            ) -> None:
+            async def fake_stream(rt: object, prompt: object, renderer: Any, auto_close: bool = True) -> None:
                 await renderer.handle_interrupt(
                     {"interrupts": [mock_interrupt]},
                     rt,
@@ -938,7 +937,11 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
                     streamed: list[str] = []
 
                     async def fake_stream_events(
-                        rt: object, prompt: str | Command[object], renderer: object, auto_close: bool = True
+                        rt: object,
+                        prompt: str | Command[object],
+                        renderer: object,
+                        auto_close: bool = True,
+                        streamed: list[str] = streamed,
                     ) -> None:
                         if isinstance(prompt, str):
                             streamed.append(prompt)

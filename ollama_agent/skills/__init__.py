@@ -11,10 +11,10 @@ from .commands import (
 from .manager import SkillInfo, SkillManager
 
 __all__ = [
+    "SkillError",
     "SkillInfo",
     "SkillManager",
     "SkillsContext",
-    "SkillError",
     "create_skill",
     "delete_skill",
     "list_skills",

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
 import io
 import json
 import sys
 import tempfile
 import unittest
+from contextlib import asynccontextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -187,9 +187,8 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             tmp_path = Path(tmp.name)
 
         try:
-            with patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path):
-                with self.assertRaises(MCPConfigError):
-                    await load_main_mcp_tools()
+            with patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path), self.assertRaises(MCPConfigError):
+                await load_main_mcp_tools()
         finally:
             tmp_path.unlink(missing_ok=True)
 
@@ -199,9 +198,11 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             tmp_path = Path(tmp.name)
 
         try:
-            with patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path):
-                with self.assertRaisesRegex(MCPConfigError, "expected a JSON object"):
-                    await _read_main_config()
+            with (
+                patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path),
+                self.assertRaisesRegex(MCPConfigError, "expected a JSON object"),
+            ):
+                await _read_main_config()
         finally:
             tmp_path.unlink(missing_ok=True)
 
@@ -223,9 +224,11 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             tmp_path = Path(tmp.name)
 
         try:
-            with patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path):
-                with self.assertRaisesRegex(MCPConfigError, "'broken'"):
-                    await load_main_mcp_tools()
+            with (
+                patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path),
+                self.assertRaisesRegex(MCPConfigError, "'broken'"),
+            ):
+                await load_main_mcp_tools()
         finally:
             tmp_path.unlink(missing_ok=True)
 
@@ -276,9 +279,9 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             with (
                 patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path),
                 patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client),
+                self.assertRaisesRegex(MCPConfigError, "fetch.*boom"),
             ):
-                with self.assertRaisesRegex(MCPConfigError, "fetch.*boom"):
-                    await load_main_mcp_tools()
+                await load_main_mcp_tools()
         finally:
             tmp_path.unlink(missing_ok=True)
 
@@ -312,9 +315,11 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
                 env={"GIT_USER": "${MISSING_VAR_XYZ}"},
             )
         ]
-        with patch.dict("os.environ", {}, clear=True):
-            with self.assertRaisesRegex(MCPConfigError, "MISSING_VAR_XYZ"):
-                await load_subagent_mcp_tools("coder", servers)
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            self.assertRaisesRegex(MCPConfigError, "MISSING_VAR_XYZ"),
+        ):
+            await load_subagent_mcp_tools("coder", servers)
 
     async def test_load_subagent_mcp_tools_empty_name_raises(self) -> None:
         servers = [SubAgentMCPServer(name="  ", command="git-mcp")]
@@ -373,9 +378,11 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
                 await asyncio.sleep(0.02)
             raise MCPConfigError(f"boom-{name}")
 
-        with patch("ollama_agent.mcp.loader._connect_and_load", side_effect=fake_connect):
-            with self.assertRaises(MCPConfigError) as cm:
-                await _load_tools_from_connections(connections)
+        with (
+            patch("ollama_agent.mcp.loader._connect_and_load", side_effect=fake_connect),
+            self.assertRaises(MCPConfigError) as cm,
+        ):
+            await _load_tools_from_connections(connections)
         self.assertIn("boom-fast-fail", str(cm.exception))
         self.assertIn("boom-slow-fail", str(cm.exception))
 
@@ -414,9 +421,8 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
 
         settings = Settings()
         try:
-            with patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path):
-                with self.assertRaises(MCPConfigError):
-                    await list_mcp_servers(console, settings=settings)
+            with patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path), self.assertRaises(MCPConfigError):
+                await list_mcp_servers(console, settings=settings)
         finally:
             tmp_path.unlink(missing_ok=True)
 
@@ -593,4 +599,3 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(seen_during_exec, [_mcp_stdio_client])
         self.assertIs(mcp.client.stdio.stdio_client, _orig_stdio_client)
         self.assertIs(langchain_mcp_adapters.sessions.stdio_client, _orig_stdio_client)
-

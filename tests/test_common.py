@@ -34,9 +34,8 @@ class TestCommonUtilities(unittest.TestCase):
 
     def test_extract_text_unknown_types_raise_type_error(self) -> None:
         for unknown in (123, 4.5, object()):
-            with self.subTest(value=unknown):
-                with self.assertRaises(TypeError):
-                    extract_text(unknown)
+            with self.subTest(value=unknown), self.assertRaises(TypeError):
+                extract_text(unknown)
 
     def test_extract_text_dict_without_text_raises_type_error(self) -> None:
         with self.assertRaises(TypeError):
@@ -65,9 +64,8 @@ class TestCommonUtilities(unittest.TestCase):
             "lpt9",
         ]
         for invalid_name in invalid_cases:
-            with self.subTest(name=invalid_name):
-                with self.assertRaises(ValueError):
-                    validate_identifier(invalid_name)
+            with self.subTest(name=invalid_name), self.assertRaises(ValueError):
+                validate_identifier(invalid_name)
 
     def test_default_reasoning_effort(self) -> None:
         self.assertEqual(DEFAULT_REASONING_EFFORT, "default")
@@ -89,9 +87,8 @@ class TestCommonUtilities(unittest.TestCase):
     def test_atomic_write_text_cleans_up_temp_file_on_failure(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             target = Path(td) / "target.txt"
-            with patch("os.replace", side_effect=OSError("Disk write error")):
-                with self.assertRaises(OSError):
-                    atomic_write_text(target, "doomed content")
+            with patch("os.replace", side_effect=OSError("Disk write error")), self.assertRaises(OSError):
+                atomic_write_text(target, "doomed content")
             # Target should not exist
             self.assertFalse(target.exists())
             # Parent directory should not have any leftover .tmp files
@@ -114,4 +111,3 @@ class TestCommonUtilities(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

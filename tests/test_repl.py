@@ -79,4 +79,3 @@ class TestREPLEffortCompletions(unittest.TestCase):
 
         self.assertIn("/effort low", comp_map)
         self.assertIn("/effort high", comp_map)
-

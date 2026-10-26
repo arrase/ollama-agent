@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import weakref
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
-import weakref
 
 from jinja2.exceptions import TemplateError
 from rich.console import Console

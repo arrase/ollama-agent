@@ -66,9 +66,8 @@ class TestI18nDetection(unittest.TestCase):
                 self.assertEqual(detect_system_language(), "en", f"Failed for {env_val}")
 
     def test_detect_empty_environment_fallback_to_english(self) -> None:
-        with patch.dict(os.environ, {}, clear=True):
-            with patch("locale.getlocale", return_value=(None, None)):
-                self.assertEqual(detect_system_language(), "en")
+        with patch.dict(os.environ, {}, clear=True), patch("locale.getlocale", return_value=(None, None)):
+            self.assertEqual(detect_system_language(), "en")
 
 
 class TestI18nLocaleManagement(unittest.TestCase):
@@ -322,8 +321,7 @@ class TestCatalogCompleteness(unittest.TestCase):
         ref_file = locales_dir / f"{non_en_locales[0]}.json"
         self.assertTrue(ref_file.exists(), f"Reference file {ref_file} must exist")
 
-        with open(ref_file, "r", encoding="utf-8") as f:
-            ref_data: dict[str, str] = json.load(f)
+        ref_data: dict[str, str] = json.loads(ref_file.read_text(encoding="utf-8"))
 
         placeholder_pattern = re.compile(r"\{([a-zA-Z0-9_]+)\}")
 
@@ -331,8 +329,7 @@ class TestCatalogCompleteness(unittest.TestCase):
             loc_file = locales_dir / f"{loc}.json"
             self.assertTrue(loc_file.exists(), f"{loc}.json must exist")
 
-            with open(loc_file, "r", encoding="utf-8") as f:
-                loc_data: dict[str, str] = json.load(f)
+            loc_data: dict[str, str] = json.loads(loc_file.read_text(encoding="utf-8"))
 
             # Check key parity with reference catalog (keys are original English strings)
             missing_keys = set(ref_data.keys()) - set(loc_data.keys())
@@ -364,31 +361,33 @@ class TestCatalogCompleteness(unittest.TestCase):
 
         extracted_strings: set[str] = set()
         for py_file in pkg_dir.rglob("*.py"):
-            with open(py_file, "r", encoding="utf-8") as f:
-                tree = ast.parse(f.read(), filename=str(py_file))
+            tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
             module_constants: dict[str, str] = {}
             for stmt in tree.body:
                 if isinstance(stmt, ast.Assign):
                     for target in stmt.targets:
-                        if isinstance(target, ast.Name) and isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str):
+                        if (
+                            isinstance(target, ast.Name)
+                            and isinstance(stmt.value, ast.Constant)
+                            and isinstance(stmt.value.value, str)
+                        ):
                             module_constants[target.id] = stmt.value.value
             for node in ast.walk(tree):
                 if isinstance(node, ast.Call):
                     func = node.func
-                    if (isinstance(func, ast.Name) and func.id == "_") or (
-                        isinstance(func, ast.Attribute) and func.attr == "_"
+                    if node.args and (
+                        (isinstance(func, ast.Name) and func.id == "_")
+                        or (isinstance(func, ast.Attribute) and func.attr == "_")
                     ):
-                        if node.args:
-                            first_arg = node.args[0]
-                            if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, str):
-                                extracted_strings.add(first_arg.value)
-                            elif isinstance(first_arg, ast.Name) and first_arg.id in module_constants:
-                                extracted_strings.add(module_constants[first_arg.id])
+                        first_arg = node.args[0]
+                        if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, str):
+                            extracted_strings.add(first_arg.value)
+                        elif isinstance(first_arg, ast.Name) and first_arg.id in module_constants:
+                            extracted_strings.add(module_constants[first_arg.id])
 
         for loc in [loc_code for loc_code in SUPPORTED_LOCALES if loc_code != "en"]:
             loc_file = locales_dir / f"{loc}.json"
-            with open(loc_file, "r", encoding="utf-8") as f:
-                catalog = json.load(f)
+            catalog = json.loads(loc_file.read_text(encoding="utf-8"))
             missing = [s for s in extracted_strings if s not in catalog]
             self.assertEqual(missing, [], f"{loc}.json is missing translation for in-code strings: {missing}")
             dead = [s for s in catalog if s not in extracted_strings]

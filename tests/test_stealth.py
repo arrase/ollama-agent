@@ -4,8 +4,8 @@ import io
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from rich.console import Console
 from langgraph.checkpoint.memory import MemorySaver
+from rich.console import Console
 
 from ollama_agent.agent import AgentRuntime
 from ollama_agent.interfaces.tui import OllamaAgentApp, OllamaREPL

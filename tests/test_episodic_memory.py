@@ -25,6 +25,8 @@ from ollama_agent.agent.episodic_memory import (
     load_session_timestamps,
     search_past_conversations_in_db,
 )
+
+
 class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
     """Unit tests for episodic memory loading, keyword search, and formatting."""
 
@@ -77,7 +79,8 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
         ]
         typ1, val1 = self.serializer.dumps_typed(t1_msgs)
         cur.execute(
-            "INSERT INTO writes (thread_id, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO writes (thread_id, checkpoint_id, task_id, idx, channel, type, value) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             ("thread-100", "cp-1", "task-1", 0, "messages", typ1, val1),
         )
 
@@ -94,7 +97,8 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
         ]
         typ2, val2 = self.serializer.dumps_typed(t2_msgs)
         cur.execute(
-            "INSERT INTO writes (thread_id, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO writes (thread_id, checkpoint_id, task_id, idx, channel, type, value) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             ("thread-200", "cp-2", "task-2", 0, "messages", typ2, val2),
         )
 
@@ -112,7 +116,8 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
         ]
         typ3, val3 = self.serializer.dumps_typed(t3_msgs)
         cur.execute(
-            "INSERT INTO writes (thread_id, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO writes (thread_id, checkpoint_id, task_id, idx, channel, type, value) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             ("thread-300", "cp-3", "task-3", 0, "messages", typ3, val3),
         )
 
@@ -190,7 +195,8 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
         t_msgs = [HumanMessage(content="Orphan message")]
         typ, val = self.serializer.dumps_typed(t_msgs)
         cur.execute(
-            "INSERT INTO writes (thread_id, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO writes (thread_id, checkpoint_id, task_id, idx, channel, type, value) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             ("orphan-thread", "cp-orphan", "task-orphan", 0, "messages", typ, val),
         )
         conn.commit()
@@ -298,7 +304,8 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
         scalar_msg = HumanMessage(content="Scalar prompt question")
         typ, val = self.serializer.dumps_typed(scalar_msg)
         cur.execute(
-            "INSERT INTO writes (thread_id, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO writes (thread_id, checkpoint_id, task_id, idx, channel, type, value) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             ("thread-scalar", "cp-scalar", "task-scalar", 0, "messages", typ, val),
         )
         conn.commit()
@@ -355,7 +362,8 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
         t2, v2 = self.serializer.dumps_typed(Overwrite(value=[msg2]))
         t3, v3 = self.serializer.dumps_typed([msg2_dup])
         cur.executemany(
-            "INSERT INTO writes (thread_id, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO writes (thread_id, checkpoint_id, task_id, idx, channel, type, value) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             [
                 ("thread-ow", "cp-ow", "t1", 0, "messages", t1, v1),
                 ("thread-ow", "cp-ow", "t2", 1, "messages", t2, v2),

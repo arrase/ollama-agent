@@ -70,8 +70,9 @@ def _get_linux_paste_cmd() -> list[str]:
 
 def _copy_via_command(cmd: list[str], text: str) -> None:
     try:
-        proc = subprocess.run(
+        proc = subprocess.run(  # noqa: S603 - argv from hardcoded clipboard tool list
             cmd,
+            check=False,
             input=text.encode("utf-8"),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -85,8 +86,9 @@ def _copy_via_command(cmd: list[str], text: str) -> None:
 
 def _paste_via_command(cmd: list[str]) -> str:
     try:
-        proc = subprocess.run(
+        proc = subprocess.run(  # noqa: S603 - argv from hardcoded clipboard tool list
             cmd,
+            check=False,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -170,9 +172,8 @@ def get_system_clipboard() -> str:
     """
     if sys.platform == "darwin":
         return _paste_via_command(["pbpaste"])
-    elif sys.platform.startswith(("linux", "freebsd", "openbsd")):
+    if sys.platform.startswith(("linux", "freebsd", "openbsd")):
         return _paste_via_command(_get_linux_paste_cmd())
-    elif sys.platform == "win32":
+    if sys.platform == "win32":
         return _paste_win32()
-    else:
-        raise ClipboardError(f"Unsupported platform: {sys.platform}")
+    raise ClipboardError(f"Unsupported platform: {sys.platform}")

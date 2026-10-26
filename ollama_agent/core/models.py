@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import httpx
 import ollama
@@ -83,7 +84,8 @@ def check_ollama_version(
     if parse_version(version_str) < parse_version(min_version):
         raise OllamaVersionError(
             _(
-                "Ollama version {version} is lower than required {min_version}. Please update your Ollama installation.",
+                "Ollama version {version} is lower than required {min_version}. "
+                "Please update your Ollama installation.",
                 version=version_str,
                 min_version=min_version,
             )
@@ -538,4 +540,3 @@ def validate_and_normalize_effort(
     if resolved is None:
         return "default", None
     return format_thinking_value(resolved), None
-

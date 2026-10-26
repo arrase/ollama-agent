@@ -5,8 +5,9 @@ from __future__ import annotations
 import argparse
 import inspect
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from rich.console import Console
 from rich.markup import escape
@@ -83,7 +84,7 @@ async def safe_call(
     except DOMAIN_ERRORS as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
     # A command must never crash the caller.
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         _log.exception("Unhandled error in command %r", fn.__name__)
         console.print(f"[red]{escape(_('Command failed: {exc}', exc=exc))}[/red]")
 
@@ -319,9 +320,7 @@ class REPLEnvironment:
             else:
                 delete_skill(self.skills_ctx, skill_id)
             return None
-        self._error(
-            _("Unknown skill subcommand '{sub}'. Usage: /skill [list | show <id> | delete <id>]", sub=args[0])
-        )
+        self._error(_("Unknown skill subcommand '{sub}'. Usage: /skill [list | show <id> | delete <id>]", sub=args[0]))
         return None
 
     def _handle_rag_add(self, sub_args: list[str]) -> object:

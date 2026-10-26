@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from conftest import make_repl_environment, recording_console
 from langchain_core.messages import AIMessageChunk
 
 from ollama_agent.agent.episodic_memory import HistoryError, format_iso_timestamp
@@ -39,8 +40,6 @@ from ollama_agent.streaming.console_renderer import ConsoleStreamingRenderer
 from ollama_agent.streaming.parsers import ThinkTagParser
 from ollama_agent.tasks.commands import TaskError
 from ollama_agent.tasks.manager import Task, TaskInput
-
-from conftest import make_repl_environment, recording_console
 
 
 class TestRichMarkupInjection(unittest.TestCase):
@@ -186,9 +185,11 @@ class TestMiddlewareTimeout(unittest.IsolatedAsyncioTestCase):
         async def handler(_req: object) -> str:
             raise TimeoutError("socket timed out")
 
-        with patch("ollama_agent.agent.middleware.get_tool_timeout", return_value=30):
-            with self.assertRaises(TimeoutError):
-                await _stream_tool_events(request, handler)
+        with (
+            patch("ollama_agent.agent.middleware.get_tool_timeout", return_value=30),
+            self.assertRaises(TimeoutError),
+        ):
+            await _stream_tool_events(request, handler)
 
     async def test_real_deadline_is_reported_as_tool_message(self) -> None:
         class _Runtime:
@@ -230,9 +231,8 @@ class TestOllamaClientLifetime(unittest.TestCase):
     def test_get_ollama_version_rejects_body_without_version(self) -> None:
         response = MagicMock()
         response.json.return_value = {"unexpected": "field"}
-        with patch("httpx.get", return_value=response):
-            with self.assertRaises(ModelCapabilityError):
-                get_ollama_version("http://localhost:11434")
+        with patch("httpx.get", return_value=response), self.assertRaises(ModelCapabilityError):
+            get_ollama_version("http://localhost:11434")
 
 
 class TestValidationGaps(unittest.TestCase):
@@ -389,9 +389,11 @@ class TestRAGIsolation(unittest.IsolatedAsyncioTestCase):
             hit.score = 0.5
             client.query_points.return_value = MagicMock(points=[hit])
             mgr._client = client
-            with patch.object(RAGManager, "_get_embeddings", AsyncMock(return_value=[[0.0]])):
-                with self.assertRaises(RAGError):
-                    await mgr.search("q")
+            with (
+                patch.object(RAGManager, "_get_embeddings", AsyncMock(return_value=[[0.0]])),
+                self.assertRaises(RAGError),
+            ):
+                await mgr.search("q")
 
 
 class TestSkillManagerIsolation(unittest.TestCase):
@@ -401,9 +403,7 @@ class TestSkillManagerIsolation(unittest.TestCase):
             (base / "broken").mkdir(parents=True)
             (base / "broken" / "SKILL.md").write_text("no frontmatter here", encoding="utf-8")
             (base / "good").mkdir()
-            (base / "good" / "SKILL.md").write_text(
-                "---\nname: Good\ndescription: d\n---\nbody\n", encoding="utf-8"
-            )
+            (base / "good" / "SKILL.md").write_text("---\nname: Good\ndescription: d\n---\nbody\n", encoding="utf-8")
             mgr = SkillManager(skills_dir=base, builtin_skills_dir=Path(tmp) / "_no_builtin")
             names = [sid for sid, _ in mgr.list_all()]
             self.assertIn("good", names)
