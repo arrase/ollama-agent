@@ -26,7 +26,6 @@ from ..commands.sessions import (
     resume_session,
 )
 from .completion import (
-    _CHAT_SCROLL_ID,
     CMD_AGENTS,
     CMD_CLEAR,
     CMD_CONTEXT,
@@ -50,6 +49,7 @@ from .widgets.header import AgentHeader
 from .widgets.messages import AgentResponse, UserMessage
 
 _log = logging.getLogger(__name__)
+_CHAT_SCROLL_ID = "#chat-scroll"
 
 IMMEDIATE_COMMANDS: frozenset[tuple[str, str]] = frozenset(
     {

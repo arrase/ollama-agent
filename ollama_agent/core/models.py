@@ -257,9 +257,6 @@ def format_thinking_value(val: Any) -> str:
     return str(val)
 
 
-_format_thinking_val = format_thinking_value
-
-
 def _match_thinking_effort(
     effort_clean: str,
     thinking_cfg: dict[str, Any],

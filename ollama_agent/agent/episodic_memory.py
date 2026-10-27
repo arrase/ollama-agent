@@ -95,7 +95,7 @@ def load_past_user_prompts(db_path: Path = HISTORY_DB_PATH) -> list[str]:
             cursor = conn.cursor()
             cursor.execute("SELECT type, value FROM writes WHERE channel = 'messages' ORDER BY rowid ASC")
             for typ, val in cursor.fetchall():
-                msg_list, _ = _deserialize_messages(typ, val)
+                msg_list, _is_overwrite = _deserialize_messages(typ, val)
                 for msg in msg_list:
                     if msg.type in ("human", "user"):
                         text = extract_text(msg.content).strip()

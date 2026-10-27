@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections import deque
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -24,11 +25,8 @@ from textual.worker import Worker
 from ...i18n import _
 from ...streaming import extract_action_requests, stream_agent_events
 from ..clipboard import ClipboardError, copy_to_system_clipboard, get_system_clipboard
-from .commands import _is_immediate_command, run_slash_command
+from .commands import _CHAT_SCROLL_ID, _is_immediate_command, run_slash_command
 from .completion import (
-    _AT_MENTION_RE,
-    _AUTOCOMPLETE_LIST_ID,
-    _CHAT_SCROLL_ID,
     NO_ARG_COMMANDS,
     file_completions,
     slash_completions,
@@ -47,6 +45,9 @@ from .widgets import (
 )
 
 _log = logging.getLogger(__name__)
+# @-mention regex: matches @"quoted", @'quoted', or @bare at word boundaries.
+_AT_MENTION_RE = re.compile(r"""(?:^|[\s\(\[\{<])@(?:"([^"]*)|'([^']*)|([^\s"'\(\[\{<>,;]*))$""")
+_AUTOCOMPLETE_LIST_ID = "#autocomplete-list"
 
 
 class OllamaAgentApp(App):

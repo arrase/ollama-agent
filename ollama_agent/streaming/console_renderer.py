@@ -142,24 +142,24 @@ class ConsoleStreamingRenderer(StreamingRenderer):
             self.console.print(f"  [red]❌ {hint}[/red]")
             return None
 
-        try:
-            while True:
-                prompt_msg = f"  {_('Choose action: Approve (y) / Reject (n) / Allow Session (a) / Cancel (c): ')}"
-                self.console.print(prompt_msg, end="")
-                self.console.file.flush()
+        while True:
+            prompt_msg = f"  {_('Choose action: Approve (y) / Reject (n) / Allow Session (a) / Cancel (c): ')}"
+            self.console.print(prompt_msg, end="")
+            self.console.file.flush()
+            try:
                 choice = (await self._prompt()).strip().lower()
-                if choice == "y":
-                    return build_approval_decisions(action_requests, "approve")
-                if choice == "n":
-                    return build_approval_decisions(action_requests, "reject")
-                if choice == "a":
-                    return build_approval_decisions(action_requests, "allow", runtime=runtime)
-                if choice == "c":
-                    break
-                invalid_msg = _("Invalid choice. Please enter 'y', 'n', 'a', or 'c'.")
-                self.console.print(f"  [red]{invalid_msg}[/red]")
-        except EOFError:
-            pass
+            except EOFError:
+                break
+            if choice == "y":
+                return build_approval_decisions(action_requests, "approve")
+            if choice == "n":
+                return build_approval_decisions(action_requests, "reject")
+            if choice == "a":
+                return build_approval_decisions(action_requests, "allow", runtime=runtime)
+            if choice == "c":
+                break
+            invalid_msg = _("Invalid choice. Please enter 'y', 'n', 'a', or 'c'.")
+            self.console.print(f"  [red]{invalid_msg}[/red]")
 
         self.console.print(f"  [red]✗ {_('Cancelled')}[/red]\n")
         return None

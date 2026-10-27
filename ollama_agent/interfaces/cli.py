@@ -5,8 +5,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import inspect
-from collections.abc import Coroutine
-from typing import Any, cast
 
 from rich.console import Console
 from rich.markup import escape
@@ -347,9 +345,8 @@ def handle_subcommand(args: argparse.Namespace, settings: Settings) -> None:
 
     try:
         result = handler()
-        if inspect.isawaitable(result):
-            # The handler is an async function, so the awaitable is always a coroutine.
-            result = asyncio.run(cast("Coroutine[Any, Any, Any]", result))
+        if inspect.iscoroutine(result):
+            result = asyncio.run(result)
     except DOMAIN_ERRORS as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
         raise SystemExit(1) from exc
