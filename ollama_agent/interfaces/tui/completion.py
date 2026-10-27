@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import re
 import threading
 import time
 from collections.abc import Iterator, Sequence
@@ -25,9 +24,6 @@ from ..commands.models import format_model_size
 from ..commands.sessions import get_available_sessions
 from .widgets.system import format_queue_preview
 
-# @-mention regex: matches @"quoted", @'quoted', or @bare at word boundaries.
-_AT_MENTION_RE = re.compile(r"""(?:^|[\s\(\[\{<])@(?:"([^"]*)|'([^']*)|([^\s"'\(\[\{<>,;]*))$""")
-
 CMD_MODEL = "/model"
 CMD_EFFORT = "/effort"
 CMD_CONTEXT = "/context"
@@ -46,8 +42,6 @@ CMD_CLEAR = "/clear"
 CMD_EXIT = "/exit"
 CMD_QUIT = "/quit"
 NO_ARG_COMMANDS: frozenset[str] = frozenset({CMD_CLEAR, CMD_NEW, CMD_EXIT, CMD_QUIT})
-_CHAT_SCROLL_ID = "#chat-scroll"
-_AUTOCOMPLETE_LIST_ID = "#autocomplete-list"
 _MODEL_CACHE_TTL = 10.0
 _model_cache: dict[tuple[str, Any], tuple[float, list[Any]]] = {}
 _model_refresh_inflight: set[tuple[str, Any]] = set()
