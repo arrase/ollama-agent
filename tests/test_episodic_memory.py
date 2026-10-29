@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.types import Overwrite
@@ -126,67 +127,64 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
 
     def test_load_past_conversations_empty_db(self) -> None:
         convs = load_past_conversations(self.db_path)
-        self.assertEqual(convs, {})
+        assert convs == {}
 
     def test_load_past_user_prompts_empty_db(self) -> None:
         prompts = load_past_user_prompts(self.db_path)
-        self.assertEqual(prompts, [])
+        assert prompts == []
 
     def test_load_past_user_prompts_with_data(self) -> None:
         self._seed_db()
         prompts = load_past_user_prompts(self.db_path)
-        self.assertEqual(
-            prompts,
-            [
-                "How do I dockerize a FastAPI application?",
-                "Set up a React Vite project with TypeScript.",
-                "How to handle PostgreSQL migrations with Alembic?",
-            ],
-        )
+        assert prompts == [
+            "How do I dockerize a FastAPI application?",
+            "Set up a React Vite project with TypeScript.",
+            "How to handle PostgreSQL migrations with Alembic?",
+        ]
 
     def test_load_past_conversations_with_data(self) -> None:
         self._seed_db()
         convs = load_past_conversations(self.db_path)
-        self.assertEqual(len(convs), 3)
-        self.assertIn("thread-100", convs)
-        self.assertIn("thread-200", convs)
-        self.assertIn("thread-300", convs)
-        self.assertEqual(len(convs["thread-100"]["messages"]), 2)
-        self.assertEqual(len(convs["thread-300"]["messages"]), 3)
-        self.assertIn("2026-08-20", convs["thread-100"]["formatted_date"])
+        assert len(convs) == 3
+        assert "thread-100" in convs
+        assert "thread-200" in convs
+        assert "thread-300" in convs
+        assert len(convs["thread-100"]["messages"]) == 2
+        assert len(convs["thread-300"]["messages"]) == 3
+        assert "2026-08-20" in convs["thread-100"]["formatted_date"]
 
     def test_load_past_conversations_exclude_thread(self) -> None:
         self._seed_db()
         convs = load_past_conversations(self.db_path, exclude_thread_id="thread-200")
-        self.assertEqual(len(convs), 2)
-        self.assertNotIn("thread-200", convs)
+        assert len(convs) == 2
+        assert "thread-200" not in convs
 
     def test_search_past_conversations_in_db(self) -> None:
         self._seed_db()
 
         # Search for FastAPI
         results = search_past_conversations_in_db("fastapi docker", db_path=self.db_path)
-        self.assertGreaterEqual(len(results), 1)
-        self.assertEqual(results[0]["thread_id"], "thread-100")
-        self.assertIn("FastAPI", results[0]["snippets"][0])
-        self.assertIn("2026-08-20", results[0]["formatted_date"])
+        assert len(results) >= 1
+        assert results[0]["thread_id"] == "thread-100"
+        assert "FastAPI" in results[0]["snippets"][0]
+        assert "2026-08-20" in results[0]["formatted_date"]
 
         # Search for Alembic
         results_alembic = search_past_conversations_in_db("alembic", db_path=self.db_path)
-        self.assertEqual(len(results_alembic), 1)
-        self.assertEqual(results_alembic[0]["thread_id"], "thread-300")
+        assert len(results_alembic) == 1
+        assert results_alembic[0]["thread_id"] == "thread-300"
 
         # Search by date
         results_date = search_past_conversations_in_db("2026-08-21", db_path=self.db_path)
-        self.assertEqual(len(results_date), 1)
-        self.assertEqual(results_date[0]["thread_id"], "thread-200")
+        assert len(results_date) == 1
+        assert results_date[0]["thread_id"] == "thread-200"
 
         # Search with no matching terms returns empty list
         results_none = search_past_conversations_in_db("quantum computing", db_path=self.db_path)
-        self.assertEqual(results_none, [])
+        assert results_none == []
 
         # Search with empty query returns empty list
-        self.assertEqual(search_past_conversations_in_db("", db_path=self.db_path), [])
+        assert search_past_conversations_in_db("", db_path=self.db_path) == []
 
     def test_load_past_conversations_thread_without_checkpoint(self) -> None:
         self._seed_db()
@@ -203,18 +201,18 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
         conn.close()
 
         conversations = load_past_conversations(self.db_path)
-        self.assertNotIn("orphan-thread", conversations)
-        self.assertIn("thread-100", conversations)
+        assert "orphan-thread" not in conversations
+        assert "thread-100" in conversations
 
     def test_search_past_conversations_limit(self) -> None:
         self._seed_db()
         results = search_past_conversations_in_db("how to", db_path=self.db_path, limit=1)
-        self.assertEqual(len(results), 1)
+        assert len(results) == 1
 
     def test_format_past_conversations_context(self) -> None:
         # Empty results formatting
         empty_formatted = format_past_conversations_context([])
-        self.assertIn("No relevant past conversations found", empty_formatted)
+        assert "No relevant past conversations found" in empty_formatted
 
         # Populated results formatting
         sample_results = [
@@ -227,10 +225,10 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
             }
         ]
         formatted = format_past_conversations_context(sample_results)
-        self.assertIn("Session #1 (thread-1)", formatted)
-        self.assertIn("2026-08-21 14:30 UTC", formatted)
-        self.assertIn("[User]: How to configure CORS?", formatted)
-        self.assertIn("[Assistant]: Use CORSMiddleware.", formatted)
+        assert "Session #1 (thread-1)" in formatted
+        assert "2026-08-21 14:30 UTC" in formatted
+        assert "[User]: How to configure CORS?" in formatted
+        assert "[Assistant]: Use CORSMiddleware." in formatted
 
     async def test_search_past_conversations_tool(self) -> None:
         self._seed_db()
@@ -238,35 +236,35 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
 
         with patch("ollama_agent.agent.episodic_memory.HISTORY_DB_PATH", self.db_path):
             output = await search_past_conversations.ainvoke({"query": "React Vite"})
-            self.assertIn("react", output.lower())
-            self.assertIn("thread-2", output)
-            self.assertIn("2026-08-21", output)
+            assert "react" in output.lower()
+            assert "thread-2" in output
+            assert "2026-08-21" in output
 
             # Excluded active thread should not appear
             output_active = await search_past_conversations.ainvoke({"query": "FastAPI"})
-            self.assertIn("No relevant past conversations found", output_active)
+            assert "No relevant past conversations found" in output_active
 
             # Non-positive limit raises ValueError
-            with self.assertRaises(ValueError):
+            with pytest.raises(ValueError):
                 await search_past_conversations.ainvoke({"query": "x", "limit": 0})
-            with self.assertRaises(ValueError):
+            with pytest.raises(ValueError):
                 await search_past_conversations.ainvoke({"query": "React Vite", "limit": -5})
 
     def test_tool_timeout_setter_getter(self) -> None:
         set_tool_timeout(45)
-        self.assertEqual(get_tool_timeout(), 45)
+        assert get_tool_timeout() == 45
 
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             set_tool_timeout(0)
 
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             set_tool_timeout(-5)
 
     def test_format_iso_timestamp(self) -> None:
         # Naive timestamp should not shift timezone
-        self.assertEqual(format_iso_timestamp("2026-08-20T10:00:00"), "2026-08-20 10:00 UTC")
+        assert format_iso_timestamp("2026-08-20T10:00:00") == "2026-08-20 10:00 UTC"
         # Timezone-aware timestamp should be converted to UTC
-        self.assertEqual(format_iso_timestamp("2026-08-20T12:00:00+02:00"), "2026-08-20 10:00 UTC")
+        assert format_iso_timestamp("2026-08-20T12:00:00+02:00") == "2026-08-20 10:00 UTC"
 
     def test_load_with_scalar_message(self) -> None:
         # Seed DB with a single BaseMessage scalar (not inside a list)
@@ -312,24 +310,21 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
         conn.close()
 
         prompts = load_past_user_prompts(self.db_path)
-        self.assertEqual(prompts, ["Scalar prompt question"])
+        assert prompts == ["Scalar prompt question"]
 
         convs = load_past_conversations(self.db_path)
-        self.assertIn("thread-scalar", convs)
-        self.assertEqual(len(convs["thread-scalar"]["messages"]), 1)
-        self.assertEqual(convs["thread-scalar"]["messages"][0].content, "Scalar prompt question")
+        assert "thread-scalar" in convs
+        assert len(convs["thread-scalar"]["messages"]) == 1
+        assert convs["thread-scalar"]["messages"][0].content == "Scalar prompt question"
 
     def test_load_session_timestamps(self) -> None:
-        self.assertEqual(load_session_timestamps(self.db_path), [])
+        assert load_session_timestamps(self.db_path) == []
         self._seed_db()
-        self.assertEqual(
-            load_session_timestamps(self.db_path),
-            [
-                ("thread-100", "2026-08-20 10:00 UTC"),
-                ("thread-200", "2026-08-21 14:30 UTC"),
-                ("thread-300", "2026-08-22 08:15 UTC"),
-            ],
-        )
+        assert load_session_timestamps(self.db_path) == [
+            ("thread-100", "2026-08-20 10:00 UTC"),
+            ("thread-200", "2026-08-21 14:30 UTC"),
+            ("thread-300", "2026-08-22 08:15 UTC"),
+        ]
 
     def test_corrupted_checkpoint_raises_history_error(self) -> None:
         self._seed_db()
@@ -343,7 +338,7 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
         conn.commit()
         conn.close()
 
-        with self.assertRaises(HistoryError):
+        with pytest.raises(HistoryError):
             load_past_conversations(self.db_path)
 
     def test_overwrite_and_message_deduplication(self) -> None:
@@ -374,9 +369,9 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
         conn.close()
 
         prompts = load_past_user_prompts(self.db_path)
-        self.assertIn("After overwrite", prompts)
+        assert "After overwrite" in prompts
         convs = load_past_conversations(self.db_path)
-        self.assertEqual([m.content for m in convs["thread-ow"]["messages"]], ["After overwrite"])
+        assert [m.content for m in convs["thread-ow"]["messages"]] == ["After overwrite"]
 
 
 if __name__ == "__main__":

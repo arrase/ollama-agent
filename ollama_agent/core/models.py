@@ -60,15 +60,21 @@ def get_ollama_version(base_url: str) -> str:
         response = httpx.get(url, timeout=5.0)
         response.raise_for_status()
         data = response.json()
-        # A 200 with a non-JSON or unexpected body must not escape as KeyError/JSONDecodeError.
-        version = data.get("version") if isinstance(data, dict) else None
-        if not isinstance(version, str) or not version:
-            raise ValueError("missing 'version' field in /api/version response")
-        return version
     except (httpx.HTTPError, OSError, ValueError) as exc:
         raise ModelCapabilityError(
             _("Could not connect to Ollama at '{base_url}': {exc}", base_url=base_url, exc=exc)
         ) from exc
+    # A 200 with a non-JSON or unexpected body must not escape as KeyError/JSONDecodeError.
+    version = data.get("version") if isinstance(data, dict) else None
+    if not isinstance(version, str) or not version:
+        raise ModelCapabilityError(
+            _(
+                "Could not connect to Ollama at '{base_url}': {exc}",
+                base_url=base_url,
+                exc="missing 'version' field in /api/version response",
+            )
+        )
+    return version
 
 
 def check_ollama_version(
@@ -109,12 +115,13 @@ async def _show_model(model: str, base_url: str) -> ExtendedShowResponse:
     """Fetch Ollama model metadata asynchronously."""
     try:
         async with create_ollama_async_client(base_url) as client:
-            return await client._request(
+            res: ExtendedShowResponse = await client._request(  # noqa: SLF001
                 ExtendedShowResponse,
                 "POST",
                 "/api/show",
                 json={"model": model},
             )
+            return res
     except Exception as exc:
         raise ModelCapabilityError(_("Failed to fetch metadata for '{model}': {exc}", model=model, exc=exc)) from exc
 
@@ -250,7 +257,7 @@ async def resolve_context_window(
     )
 
 
-def format_thinking_value(val: Any) -> str:
+def format_thinking_value(val: object) -> str:
     """Format an Ollama thinking control value as a normalized string."""
     if isinstance(val, bool):
         return "true" if val else "false"
@@ -261,14 +268,14 @@ def _match_thinking_effort(
     effort_clean: str,
     thinking_cfg: dict[str, Any],
     model_name: str,
-) -> tuple[bool, Any, str | None]:
+) -> tuple[bool, bool | str | None, str | None]:
     """Match an effort token against Ollama thinking metadata.
 
     Returns ``(matched, resolved_value, warning_msg)``.
     """
     raw_values = thinking_cfg.get("values")
     values: list[Any] = list(raw_values) if isinstance(raw_values, (list, tuple)) else []
-    default: Any = thinking_cfg.get("default")
+    default: bool | str | None = thinking_cfg.get("default")
     effort_lower = effort_clean.lower()
 
     if not effort_clean or effort_lower in ("default", "hide"):
@@ -278,12 +285,10 @@ def _match_thinking_effort(
     is_on = effort_lower in REASONING_ON_VALUES
 
     for v in values:
-        if v is False and is_off:
-            return True, False, None
-        if v is True and is_on:
-            return True, True, None
-        if not isinstance(v, bool) and str(v).lower() == effort_lower:
+        if (v is False and is_off) or (v is True and is_on):
             return True, v, None
+        if not isinstance(v, bool) and str(v).lower() == effort_lower:
+            return True, str(v), None
 
     if is_on:
         return True, default, None
@@ -313,12 +318,14 @@ def _match_thinking_effort(
 def _resolve_thinking_from_cfg(
     thinking_cfg: dict[str, Any],
     effort_clean: str,
-    is_default: bool,
     model: str,
     warn_callback: Callable[[str], None],
+    *,
+    is_default: bool,
 ) -> bool | str | None:
     if is_default:
-        return thinking_cfg.get("default")
+        default_val: bool | str | None = thinking_cfg.get("default")
+        return default_val
     matched, resolved, msg = _match_thinking_effort(effort_clean, thinking_cfg, model)
     if not matched and msg is not None:
         warn_callback(msg)
@@ -327,7 +334,7 @@ def _resolve_thinking_from_cfg(
 
 async def resolve_ollama_reasoning(
     model: str,
-    effort: Any,
+    effort: object,
     base_url: str,
     warn_callback: Callable[[str], None],
     *,
@@ -342,7 +349,7 @@ async def resolve_ollama_reasoning(
     is_default = not effort_clean or effort_lower in ("default", "hide")
 
     if thinking_cfg is not None:
-        return _resolve_thinking_from_cfg(thinking_cfg, effort_clean, is_default, model, warn_callback)
+        return _resolve_thinking_from_cfg(thinking_cfg, effort_clean, model, warn_callback, is_default=is_default)
 
     if "thinking" not in await get_model_capabilities(model, base_url, show_info=response):
         return None
@@ -359,9 +366,10 @@ async def resolve_ollama_reasoning(
 def _find_param_in_modelfile(
     param: str,
     meta_sources: list[str],
-    is_int: bool,
     warn_callback: Callable[[str], None],
-) -> Any | None:
+    *,
+    is_int: bool,
+) -> int | float | None:
     for text in meta_sources:
         raw = _parse_modelfile_param(text, param)
         if raw is None and param == "repeat_penalty":
@@ -408,7 +416,7 @@ async def resolve_model_parameters(
             resolved[param] = (int(user_val) if is_int else float(user_val), "user")
             continue
 
-        found_val = _find_param_in_modelfile(param, meta_sources, is_int, warn_callback)
+        found_val = _find_param_in_modelfile(param, meta_sources, warn_callback, is_int=is_int)
         if found_val is not None:
             resolved[param] = (found_val, "modelfile")
 
@@ -487,7 +495,7 @@ async def create_ollama_chat_model(
     return OllamaChatModel(**kwargs)
 
 
-def validate_reasoning_effort(effort: Any) -> ReasoningEffortValue:
+def validate_reasoning_effort(effort: object) -> ReasoningEffortValue:
     """Normalize and validate reasoning effort value.
 
     The value is forwarded verbatim to Ollama's ``think`` parameter and persisted to

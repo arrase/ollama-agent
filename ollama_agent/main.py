@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
 import sys
 import warnings
-from typing import Any
 
 import yaml
 from langchain_core._api.deprecation import LangChainPendingDeprecationWarning
@@ -47,7 +47,7 @@ def _extract_early_language(argv: list[str]) -> str | None:
     return None
 
 
-def _apply_cli_overrides(settings: Settings, args: Any) -> None:
+def _apply_cli_overrides(settings: Settings, args: argparse.Namespace) -> None:
     """Apply CLI arguments to settings."""
     if args.model:
         settings.model.name = args.model
@@ -59,6 +59,28 @@ def _apply_cli_overrides(settings: Settings, args: Any) -> None:
         settings.runtime.builtin_tool_timeout = args.builtin_tool_timeout
     if args.allow_traversal is not None:
         settings.runtime.allow_traversal = args.allow_traversal
+
+
+def _load_and_configure_settings(args: argparse.Namespace, console: Console) -> Settings:
+    """Load settings from disk and apply CLI/locale overrides."""
+    try:
+        settings = load_settings()
+        settings.setup_environment()
+
+        if args.language:
+            settings.runtime.language = args.language
+            set_locale(args.language)
+        elif settings.runtime.language:
+            set_locale(settings.runtime.language)
+
+        _apply_cli_overrides(settings, args)
+        settings.model.reasoning_effort = validate_reasoning_effort(settings.model.reasoning_effort)
+        set_tool_timeout(settings.runtime.builtin_tool_timeout)
+    except (ValueError, yaml.YAMLError) as exc:
+        # Invalid locale, settings.yaml, or reasoning effort coming from settings.yaml / CLI.
+        console.print(f"[red]{escape(_('Error: {exc}', exc=exc))}[/red]")
+        raise SystemExit(1) from None
+    return settings
 
 
 def main() -> None:
@@ -79,23 +101,7 @@ def main() -> None:
                 console.print(msg)
             return
 
-        try:
-            settings = load_settings()
-            settings.setup_environment()
-
-            if args.language:
-                settings.runtime.language = args.language
-                set_locale(args.language)
-            elif settings.runtime.language:
-                set_locale(settings.runtime.language)
-
-            _apply_cli_overrides(settings, args)
-            settings.model.reasoning_effort = validate_reasoning_effort(settings.model.reasoning_effort)
-            set_tool_timeout(settings.runtime.builtin_tool_timeout)
-        except (ValueError, yaml.YAMLError) as exc:
-            # Invalid locale, settings.yaml, or reasoning effort coming from settings.yaml / CLI.
-            console.print(f"[red]{escape(_('Error: {exc}', exc=exc))}[/red]")
-            raise SystemExit(1) from None
+        settings = _load_and_configure_settings(args, console)
 
         if args.command:
             handle_subcommand(args, settings)

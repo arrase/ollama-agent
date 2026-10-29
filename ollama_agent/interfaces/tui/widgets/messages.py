@@ -14,6 +14,8 @@ from textual.widgets import Collapsible, Markdown, Static
 
 from ....i18n import _
 
+_TEXT_FLUSH_INTERVAL = 0.1
+
 
 class UserMessage(Container):
     """Rendered user prompt."""
@@ -104,10 +106,10 @@ class AgentResponse(Container):
         self._text_chunks.append(delta)
 
         now = time.monotonic()
-        if now - self._last_text_update > 0.1:
+        if now - self._last_text_update > _TEXT_FLUSH_INTERVAL:
             self.flush_text()
         elif self._text_update_timer is None:
-            self._text_update_timer = self.set_timer(0.1, self.flush_text)
+            self._text_update_timer = self.set_timer(_TEXT_FLUSH_INTERVAL, self.flush_text)
 
     def flush_text(self) -> None:
         if self._text_update_timer is not None:

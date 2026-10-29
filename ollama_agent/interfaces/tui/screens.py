@@ -10,7 +10,7 @@ from textual.screen import Screen
 _log = logging.getLogger(__name__)
 
 
-class MainScreen(Screen):
+class MainScreen(Screen[None]):
     """Default screen with a guard against Textual crashes when text selection
     ends over a widget detached mid-drag (``parent`` is ``None``)."""
 

@@ -9,7 +9,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Self, TypeVar
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 from pydantic import (
     ConfigDict,
     StrictBool,
@@ -183,7 +183,7 @@ class Settings:
 T = TypeVar("T")
 
 
-def _dataclass_from_dict(cls: type[T], raw: Any) -> T:
+def _dataclass_from_dict(cls: type[T], raw: object) -> T:
     try:
         return TypeAdapter(cls).validate_python(raw)
     except ValidationError as exc:

@@ -80,9 +80,9 @@ async def rag_search(query: str, top_k: int | None = None) -> RAGToolResult:
             source = r["filename"]
             context_parts.append(f"[{_('Source:')} {source}]\n{r['content']}")
         context = "\n\n---\n\n".join(context_parts)
-        return {"success": True, "context": context}
     except RAGError as exc:
         return {"success": False, "error": str(exc)}
+    return {"success": True, "context": context}
 
 
 @tool

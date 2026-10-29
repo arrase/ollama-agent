@@ -7,14 +7,13 @@ import os
 import shutil
 import subprocess
 import sys
-from typing import Any
 
 
 class ClipboardError(Exception):
     """Raised when a system clipboard operation fails."""
 
 
-def _configure_win32_clipboard(u32: Any, k32: Any) -> None:
+def _configure_win32_clipboard(u32: ctypes.CDLL, k32: ctypes.CDLL) -> None:
     u32.OpenClipboard.argtypes = [ctypes.c_void_p]
     u32.OpenClipboard.restype = ctypes.c_int
     u32.CloseClipboard.argtypes = []

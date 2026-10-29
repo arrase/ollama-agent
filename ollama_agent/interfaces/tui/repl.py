@@ -19,6 +19,8 @@ from ..commands.sessions import new_session
 from .app import OllamaAgentApp
 from .widgets.system import format_queue_line
 
+_MIN_QUEUE_RM_ARGS = 2
+
 
 class OllamaREPL:
     """Read-Eval-Print Loop for interacting with the Ollama Agent."""
@@ -27,7 +29,7 @@ class OllamaREPL:
         self,
         runtime: AgentRuntime,
         rag_database: str | None = None,
-    ):
+    ) -> None:
         self.runtime = runtime
         self.console = Console(force_terminal=True, color_system="truecolor")
         self._task_ctx = TasksContext(console=self.console, settings=self.runtime.settings)
@@ -87,7 +89,7 @@ class OllamaREPL:
             self.runtime.thread_id = new_session(self.console)
         self.runtime.last_context_tokens = 0
 
-    def _parse_toggle_arg(self, args: list[str], current: bool, usage: str) -> bool | None:
+    def _parse_toggle_arg(self, args: list[str], *, current: bool, usage: str) -> bool | None:
         if not args:
             return not current
         val = args[0].lower()
@@ -99,7 +101,7 @@ class OllamaREPL:
         return None
 
     def _handle_yolo_cmd(self, args: list[str]) -> None:
-        new_val = self._parse_toggle_arg(args, self.runtime.yolo_mode, _("Usage: /yolo [on|off]"))
+        new_val = self._parse_toggle_arg(args, current=self.runtime.yolo_mode, usage=_("Usage: /yolo [on|off]"))
         if new_val is None:
             return
         self.runtime.yolo_mode = new_val
@@ -108,7 +110,7 @@ class OllamaREPL:
         self.console.print(f"[bold {color}]{_('YOLO mode is now {status}', status=status)}[/bold {color}]")
 
     async def _handle_stealth_cmd(self, args: list[str]) -> None:
-        new_val = self._parse_toggle_arg(args, self.runtime.stealth_mode, _("Usage: /stealth [on|off]"))
+        new_val = self._parse_toggle_arg(args, current=self.runtime.stealth_mode, usage=_("Usage: /stealth [on|off]"))
         if new_val is None:
             return
         self.runtime.stealth_mode = new_val
@@ -125,7 +127,7 @@ class OllamaREPL:
             f"[bold {color}]{_('Stealth mode is now {status} ({desc})', status=status, desc=desc)}[/bold {color}]"
         )
 
-    def _handle_queue_rm(self, queue: deque, pos_str: str) -> None:
+    def _handle_queue_rm(self, queue: deque[str], pos_str: str) -> None:
         if not queue:
             self.console.print(f"[dim]{_('Prompt queue is empty.')}[/dim]")
             return
@@ -169,7 +171,7 @@ class OllamaREPL:
             self.console.print(f"[bold #34d399]✓ {escape(msg)}[/bold #34d399]")
             return
         if args[0] in ("rm", "remove", "delete"):
-            if len(args) < 2:
+            if len(args) < _MIN_QUEUE_RM_ARGS:
                 self.console.print(f"[red]{escape(_('Usage: /queue rm <position>'))}[/red]")
                 return
             self._handle_queue_rm(queue, args[1])

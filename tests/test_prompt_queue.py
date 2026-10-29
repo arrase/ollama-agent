@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import unittest
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from conftest import make_mock_repl, recording_console
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.types import Command
@@ -20,6 +20,7 @@ from ollama_agent.interfaces.tui.widgets import (
     SystemOutputWidget,
     UserMessage,
 )
+from ollama_agent.streaming.base import StreamingRenderer
 
 
 class TestPromptQueueWidget(unittest.TestCase):
@@ -27,58 +28,58 @@ class TestPromptQueueWidget(unittest.TestCase):
 
     def test_can_focus_is_false(self) -> None:
         widget = PromptQueueWidget()
-        self.assertFalse(widget.can_focus)
+        assert not widget.can_focus
 
     def test_update_queue_empty_hides_widget(self) -> None:
         widget = PromptQueueWidget()
         widget.update_queue([])
-        self.assertFalse(widget.display)
+        assert not widget.display
 
     def test_update_queue_renders_items(self) -> None:
         widget = PromptQueueWidget()
         items = ["Prompt alpha", "Prompt beta"]
         widget.update_queue(items)
-        self.assertTrue(widget.display)
+        assert widget.display
         rendered = str(widget.render())
-        self.assertIn("Queued (2)", rendered)
-        self.assertIn("#1 Prompt alpha", rendered)
-        self.assertIn("#2 Prompt beta", rendered)
+        assert "Queued (2)" in rendered
+        assert "#1 Prompt alpha" in rendered
+        assert "#2 Prompt beta" in rendered
 
     def test_update_queue_truncates_long_items_and_escapes(self) -> None:
         widget = PromptQueueWidget()
         long_prompt = "A" * 70
         widget.update_queue([long_prompt])
-        self.assertTrue(widget.display)
+        assert widget.display
         rendered = str(widget.render())
-        self.assertIn("...", rendered)
+        assert "..." in rendered
 
     def test_update_queue_more_than_three_items(self) -> None:
         widget = PromptQueueWidget()
         items = [f"Item {i}" for i in range(1, 6)]
         widget.update_queue(items)
-        self.assertTrue(widget.display)
+        assert widget.display
         rendered = str(widget.render())
-        self.assertIn("Queued (5)", rendered)
-        self.assertIn("#1 Item 1", rendered)
-        self.assertIn("#2 Item 2", rendered)
-        self.assertIn("#3 Item 3", rendered)
-        self.assertNotIn("#4 Item 4", rendered)
-        self.assertIn("+2 more", rendered)
+        assert "Queued (5)" in rendered
+        assert "#1 Item 1" in rendered
+        assert "#2 Item 2" in rendered
+        assert "#3 Item 3" in rendered
+        assert "#4 Item 4" not in rendered
+        assert "+2 more" in rendered
 
 
 class TestIsImmediateCommand(unittest.TestCase):
     """Unit tests for immediate vs stateful/queued slash command classification."""
 
     def test_immediate_commands_set(self) -> None:
-        self.assertIn(("/exit", "*"), IMMEDIATE_COMMANDS)
-        self.assertIn(("/quit", "*"), IMMEDIATE_COMMANDS)
-        self.assertIn(("/queue", "*"), IMMEDIATE_COMMANDS)
-        self.assertIn(("/yolo", "*"), IMMEDIATE_COMMANDS)
-        self.assertIn(("/stealth", "*"), IMMEDIATE_COMMANDS)
-        self.assertIn(("/model", "list"), IMMEDIATE_COMMANDS)
-        self.assertIn(("/effort", ""), IMMEDIATE_COMMANDS)
-        self.assertIn(("/context", ""), IMMEDIATE_COMMANDS)
-        self.assertIn(("/session", "list"), IMMEDIATE_COMMANDS)
+        assert ("/exit", "*") in IMMEDIATE_COMMANDS
+        assert ("/quit", "*") in IMMEDIATE_COMMANDS
+        assert ("/queue", "*") in IMMEDIATE_COMMANDS
+        assert ("/yolo", "*") in IMMEDIATE_COMMANDS
+        assert ("/stealth", "*") in IMMEDIATE_COMMANDS
+        assert ("/model", "list") in IMMEDIATE_COMMANDS
+        assert ("/effort", "") in IMMEDIATE_COMMANDS
+        assert ("/context", "") in IMMEDIATE_COMMANDS
+        assert ("/session", "list") in IMMEDIATE_COMMANDS
 
     def test_immediate_commands_bypass_queue(self) -> None:
         immediate_samples = [
@@ -126,7 +127,7 @@ class TestIsImmediateCommand(unittest.TestCase):
         ]
         for cmd in immediate_samples:
             with self.subTest(cmd=cmd):
-                self.assertTrue(_is_immediate_command(cmd))
+                assert _is_immediate_command(cmd)
 
     def test_stateful_commands_and_prompts_are_not_immediate(self) -> None:
         stateful_samples = [
@@ -157,7 +158,7 @@ class TestIsImmediateCommand(unittest.TestCase):
         ]
         for cmd in stateful_samples:
             with self.subTest(cmd=cmd):
-                self.assertFalse(_is_immediate_command(cmd))
+                assert not _is_immediate_command(cmd)
 
 
 class TestPromptQueueFIFO(unittest.IsolatedAsyncioTestCase):
@@ -177,22 +178,22 @@ class TestPromptQueueFIFO(unittest.IsolatedAsyncioTestCase):
             app.on_repl_input_submitted(ReplInput.Submitted(inp, "Prompt 2"))
             app.on_repl_input_submitted(ReplInput.Submitted(inp, "Prompt 3"))
 
-            self.assertEqual(len(app._prompt_queue), 3)
-            self.assertEqual(app._prompt_queue[0], "Prompt 1")
-            self.assertEqual(app._prompt_queue[1], "Prompt 2")
-            self.assertEqual(app._prompt_queue[2], "Prompt 3")
+            assert len(app._prompt_queue) == 3
+            assert app._prompt_queue[0] == "Prompt 1"
+            assert app._prompt_queue[1] == "Prompt 2"
+            assert app._prompt_queue[2] == "Prompt 3"
 
-            self.assertEqual(footer._queued_count, 3)
-            self.assertIn("3 queued", str(footer.render()))
+            assert footer._queued_count == 3
+            assert "3 queued" in str(footer.render())
 
-            self.assertEqual(len(list(chat_scroll.query(".system-message"))), 0)
+            assert len(list(chat_scroll.query(".system-message"))) == 0
             queue_widget = app.query_one(PromptQueueWidget)
-            self.assertTrue(queue_widget.display)
-            self.assertIn("Prompt 1", str(queue_widget.render()))
-            self.assertIn("Prompt 2", str(queue_widget.render()))
-            self.assertIn("Prompt 3", str(queue_widget.render()))
+            assert queue_widget.display
+            assert "Prompt 1" in str(queue_widget.render())
+            assert "Prompt 2" in str(queue_widget.render())
+            assert "Prompt 3" in str(queue_widget.render())
             sys_out = app.query_one(SystemOutputWidget)
-            self.assertFalse(sys_out.display)
+            assert not sys_out.display
 
     async def test_fifo_queuing_stateful_slash_commands(self) -> None:
         repl = make_mock_repl()
@@ -207,11 +208,11 @@ class TestPromptQueueFIFO(unittest.IsolatedAsyncioTestCase):
             app.on_repl_input_submitted(ReplInput.Submitted(inp, "/model set llama3:latest"))
             app.on_repl_input_submitted(ReplInput.Submitted(inp, "/session new"))
 
-            self.assertEqual(len(app._prompt_queue), 3)
-            self.assertEqual(app._prompt_queue[0], "/task run task_123")
-            self.assertEqual(app._prompt_queue[1], "/model set llama3:latest")
-            self.assertEqual(app._prompt_queue[2], "/session new")
-            self.assertEqual(footer._queued_count, 3)
+            assert len(app._prompt_queue) == 3
+            assert app._prompt_queue[0] == "/task run task_123"
+            assert app._prompt_queue[1] == "/model set llama3:latest"
+            assert app._prompt_queue[2] == "/session new"
+            assert footer._queued_count == 3
 
     async def test_fifo_queuing_mixed_prompts_and_commands(self) -> None:
         repl = make_mock_repl()
@@ -227,10 +228,7 @@ class TestPromptQueueFIFO(unittest.IsolatedAsyncioTestCase):
             app.on_repl_input_submitted(ReplInput.Submitted(inp, "/session resume sess_xyz"))
 
             queue_items = list(app._prompt_queue)
-            self.assertEqual(
-                queue_items,
-                ["First prompt", "/task run task_123", "Second prompt", "/session resume sess_xyz"],
-            )
+            assert queue_items == ["First prompt", "/task run task_123", "Second prompt", "/session resume sess_xyz"]
 
     async def test_empty_or_whitespace_input_not_queued(self) -> None:
         repl = make_mock_repl()
@@ -242,7 +240,7 @@ class TestPromptQueueFIFO(unittest.IsolatedAsyncioTestCase):
             app.on_repl_input_submitted(ReplInput.Submitted(inp, ""))
             app.on_repl_input_submitted(ReplInput.Submitted(inp, "   \n\t  "))
 
-            self.assertEqual(len(app._prompt_queue), 0)
+            assert len(app._prompt_queue) == 0
 
 
 class TestImmediateCommandExecution(unittest.IsolatedAsyncioTestCase):
@@ -263,9 +261,9 @@ class TestImmediateCommandExecution(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
 
                 # Immediate command must not be added to queue
-                self.assertEqual(len(app._prompt_queue), 0)
+                assert len(app._prompt_queue) == 0
                 # Active worker is preserved while generating
-                self.assertEqual(app._current_worker, active_worker)
+                assert app._current_worker == active_worker
 
     async def test_immediate_command_while_queue_has_items(self) -> None:
         repl = make_mock_repl()
@@ -279,15 +277,15 @@ class TestImmediateCommandExecution(unittest.IsolatedAsyncioTestCase):
             app._prompt_queue.append("Queued prompt 2")
             app._update_queue_ui()
 
-            self.assertEqual(footer._queued_count, 2)
+            assert footer._queued_count == 2
 
             with patch("ollama_agent.interfaces.tui.app.run_slash_command", new_callable=AsyncMock):
                 app.on_repl_input_submitted(ReplInput.Submitted(inp, "/queue list"))
                 await pilot.pause()
 
                 # Queue remains unmodified
-                self.assertEqual(len(app._prompt_queue), 2)
-                self.assertEqual(footer._queued_count, 2)
+                assert len(app._prompt_queue) == 2
+                assert footer._queued_count == 2
 
     async def test_immediate_command_when_idle_sets_current_worker(self) -> None:
         repl = make_mock_repl()
@@ -298,7 +296,7 @@ class TestImmediateCommandExecution(unittest.IsolatedAsyncioTestCase):
 
             with patch("ollama_agent.interfaces.tui.app.run_slash_command", new_callable=AsyncMock):
                 app.on_repl_input_submitted(ReplInput.Submitted(inp, "/yolo"))
-                self.assertIsNotNone(app._current_worker)
+                assert app._current_worker is not None
                 await pilot.pause()
 
 
@@ -328,14 +326,14 @@ class TestQueueDrainingBehavior(unittest.IsolatedAsyncioTestCase):
                 app._is_generating = True
                 app._is_approval_pending = False
                 app._process_next_in_queue()
-                self.assertEqual(len(app._prompt_queue), 1)
+                assert len(app._prompt_queue) == 1
                 mock_stream.assert_not_called()
 
                 # Blocked when approval pending
                 app._is_generating = False
                 app._is_approval_pending = True
                 app._process_next_in_queue()
-                self.assertEqual(len(app._prompt_queue), 1)
+                assert len(app._prompt_queue) == 1
                 mock_stream.assert_not_called()
 
     async def test_drains_prompt_item_and_updates_badge(self) -> None:
@@ -347,23 +345,23 @@ class TestQueueDrainingBehavior(unittest.IsolatedAsyncioTestCase):
 
             app._prompt_queue.append("Drainable prompt")
             app._update_queue_ui()
-            self.assertEqual(footer._queued_count, 1)
+            assert footer._queued_count == 1
 
             with patch.object(app, "_run_stream", new_callable=AsyncMock) as mock_stream:
                 app._process_next_in_queue()
                 await pilot.pause()
 
-                self.assertEqual(len(app._prompt_queue), 0)
-                self.assertEqual(footer._queued_count, 0)
-                self.assertNotIn("queued", str(footer.render()))
+                assert len(app._prompt_queue) == 0
+                assert footer._queued_count == 0
+                assert "queued" not in str(footer.render())
 
                 user_msgs = list(chat_scroll.query(UserMessage))
                 agent_msgs = list(chat_scroll.query(AgentResponse))
-                self.assertEqual(len(user_msgs), 1)
-                self.assertEqual(len(agent_msgs), 1)
+                assert len(user_msgs) == 1
+                assert len(agent_msgs) == 1
 
                 mock_stream.assert_called_once()
-                self.assertEqual(mock_stream.call_args[0][0], "Drainable prompt")
+                assert mock_stream.call_args[0][0] == "Drainable prompt"
 
     async def test_drains_slash_command_item(self) -> None:
         repl = make_mock_repl()
@@ -373,14 +371,14 @@ class TestQueueDrainingBehavior(unittest.IsolatedAsyncioTestCase):
 
             app._prompt_queue.append("/task run task_123")
             app._update_queue_ui()
-            self.assertEqual(footer._queued_count, 1)
+            assert footer._queued_count == 1
 
             with patch("ollama_agent.interfaces.tui.app.run_slash_command", new_callable=AsyncMock) as mock_slash:
                 app._process_next_in_queue()
                 await pilot.pause()
 
-                self.assertEqual(len(app._prompt_queue), 0)
-                self.assertEqual(footer._queued_count, 0)
+                assert len(app._prompt_queue) == 0
+                assert footer._queued_count == 0
                 mock_slash.assert_called_once_with(app, "/task run task_123")
 
     async def test_sequential_queue_draining_flow(self) -> None:
@@ -395,8 +393,9 @@ class TestQueueDrainingBehavior(unittest.IsolatedAsyncioTestCase):
             streamed_prompts: list[str] = []
 
             async def fake_stream_events(
-                rt: object, prompt: str | Command[object], renderer: object, auto_close: bool = True
+                _rt: object, prompt: str | Command[object], _renderer: object, *, auto_close: bool = True
             ) -> None:
+                _ = auto_close
                 if isinstance(prompt, str):
                     streamed_prompts.append(prompt)
 
@@ -404,8 +403,8 @@ class TestQueueDrainingBehavior(unittest.IsolatedAsyncioTestCase):
                 app._process_next_in_queue()
                 await pilot.pause()
 
-            self.assertEqual(streamed_prompts, ["Prompt 1", "Prompt 2"])
-            self.assertEqual(len(app._prompt_queue), 0)
+            assert streamed_prompts == ["Prompt 1", "Prompt 2"]
+            assert len(app._prompt_queue) == 0
 
 
 class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
@@ -430,14 +429,14 @@ class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
 
             # Worker cancelled AND queue cleared
             mock_worker.cancel.assert_called_once()
-            self.assertEqual(len(app._prompt_queue), 0)
-            self.assertEqual(footer._queued_count, 0)
-            self.assertNotIn("queued", str(footer.render()))
+            assert len(app._prompt_queue) == 0
+            assert footer._queued_count == 0
+            assert "queued" not in str(footer.render())
 
-            self.assertEqual(len(list(chat_scroll.query(".system-message"))), 0)
+            assert len(list(chat_scroll.query(".system-message"))) == 0
             sys_out = app.query_one(SystemOutputWidget)
-            self.assertTrue(sys_out.display)
-            self.assertIn("Prompt queue cleared", str(sys_out.render()))
+            assert sys_out.display
+            assert "Prompt queue cleared" in str(sys_out.render())
 
     async def test_cancel_generation_cancels_worker_and_approval(self) -> None:
         repl = make_mock_repl()
@@ -460,13 +459,13 @@ class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
             footer.set_approval(True)
 
             app.action_cancel_generation()
-            self.assertFalse(app._is_approval_pending)
-            self.assertNotIn("Approval required", str(footer.render()))
+            assert not app._is_approval_pending
+            assert "Approval required" not in str(footer.render())
 
-            self.assertEqual(len(list(chat_scroll.query(".system-message"))), 0)
+            assert len(list(chat_scroll.query(".system-message"))) == 0
             sys_out = app.query_one(SystemOutputWidget)
-            self.assertTrue(sys_out.display)
-            self.assertIn("Approval cancelled", str(sys_out.render()))
+            assert sys_out.display
+            assert "Approval cancelled" in str(sys_out.render())
 
     async def test_action_cancel_or_quit_branches(self) -> None:
         repl = make_mock_repl()
@@ -517,19 +516,19 @@ class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
 
             with (
                 patch("ollama_agent.interfaces.tui.app.stream_agent_events", side_effect=asyncio.CancelledError()),
-                self.assertRaises(asyncio.CancelledError),
+                pytest.raises(asyncio.CancelledError),
             ):
                 await app._run_stream("Trigger prompt", chat_scroll, agent_msg)
 
-            self.assertEqual(len(app._prompt_queue), 0)
-            self.assertEqual(footer._queued_count, 0)
-            self.assertFalse(inp.disabled)
-            self.assertFalse(app._is_approval_pending)
+            assert len(app._prompt_queue) == 0
+            assert footer._queued_count == 0
+            assert not inp.disabled
+            assert not app._is_approval_pending
 
-            self.assertEqual(len(list(chat_scroll.query(".system-message"))), 0)
+            assert len(list(chat_scroll.query(".system-message"))) == 0
             sys_out = app.query_one(SystemOutputWidget)
-            self.assertTrue(sys_out.display)
-            self.assertIn("Execution interrupted by user", str(sys_out.render()))
+            assert sys_out.display
+            assert "Execution interrupted by user" in str(sys_out.render())
 
     async def test_queue_clear_and_rm_do_not_interrupt_active_generation(self) -> None:
         repl = make_mock_repl()
@@ -546,17 +545,17 @@ class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
 
             # /queue rm 2 removes item 2 without stopping worker
             repl._handle_queue_cmd(["rm", "2"])
-            self.assertEqual(len(app._prompt_queue), 2)
-            self.assertEqual(app._prompt_queue[0], "Prompt 1")
-            self.assertEqual(app._prompt_queue[1], "Prompt 3")
+            assert len(app._prompt_queue) == 2
+            assert app._prompt_queue[0] == "Prompt 1"
+            assert app._prompt_queue[1] == "Prompt 3"
             mock_worker.cancel.assert_not_called()
-            self.assertTrue(app._is_generating)
+            assert app._is_generating
 
             # /queue clear clears queue without stopping worker
             repl._handle_queue_cmd(["clear"])
-            self.assertEqual(len(app._prompt_queue), 0)
+            assert len(app._prompt_queue) == 0
             mock_worker.cancel.assert_not_called()
-            self.assertTrue(app._is_generating)
+            assert app._is_generating
 
 
 class TestToolApprovalModalAndQueue(unittest.IsolatedAsyncioTestCase):
@@ -575,7 +574,10 @@ class TestToolApprovalModalAndQueue(unittest.IsolatedAsyncioTestCase):
             mock_interrupt = MagicMock()
             mock_interrupt.value = {"action_requests": [{"name": "read_file", "args": {"path": "main.py"}}]}
 
-            async def fake_stream(rt: object, prompt: object, renderer: Any, auto_close: bool = True) -> None:
+            async def fake_stream(
+                rt: object, _prompt: object, renderer: StreamingRenderer, *, auto_close: bool = True
+            ) -> None:
+                _ = auto_close
                 await renderer.handle_interrupt(
                     {"interrupts": [mock_interrupt]},
                     rt,
@@ -584,9 +586,9 @@ class TestToolApprovalModalAndQueue(unittest.IsolatedAsyncioTestCase):
             with patch("ollama_agent.interfaces.tui.app.stream_agent_events", side_effect=fake_stream):
                 await app._run_stream("Read file prompt", chat_scroll, agent_msg)
 
-            self.assertTrue(app._is_approval_pending)
-            self.assertFalse(inp.disabled)
-            self.assertIn("Approval required", str(footer.render()))
+            assert app._is_approval_pending
+            assert not inp.disabled
+            assert "Approval required" in str(footer.render())
 
     async def test_queuing_prompts_during_approval_pending(self) -> None:
         repl = make_mock_repl()
@@ -600,10 +602,10 @@ class TestToolApprovalModalAndQueue(unittest.IsolatedAsyncioTestCase):
 
             app.on_repl_input_submitted(ReplInput.Submitted(inp, "Prompt during approval"))
 
-            self.assertEqual(len(app._prompt_queue), 1)
-            self.assertEqual(app._prompt_queue[0], "Prompt during approval")
-            self.assertEqual(footer._queued_count, 1)
-            self.assertIn("1 queued", str(footer.render()))
+            assert len(app._prompt_queue) == 1
+            assert app._prompt_queue[0] == "Prompt during approval"
+            assert footer._queued_count == 1
+            assert "1 queued" in str(footer.render())
 
     async def test_approval_decision_resumes_stream_and_drains_queue(self) -> None:
         repl = make_mock_repl()
@@ -625,19 +627,20 @@ class TestToolApprovalModalAndQueue(unittest.IsolatedAsyncioTestCase):
             processed_calls: list[object] = []
 
             async def fake_stream_events(
-                rt: object, prompt: str | Command[object], renderer: object, auto_close: bool = True
+                _rt: object, prompt: str | Command[object], _renderer: object, *, auto_close: bool = True
             ) -> None:
+                _ = auto_close
                 processed_calls.append(prompt)
 
             with patch("ollama_agent.interfaces.tui.app.stream_agent_events", side_effect=fake_stream_events):
                 await app._handle_approval_decision([{"type": "approve"}], chat_scroll, agent_msg)
                 await pilot.pause()
 
-            self.assertFalse(app._is_approval_pending)
-            self.assertEqual(len(processed_calls), 2)
-            self.assertIsInstance(processed_calls[0], Command)
-            self.assertEqual(processed_calls[1], "Subsequent queued prompt")
-            self.assertEqual(len(app._prompt_queue), 0)
+            assert not app._is_approval_pending
+            assert len(processed_calls) == 2
+            assert isinstance(processed_calls[0], Command)
+            assert processed_calls[1] == "Subsequent queued prompt"
+            assert len(app._prompt_queue) == 0
 
 
 class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
@@ -648,7 +651,7 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
         repl.app = None
         repl._handle_queue_cmd([])
         output = repl.console.export_text()
-        self.assertIn("Prompt queue is empty", output)
+        assert "Prompt queue is empty" in output
 
     async def test_queue_list_with_items(self) -> None:
         repl = make_mock_repl()
@@ -661,9 +664,9 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
             repl._handle_queue_cmd(["list"])
             output = repl.console.export_text()
 
-            self.assertIn("Queued prompts (2)", output)
-            self.assertIn("#1 Prompt alpha", output)
-            self.assertIn("#2 Prompt beta", output)
+            assert "Queued prompts (2)" in output
+            assert "#1 Prompt alpha" in output
+            assert "#2 Prompt beta" in output
 
     async def test_queue_clear_subcommand(self) -> None:
         repl = make_mock_repl()
@@ -678,10 +681,10 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
             repl._handle_queue_cmd(["clear"])
             output = repl.console.export_text()
 
-            self.assertIn("Prompt queue cleared (3 removed)", output)
-            self.assertEqual(len(app._prompt_queue), 0)
+            assert "Prompt queue cleared (3 removed)" in output
+            assert len(app._prompt_queue) == 0
             footer = app.query_one(AgentFooter)
-            self.assertEqual(footer._queued_count, 0)
+            assert footer._queued_count == 0
 
     async def test_queue_rm_success(self) -> None:
         repl = make_mock_repl()
@@ -696,12 +699,12 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
             repl._handle_queue_cmd(["rm", "2"])
             output = repl.console.export_text()
 
-            self.assertIn("Removed #2 from prompt queue: Item 2", output)
-            self.assertEqual(len(app._prompt_queue), 2)
-            self.assertEqual(app._prompt_queue[0], "Item 1")
-            self.assertEqual(app._prompt_queue[1], "Item 3")
+            assert "Removed #2 from prompt queue: Item 2" in output
+            assert len(app._prompt_queue) == 2
+            assert app._prompt_queue[0] == "Item 1"
+            assert app._prompt_queue[1] == "Item 3"
             footer = app.query_one(AgentFooter)
-            self.assertEqual(footer._queued_count, 2)
+            assert footer._queued_count == 2
 
     async def test_queue_rm_with_hash_prefix(self) -> None:
         repl = make_mock_repl()
@@ -715,9 +718,9 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
             repl._handle_queue_cmd(["rm", "#1"])
             output = repl.console.export_text()
 
-            self.assertIn("Removed #1 from prompt queue: Item 1", output)
-            self.assertEqual(len(app._prompt_queue), 1)
-            self.assertEqual(app._prompt_queue[0], "Item 2")
+            assert "Removed #1 from prompt queue: Item 1" in output
+            assert len(app._prompt_queue) == 1
+            assert app._prompt_queue[0] == "Item 2"
 
     async def test_queue_rm_aliases_remove_and_delete(self) -> None:
         repl = make_mock_repl()
@@ -729,26 +732,26 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
 
             repl.console = recording_console()
             repl._handle_queue_cmd(["remove", "1"])
-            self.assertIn("Removed #1 from prompt queue: Alpha", repl.console.export_text())
+            assert "Removed #1 from prompt queue: Alpha" in repl.console.export_text()
 
             repl.console = recording_console()
             repl._handle_queue_cmd(["delete", "1"])
-            self.assertIn("Removed #1 from prompt queue: Beta", repl.console.export_text())
-            self.assertEqual(len(app._prompt_queue), 0)
+            assert "Removed #1 from prompt queue: Beta" in repl.console.export_text()
+            assert len(app._prompt_queue) == 0
 
     def test_queue_rm_missing_position(self) -> None:
         repl = make_mock_repl()
         repl.app = None
         repl._handle_queue_cmd(["rm"])
         output = repl.console.export_text()
-        self.assertIn("Usage: /queue rm <position>", output)
+        assert "Usage: /queue rm <position>" in output
 
     def test_queue_rm_when_empty(self) -> None:
         repl = make_mock_repl()
         repl.app = None
         repl._handle_queue_cmd(["rm", "1"])
         output = repl.console.export_text()
-        self.assertIn("Prompt queue is empty.", output)
+        assert "Prompt queue is empty." in output
 
     async def test_queue_rm_invalid_position_non_digit(self) -> None:
         repl = make_mock_repl()
@@ -758,7 +761,7 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
             repl.console = recording_console()
             repl._handle_queue_cmd(["rm", "abc"])
             output = repl.console.export_text()
-            self.assertIn("Invalid queue position 'abc'. Usage: /queue rm <position>", output)
+            assert "Invalid queue position 'abc'. Usage: /queue rm <position>" in output
 
     async def test_queue_rm_out_of_range(self) -> None:
         repl = make_mock_repl()
@@ -770,11 +773,11 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
 
             repl.console = recording_console()
             repl._handle_queue_cmd(["rm", "0"])
-            self.assertIn("Queue position 0 out of range (queue has 2 items).", repl.console.export_text())
+            assert "Queue position 0 out of range (queue has 2 items)." in repl.console.export_text()
 
             repl.console = recording_console()
             repl._handle_queue_cmd(["rm", "5"])
-            self.assertIn("Queue position 5 out of range (queue has 2 items).", repl.console.export_text())
+            assert "Queue position 5 out of range (queue has 2 items)." in repl.console.export_text()
 
     async def test_queue_rm_autocomplete(self) -> None:
         repl = make_mock_repl()
@@ -785,39 +788,39 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
 
             # Level 2 completions for /queue rm
             comps = slash_completions("/queue rm ", app.repl, list(app._prompt_queue))
-            self.assertEqual(len(comps), 2)
-            self.assertEqual(comps[0][0], "/queue rm 1")
-            self.assertEqual(comps[1][0], "/queue rm 2")
-            self.assertIn("#1", comps[0][1].plain)
-            self.assertIn("First queued prompt", comps[0][1].plain)
+            assert len(comps) == 2
+            assert comps[0][0] == "/queue rm 1"
+            assert comps[1][0] == "/queue rm 2"
+            assert "#1" in comps[0][1].plain
+            assert "First queued prompt" in comps[0][1].plain
 
             # Filtered completion
             comps_filtered = slash_completions("/queue remove 2", app.repl, list(app._prompt_queue))
-            self.assertEqual(len(comps_filtered), 1)
-            self.assertEqual(comps_filtered[0][0], "/queue remove 2")
+            assert len(comps_filtered) == 1
+            assert comps_filtered[0][0] == "/queue remove 2"
 
             # Hash-prefixed filter
             comps_hash = slash_completions("/queue delete #1", app.repl, list(app._prompt_queue))
-            self.assertEqual(len(comps_hash), 1)
-            self.assertEqual(comps_hash[0][0], "/queue delete 1")
+            assert len(comps_hash) == 1
+            assert comps_hash[0][0] == "/queue delete 1"
 
     def test_queue_invalid_subcommand(self) -> None:
         repl = make_mock_repl()
         repl.app = None
         repl._handle_queue_cmd(["unknown_cmd"])
         output = repl.console.export_text()
-        self.assertIn("Unknown queue subcommand 'unknown_cmd'", output)
+        assert "Unknown queue subcommand 'unknown_cmd'" in output
 
     def test_queue_handler_when_app_is_none(self) -> None:
         repl = make_mock_repl()
         repl.app = None
 
         repl._handle_queue_cmd(["list"])
-        self.assertIn("Prompt queue is empty", repl.console.export_text())
+        assert "Prompt queue is empty" in repl.console.export_text()
 
         repl.console = recording_console()
         repl._handle_queue_cmd(["clear"])
-        self.assertIn("Prompt queue cleared (0 removed)", repl.console.export_text())
+        assert "Prompt queue cleared (0 removed)" in repl.console.export_text()
 
 
 class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
@@ -835,8 +838,9 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
             streamed: list[str] = []
 
             async def fake_stream_events(
-                rt: object, prompt: str | Command[object], renderer: object, auto_close: bool = True
+                _rt: object, prompt: str | Command[object], _renderer: object, *, auto_close: bool = True
             ) -> None:
+                _ = auto_close
                 if isinstance(prompt, str):
                     streamed.append(prompt)
 
@@ -847,9 +851,9 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
                 app._process_next_in_queue()
                 await pilot.pause()
 
-                self.assertEqual(runtime.thread_id, "sess_new_999")
-                self.assertEqual(len(app._prompt_queue), 0)
-                self.assertEqual(streamed, ["First message in fresh session"])
+                assert runtime.thread_id == "sess_new_999"
+                assert len(app._prompt_queue) == 0
+                assert streamed == ["First message in fresh session"]
 
     async def test_session_resume_success_drains_subsequent_queue(self) -> None:
         repl = make_mock_repl()
@@ -873,8 +877,9 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
             streamed: list[str] = []
 
             async def fake_stream_events(
-                rt: object, prompt: str | Command[object], renderer: object, auto_close: bool = True
+                _rt: object, prompt: str | Command[object], _renderer: object, *, auto_close: bool = True
             ) -> None:
+                _ = auto_close
                 if isinstance(prompt, str):
                     streamed.append(prompt)
 
@@ -885,16 +890,16 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
                 app._process_next_in_queue()
                 await pilot.pause()
 
-                self.assertEqual(runtime.thread_id, "sess_target_123")
-                self.assertEqual(runtime.last_context_tokens, 128)
+                assert runtime.thread_id == "sess_target_123"
+                assert runtime.last_context_tokens == 128
 
                 user_msgs = list(chat_scroll.query(UserMessage))
                 agent_msgs = list(chat_scroll.query(AgentResponse))
-                self.assertEqual(len(user_msgs), 2)
-                self.assertEqual(len(agent_msgs), 2)
+                assert len(user_msgs) == 2
+                assert len(agent_msgs) == 2
 
-                self.assertEqual(len(app._prompt_queue), 0)
-                self.assertEqual(streamed, ["Followup question"])
+                assert len(app._prompt_queue) == 0
+                assert streamed == ["Followup question"]
 
     async def test_session_resume_not_found_drains_subsequent_queue(self) -> None:
         repl = make_mock_repl()
@@ -908,8 +913,9 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
             streamed: list[str] = []
 
             async def fake_stream_events(
-                rt: object, prompt: str | Command[object], renderer: object, auto_close: bool = True
+                _rt: object, prompt: str | Command[object], _renderer: object, *, auto_close: bool = True
             ) -> None:
+                _ = auto_close
                 if isinstance(prompt, str):
                     streamed.append(prompt)
 
@@ -920,9 +926,9 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
                 app._process_next_in_queue()
                 await pilot.pause()
 
-                self.assertEqual(len(list(chat_scroll.query(".system-message"))), 0)
-                self.assertEqual(len(app._prompt_queue), 0)
-                self.assertEqual(streamed, ["Subsequent message"])
+                assert len(list(chat_scroll.query(".system-message"))) == 0
+                assert len(app._prompt_queue) == 0
+                assert streamed == ["Subsequent message"]
 
     async def test_clear_and_new_aliases_drain_subsequent_queue(self) -> None:
         for alias in ("/clear", "/new"):
@@ -937,12 +943,14 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
                     streamed: list[str] = []
 
                     async def fake_stream_events(
-                        rt: object,
+                        _rt: object,
                         prompt: str | Command[object],
-                        renderer: object,
+                        _renderer: object,
+                        *,
                         auto_close: bool = True,
                         streamed: list[str] = streamed,
                     ) -> None:
+                        _ = auto_close
                         if isinstance(prompt, str):
                             streamed.append(prompt)
 
@@ -953,6 +961,6 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
                         app._process_next_in_queue()
                         await pilot.pause()
 
-                        self.assertEqual(runtime.thread_id, "sess_alias_001")
-                        self.assertEqual(len(app._prompt_queue), 0)
-                        self.assertEqual(streamed, ["Next action"])
+                        assert runtime.thread_id == "sess_alias_001"
+                        assert len(app._prompt_queue) == 0
+                        assert streamed == ["Next action"]

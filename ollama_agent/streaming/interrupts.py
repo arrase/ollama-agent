@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from ..agent import AgentRuntime
 from ..i18n import _
 
 
@@ -17,7 +18,7 @@ def build_approval_decisions(
     action_requests: list[dict[str, Any]],
     action: str,  # "approve", "reject", or "allow"
     *,
-    runtime: Any = None,
+    runtime: AgentRuntime | None = None,
     reject_message: str | None = None,
 ) -> list[dict[str, Any]]:
     """Consolidate LangGraph approval/rejection payload construction used across CLI and TUI."""

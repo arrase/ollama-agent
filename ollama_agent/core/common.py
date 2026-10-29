@@ -16,7 +16,7 @@ ReasoningEffortValue = str
 DEFAULT_REASONING_EFFORT: ReasoningEffortValue = "default"
 
 
-def extract_text(content: Any) -> str:
+def extract_text(content: object) -> str:
     """Convert agent payload content into plain text.
 
     Non-text multimodal blocks (image/audio/video/file) contribute no plain text, so

@@ -26,6 +26,7 @@ from ...i18n import _
 from ...settings.paths import HISTORY_DB_PATH
 
 _SESSION_NOT_FOUND_MSG = "Session '{target_id}' not found."
+_MAX_SNIPPET_LEN = 120
 
 
 def is_current(thread_id: str, current_thread_id: str) -> bool:
@@ -125,9 +126,10 @@ def resolve_session_id(target_id: str, available_sessions: list[dict[str, Any]])
             not_found_error=LookupError,
             ambiguous_error=ValueError,
         )
-        return resolved
     except (LookupError, ValueError):
         return None
+    else:
+        return resolved
 
 
 def _resolve_or_report_session(
@@ -150,7 +152,6 @@ def _resolve_or_report_session(
             not_found_error=LookupError,
             ambiguous_error=ValueError,
         )
-        return resolved
     except ValueError:
         matches_str = ", ".join(tid for tid, _ in matches[:5])
         ambiguous_msg = _(
@@ -162,6 +163,8 @@ def _resolve_or_report_session(
     except LookupError:
         not_found_msg = _(_SESSION_NOT_FOUND_MSG, target_id=target_id)
         console.print(f"[red]{escape(not_found_msg)}[/red]")
+    else:
+        return resolved
     return None
 
 
@@ -205,11 +208,12 @@ def delete_session(
             conn.commit()
         deleted_msg = _("Deleted session: {resolved}", resolved=resolved)
         console.print(f"[green]✓ {escape(deleted_msg)}[/green]")
-        return True
     except (sqlite3.Error, OSError, HistoryError) as exc:
         failed_msg = _("Failed to delete session '{resolved}': {exc}", resolved=resolved, exc=exc)
         console.print(f"[red]{escape(failed_msg)}[/red]")
         return False
+    else:
+        return True
 
 
 def _format_exported_messages(messages: list[Any], export_title: str) -> list[str]:
@@ -286,11 +290,12 @@ async def export_session(
         target_file.write_text("\n".join(lines), encoding="utf-8")
         exported_msg = _("Session exported to: {target_file}", target_file=target_file)
         console.print(f"[green]✓ {escape(exported_msg)}[/green]")
-        return target_file
     except OSError as exc:
         failed_export = _("Failed to export session to {target_file}: {exc}", target_file=target_file, exc=exc)
         console.print(f"[red]{escape(failed_export)}[/red]")
         return None
+    else:
+        return target_file
 
 
 def search_sessions(
@@ -333,8 +338,8 @@ def search_sessions(
         cleaned_snippets = []
         for s in item["snippets"][:2]:
             single = " ".join(s.split())
-            if len(single) > 120:
-                single = f"{single[:117]}..."
+            if len(single) > _MAX_SNIPPET_LEN:
+                single = f"{single[: _MAX_SNIPPET_LEN - 3]}..."
             cleaned_snippets.append(single)
         snippets_display = "\n".join(cleaned_snippets)
         table.add_row(tid_display, ts_display, score_display, snippets_display)

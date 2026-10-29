@@ -34,7 +34,7 @@ class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
         agents_file.write_text("# Project Agents\n\nConventions here.\n", encoding="utf-8")
 
         found = find_agents_file(self.base_path)
-        self.assertEqual(found, agents_file)
+        assert found == agents_file
 
     def test_find_agents_file_in_parent_directory(self) -> None:
         agents_file = self.base_path / "AGENTS.md"
@@ -48,7 +48,7 @@ class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
         nested_dir.mkdir(parents=True)
 
         found = find_agents_file(nested_dir)
-        self.assertEqual(found, agents_file)
+        assert found == agents_file
 
     def test_find_agents_file_stops_at_git_root(self) -> None:
         # AGENTS.md outside repo
@@ -63,7 +63,7 @@ class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
         sub_dir.mkdir()
 
         found = find_agents_file(sub_dir)
-        self.assertIsNone(found)
+        assert found is None
 
     def test_find_agents_file_name_variations(self) -> None:
         for filename in ("AGENTS.md", "agents.md", ".agents.md"):
@@ -72,12 +72,12 @@ class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
                 f = target_dir / filename
                 f.write_text("# Variation\n", encoding="utf-8")
                 found = find_agents_file(target_dir)
-                self.assertEqual(found, f)
+                assert found == f
 
     def test_find_agents_file_returns_none_when_missing(self) -> None:
         empty_dir = self.base_path / "empty"
         empty_dir.mkdir()
-        self.assertIsNone(find_agents_file(empty_dir))
+        assert find_agents_file(empty_dir) is None
 
     def test_memory_middleware_loads_agents_md_into_system_prompt(self) -> None:
         project_dir = self.base_path / "project"
@@ -105,22 +105,22 @@ class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
         state: dict[str, Any] = {}
         runtime_mock = MagicMock()
         update = middleware.before_agent(state, runtime_mock, {})  # type: ignore[arg-type]
-        self.assertIsNotNone(update)
+        assert update is not None
         if update:
             state.update(update)  # type: ignore[arg-type]
 
         contents = state.get("memory_contents", {})
-        self.assertIn("/agent/MEMORY.md", contents)
-        self.assertIn("/AGENTS.md", contents)
-        self.assertIn("Project Standards", contents["/AGENTS.md"])
+        assert "/agent/MEMORY.md" in contents
+        assert "/AGENTS.md" in contents
+        assert "Project Standards" in contents["/AGENTS.md"]
 
         class DummyRequest:
-            def __init__(self, state_dict: dict[str, Any]):
+            def __init__(self, state_dict: dict[str, Any]) -> None:
                 self.state = state_dict
                 self.system_message = SystemMessage(content="Base system prompt.")
                 self.model = None
 
-            def override(self, **kwargs: Any) -> Any:
+            def override(self, **kwargs: object) -> dict[str, object]:
                 return kwargs
 
         req = DummyRequest(state)
@@ -132,9 +132,9 @@ class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
         else:
             combined_text = str(rendered)
 
-        self.assertIn("/agent/MEMORY.md", combined_text)
-        self.assertIn("/AGENTS.md", combined_text)
-        self.assertIn("Project Standards", combined_text)
+        assert "/agent/MEMORY.md" in combined_text
+        assert "/AGENTS.md" in combined_text
+        assert "Project Standards" in combined_text
 
     async def test_agent_runtime_routes_ancestor_agents_md(self) -> None:
         repo_root = self.base_path / "my_workspace"
@@ -174,12 +174,12 @@ class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
             call_kwargs = mock_create_agent.call_args.kwargs
 
             # Verify memory includes /project/AGENTS.md
-            self.assertIn("/agent/MEMORY.md", call_kwargs["memory"])
-            self.assertIn("/project/AGENTS.md", call_kwargs["memory"])
+            assert "/agent/MEMORY.md" in call_kwargs["memory"]
+            assert "/project/AGENTS.md" in call_kwargs["memory"]
 
             # Verify backend routes has /project/
             backend = call_kwargs["backend"]
-            self.assertIn("/project/", backend.routes)
+            assert "/project/" in backend.routes
 
     async def test_agent_runtime_no_agents_md_when_missing(self) -> None:
         empty_dir = self.base_path / "no_agents"
@@ -212,8 +212,8 @@ class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
             call_kwargs = mock_create_agent.call_args.kwargs
 
             # Verify /AGENTS.md is NOT in memory sources when not found
-            self.assertNotIn("/AGENTS.md", call_kwargs["memory"])
-            self.assertNotIn("/project/AGENTS.md", call_kwargs["memory"])
+            assert "/AGENTS.md" not in call_kwargs["memory"]
+            assert "/project/AGENTS.md" not in call_kwargs["memory"]
 
 
 if __name__ == "__main__":

@@ -97,7 +97,6 @@ async def set_effort(
             norm_effort=norm_effort,
         )
         console.print(f"[green]✓ {escape(switched_msg)}[/green]")
-        return norm_effort
     except (ollama.ResponseError, OSError, ValueError) as exc:
         failed_msg = _(
             "Failed to switch reasoning effort to '{norm_effort}': {exc}",
@@ -106,6 +105,8 @@ async def set_effort(
         )
         console.print(f"[red]{escape(failed_msg)}[/red]")
         return None
+    else:
+        return norm_effort
 
 
 def show_context_window(console: Console, runtime: AgentRuntime) -> None:

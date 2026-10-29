@@ -6,6 +6,7 @@ import io
 import unittest
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
+import pytest
 from conftest import make_repl_environment, recording_console
 from rich.console import Console
 
@@ -45,90 +46,90 @@ class TestDispatchAndCLI(unittest.TestCase):
         args = parser.parse_args(
             ["-m", "llama3:8b", "-e", "high", "-c", "16384", "-y", "-s", "--prompt", "hello", "--rag", "docs_db"]
         )
-        self.assertEqual(args.model, "llama3:8b")
-        self.assertEqual(args.effort, "high")
-        self.assertEqual(args.num_ctx, 16384)
-        self.assertTrue(args.yolo)
-        self.assertTrue(args.stealth)
-        self.assertEqual(args.prompt, "hello")
-        self.assertEqual(args.rag, "docs_db")
+        assert args.model == "llama3:8b"
+        assert args.effort == "high"
+        assert args.num_ctx == 16384
+        assert args.yolo
+        assert args.stealth
+        assert args.prompt == "hello"
+        assert args.rag == "docs_db"
 
     def test_argument_parser_num_ctx(self) -> None:
         parser = create_argument_parser()
         args1 = parser.parse_args(["--num-ctx", "32768"])
-        self.assertEqual(args1.num_ctx, 32768)
+        assert args1.num_ctx == 32768
         args2 = parser.parse_args(["-c", "max"])
-        self.assertEqual(args2.num_ctx, "max")
+        assert args2.num_ctx == "max"
 
     def test_argument_parser_rejects_invalid_numeric_args(self) -> None:
         """Garbage for -c/-t must be an argparse error, not a later traceback."""
         parser = create_argument_parser()
         with patch("sys.stderr", new_callable=io.StringIO):
             for argv in (["-c", "invalid"], ["-c", "-5"], ["-c", "0"], ["-t", "0"], ["-t", "abc"]):
-                with self.subTest(argv=argv), self.assertRaises(SystemExit) as ctx:
+                with self.subTest(argv=argv), pytest.raises(SystemExit) as ctx:
                     parser.parse_args(argv)
-                self.assertEqual(ctx.exception.code, 2)
+                assert ctx.value.code == 2
 
     def test_argument_parser_runtime_flags(self) -> None:
         parser = create_argument_parser()
         args = parser.parse_args(["--builtin-tool-timeout", "45", "--allow-traversal"])
-        self.assertEqual(args.builtin_tool_timeout, 45)
-        self.assertTrue(args.allow_traversal)
+        assert args.builtin_tool_timeout == 45
+        assert args.allow_traversal
 
     def test_argument_parser_config_reset(self) -> None:
         parser = create_argument_parser()
         args = parser.parse_args(["--config-reset", "system-prompt"])
-        self.assertEqual(args.config_reset, "system-prompt")
+        assert args.config_reset == "system-prompt"
 
     def test_task_run_yolo_flag_parsing(self) -> None:
         parser = create_argument_parser()
         args1 = parser.parse_args(["task", "run", "my-task", "-y"])
-        self.assertEqual(args1.task_id, "my-task")
-        self.assertTrue(args1.yolo)
+        assert args1.task_id == "my-task"
+        assert args1.yolo
 
         args2 = parser.parse_args(["-y", "task", "run", "my-task"])
-        self.assertEqual(args2.task_id, "my-task")
-        self.assertTrue(args2.yolo)
+        assert args2.task_id == "my-task"
+        assert args2.yolo
 
         args3 = parser.parse_args(["task", "run", "my-task"])
-        self.assertEqual(args3.task_id, "my-task")
-        self.assertFalse(args3.yolo)
+        assert args3.task_id == "my-task"
+        assert not args3.yolo
 
     def test_task_run_vars_argument_parsing(self) -> None:
         parser = create_argument_parser()
         args1 = parser.parse_args(["task", "run", "my-task", "file=app.py", "strict=true"])
-        self.assertEqual(args1.task_id, "my-task")
-        self.assertEqual(args1.vars, ["file=app.py", "strict=true"])
-        self.assertEqual(args1.flag_vars, [])
+        assert args1.task_id == "my-task"
+        assert args1.vars == ["file=app.py", "strict=true"]
+        assert args1.flag_vars == []
 
         args2 = parser.parse_args(["task", "run", "my-task", "--var", "file=app.py", "--var", "mode=fast"])
-        self.assertEqual(args2.task_id, "my-task")
-        self.assertEqual(args2.vars, [])
-        self.assertEqual(args2.flag_vars, ["file=app.py", "mode=fast"])
+        assert args2.task_id == "my-task"
+        assert args2.vars == []
+        assert args2.flag_vars == ["file=app.py", "mode=fast"]
 
         args3 = parser.parse_args(["task", "run", "my-task", "file=app.py", "--var", "mode=fast", "-y"])
-        self.assertEqual(args3.task_id, "my-task")
-        self.assertEqual(args3.vars, ["file=app.py"])
-        self.assertEqual(args3.flag_vars, ["mode=fast"])
-        self.assertTrue(args3.yolo)
+        assert args3.task_id == "my-task"
+        assert args3.vars == ["file=app.py"]
+        assert args3.flag_vars == ["mode=fast"]
+        assert args3.yolo
 
     def test_argument_parser_language_choices(self) -> None:
         parser = create_argument_parser()
         args = parser.parse_args(["-l", "es"])
-        self.assertEqual(args.language, "es")
-        with patch("sys.stderr", new_callable=io.StringIO), self.assertRaises(SystemExit):
+        assert args.language == "es"
+        with patch("sys.stderr", new_callable=io.StringIO), pytest.raises(SystemExit):
             parser.parse_args(["-l", "klingon"])
 
     def test_build_cli_handlers_registry(self) -> None:
         parser = create_argument_parser()
         args = parser.parse_args(["task", "list"])
         handlers = _build_cli_handlers(args)
-        self.assertIn(("task", "list"), handlers)
-        self.assertIn(("task", "create"), handlers)
-        self.assertIn(("rag", "list"), handlers)
-        self.assertIn(("skill", "list"), handlers)
-        self.assertIn(("mcp", "list"), handlers)
-        self.assertIn(("agents", "list"), handlers)
+        assert ("task", "list") in handlers
+        assert ("task", "create") in handlers
+        assert ("rag", "list") in handlers
+        assert ("skill", "list") in handlers
+        assert ("mcp", "list") in handlers
+        assert ("agents", "list") in handlers
 
     def test_build_cli_handlers_requires_settings(self) -> None:
         parser = create_argument_parser()
@@ -136,7 +137,7 @@ class TestDispatchAndCLI(unittest.TestCase):
         task_ctx = TasksContext(console=recording_console())
         rag_ctx = RAGContext(rag_manager=RAGManager(RAGSettings()), console=recording_console())
         skills_ctx = SkillsContext(console=recording_console())
-        with self.assertRaises(TypeError):
+        with pytest.raises(TypeError):
             build_cli_handlers(
                 args,
                 task_ctx=task_ctx,
@@ -147,31 +148,31 @@ class TestDispatchAndCLI(unittest.TestCase):
     def test_argument_parser_agents_subcommand(self) -> None:
         parser = create_argument_parser()
         args = parser.parse_args(["agents", "list"])
-        self.assertEqual(args.command, "agents")
-        self.assertEqual(args.subcommand, "list")
+        assert args.command == "agents"
+        assert args.subcommand == "list"
 
     def test_build_repl_handlers_registry(self) -> None:
         handlers = build_repl_handlers(make_repl_environment())
 
-        self.assertNotIn("/help", handlers)
-        self.assertNotIn("/exit", handlers)
-        self.assertNotIn("/quit", handlers)
-        self.assertNotIn("/clear", handlers)
-        self.assertNotIn("/new", handlers)
-        self.assertNotIn("/compact", handlers)
-        self.assertIn("/model", handlers)
-        self.assertIn("/effort", handlers)
-        self.assertIn("/context", handlers)
-        self.assertNotIn("/ctx", handlers)
-        self.assertIn("/queue", handlers)
-        self.assertIn("/yolo", handlers)
-        self.assertIn("/stealth", handlers)
-        self.assertIn("/session", handlers)
-        self.assertIn("/task", handlers)
-        self.assertIn("/skill", handlers)
-        self.assertIn("/rag", handlers)
-        self.assertIn("/mcp", handlers)
-        self.assertIn("/agents", handlers)
+        assert "/help" not in handlers
+        assert "/exit" not in handlers
+        assert "/quit" not in handlers
+        assert "/clear" not in handlers
+        assert "/new" not in handlers
+        assert "/compact" not in handlers
+        assert "/model" in handlers
+        assert "/effort" in handlers
+        assert "/context" in handlers
+        assert "/ctx" not in handlers
+        assert "/queue" in handlers
+        assert "/yolo" in handlers
+        assert "/stealth" in handlers
+        assert "/session" in handlers
+        assert "/task" in handlers
+        assert "/skill" in handlers
+        assert "/rag" in handlers
+        assert "/mcp" in handlers
+        assert "/agents" in handlers
 
     def test_build_repl_handlers_intercepted_subcommands_removed(self) -> None:
         out = io.StringIO()
@@ -185,20 +186,20 @@ class TestDispatchAndCLI(unittest.TestCase):
 
         # /task create and /task run now report unknown subcommand.
         task_handler(["create", "my-task"])
-        self.assertIn("Unknown task subcommand 'create'", out.getvalue())
+        assert "Unknown task subcommand 'create'" in out.getvalue()
         task_handler(["run", "my-task"])
-        self.assertIn("Unknown task subcommand 'run'", out.getvalue())
+        assert "Unknown task subcommand 'run'" in out.getvalue()
 
         # /skill create reports unknown subcommand.
         skill_handler(["create", "my-skill"])
-        self.assertIn("Unknown skill subcommand 'create'", out.getvalue())
+        assert "Unknown skill subcommand 'create'" in out.getvalue()
 
         # /session new/resume/export report unknown subcommand.
         for sub in ("new", "resume", "switch", "export"):
             session_handler([sub, "x"])
         rendered = out.getvalue()
         for sub in ("new", "resume", "switch", "export"):
-            self.assertIn(f"Unknown session subcommand '{sub}'", rendered)
+            assert f"Unknown session subcommand '{sub}'" in rendered
 
     def test_main_config_reset(self) -> None:
         # Patch set_locale so the system language does not leak into other tests.
@@ -228,10 +229,10 @@ class TestDispatchAndCLI(unittest.TestCase):
             patch("sys.argv", ["ollama-agent", "task", "list", "-p", "hello"]),
             patch("ollama_agent.main.set_locale", return_value="en"),
             patch("sys.stderr", new_callable=io.StringIO),
-            self.assertRaises(SystemExit) as cm,
+            pytest.raises(SystemExit) as cm,
         ):
             main()
-        self.assertEqual(cm.exception.code, 2)
+        assert cm.value.code == 2
 
     def test_main_repl_flow(self) -> None:
         mock_settings = Settings()
@@ -248,9 +249,9 @@ class TestDispatchAndCLI(unittest.TestCase):
             main()
             mock_check_version.assert_called_once_with(mock_settings.model.base_url)
             mock_ensure.assert_called_once_with(mock_settings, console=ANY)
-            self.assertEqual(mock_settings.model.name, "qwen3:32b")
-            self.assertEqual(mock_settings.model.reasoning_effort, "high")
-            self.assertEqual(mock_settings.runtime.builtin_tool_timeout, 40)
+            assert mock_settings.model.name == "qwen3:32b"
+            assert mock_settings.model.reasoning_effort == "high"
+            assert mock_settings.runtime.builtin_tool_timeout == 40
             mock_runtime_cls.assert_called_once()
             mock_repl_cls.assert_called_once()
             mock_asyncio_run.assert_called_once()
@@ -279,9 +280,9 @@ class TestDispatchAndCLI(unittest.TestCase):
             patch("ollama_agent.main.check_ollama_version", return_value="0.34.3"),
             patch("ollama_agent.main.ensure_model_configured", side_effect=ModelCapabilityError("Model unsupported")),
         ):
-            with self.assertRaises(SystemExit) as cm:
+            with pytest.raises(SystemExit) as cm:
                 main()
-            self.assertEqual(cm.exception.code, 1)
+            assert cm.value.code == 1
 
     def test_apply_cli_overrides_propagates_every_flag(self) -> None:
         """Every CLI flag must reach the settings object, not just be parsed."""
@@ -303,22 +304,22 @@ class TestDispatchAndCLI(unittest.TestCase):
                 ]
             ),
         )
-        self.assertEqual(settings.model.name, "llama3:8b")
-        self.assertEqual(settings.model.reasoning_effort, "high")
-        self.assertEqual(settings.model.context_window, 16384)
-        self.assertEqual(settings.runtime.builtin_tool_timeout, 42)
-        self.assertTrue(settings.runtime.allow_traversal)
+        assert settings.model.name == "llama3:8b"
+        assert settings.model.reasoning_effort == "high"
+        assert settings.model.context_window == 16384
+        assert settings.runtime.builtin_tool_timeout == 42
+        assert settings.runtime.allow_traversal
 
     def test_apply_cli_overrides_num_ctx_max_and_traversal_off(self) -> None:
         parser = create_argument_parser()
         settings = Settings()
         _apply_cli_overrides(settings, parser.parse_args(["-c", "max"]))
-        self.assertEqual(settings.model.context_window, "max")
+        assert settings.model.context_window == "max"
 
         settings2 = Settings()
         settings2.runtime.allow_traversal = True
         _apply_cli_overrides(settings2, parser.parse_args(["--no-allow-traversal"]))
-        self.assertFalse(settings2.runtime.allow_traversal)
+        assert not settings2.runtime.allow_traversal
 
     def test_main_context_window_error_exits(self) -> None:
         with (
@@ -330,9 +331,9 @@ class TestDispatchAndCLI(unittest.TestCase):
             patch("ollama_agent.main.ensure_model_configured", return_value="qwen3:32b"),
             patch("ollama_agent.main.AgentRuntime", side_effect=ModelContextWindowError("Invalid context window")),
         ):
-            with self.assertRaises(SystemExit) as cm:
+            with pytest.raises(SystemExit) as cm:
                 main()
-            self.assertEqual(cm.exception.code, 1)
+            assert cm.value.code == 1
 
     def test_main_ollama_version_too_low_exits(self) -> None:
         mock_console = MagicMock()
@@ -345,14 +346,14 @@ class TestDispatchAndCLI(unittest.TestCase):
             patch("ollama_agent.main.check_ollama_version", side_effect=OllamaVersionError(err_msg)),
             patch("ollama_agent.main.ensure_model_configured") as mock_ensure,
         ):
-            with self.assertRaises(SystemExit) as cm:
+            with pytest.raises(SystemExit) as cm:
                 main()
-            self.assertEqual(cm.exception.code, 1)
+            assert cm.value.code == 1
             mock_ensure.assert_not_called()
             mock_console.print.assert_called_once()
             printed = mock_console.print.call_args[0][0]
-            self.assertIn("0.33.0", printed)
-            self.assertIn("0.34.3", printed)
+            assert "0.33.0" in printed
+            assert "0.34.3" in printed
 
     def test_main_ollama_connection_error_exits(self) -> None:
         mock_console = MagicMock()
@@ -369,9 +370,9 @@ class TestDispatchAndCLI(unittest.TestCase):
             ),
             patch("ollama_agent.main.ensure_model_configured") as mock_ensure,
         ):
-            with self.assertRaises(SystemExit) as cm:
+            with pytest.raises(SystemExit) as cm:
                 main()
-            self.assertEqual(cm.exception.code, 1)
+            assert cm.value.code == 1
             mock_ensure.assert_not_called()
             mock_console.print.assert_called_once()
 
@@ -435,9 +436,9 @@ class TestDispatchAndCLI(unittest.TestCase):
             asyncio.run(handlers[("task", "run")]())
             mock_run_task.assert_awaited_once()
             call_args = mock_run_task.call_args
-            self.assertEqual(call_args.args[1], "my-task")
-            self.assertEqual(call_args.kwargs["variables"], {"file": "app.py", "mode": "fast"})
-            self.assertTrue(call_args.kwargs["yolo"])
+            assert call_args.args[1] == "my-task"
+            assert call_args.kwargs["variables"] == {"file": "app.py", "mode": "fast"}
+            assert call_args.kwargs["yolo"]
 
     def test_handle_subcommand_task_run_validation_error(self) -> None:
         parser = create_argument_parser()
@@ -447,27 +448,27 @@ class TestDispatchAndCLI(unittest.TestCase):
             patch("sys.stdout", new_callable=io.StringIO),
             patch("sys.stderr", new_callable=io.StringIO),
         ):
-            with self.assertRaises(SystemExit) as cm:
+            with pytest.raises(SystemExit) as cm:
                 handle_subcommand(args, settings)
-            self.assertEqual(cm.exception.code, 1)
+            assert cm.value.code == 1
 
     def test_extract_early_language(self) -> None:
-        self.assertEqual(_extract_early_language(["-l", "es"]), "es")
-        self.assertEqual(_extract_early_language(["--lang", "fr"]), "fr")
-        self.assertEqual(_extract_early_language(["--language=de"]), "de")
-        self.assertEqual(_extract_early_language(["-l=it"]), "it")
-        self.assertIsNone(_extract_early_language(["--unknown", "val"]))
-        self.assertIsNone(_extract_early_language(["-l", "unsupported_lang"]))
-        self.assertIsNone(_extract_early_language([]))
+        assert _extract_early_language(["-l", "es"]) == "es"
+        assert _extract_early_language(["--lang", "fr"]) == "fr"
+        assert _extract_early_language(["--language=de"]) == "de"
+        assert _extract_early_language(["-l=it"]) == "it"
+        assert _extract_early_language(["--unknown", "val"]) is None
+        assert _extract_early_language(["-l", "unsupported_lang"]) is None
+        assert _extract_early_language([]) is None
 
     def test_main_help_localization(self) -> None:
         stdout = io.StringIO()
         with patch("sys.argv", ["ollama-agent", "-l", "es", "--help"]), patch("sys.stdout", stdout):
-            with self.assertRaises(SystemExit) as cm:
+            with pytest.raises(SystemExit) as cm:
                 main()
-            self.assertEqual(cm.exception.code, 0)
+            assert cm.value.code == 0
         output = stdout.getvalue()
-        self.assertIn("Agente de IA", output)
+        assert "Agente de IA" in output
 
 
 if __name__ == "__main__":

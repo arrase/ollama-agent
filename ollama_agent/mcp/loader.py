@@ -9,7 +9,8 @@ import logging
 import os
 import re
 import sys
-from typing import Any, cast
+from collections.abc import AsyncIterator, Iterator
+from typing import Any, TextIO, cast
 
 import langchain_mcp_adapters.sessions
 import mcp.client.stdio
@@ -27,13 +28,13 @@ _orig_stdio_client = mcp.client.stdio.stdio_client
 _stdio_patch_depth = 0
 
 
-def _open_mcp_log() -> Any:
+def _open_mcp_log() -> TextIO:
     MCP_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     return MCP_LOG_PATH.open("a", encoding="utf-8")
 
 
 @contextlib.asynccontextmanager
-async def _mcp_stdio_client(server: Any, errlog: Any = None) -> Any:
+async def _mcp_stdio_client(server: Any, errlog: Any = None) -> AsyncIterator[Any]:  # noqa: ANN401
     """Redirect stdio MCP server stderr to mcp.log to keep the TUI pristine."""
     if errlog is not None and errlog is not sys.stderr:
         async with _orig_stdio_client(server, errlog=errlog) as streams:
@@ -49,11 +50,11 @@ async def _mcp_stdio_client(server: Any, errlog: Any = None) -> Any:
 
 
 @contextlib.contextmanager
-def _patched_stdio_client() -> Any:
+def _patched_stdio_client() -> Iterator[None]:
     global _stdio_patch_depth
     if _stdio_patch_depth == 0:
         mcp.client.stdio.stdio_client = _mcp_stdio_client
-        langchain_mcp_adapters.sessions.stdio_client = _mcp_stdio_client
+        langchain_mcp_adapters.sessions.stdio_client = _mcp_stdio_client  # type: ignore[attr-defined]
     _stdio_patch_depth += 1
     try:
         yield
@@ -61,14 +62,14 @@ def _patched_stdio_client() -> Any:
         _stdio_patch_depth -= 1
         if _stdio_patch_depth == 0:
             mcp.client.stdio.stdio_client = _orig_stdio_client
-            langchain_mcp_adapters.sessions.stdio_client = _orig_stdio_client
+            langchain_mcp_adapters.sessions.stdio_client = _orig_stdio_client  # type: ignore[attr-defined]
 
 
-def _wrap_tool_stdio(tool: Any) -> None:
+def _wrap_tool_stdio(tool: Any) -> None:  # noqa: ANN401
     orig_coro = tool.coroutine
     if orig_coro is not None:
 
-        async def _patched_coro(*args: Any, **kwargs: Any) -> Any:
+        async def _patched_coro(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
             with _patched_stdio_client():
                 return await orig_coro(*args, **kwargs)
 
@@ -225,7 +226,7 @@ async def _connect_and_load(name: str, conn: dict[str, Any]) -> list[Any]:
     try:
         with _patched_stdio_client():
             async with asyncio.timeout(DEFAULT_MCP_TIMEOUT):
-                client = MultiServerMCPClient({name: conn})  # type: ignore[dict-item,arg-type]
+                client = MultiServerMCPClient({name: conn})  # type: ignore[dict-item]
                 tools = await client.get_tools()
     except TimeoutError as exc:
         # str(TimeoutError()) is empty, so the generic handler would report no reason.

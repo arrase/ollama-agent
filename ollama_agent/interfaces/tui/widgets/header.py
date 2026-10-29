@@ -9,6 +9,10 @@ from textual.widgets import Static
 
 from ....i18n import _
 
+_CTX_PCT_CRITICAL = 90
+_CTX_PCT_WARNING = 75
+_KILO_TOKENS = 1000
+
 
 def _format_context_info(tokens: int, eff_ctx: int, ms_context_window: int | str) -> str:
     num_ctx = 0
@@ -23,15 +27,15 @@ def _format_context_info(tokens: int, eff_ctx: int, ms_context_window: int | str
         return ""
 
     pct = int((tokens / num_ctx) * 100)
-    if pct > 90:
+    if pct > _CTX_PCT_CRITICAL:
         color = "#f87171"
-    elif pct > 75:
+    elif pct > _CTX_PCT_WARNING:
         color = "#fbbf24"
     else:
         color = "#38bdf8"
 
-    tok_str = f"{tokens / 1000:.1f}k" if tokens >= 1000 else str(tokens)
-    ctx_str = f"{num_ctx / 1000:.1f}k" if num_ctx >= 1000 else str(num_ctx)
+    tok_str = f"{tokens / _KILO_TOKENS:.1f}k" if tokens >= _KILO_TOKENS else str(tokens)
+    ctx_str = f"{num_ctx / _KILO_TOKENS:.1f}k" if num_ctx >= _KILO_TOKENS else str(num_ctx)
     ctx_label = _("Context:")
     return (
         f"  [#30363d]│[/]  [bold #8b949e]{ctx_label}[/bold #8b949e] "

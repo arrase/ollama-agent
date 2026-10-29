@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from rich.console import Console
@@ -85,31 +86,31 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
     def test_new_session(self) -> None:
         console = Console(file=io.StringIO())
         sid = new_session(console)
-        self.assertEqual(len(sid), 8)
+        assert len(sid) == 8
 
     def test_get_available_sessions_empty_when_no_db(self) -> None:
         sessions = get_available_sessions(self.db_path)
-        self.assertEqual(sessions, [])
+        assert sessions == []
 
     def test_get_available_sessions_corrupted_db_raises_history_error(self) -> None:
         self.db_path.write_text("this is not a valid sqlite database", encoding="utf-8")
-        with self.assertRaises(HistoryError):
+        with pytest.raises(HistoryError):
             get_available_sessions(self.db_path)
 
     def test_get_available_sessions_and_list_sessions(self) -> None:
         self._init_sample_db()
         sessions = get_available_sessions(self.db_path)
-        self.assertEqual(len(sessions), 2)
+        assert len(sessions) == 2
         step_map = {s["thread_id"]: s["steps"] for s in sessions}
-        self.assertEqual(step_map["session-12345678"], 2)
-        self.assertEqual(step_map["session-87654321"], 1)
+        assert step_map["session-12345678"] == 2
+        assert step_map["session-87654321"] == 1
 
         console = Console(file=io.StringIO(), record=True)
         rendered_sessions = list_sessions(console, self.db_path, current_thread_id="session-12345678")
         out = console.export_text()
-        self.assertEqual(len(rendered_sessions), 2)
-        self.assertIn("session-12345678", out)
-        self.assertIn("current", out)
+        assert len(rendered_sessions) == 2
+        assert "session-12345678" in out
+        assert "current" in out
 
     def test_get_available_sessions_missing_timestamp(self) -> None:
         self._init_sample_db()
@@ -124,7 +125,7 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         conn.commit()
         conn.close()
 
-        with self.assertRaises(HistoryError):
+        with pytest.raises(HistoryError):
             get_available_sessions(self.db_path)
 
     def test_resolve_session_id(self) -> None:
@@ -134,15 +135,15 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
             {"thread_id": "1234567890ab"},
         ]
         # Exact match
-        self.assertEqual(resolve_session_id("abcdef123456", available), "abcdef123456")
+        assert resolve_session_id("abcdef123456", available) == "abcdef123456"
         # Unambiguous prefix
-        self.assertEqual(resolve_session_id("1234", available), "1234567890ab")
+        assert resolve_session_id("1234", available) == "1234567890ab"
         # Ambiguous prefix
-        self.assertIsNone(resolve_session_id("abc", available))
+        assert resolve_session_id("abc", available) is None
         # Nonexistent
-        self.assertIsNone(resolve_session_id("nonexistent", available))
+        assert resolve_session_id("nonexistent", available) is None
         # Empty
-        self.assertIsNone(resolve_session_id("", available))
+        assert resolve_session_id("", available) is None
 
     def test_resume_session(self) -> None:
         self._init_sample_db()
@@ -150,23 +151,23 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
 
         # Successful resume by prefix
         res = resume_session(console, "session-1", db_path=self.db_path)
-        self.assertEqual(res, "session-12345678")
-        self.assertIn("Switched to session", console.export_text())
+        assert res == "session-12345678"
+        assert "Switched to session" in console.export_text()
 
         # Nonexistent resume
         res2 = resume_session(console, "missing-id", db_path=self.db_path)
-        self.assertIsNone(res2)
+        assert res2 is None
 
     def test_delete_session(self) -> None:
         self._init_sample_db()
         console = Console(file=io.StringIO(), record=True)
 
         success = delete_session(console, "session-12345678", db_path=self.db_path)
-        self.assertTrue(success)
+        assert success
 
         sessions_after = get_available_sessions(self.db_path)
-        self.assertEqual(len(sessions_after), 1)
-        self.assertEqual(sessions_after[0]["thread_id"], "session-87654321")
+        assert len(sessions_after) == 1
+        assert sessions_after[0]["thread_id"] == "session-87654321"
 
     async def test_export_session(self) -> None:
         self._init_sample_db()
@@ -182,13 +183,13 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
             console, runtime_mock, "session-1234", output_path=str(out_file), db_path=self.db_path
         )
 
-        self.assertIsNotNone(exported_path)
-        self.assertTrue(out_file.exists())
+        assert exported_path is not None
+        assert out_file.exists()
         content = out_file.read_text(encoding="utf-8")
-        self.assertIn("User", content)
-        self.assertIn("How do I create a class?", content)
-        self.assertIn("Assistant", content)
-        self.assertIn("Use `class MyClass:` syntax.", content)
+        assert "User" in content
+        assert "How do I create a class?" in content
+        assert "Assistant" in content
+        assert "Use `class MyClass:` syntax." in content
 
     async def test_export_session_not_found(self) -> None:
         console = Console(file=io.StringIO(), record=True)
@@ -197,21 +198,21 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
 
         res = await export_session(console, runtime_mock, "nonexistent-id", db_path=self.db_path)
 
-        self.assertIsNone(res)
+        assert res is None
         runtime_mock.get_thread_messages.assert_not_called()
-        self.assertIn("not found", console.export_text())
+        assert "not found" in console.export_text()
 
     def test_search_sessions(self) -> None:
         console = Console(file=io.StringIO(), record=True)
 
         # Empty query
         res_empty = search_sessions(console, "", db_path=self.db_path)
-        self.assertEqual(res_empty, [])
-        self.assertIn("Please provide a search query", console.export_text())
+        assert res_empty == []
+        assert "Please provide a search query" in console.export_text()
 
         # No database
         res_nodb = search_sessions(console, "python", db_path=self.db_path)
-        self.assertEqual(res_nodb, [])
+        assert res_nodb == []
 
         # Populated search
         self._init_sample_db()
@@ -242,18 +243,18 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
 
         console_search = Console(file=io.StringIO(), record=True)
         results = search_sessions(console_search, "async", db_path=self.db_path)
-        self.assertEqual(len(results), 1)
+        assert len(results) == 1
         out = console_search.export_text()
-        self.assertIn("session-", out)
-        self.assertIn("async", out.lower())
+        assert "session-" in out
+        assert "async" in out.lower()
 
     def test_is_current_bidirectional_and_empty(self) -> None:
-        self.assertTrue(is_current("12345678", "12345678"))
-        self.assertTrue(is_current("12345678", "1234"))
-        self.assertTrue(is_current("1234", "12345678"))
-        self.assertFalse(is_current("", "1234"))
-        self.assertFalse(is_current("1234", ""))
-        self.assertFalse(is_current("abcd", "1234"))
+        assert is_current("12345678", "12345678")
+        assert is_current("12345678", "1234")
+        assert is_current("1234", "12345678")
+        assert not is_current("", "1234")
+        assert not is_current("1234", "")
+        assert not is_current("abcd", "1234")
 
     async def test_export_session_with_tool_calls_and_nested_dir(self) -> None:
         self._init_sample_db()
@@ -273,24 +274,24 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
             console, runtime_mock, "session-1234", output_path=str(out_file), db_path=self.db_path
         )
 
-        self.assertIsNotNone(exported_path)
-        self.assertTrue(out_file.exists())
+        assert exported_path is not None
+        assert out_file.exists()
         content = out_file.read_text(encoding="utf-8")
-        self.assertIn("Tool: test_tool", content)
-        self.assertIn("val1", content)
-        self.assertIn("tool output result", content)
+        assert "Tool: test_tool" in content
+        assert "val1" in content
+        assert "tool output result" in content
 
     async def test_delete_and_export_session_ambiguous_prefix(self) -> None:
         self._init_sample_db()
         console_del = Console(file=io.StringIO(), record=True)
-        self.assertFalse(delete_session(console_del, "session-", db_path=self.db_path))
-        self.assertIn("Ambiguous session ID", console_del.export_text())
+        assert not delete_session(console_del, "session-", db_path=self.db_path)
+        assert "Ambiguous session ID" in console_del.export_text()
 
         console_exp = Console(file=io.StringIO(), record=True)
         runtime_mock = MagicMock(stealth_mode=False)
         res = await export_session(console_exp, runtime_mock, "session-", db_path=self.db_path)
-        self.assertIsNone(res)
-        self.assertIn("Ambiguous session ID", console_exp.export_text())
+        assert res is None
+        assert "Ambiguous session ID" in console_exp.export_text()
 
 
 if __name__ == "__main__":

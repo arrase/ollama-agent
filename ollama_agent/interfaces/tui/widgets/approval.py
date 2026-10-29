@@ -7,7 +7,7 @@ from typing import Any, ClassVar
 from rich.markup import escape
 from textual import events
 from textual.app import ComposeResult
-from textual.containers import Container, Horizontal
+from textual.containers import Container, Horizontal, ScrollableContainer
 from textual.widgets import Button, Static
 
 from ....i18n import _
@@ -32,7 +32,7 @@ class ToolApprovalWidget(Container):
         self,
         action_requests: list[dict[str, Any]],
         app_ref: Any,
-        scroll: Any,
+        scroll: ScrollableContainer,
         agent_msg: AgentResponse,
         **kwargs: Any,
     ) -> None:
@@ -67,7 +67,7 @@ class ToolApprovalWidget(Container):
         if event.button.id:
             self._handle_decision(event.button.id)
 
-    def _cycle_button_focus(self, forward: bool) -> None:
+    def _cycle_button_focus(self, *, forward: bool) -> None:
         focused = self.app.focused
         current_id = focused.id if focused and focused.id in self.BUTTON_IDS else None
         if forward:

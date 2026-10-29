@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from textual.app import App
+from textual.containers import ScrollableContainer
+
+from ...agent import AgentRuntime
 from ...streaming import StreamingRenderer
 from .widgets.messages import AgentResponse
 
@@ -11,7 +15,7 @@ from .widgets.messages import AgentResponse
 class _TUIStreamingRenderer(StreamingRenderer):
     """Bridge connecting streaming event callbacks to Textual TUI widgets."""
 
-    def __init__(self, app: Any, scroll: Any, widget: AgentResponse):
+    def __init__(self, app: App[None], scroll: ScrollableContainer, widget: AgentResponse) -> None:
         self.app = app
         self.scroll = scroll
         self.widget = widget
@@ -66,7 +70,7 @@ class _TUIStreamingRenderer(StreamingRenderer):
         self.widget.add_warning(event["content"])
         self._scroll()
 
-    async def handle_interrupt(self, event: dict[str, Any], runtime: Any) -> list[dict[str, Any]] | None:
+    async def handle_interrupt(self, event: dict[str, Any], _runtime: AgentRuntime) -> list[dict[str, Any]] | None:
         self.last_interrupt = event
         return None
 

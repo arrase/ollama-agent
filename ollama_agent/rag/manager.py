@@ -240,7 +240,7 @@ class RAGManager:
         """Release every client owned by this manager."""
         self.unload()
         if self._ollama_client is not None:
-            await self._ollama_client.close()
+            await self._ollama_client.close()  # type: ignore[no-untyped-call]
             self._ollama_client = None
 
     async def _index_chunks(self, client: QdrantClient, path: Path, chunks: list[str]) -> None:

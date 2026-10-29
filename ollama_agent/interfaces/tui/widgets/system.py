@@ -13,6 +13,8 @@ from textual.widgets import Static
 from ....core import shorten
 from ....i18n import _
 
+_MAX_VISIBLE_QUEUED = 3
+
 
 def format_queue_preview(item: str) -> str:
     """Return a single-line, truncated, Rich-markup-escaped preview of a queued prompt."""
@@ -39,11 +41,11 @@ class PromptQueueWidget(Static):
         header = f"[bold #38bdf8]⏳ {_('Queued ({count})', count=count)}[/bold #38bdf8]"
         lines = [header]
 
-        for i, item in enumerate(islice(queue, 3), 1):
+        for i, item in enumerate(islice(queue, _MAX_VISIBLE_QUEUED), 1):
             lines.append(format_queue_line(i, item))
 
-        if count > 3:
-            remaining = count - 3
+        if count > _MAX_VISIBLE_QUEUED:
+            remaining = count - _MAX_VISIBLE_QUEUED
             lines.append(f"  [dim]... +{remaining} {_('more')}[/dim]")
 
         self.update("\n".join(lines))
