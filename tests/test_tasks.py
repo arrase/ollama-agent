@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
 from jinja2.exceptions import UndefinedError
 
 from ollama_agent.settings.config import Settings, _task_model_overrides
@@ -25,27 +26,27 @@ class TestTaskManager(unittest.TestCase):
 
     def test_task_model_initialization(self) -> None:
         t = Task(title="Review PR", prompt="Check diff", model="llama3:8b", reasoning_effort="high")
-        self.assertEqual(t.title, "Review PR")
-        self.assertEqual(t.model, "llama3:8b")
-        self.assertEqual(t.reasoning_effort, "high")
+        assert t.title == "Review PR"
+        assert t.model == "llama3:8b"
+        assert t.reasoning_effort == "high"
 
     def test_save_and_get_task(self) -> None:
         t = Task(title="Run tests", prompt="pytest -v", model="gemma4:26b")
         saved_id = self.mgr.save("run-tests", t)
-        self.assertEqual(saved_id, "run-tests")
+        assert saved_id == "run-tests"
 
         loaded = self.mgr.get("run-tests")
-        self.assertIsNotNone(loaded)
-        self.assertEqual(loaded.title, "Run tests")
-        self.assertEqual(loaded.prompt, "pytest -v")
+        assert loaded is not None
+        assert loaded.title == "Run tests"
+        assert loaded.prompt == "pytest -v"
 
     def test_get_missing_task_raises(self) -> None:
-        with self.assertRaises(FileNotFoundError):
+        with pytest.raises(FileNotFoundError):
             self.mgr.get("missing-task")
 
     def test_get_corrupted_task_raises(self) -> None:
         (self.tasks_dir / "broken.yaml").write_text("title: Broken\nmodel: m\n", encoding="utf-8")
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             self.mgr.get("broken")
 
     def test_list_all_skips_corrupt_task(self) -> None:
@@ -53,21 +54,21 @@ class TestTaskManager(unittest.TestCase):
         (self.tasks_dir / "good.yaml").write_text("title: Good\nprompt: hi\nmodel: m\n", encoding="utf-8")
         (self.tasks_dir / "broken.yaml").write_text("title: Broken\nmodel: m\n", encoding="utf-8")
         listed = dict(self.mgr.list_all())
-        self.assertIn("good", listed)
-        self.assertNotIn("broken", listed)
+        assert "good" in listed
+        assert "broken" not in listed
 
     def test_find_matches_rejects_invalid_prefix(self) -> None:
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             self.mgr.find_matches("../escape")
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             self.mgr.get("../escape")
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             self.mgr.delete("../escape")
 
     def test_save_existing_task_without_overwrite_raises(self) -> None:
         t = Task(title="T1", prompt="P1", model="M1")
         self.mgr.save("task-1", t)
-        with self.assertRaises(FileExistsError):
+        with pytest.raises(FileExistsError):
             self.mgr.save("task-1", t, overwrite=False)
 
     def test_find_matches_exact_and_prefix(self) -> None:
@@ -77,20 +78,20 @@ class TestTaskManager(unittest.TestCase):
         self.mgr.save("build-docs", t2)
 
         matches = self.mgr.find_matches("build-")
-        self.assertEqual(len(matches), 2)
+        assert len(matches) == 2
 
         exact = self.mgr.find_matches("build-docker")
-        self.assertEqual(len(exact), 1)
-        self.assertEqual(exact[0][0], "build-docker")
+        assert len(exact) == 1
+        assert exact[0][0] == "build-docker"
 
     def test_delete_task(self) -> None:
         t = Task(title="Temporary", prompt="Temp", model="M1")
         self.mgr.save("temp-task", t)
         self.mgr.delete("temp-task")
-        self.assertFalse((self.tasks_dir / "temp-task.yaml").exists())
-        with self.assertRaises(FileNotFoundError):
+        assert not (self.tasks_dir / "temp-task.yaml").exists()
+        with pytest.raises(FileNotFoundError):
             self.mgr.get("temp-task")
-        with self.assertRaises(FileNotFoundError):
+        with pytest.raises(FileNotFoundError):
             self.mgr.delete("temp-task")
 
     def test_list_all_sorted_by_title(self) -> None:
@@ -98,14 +99,14 @@ class TestTaskManager(unittest.TestCase):
         self.mgr.save("t-a", Task(title="Alpha Task", prompt="p", model="m"))
 
         all_tasks = self.mgr.list_all()
-        self.assertEqual(len(all_tasks), 2)
-        self.assertEqual(all_tasks[0][1].title, "Alpha Task")
-        self.assertEqual(all_tasks[1][1].title, "Beta Task")
+        assert len(all_tasks) == 2
+        assert all_tasks[0][1].title == "Alpha Task"
+        assert all_tasks[1][1].title == "Beta Task"
 
     def test_task_from_dict_non_dict_raises_value_error(self) -> None:
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             Task.from_dict("not-a-dict")
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             Task.from_dict([1, 2, 3])
 
     def test_find_matches_no_shadowing_and_sorted_deterministically(self) -> None:
@@ -114,21 +115,21 @@ class TestTaskManager(unittest.TestCase):
         self.mgr.save("build-docker", Task(title="Docker", prompt="p", model="m"))
 
         matches = self.mgr.find_matches("build")
-        self.assertEqual(len(matches), 3)
-        self.assertEqual([m[0] for m in matches], ["build", "build-docker", "build-docs"])
+        assert len(matches) == 3
+        assert [m[0] for m in matches] == ["build", "build-docker", "build-docs"]
 
     def test_get_directory_raises_file_not_found(self) -> None:
         dir_as_task = self.tasks_dir / "folder.yaml"
         dir_as_task.mkdir()
-        with self.assertRaises(FileNotFoundError):
+        with pytest.raises(FileNotFoundError):
             self.mgr.get("folder")
 
     def test_task_input_defaults(self) -> None:
         inp = TaskInput()
-        self.assertEqual(inp.description, "")
-        self.assertIsNone(inp.default)
-        self.assertFalse(inp.required)
-        self.assertEqual(inp.type, "string")
+        assert inp.description == ""
+        assert inp.default is None
+        assert not inp.required
+        assert inp.type == "string"
 
     def test_task_from_dict_with_inputs(self) -> None:
         data = {
@@ -156,14 +157,14 @@ class TestTaskManager(unittest.TestCase):
             },
         }
         task = Task.from_dict(data)
-        self.assertEqual(len(task.inputs), 3)
-        self.assertEqual(task.inputs["file"].description, "Path to file")
-        self.assertTrue(task.inputs["file"].required)
-        self.assertEqual(task.inputs["file"].type, "string")
-        self.assertEqual(task.inputs["pattern"].default, "factory")
-        self.assertFalse(task.inputs["pattern"].required)
-        self.assertFalse(task.inputs["dry_run"].default)
-        self.assertEqual(task.inputs["dry_run"].type, "boolean")
+        assert len(task.inputs) == 3
+        assert task.inputs["file"].description == "Path to file"
+        assert task.inputs["file"].required
+        assert task.inputs["file"].type == "string"
+        assert task.inputs["pattern"].default == "factory"
+        assert not task.inputs["pattern"].required
+        assert not task.inputs["dry_run"].default
+        assert task.inputs["dry_run"].type == "boolean"
 
     def test_task_save_and_get_with_inputs(self) -> None:
         task = Task(
@@ -177,18 +178,18 @@ class TestTaskManager(unittest.TestCase):
         )
         self.mgr.save("deploy-app", task)
         loaded = self.mgr.get("deploy-app")
-        self.assertEqual(len(loaded.inputs), 2)
-        self.assertTrue(loaded.inputs["app_name"].required)
-        self.assertEqual(loaded.inputs["env"].default, "staging")
+        assert len(loaded.inputs) == 2
+        assert loaded.inputs["app_name"].required
+        assert loaded.inputs["env"].default == "staging"
 
     def test_render_backward_compatibility_no_inputs(self) -> None:
         task_static = Task(title="Static", prompt="Run standard linter", model="m")
-        self.assertEqual(task_static.render(), "Run standard linter")
-        self.assertEqual(task_static.render({"unused": "ignored"}), "Run standard linter")
+        assert task_static.render() == "Run standard linter"
+        assert task_static.render({"unused": "ignored"}) == "Run standard linter"
 
         task_dynamic = Task(title="Dynamic", prompt="Hello {{ name }}!", model="m")
-        self.assertEqual(task_dynamic.render({"name": "Alice"}), "Hello Alice!")
-        with self.assertRaises(UndefinedError):
+        assert task_dynamic.render({"name": "Alice"}) == "Hello Alice!"
+        with pytest.raises(UndefinedError):
             task_dynamic.render()
 
     def test_render_with_variables_and_defaults(self) -> None:
@@ -201,9 +202,9 @@ class TestTaskManager(unittest.TestCase):
                 "name": TaskInput(default="World"),
             },
         )
-        self.assertEqual(task.render(), "Hello, World!")
-        self.assertEqual(task.render({"name": "Alice"}), "Hello, Alice!")
-        self.assertEqual(task.render({"greeting": "Hi", "name": "Bob"}), "Hi, Bob!")
+        assert task.render() == "Hello, World!"
+        assert task.render({"name": "Alice"}) == "Hello, Alice!"
+        assert task.render({"greeting": "Hi", "name": "Bob"}) == "Hi, Bob!"
 
     def test_render_missing_required_variable_raises(self) -> None:
         task = Task(
@@ -214,19 +215,19 @@ class TestTaskManager(unittest.TestCase):
                 "query": TaskInput(required=True),
             },
         )
-        with self.assertRaises(ValueError) as ctx:
+        with pytest.raises(ValueError) as ctx:
             task.render()
-        self.assertIn("query", str(ctx.exception))
+        assert "query" in str(ctx.value)
 
-        with self.assertRaises(ValueError) as ctx:
+        with pytest.raises(ValueError) as ctx:
             task.render({})
-        self.assertIn("query", str(ctx.exception))
+        assert "query" in str(ctx.value)
 
-        with self.assertRaises(ValueError) as ctx:
+        with pytest.raises(ValueError) as ctx:
             task.render({"query": None})
-        self.assertIn("query", str(ctx.exception))
+        assert "query" in str(ctx.value)
 
-        self.assertEqual(task.render({"query": "python 3.14"}), "Search for python 3.14")
+        assert task.render({"query": "python 3.14"}) == "Search for python 3.14"
 
     def test_render_jinja_conditionals(self) -> None:
         task = Task(
@@ -237,10 +238,10 @@ class TestTaskManager(unittest.TestCase):
                 "optimize": TaskInput(type="boolean", default=False),
             },
         )
-        self.assertEqual(task.render(), "Debug mode")
-        self.assertEqual(task.render({"optimize": True}), "Optimize mode")
-        self.assertEqual(task.render({"optimize": "yes"}), "Optimize mode")
-        self.assertEqual(task.render({"optimize": "no"}), "Debug mode")
+        assert task.render() == "Debug mode"
+        assert task.render({"optimize": True}) == "Optimize mode"
+        assert task.render({"optimize": "yes"}) == "Optimize mode"
+        assert task.render({"optimize": "no"}) == "Debug mode"
 
     def test_render_jinja_loops(self) -> None:
         task = Task(
@@ -249,7 +250,7 @@ class TestTaskManager(unittest.TestCase):
             model="m",
         )
         rendered = task.render({"files": ["a.py", "b.py", "c.py"]})
-        self.assertEqual(rendered, "Files:\n- a.py\n- b.py\n- c.py\n")
+        assert rendered == "Files:\n- a.py\n- b.py\n- c.py\n"
 
     def test_render_jinja_default_filter(self) -> None:
         task = Task(
@@ -257,8 +258,8 @@ class TestTaskManager(unittest.TestCase):
             prompt="Welcome {{ user | default('Guest') }}",
             model="m",
         )
-        self.assertEqual(task.render(), "Welcome Guest")
-        self.assertEqual(task.render({"user": "Bob"}), "Welcome Bob")
+        assert task.render() == "Welcome Guest"
+        assert task.render({"user": "Bob"}) == "Welcome Bob"
 
     def test_render_type_coercion_boolean(self) -> None:
         task = Task(
@@ -268,13 +269,13 @@ class TestTaskManager(unittest.TestCase):
             inputs={"flag": TaskInput(type="boolean")},
         )
         for truthy in [True, "true", "True", "TRUE", "yes", "YES", "1", 1, 1.0]:
-            self.assertEqual(task.render({"flag": truthy}), "TRUE")
+            assert task.render({"flag": truthy}) == "TRUE"
 
         for falsy in [False, "false", "False", "FALSE", "no", "NO", "0", 0, 0.0]:
-            self.assertEqual(task.render({"flag": falsy}), "FALSE")
+            assert task.render({"flag": falsy}) == "FALSE"
 
         for invalid in ["maybe", "invalid", 2, -1, [1], {"a": 1}]:
-            with self.assertRaises(ValueError):
+            with pytest.raises(ValueError):
                 task.render({"flag": invalid})
 
     def test_render_type_coercion_number(self) -> None:
@@ -284,22 +285,22 @@ class TestTaskManager(unittest.TestCase):
             model="m",
             inputs={"value": TaskInput(type="number")},
         )
-        self.assertEqual(task.render({"value": 5}), "Result: 10")
-        self.assertEqual(task.render({"value": "5"}), "Result: 10")
-        self.assertEqual(task.render({"value": 2.5}), "Result: 5.0")
-        self.assertEqual(task.render({"value": "2.5"}), "Result: 5.0")
+        assert task.render({"value": 5}) == "Result: 10"
+        assert task.render({"value": "5"}) == "Result: 10"
+        assert task.render({"value": 2.5}) == "Result: 5.0"
+        assert task.render({"value": "2.5"}) == "Result: 5.0"
 
         for invalid in ["abc", True, False, [10], {"num": 1}]:
-            with self.assertRaises(ValueError):
+            with pytest.raises(ValueError):
                 task.render({"value": invalid})
 
     def test_coerce_number_invalid_string_raises_localized_domain_error(self) -> None:
         inp = TaskInput(type="number")
-        with self.assertRaises(ValueError) as ctx:
+        with pytest.raises(ValueError) as ctx:
             inp.coerce("val_input", "abc")
-        self.assertIn("Invalid number value for input 'val_input': abc", str(ctx.exception))
-        self.assertEqual(inp.coerce("val_input", "42"), 42)
-        self.assertEqual(inp.coerce("val_input", "3.14"), 3.14)
+        assert "Invalid number value for input 'val_input': abc" in str(ctx.value)
+        assert inp.coerce("val_input", "42") == 42
+        assert inp.coerce("val_input", "3.14") == 3.14
 
     def test_render_type_coercion_string(self) -> None:
         task = Task(
@@ -308,9 +309,9 @@ class TestTaskManager(unittest.TestCase):
             model="m",
             inputs={"text": TaskInput(type="string")},
         )
-        self.assertEqual(task.render({"text": "hello"}), "Value: hello")
-        self.assertEqual(task.render({"text": 123}), "Value: 123")
-        self.assertEqual(task.render({"text": True}), "Value: True")
+        assert task.render({"text": "hello"}) == "Value: hello"
+        assert task.render({"text": 123}) == "Value: 123"
+        assert task.render({"text": True}) == "Value: True"
 
     def test_render_unsupported_input_type_raises(self) -> None:
         task = Task(
@@ -319,9 +320,9 @@ class TestTaskManager(unittest.TestCase):
             model="m",
             inputs={"custom": TaskInput(type="custom_type")},
         )
-        with self.assertRaises(ValueError) as ctx:
+        with pytest.raises(ValueError) as ctx:
             task.render({"custom": "value"})
-        self.assertIn("custom_type", str(ctx.exception))
+        assert "custom_type" in str(ctx.value)
 
     def test_render_falsy_defaults(self) -> None:
         task = Task(
@@ -334,9 +335,9 @@ class TestTaskManager(unittest.TestCase):
                 "prefix": TaskInput(type="string", default=""),
             },
         )
-        self.assertEqual(task.render(), "count=0, active=False, prefix=''")
-        self.assertEqual(task.render({"count": 5}), "count=5, active=False, prefix=''")
-        self.assertEqual(task.render({"active": True}), "count=0, active=True, prefix=''")
+        assert task.render() == "count=0, active=False, prefix=''"
+        assert task.render({"count": 5}) == "count=5, active=False, prefix=''"
+        assert task.render({"active": True}) == "count=0, active=True, prefix=''"
 
     def test_render_explicit_none_does_not_swallow_none(self) -> None:
         task = Task(
@@ -345,7 +346,7 @@ class TestTaskManager(unittest.TestCase):
             model="m",
             inputs={"val": TaskInput(type="string", default="fallback")},
         )
-        self.assertEqual(task.render({"val": None}), "val=None")
+        assert task.render({"val": None}) == "val=None"
 
     def test_render_undefined_variable_in_block_raises(self) -> None:
         task = Task(
@@ -353,25 +354,25 @@ class TestTaskManager(unittest.TestCase):
             prompt="{% if missing_cond %}YES{% endif %}",
             model="m",
         )
-        with self.assertRaises(UndefinedError):
+        with pytest.raises(UndefinedError):
             task.render()
 
     def test_task_from_dict_rejects_null_or_empty_fields(self) -> None:
         for field_name in ("title", "prompt", "model"):
-            with self.assertRaises(ValueError):
+            with pytest.raises(ValueError):
                 Task.from_dict({"title": "T", "prompt": "P", "model": "M", field_name: None})
-            with self.assertRaises(ValueError):
+            with pytest.raises(ValueError):
                 Task.from_dict({"title": "T", "prompt": "P", "model": "M", field_name: "   "})
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             Task.from_dict({"title": "T", "prompt": "P", "model": "M", "reasoning_effort": None})
 
     def test_get_and_find_matches_handle_invalid_yaml(self) -> None:
         (self.tasks_dir / "bad-yaml.yaml").write_text("title: [unclosed\n", encoding="utf-8")
         (self.tasks_dir / "bad-good.yaml").write_text("title: Good\nprompt: hi\nmodel: m\n", encoding="utf-8")
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             self.mgr.get("bad-yaml")
         matches = self.mgr.find_matches("bad-")
-        self.assertEqual([m[0] for m in matches], ["bad-good"])
+        assert [m[0] for m in matches] == ["bad-good"]
 
     def test_render_complex_template_with_mixed_inputs(self) -> None:
         prompt = (
@@ -404,7 +405,7 @@ class TestTaskManager(unittest.TestCase):
             }
         )
         expected = "Model: qwen2.5:32b\nIterations: 3\nVerbose mode enabled.\nTags:\n- prod\n- gpu\n"
-        self.assertEqual(rendered, expected)
+        assert rendered == expected
 
     def test_task_from_dict_non_dict_inputs_raises(self) -> None:
         raw = {
@@ -414,7 +415,7 @@ class TestTaskManager(unittest.TestCase):
             "reasoning_effort": "low",
             "inputs": "not-a-dict",
         }
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             Task.from_dict(raw)
 
     def test_task_from_dict_invalid_input_value_raises(self) -> None:
@@ -427,9 +428,9 @@ class TestTaskManager(unittest.TestCase):
                 "bad_param": "not-a-taskinput-or-dict",
             },
         }
-        with self.assertRaises(ValueError) as ctx:
+        with pytest.raises(ValueError) as ctx:
             Task.from_dict(raw)
-        self.assertIn("bad_param", str(ctx.exception))
+        assert "bad_param" in str(ctx.value)
 
     def test_task_from_dict_invalid_input_type_or_required_raises(self) -> None:
         raw_bad_type = {
@@ -438,7 +439,7 @@ class TestTaskManager(unittest.TestCase):
             "model": "m",
             "inputs": {"count": {"type": "integer"}},
         }
-        with self.assertRaisesRegex(ValueError, "Unsupported input type 'integer'"):
+        with pytest.raises(ValueError, match="Unsupported input type 'integer'"):
             Task.from_dict(raw_bad_type)
 
         raw_bad_req = {
@@ -447,7 +448,7 @@ class TestTaskManager(unittest.TestCase):
             "model": "m",
             "inputs": {"flag": {"type": "boolean", "required": "yes"}},
         }
-        with self.assertRaisesRegex(ValueError, "Invalid input definition for 'flag'"):
+        with pytest.raises(ValueError, match="Invalid input definition for 'flag'"):
             Task.from_dict(raw_bad_req)
 
     def test_apply_task_settings_does_not_leak_to_serialized_settings(self) -> None:
@@ -457,20 +458,20 @@ class TestTaskManager(unittest.TestCase):
         task = Task(title="T", prompt="P", model="task-override:70b", reasoning_effort="high")
 
         restore = apply_task_settings(settings, task)
-        self.assertEqual(settings.model.name, "task-override:70b")
-        self.assertEqual(settings.model.reasoning_effort, "high")
+        assert settings.model.name == "task-override:70b"
+        assert settings.model.reasoning_effort == "high"
 
         # Serializing settings while a task is active must preserve the original model settings
         serialized = settings.to_dict()
-        self.assertEqual(serialized["model"]["name"], "original-model:latest")
-        self.assertEqual(serialized["model"]["reasoning_effort"], "low")
+        assert serialized["model"]["name"] == "original-model:latest"
+        assert serialized["model"]["reasoning_effort"] == "low"
 
         restore()
-        self.assertEqual(settings.model.name, "original-model:latest")
-        self.assertEqual(settings.model.reasoning_effort, "low")
+        assert settings.model.name == "original-model:latest"
+        assert settings.model.reasoning_effort == "low"
         serialized_after = settings.to_dict()
-        self.assertEqual(serialized_after["model"]["name"], "original-model:latest")
-        self.assertEqual(serialized_after["model"]["reasoning_effort"], "low")
+        assert serialized_after["model"]["name"] == "original-model:latest"
+        assert serialized_after["model"]["reasoning_effort"] == "low"
 
     def test_apply_task_settings_preserves_mid_task_user_changes_and_cleans_up_on_gc(self) -> None:
         settings = Settings()
@@ -482,22 +483,22 @@ class TestTaskManager(unittest.TestCase):
         # User explicitly changes model mid-task (e.g. while paused at HITL approval)
         settings.model.name = "user-chosen:latest"
         serialized = settings.to_dict()
-        self.assertEqual(serialized["model"]["name"], "user-chosen:latest")
-        self.assertEqual(serialized["model"]["reasoning_effort"], "low")
+        assert serialized["model"]["name"] == "user-chosen:latest"
+        assert serialized["model"]["reasoning_effort"] == "low"
 
         restore()
-        self.assertEqual(settings.model.name, "user-chosen:latest")
-        self.assertEqual(settings.model.reasoning_effort, "low")
+        assert settings.model.name == "user-chosen:latest"
+        assert settings.model.reasoning_effort == "low"
 
         # Verify weakref cleanup when Settings is garbage-collected without calling restore()
         transient = Settings()
         transient.model.name = "orig"
         key = id(transient.model)
         apply_task_settings(transient, task)
-        self.assertIn(key, _task_model_overrides)
+        assert key in _task_model_overrides
         del transient
         gc.collect()
-        self.assertNotIn(key, _task_model_overrides)
+        assert key not in _task_model_overrides
 
 
 if __name__ == "__main__":

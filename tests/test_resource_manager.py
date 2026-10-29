@@ -4,6 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
+
 from ollama_agent.core.resource_manager import (
     BaseFileStoreManager,
     require_text,
@@ -63,23 +65,23 @@ class TestResourceManager(unittest.TestCase):
     def test_base_dir_created_automatically(self) -> None:
         sub = self.base_path / "nested" / "dir"
         DummyFileManager(sub)
-        self.assertTrue(sub.is_dir())
+        assert sub.is_dir()
 
     def test_path_resolution_within_base_dir(self) -> None:
         resolved = self.mgr._path("test_item")
-        self.assertEqual(resolved, (self.base_path / "test_item.txt").resolve())
+        assert resolved == (self.base_path / "test_item.txt").resolve()
 
     def test_path_traversal_detection_raises_value_error(self) -> None:
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             self.mgr._path("../outside_item")
 
     def test_require_text_valid(self) -> None:
-        self.assertEqual(require_text("  hello world  ", "Field", ValueError), "hello world")
+        assert require_text("  hello world  ", "Field", ValueError) == "hello world"
 
     def test_require_text_empty_raises(self) -> None:
-        with self.assertRaises(ValueError) as cm:
+        with pytest.raises(ValueError) as cm:
             require_text("   ", "Name", ValueError)
-        self.assertIn("Name cannot be empty", str(cm.exception))
+        assert "Name cannot be empty" in str(cm.value)
 
     def test_resolve_unique_match_success(self) -> None:
         match = resolve_unique_match(
@@ -89,10 +91,10 @@ class TestResourceManager(unittest.TestCase):
             not_found_error=ItemNotFoundError,
             ambiguous_error=AmbiguousItemError,
         )
-        self.assertEqual(match, ("id1", "val1"))
+        assert match == ("id1", "val1")
 
     def test_resolve_unique_match_not_found_raises(self) -> None:
-        with self.assertRaises(ItemNotFoundError):
+        with pytest.raises(ItemNotFoundError):
             resolve_unique_match(
                 [],
                 "missing",
@@ -102,7 +104,7 @@ class TestResourceManager(unittest.TestCase):
             )
 
     def test_resolve_unique_match_ambiguous_raises(self) -> None:
-        with self.assertRaises(AmbiguousItemError):
+        with pytest.raises(AmbiguousItemError):
             resolve_unique_match(
                 [("id1", "v1"), ("id2", "v2")],
                 "id",
@@ -119,7 +121,7 @@ class TestResourceManager(unittest.TestCase):
             not_found_error=ItemNotFoundError,
             ambiguous_error=AmbiguousItemError,
         )
-        self.assertEqual(match, ("test", "v1"))
+        assert match == ("test", "v1")
 
     def test_manager_resolve_success(self) -> None:
         self.mgr.items["tool-a"] = "alpha"
@@ -130,10 +132,10 @@ class TestResourceManager(unittest.TestCase):
             ambiguous_error=AmbiguousItemError,
             validation_error=ItemValidationError,
         )
-        self.assertEqual(res, ("tool-a", "alpha"))
+        assert res == ("tool-a", "alpha")
 
     def test_manager_resolve_not_found_raises(self) -> None:
-        with self.assertRaises(ItemNotFoundError):
+        with pytest.raises(ItemNotFoundError):
             self.mgr.resolve(
                 "missing",
                 label="Item",
@@ -145,7 +147,7 @@ class TestResourceManager(unittest.TestCase):
     def test_manager_resolve_ambiguous_raises(self) -> None:
         self.mgr.items["tool-a"] = "alpha"
         self.mgr.items["tool-b"] = "beta"
-        with self.assertRaises(AmbiguousItemError):
+        with pytest.raises(AmbiguousItemError):
             self.mgr.resolve(
                 "tool",
                 label="Item",
@@ -155,7 +157,7 @@ class TestResourceManager(unittest.TestCase):
             )
 
     def test_manager_resolve_validation_error_raises(self) -> None:
-        with self.assertRaises(ItemValidationError):
+        with pytest.raises(ItemValidationError):
             self.mgr.resolve(
                 "invalid!",
                 label="Item",

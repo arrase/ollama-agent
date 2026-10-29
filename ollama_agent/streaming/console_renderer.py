@@ -13,6 +13,7 @@ from rich.markdown import Markdown
 from rich.markup import escape
 from rich.padding import Padding
 
+from ..agent import AgentRuntime
 from ..i18n import _
 from .base import StreamingRenderer
 from .interrupts import build_approval_decisions, extract_action_requests
@@ -29,7 +30,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         self._reasoning = False
         self._live_active = False
 
-    def _toggle_live(self, start: bool) -> None:
+    def _toggle_live(self, *, start: bool) -> None:
         if start and not self._live_active:
             self.live.start()
             self._live_active = True
@@ -48,7 +49,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         if not self._banner_shown:
             self.console.print(f"  [bold green]🤖 {_('Assistant')}[/bold green]")
             self._banner_shown = True
-        self._toggle_live(True)
+        self._toggle_live(start=True)
         self._text.append(event["content"])
         self.live.update(Padding(Markdown("".join(self._text)), (0, 0, 0, 4)))
 
@@ -57,7 +58,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         if not content:
             return
         if not self._reasoning:
-            self._toggle_live(False)
+            self._toggle_live(start=False)
             self.console.print(f"\n  [bold magenta]🧠 {_('Thinking')}[/bold magenta]")
             self.console.print("  [dim magenta]│[/dim magenta] ", end="")
             self._reasoning = True
@@ -75,25 +76,25 @@ class ConsoleStreamingRenderer(StreamingRenderer):
 
     def on_tool_call(self, event: dict[str, Any]) -> None:
         self._end_reasoning()
-        self._toggle_live(False)
+        self._toggle_live(start=False)
         prefix = self._agent_prefix(event)
         tool_msg = escape(_("Calling tool: {tool_name}", tool_name=str(event["name"])))
         self.console.print(f"  [yellow]✦ {prefix}{tool_msg}[/yellow]")
 
     def on_tool_output(self, event: dict[str, Any]) -> None:
-        self._toggle_live(False)
+        self._toggle_live(start=False)
         prefix = self._agent_prefix(event)
         suffix = f" ({_('{output_len} chars', output_len=event['output_len'])})"
         self.console.print(f"  [dim cyan]✓ {prefix}{_('Tool output received')}{suffix}[/dim cyan]\n")
 
     def on_error(self, event: dict[str, Any]) -> None:
         self._end_reasoning()
-        self._toggle_live(False)
+        self._toggle_live(start=False)
         self.console.print(f"  [red]❌ {_('Error:')} {escape(str(event['content']))}[/red]")
 
     def on_warning(self, event: dict[str, Any]) -> None:
         self._end_reasoning()
-        self._toggle_live(False)
+        self._toggle_live(start=False)
         self.console.print(f"  [yellow]⚠ {_('Warning:')} {escape(str(event['content']))}[/yellow]")
 
     @staticmethod
@@ -112,7 +113,7 @@ class ConsoleStreamingRenderer(StreamingRenderer):
             # SystemExit and stop the interpreter from unwinding.
             try:
                 value = input()
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 loop.call_soon_threadsafe(future.set_exception, exc)
             except KeyboardInterrupt as exc:
                 loop.call_soon_threadsafe(future.set_exception, exc)
@@ -122,8 +123,8 @@ class ConsoleStreamingRenderer(StreamingRenderer):
         threading.Thread(target=_read, daemon=True, name="ollama-agent-approval").start()
         return await future
 
-    async def handle_interrupt(self, event: dict[str, Any], runtime: Any) -> list[dict[str, Any]] | None:
-        self._toggle_live(False)
+    async def handle_interrupt(self, event: dict[str, Any], runtime: AgentRuntime) -> list[dict[str, Any]] | None:
+        self._toggle_live(start=False)
         self._end_reasoning()
 
         action_requests = extract_action_requests(event)
@@ -166,5 +167,5 @@ class ConsoleStreamingRenderer(StreamingRenderer):
 
     def close(self) -> None:
         self._end_reasoning()
-        self._toggle_live(False)
+        self._toggle_live(start=False)
         self.console.print()

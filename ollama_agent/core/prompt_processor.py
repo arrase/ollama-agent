@@ -104,6 +104,7 @@ def read_binary_file_b64(file_path: Path, max_file_size: int = 1024 * 1024) -> s
 
 def _load_validated_file(
     file_path: Path,
+    *,
     max_file_size: int,
     max_total_size: int,
     current_size: int,
@@ -128,6 +129,7 @@ def _load_validated_file(
 
 def _resolve_single_file(
     target_path: Path,
+    *,
     max_file_size: int,
     max_files: int,
     max_total_size: int,
@@ -143,13 +145,21 @@ def _resolve_single_file(
         raise ContextLimitExceededError(_("Mentions limit exceeded: max {max_files} files.", max_files=max_files))
     text_contents: dict[Path, str] = {}
     attachments: list[dict[str, Any]] = []
-    size = _load_validated_file(target_path, max_file_size, max_total_size, initial_size, text_contents, attachments)
+    size = _load_validated_file(
+        target_path,
+        max_file_size=max_file_size,
+        max_total_size=max_total_size,
+        current_size=initial_size,
+        text_contents=text_contents,
+        attachments=attachments,
+    )
     seen_files.add(resolved_file)
     return ResolvedContext(text_contents, attachments, [], size)
 
 
 def _resolve_directory(
     target_path: Path,
+    *,
     max_file_size: int,
     max_files: int,
     max_total_size: int,
@@ -186,11 +196,11 @@ def _resolve_directory(
 
             size = _load_validated_file(
                 file_path,
-                max_file_size,
-                max_total_size,
-                initial_size + resolved_size,
-                text_contents,
-                attachments,
+                max_file_size=max_file_size,
+                max_total_size=max_total_size,
+                current_size=initial_size + resolved_size,
+                text_contents=text_contents,
+                attachments=attachments,
             )
             seen_files.add(resolved_file)
             resolved_size += size
@@ -269,6 +279,7 @@ def _extract_mention_path(match: re.Match[str]) -> tuple[str, int, bool]:
 def _resolve_mention_target(
     path_str: str,
     resolved_base: Path,
+    *,
     allow_traversal: bool,
     is_quoted: bool,
 ) -> Path | None:
@@ -308,6 +319,7 @@ def process_prompt_mentions(
     max_file_size: int = 1024 * 1024,
     max_files: int = 100,
     max_total_size: int = 10 * 1024 * 1024,
+    *,
     allow_traversal: bool = True,
     base_dir: Path = Path(),
 ) -> tuple[str, list[dict[str, Any]], list[str]]:
@@ -326,7 +338,12 @@ def process_prompt_mentions(
 
     for match in pattern.finditer(prompt):
         path_str, end, is_quoted = _extract_mention_path(match)
-        path = _resolve_mention_target(path_str, resolved_base, allow_traversal, is_quoted)
+        path = _resolve_mention_target(
+            path_str,
+            resolved_base,
+            allow_traversal=allow_traversal,
+            is_quoted=is_quoted,
+        )
         if path is None:
             continue
 

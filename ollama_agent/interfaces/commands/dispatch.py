@@ -60,6 +60,8 @@ from .sessions import (
 CLIHandler = Callable[[], Any]
 REPLHandler = Callable[[list[str]], object]
 DOMAIN_ERRORS = (SkillError, TaskError, RAGError, HistoryError, MCPConfigError)
+_MIN_SUBCMD_VALUE_ARGS = 2
+_MIN_PARAMS_SET_ARGS = 3
 
 _log = logging.getLogger(__name__)
 
@@ -84,7 +86,7 @@ async def safe_call(
     except DOMAIN_ERRORS as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
     # A command must never crash the caller.
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         _log.exception("Unhandled error in command %r", fn.__name__)
         console.print(f"[red]{escape(_('Command failed: {exc}', exc=exc))}[/red]")
 
@@ -283,7 +285,7 @@ class REPLEnvironment:
             show_model_params(self.console, self.runtime)
             return None
         if args[0] == "set":
-            if len(args) < 3:
+            if len(args) < _MIN_PARAMS_SET_ARGS:
                 self.console.print(
                     f"[red]{escape(_('Usage: /params set <parameter> <value>'))}[/red]\n"
                     f"[dim]{escape(_('Example: /params set temperature 0.7'))}[/dim]"
@@ -337,6 +339,18 @@ class REPLEnvironment:
             return add_rag_directory(self.get_rag_ctx(), target_path)
         return add_rag_file(self.get_rag_ctx(), target_path)
 
+    def _handle_rag_reload_sub(self, sub: str, args: list[str]) -> object:
+        if sub == "unload":
+            unload_rag_database(self.get_rag_ctx())
+            return self.runtime.reload()
+        usage = _("Usage: /rag delete <name>") if sub == "delete" else _("Usage: /rag load <name>")
+        name = self._require_arg(args, 1, usage)
+        if name is None:
+            return None
+        action = delete_rag_database if sub == "delete" else load_rag_database
+        action(self.get_rag_ctx(), name)
+        return self.runtime.reload()
+
     def handle_rag(self, args: list[str]) -> object:
         if not args or args[0] == "status":
             show_rag_status(self.get_rag_ctx())
@@ -350,21 +364,8 @@ class REPLEnvironment:
             if name is not None:
                 create_rag_database(self.get_rag_ctx(), name)
             return None
-        if sub == "delete":
-            name = self._require_arg(args, 1, _("Usage: /rag delete <name>"))
-            if name is None:
-                return None
-            delete_rag_database(self.get_rag_ctx(), name)
-            return self.runtime.reload()
-        if sub == "load":
-            name = self._require_arg(args, 1, _("Usage: /rag load <name>"))
-            if name is None:
-                return None
-            load_rag_database(self.get_rag_ctx(), name)
-            return self.runtime.reload()
-        if sub == "unload":
-            unload_rag_database(self.get_rag_ctx())
-            return self.runtime.reload()
+        if sub in ("delete", "load", "unload"):
+            return self._handle_rag_reload_sub(sub, args)
         if sub == "add":
             return self._handle_rag_add(args[1:])
         self._error(
@@ -381,7 +382,7 @@ class REPLEnvironment:
             return None
         sub = args[0]
         if sub == "search":
-            if len(args) < 2:
+            if len(args) < _MIN_SUBCMD_VALUE_ARGS:
                 self._error(_("Usage: /session search <query>"))
                 return None
             search_sessions(

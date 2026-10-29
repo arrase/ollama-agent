@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
 from rich.console import Console
 
 from ollama_agent.skills.commands import (
@@ -35,11 +36,11 @@ class TestSkillsCommands(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_require_validation(self) -> None:
-        with self.assertRaises(ValidationError):
+        with pytest.raises(ValidationError):
             create_skill(self.ctx, "s1", name="   ", description="d", instructions="i")
-        with self.assertRaises(ValidationError):
+        with pytest.raises(ValidationError):
             create_skill(self.ctx, "s1", name="n", description="   ", instructions="i")
-        with self.assertRaises(ValidationError):
+        with pytest.raises(ValidationError):
             create_skill(self.ctx, "s1", name="n", description="d", instructions="   ")
 
     def test_create_and_show_skill(self) -> None:
@@ -51,14 +52,14 @@ class TestSkillsCommands(unittest.TestCase):
             instructions="Run git status",
         )
         skill = self.mgr.get("git-helper")
-        self.assertIsNotNone(skill)
         assert skill is not None
-        self.assertEqual(skill.name, "Git Helper")
+        assert skill is not None
+        assert skill.name == "Git Helper"
 
         show_skill(self.ctx, "git-helper")
         out = self.console.export_text()
-        self.assertIn("Git Helper", out)
-        self.assertIn("Run git status", out)
+        assert "Git Helper" in out
+        assert "Run git status" in out
 
     def test_list_and_delete_skill(self) -> None:
         create_skill(
@@ -70,10 +71,10 @@ class TestSkillsCommands(unittest.TestCase):
         )
         list_skills(self.ctx)
         out = self.console.export_text()
-        self.assertIn("Skill A", out)
+        assert "Skill A" in out
 
         delete_skill(self.ctx, "skill-a")
-        with self.assertRaises(FileNotFoundError):
+        with pytest.raises(FileNotFoundError):
             self.mgr.get("skill-a")
 
     def test_list_skills_long_description_not_truncated(self) -> None:
@@ -87,23 +88,23 @@ class TestSkillsCommands(unittest.TestCase):
         )
         list_skills(self.ctx)
         out = self.console.export_text()
-        self.assertIn("servers and tools", out)
+        assert "servers and tools" in out
 
     def test_resolve_skill_errors(self) -> None:
-        with self.assertRaises(SkillNotFoundError):
+        with pytest.raises(SkillNotFoundError):
             self.ctx.resolve_skill("nonexistent")
 
-        with self.assertRaises(ValidationError):
+        with pytest.raises(ValidationError):
             self.ctx.resolve_skill("invalid/name")
 
         create_skill(self.ctx, "test-1", name="T1", description="D1", instructions="I1")
         create_skill(self.ctx, "test-2", name="T2", description="D2", instructions="I2")
 
-        with self.assertRaises(AmbiguousSkillError):
+        with pytest.raises(AmbiguousSkillError):
             self.ctx.resolve_skill("test")
 
     def test_delete_builtin_skill_fails(self) -> None:
         mgr = SkillManager(skills_dir=Path(self.temp_dir.name))
         ctx = SkillsContext(console=self.console, skill_manager=mgr)
-        with self.assertRaises(SkillError):
+        with pytest.raises(SkillError):
             delete_skill(ctx, "skill-creator")

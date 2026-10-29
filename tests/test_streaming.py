@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
 from rich.console import Console
 
 from ollama_agent.streaming import build_approval_decisions, extract_action_requests
@@ -51,7 +52,7 @@ class TestStreamingSystem(unittest.IsolatedAsyncioTestCase):
     def test_base_streaming_renderer_dispatch(self) -> None:
         renderer = DummyRenderer()
         renderer.on_event({"type": "text_delta", "content": "hello"})
-        self.assertEqual(len(renderer.events), 1)
+        assert len(renderer.events) == 1
 
     def test_console_streaming_renderer_skips_unknown_type(self) -> None:
         renderer = DummyRenderer()
@@ -59,8 +60,8 @@ class TestStreamingSystem(unittest.IsolatedAsyncioTestCase):
         # The event reaches DummyRenderer.on_event which always appends,
         # but no type-specific handler (on_agent_update) was called — verify
         # it didn't crash and no warnings/errors were recorded.
-        self.assertEqual(len(renderer.warnings), 0)
-        self.assertEqual(len(renderer.errors), 0)
+        assert len(renderer.warnings) == 0
+        assert len(renderer.errors) == 0
 
     def test_console_streaming_renderer_reasoning_is_pure_delta(self) -> None:
         console = Console(file=io.StringIO(), record=True)
@@ -71,7 +72,7 @@ class TestStreamingSystem(unittest.IsolatedAsyncioTestCase):
         renderer.close()
 
         out = console.export_text()
-        self.assertIn("thethe", out)
+        assert "thethe" in out
 
     def test_console_streaming_renderer_deltas(self) -> None:
         console = Console(file=io.StringIO(), record=True)
@@ -86,27 +87,28 @@ class TestStreamingSystem(unittest.IsolatedAsyncioTestCase):
         renderer.close()
 
         out = console.export_text()
-        self.assertIn("Hello world", out)
-        self.assertIn("Thinking step", out)
-        self.assertIn("Calling tool", out)
-        self.assertIn("Tool output received", out)
-        self.assertIn("Network failure", out)
-        self.assertIn("Slow connection", out)
+        assert "Hello world" in out
+        assert "Thinking step" in out
+        assert "Calling tool" in out
+        assert "Tool output received" in out
+        assert "Network failure" in out
+        assert "Slow connection" in out
 
     def test_console_streaming_renderer_agent_prefix(self) -> None:
         console = Console(file=io.StringIO(), record=True)
         renderer = ConsoleStreamingRenderer(console=console)
         # The prefix is escaped so an agent name carrying markup cannot break printing.
-        self.assertEqual(renderer._agent_prefix({"agent_name": "worker"}), "\\[worker] ")
-        self.assertEqual(renderer._agent_prefix({"agent_name": "a[/b]c"}), "[a\\[/b]c] ")
-        self.assertEqual(renderer._agent_prefix({"agent_name": ""}), "")
-        self.assertEqual(renderer._agent_prefix({"agent_name": None}), "")
-        self.assertEqual(renderer._agent_prefix({}), "")
+        assert renderer._agent_prefix({"agent_name": "worker"}) == "\\[worker] "
+        assert renderer._agent_prefix({"agent_name": "a[/b]c"}) == "[a\\[/b]c] "
+        assert renderer._agent_prefix({"agent_name": ""}) == ""
+        assert renderer._agent_prefix({"agent_name": None}) == ""
+        assert renderer._agent_prefix({}) == ""
 
     async def test_stream_agent_events_pipeline(self) -> None:
         mock_runtime = MagicMock()
 
-        async def fake_stream(prompt: str, thread_id: str = "") -> AsyncGenerator[dict[str, Any], None]:
+        async def fake_stream(_prompt: str, thread_id: str = "") -> AsyncGenerator[dict[str, Any], None]:
+            _ = thread_id
             yield {"type": "text_delta", "content": "Hello"}
             yield {"type": "tool_call", "name": "search"}
             yield {"type": "text_delta", "content": "World"}
@@ -116,21 +118,22 @@ class TestStreamingSystem(unittest.IsolatedAsyncioTestCase):
         renderer = DummyRenderer()
         await stream_agent_events(mock_runtime, "test prompt", renderer)
 
-        self.assertTrue(renderer.closed)
+        assert renderer.closed
         types = [e["type"] for e in renderer.events]
-        self.assertEqual(types, ["text_delta", "tool_call", "text_delta"])
+        assert types == ["text_delta", "tool_call", "text_delta"]
 
     async def test_stream_agent_events_returns_completed_true(self) -> None:
         mock_runtime = MagicMock()
 
-        async def fake_stream(prompt: str, thread_id: str = "") -> AsyncGenerator[dict[str, Any], None]:
+        async def fake_stream(_prompt: str, thread_id: str = "") -> AsyncGenerator[dict[str, Any], None]:
+            _ = thread_id
             yield {"type": "text_delta", "content": "Hi"}
 
         mock_runtime.run_streamed = fake_stream
         renderer = DummyRenderer()
         completed = await stream_agent_events(mock_runtime, "p", renderer)
-        self.assertTrue(completed)
-        self.assertTrue(renderer.closed)
+        assert completed
+        assert renderer.closed
 
 
 class TestInterruptHandling(unittest.IsolatedAsyncioTestCase):
@@ -161,8 +164,8 @@ class TestInterruptHandling(unittest.IsolatedAsyncioTestCase):
         fake_stdin = SimpleNamespace(isatty=lambda: False)
         with patch("ollama_agent.streaming.console_renderer.sys.stdin", new=fake_stdin):
             result = await renderer.handle_interrupt(self._interrupt_event(), MagicMock())
-        self.assertIsNone(result)
-        self.assertIn("--yolo", console.export_text())
+        assert result is None
+        assert "--yolo" in console.export_text()
 
     async def test_approval_choices(self) -> None:
         runtime = MagicMock()
@@ -185,11 +188,11 @@ class TestInterruptHandling(unittest.IsolatedAsyncioTestCase):
                 runtime.auto_approved_tools.clear()
                 result = await renderer.handle_interrupt(self._interrupt_event(), runtime)
                 if expected is None:
-                    self.assertIsNone(result)
+                    assert result is None
                 else:
                     assert result is not None
-                    self.assertEqual(result[0]["type"], expected)
-                self.assertEqual("execute" in runtime.auto_approved_tools, should_auto_approve)
+                    assert result[0]["type"] == expected
+                assert ("execute" in runtime.auto_approved_tools) == should_auto_approve
 
     async def test_eof_at_prompt_returns_none(self) -> None:
         renderer, console = self._make_renderer()
@@ -199,8 +202,8 @@ class TestInterruptHandling(unittest.IsolatedAsyncioTestCase):
             patch("builtins.input", side_effect=EOFError),
         ):
             result = await renderer.handle_interrupt(self._interrupt_event(), MagicMock())
-        self.assertIsNone(result)
-        self.assertIn("Cancelled", console.export_text())
+        assert result is None
+        assert "Cancelled" in console.export_text()
 
     async def test_keyboard_interrupt_at_prompt_propagates(self) -> None:
         """Ctrl-C on the prompt propagates KeyboardInterrupt to the caller."""
@@ -211,58 +214,61 @@ class TestInterruptHandling(unittest.IsolatedAsyncioTestCase):
         with (
             patch("ollama_agent.streaming.console_renderer.sys.stdin", new=fake_stdin),
             patch("builtins.input", side_effect=KeyboardInterrupt),
-            self.assertRaises(KeyboardInterrupt),
+            pytest.raises(KeyboardInterrupt),
         ):
             await renderer.handle_interrupt(event, runtime)
 
     async def test_stream_agent_events_propagates_keyboard_interrupt(self) -> None:
         mock_runtime = MagicMock()
 
-        async def fake_stream(prompt: str, thread_id: str = "") -> AsyncGenerator[dict[str, Any], None]:
+        async def fake_stream(_prompt: str, thread_id: str = "") -> AsyncGenerator[dict[str, Any], None]:
+            _ = thread_id
             raise KeyboardInterrupt
             yield  # pragma: no cover - makes this an async generator
 
         mock_runtime.run_streamed = fake_stream
         renderer = DummyRenderer()
-        with self.assertRaises(KeyboardInterrupt):
+        with pytest.raises(KeyboardInterrupt):
             await stream_agent_events(mock_runtime, "p", renderer)
-        self.assertTrue(renderer.closed)
+        assert renderer.closed
 
     async def test_stream_agent_events_aborted_interrupt_returns_false(self) -> None:
         mock_runtime = MagicMock()
 
-        async def fake_stream(prompt: str, thread_id: str = "") -> AsyncGenerator[dict[str, Any], None]:
+        async def fake_stream(_prompt: str, thread_id: str = "") -> AsyncGenerator[dict[str, Any], None]:
+            _ = thread_id
             yield {"type": "interrupt", "interrupts": [SimpleNamespace(value={"action_requests": []})]}
 
         mock_runtime.run_streamed = fake_stream
         renderer = DummyRenderer()
         with patch.object(renderer, "handle_interrupt", return_value=None):
             completed = await stream_agent_events(mock_runtime, "p", renderer)
-        self.assertFalse(completed)
+        assert not completed
 
     async def test_stream_agent_events_propagates_renderer_exceptions(self) -> None:
         mock_runtime = MagicMock()
 
-        async def fake_stream(prompt: str, thread_id: str = "") -> AsyncGenerator[dict[str, Any], None]:
+        async def fake_stream(_prompt: str, thread_id: str = "") -> AsyncGenerator[dict[str, Any], None]:
+            _ = thread_id
             yield {"type": "interrupt", "interrupts": [SimpleNamespace(value={"action_requests": []})]}
 
         mock_runtime.run_streamed = fake_stream
 
         class BrokenRenderer(DummyRenderer):
-            async def handle_interrupt(self, event: dict[str, Any], runtime: Any) -> list[dict[str, Any]] | None:
+            async def handle_interrupt(self, _event: dict[str, Any], _runtime: object) -> list[dict[str, Any]] | None:
                 raise ValueError("boom")
 
         renderer = BrokenRenderer()
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             await stream_agent_events(mock_runtime, "p", renderer)
-        self.assertTrue(renderer.closed)
+        assert renderer.closed
 
 
 class TestExtractActionRequests(unittest.TestCase):
     """Tests for direct interrupt payload extraction."""
 
     @staticmethod
-    def _event(action_requests: Any) -> dict[str, Any]:
+    def _event(action_requests: object) -> dict[str, Any]:
         return {
             "type": "interrupt",
             "interrupts": [SimpleNamespace(value={"action_requests": action_requests})],
@@ -270,7 +276,7 @@ class TestExtractActionRequests(unittest.TestCase):
 
     def test_valid_payload(self) -> None:
         requests = [{"name": "execute", "args": {"command": "ls"}}]
-        self.assertEqual(extract_action_requests(self._event(requests)), requests)
+        assert extract_action_requests(self._event(requests)) == requests
 
     def test_valid_tuple_payload(self) -> None:
         requests = [{"name": "write_file", "args": {"file_path": "/test"}}]
@@ -278,7 +284,7 @@ class TestExtractActionRequests(unittest.TestCase):
             "type": "interrupt",
             "interrupts": (SimpleNamespace(value={"action_requests": requests}),),
         }
-        self.assertEqual(extract_action_requests(event), requests)
+        assert extract_action_requests(event) == requests
 
     def test_multiple_interrupts_concatenates_requests(self) -> None:
         req1 = {"name": "execute", "args": {"command": "ls"}}
@@ -290,23 +296,23 @@ class TestExtractActionRequests(unittest.TestCase):
                 SimpleNamespace(value={"action_requests": [req2]}),
             ],
         }
-        self.assertEqual(extract_action_requests(event), [req1, req2])
+        assert extract_action_requests(event) == [req1, req2]
 
     def test_missing_interrupts_raises(self) -> None:
-        with self.assertRaises(KeyError):
+        with pytest.raises(KeyError):
             extract_action_requests({"type": "interrupt"})
 
     def test_empty_interrupts_returns_empty_list(self) -> None:
-        self.assertEqual(extract_action_requests({"type": "interrupt", "interrupts": []}), [])
+        assert extract_action_requests({"type": "interrupt", "interrupts": []}) == []
 
     def test_missing_value_attribute_raises(self) -> None:
         event = {"type": "interrupt", "interrupts": [SimpleNamespace()]}
-        with self.assertRaises(AttributeError):
+        with pytest.raises(AttributeError):
             extract_action_requests(event)
 
     def test_missing_action_requests_raises(self) -> None:
         event = {"type": "interrupt", "interrupts": [SimpleNamespace(value={})]}
-        with self.assertRaises(KeyError):
+        with pytest.raises(KeyError):
             extract_action_requests(event)
 
 
@@ -318,24 +324,24 @@ class TestBuildApprovalDecisions(unittest.TestCase):
 
     def test_approve(self) -> None:
         decisions = build_approval_decisions(self.requests, "approve")
-        self.assertEqual(decisions, [{"type": "approve"}])
+        assert decisions == [{"type": "approve"}]
 
     def test_allow(self) -> None:
         runtime = SimpleNamespace(auto_approved_tools=set())
         decisions = build_approval_decisions(self.requests, "allow", runtime=runtime)
-        self.assertEqual(decisions, [{"type": "approve"}])
-        self.assertIn("execute", runtime.auto_approved_tools)
+        assert decisions == [{"type": "approve"}]
+        assert "execute" in runtime.auto_approved_tools
 
     def test_reject_default_message(self) -> None:
         decisions = build_approval_decisions(self.requests, "reject")
-        self.assertEqual(len(decisions), 1)
-        self.assertEqual(decisions[0]["type"], "reject")
-        self.assertIn("execute", decisions[0]["message"])
+        assert len(decisions) == 1
+        assert decisions[0]["type"] == "reject"
+        assert "execute" in decisions[0]["message"]
 
     def test_reject_custom_message(self) -> None:
         decisions = build_approval_decisions(self.requests, "reject", reject_message="Custom rejection")
-        self.assertEqual(decisions, [{"type": "reject", "message": "Custom rejection"}])
+        assert decisions == [{"type": "reject", "message": "Custom rejection"}]
 
     def test_unknown_action_raises(self) -> None:
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             build_approval_decisions(self.requests, "unknown")

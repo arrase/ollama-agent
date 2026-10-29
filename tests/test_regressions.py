@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from conftest import make_repl_environment, recording_console
 from langchain_core.messages import AIMessageChunk
 
@@ -53,40 +54,40 @@ class TestRichMarkupInjection(unittest.TestCase):
         console = recording_console()
         renderer = ConsoleStreamingRenderer(console=console)
         renderer.on_reasoning_delta({"type": "reasoning_delta", "content": "see [/italic] and foo [/]"})
-        self.assertIn("[/italic]", console.export_text())
+        assert "[/italic]" in console.export_text()
 
     def test_error_and_warning_content_does_not_crash(self) -> None:
         console = recording_console()
         renderer = ConsoleStreamingRenderer(console=console)
         renderer.on_error({"type": "error", "content": "boom [/red]"})
         renderer.on_warning({"type": "warning", "content": "careful [/bold]"})
-        self.assertIn("boom", console.export_text())
+        assert "boom" in console.export_text()
 
     def test_tool_call_with_markup_in_name_does_not_crash(self) -> None:
         console = recording_console()
         renderer = ConsoleStreamingRenderer(console=console)
         renderer.on_tool_call({"type": "tool_call", "name": "weird[/name]", "agent_name": "a[/b]c"})
-        self.assertIn("weird", console.export_text())
+        assert "weird" in console.export_text()
 
     def test_unknown_subcommand_with_markup_does_not_crash(self) -> None:
         env = make_repl_environment(console=recording_console())
         for handler_name in ("handle_agents", "handle_mcp", "handle_task", "handle_skill", "handle_rag"):
             with self.subTest(handler=handler_name):
                 getattr(env, handler_name)(["x[/y]z"])
-        self.assertTrue(env.console.file.getvalue())  # type: ignore[union-attr]
+        assert env.console.file.getvalue()  # type: ignore[union-attr]
 
     def test_safe_call_escapes_domain_error(self) -> None:
         console = recording_console()
         env = make_repl_environment(console=console)
         with patch("ollama_agent.interfaces.commands.dispatch.list_tasks", side_effect=TaskError("bad [/x]")):
             asyncio.run(safe_call(env.handle_task, ["list"], console=console))
-        self.assertIn("bad", console.export_text())
+        assert "bad" in console.export_text()
 
     def test_shorten_collapses_and_truncates(self) -> None:
-        self.assertEqual(shorten("a\nb"), "a b")
-        self.assertEqual(shorten("x" * 100), "x" * 57 + "...")
-        self.assertEqual(len(shorten("x" * 100)), 60)
-        self.assertEqual(shorten("short"), "short")
+        assert shorten("a\nb") == "a b"
+        assert shorten("x" * 100) == "x" * 57 + "..."
+        assert len(shorten("x" * 100)) == 60
+        assert shorten("short") == "short"
 
 
 class TestExtractTextMultimodal(unittest.TestCase):
@@ -94,27 +95,27 @@ class TestExtractTextMultimodal(unittest.TestCase):
 
     def test_non_text_block_yields_empty_string(self) -> None:
         block = {"type": "image", "base64": "AAAA", "mime_type": "image/png"}
-        self.assertEqual(extract_text(block), "")
+        assert extract_text(block) == ""
 
     def test_mixed_blocks_keep_the_text(self) -> None:
         blocks = [
             {"type": "text", "text": "describe this"},
             {"type": "image", "base64": "AAAA", "mime_type": "image/png"},
         ]
-        self.assertEqual(extract_text(blocks), "describe this")
+        assert extract_text(blocks) == "describe this"
 
     def test_malformed_dict_still_raises(self) -> None:
-        with self.assertRaises(TypeError):
+        with pytest.raises(TypeError):
             extract_text({"unexpected": 1})
 
 
 class TestHistoryErrorContract(unittest.TestCase):
     def test_malformed_timestamp_raises_history_error(self) -> None:
-        with self.assertRaises(HistoryError):
+        with pytest.raises(HistoryError):
             format_iso_timestamp("not-a-timestamp")
 
     def test_valid_timestamp_is_formatted(self) -> None:
-        self.assertEqual(format_iso_timestamp("2026-08-20T10:00:00+00:00"), "2026-08-20 10:00 UTC")
+        assert format_iso_timestamp("2026-08-20T10:00:00+00:00") == "2026-08-20 10:00 UTC"
 
 
 class TestStreamingParser(unittest.TestCase):
@@ -129,10 +130,10 @@ class TestStreamingParser(unittest.TestCase):
         )
         events = parser.process_chunk(chunk)
         kinds = [e["type"] for e in events]
-        self.assertIn("reasoning_delta", kinds)
-        self.assertIn("text_delta", kinds)
+        assert "reasoning_delta" in kinds
+        assert "text_delta" in kinds
         text = "".join(e["content"] for e in events if e["type"] == "text_delta")
-        self.assertEqual(text, "Hello world")
+        assert text == "Hello world"
 
     def test_hide_reasoning_keeps_text(self) -> None:
         parser = ThinkTagParser()
@@ -142,8 +143,8 @@ class TestStreamingParser(unittest.TestCase):
             response_metadata={},
         )
         events = parser.process_chunk(chunk, hide_reasoning=True)
-        self.assertTrue(all(e["type"] != "reasoning_delta" for e in events))
-        self.assertEqual("".join(e["content"] for e in events), "Visible")
+        assert all(e["type"] != "reasoning_delta" for e in events)
+        assert "".join(e["content"] for e in events) == "Visible"
 
     def test_hidden_reasoning_does_not_desync_the_think_buffer(self) -> None:
         """With reasoning hidden, text inside a think block must stay hidden.
@@ -158,15 +159,15 @@ class TestStreamingParser(unittest.TestCase):
             response_metadata={},
         )
         parser.process_chunk(opener, hide_reasoning=True)
-        self.assertTrue(parser.in_think)
+        assert parser.in_think
 
         body = AIMessageChunk(content="hidden body", additional_kwargs={}, response_metadata={})
         events = parser.process_chunk(body, hide_reasoning=True)
-        self.assertEqual(events, [])
+        assert events == []
 
         closer = AIMessageChunk(content="</think>visible", additional_kwargs={}, response_metadata={})
         events = parser.process_chunk(closer, hide_reasoning=True)
-        self.assertEqual("".join(e["content"] for e in events), "visible")
+        assert "".join(e["content"] for e in events) == "visible"
 
 
 class TestMiddlewareTimeout(unittest.IsolatedAsyncioTestCase):
@@ -187,7 +188,7 @@ class TestMiddlewareTimeout(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("ollama_agent.agent.middleware.get_tool_timeout", return_value=30),
-            self.assertRaises(TimeoutError),
+            pytest.raises(TimeoutError),
         ):
             await _stream_tool_events(request, handler)
 
@@ -207,8 +208,8 @@ class TestMiddlewareTimeout(unittest.IsolatedAsyncioTestCase):
 
         with patch("ollama_agent.agent.middleware.get_tool_timeout", return_value=0.01):
             result = await _stream_tool_events(request, handler)
-        self.assertEqual(result.status, "error")
-        self.assertIn("timed out", result.content)
+        assert result.status == "error"
+        assert "timed out" in result.content
 
 
 class TestOllamaClientLifetime(unittest.TestCase):
@@ -217,8 +218,8 @@ class TestOllamaClientLifetime(unittest.TestCase):
     def test_async_client_has_bounded_timeout(self) -> None:
         client = create_ollama_async_client("http://localhost:11434/")
         try:
-            self.assertIsNotNone(client._client.timeout.read)
-            self.assertGreater(client._client.timeout.read, 0)
+            assert client._client.timeout.read is not None
+            assert client._client.timeout.read > 0
         finally:
             asyncio.run(client.close())
 
@@ -226,25 +227,25 @@ class TestOllamaClientLifetime(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             mgr = RAGManager(RAGSettings(rag_dir=str(tmp)))
             # A manager that only lists databases must not hold a connection pool.
-            self.assertIsNone(mgr._ollama_client)
+            assert mgr._ollama_client is None
 
     def test_get_ollama_version_rejects_body_without_version(self) -> None:
         response = MagicMock()
         response.json.return_value = {"unexpected": "field"}
-        with patch("httpx.get", return_value=response), self.assertRaises(ModelCapabilityError):
+        with patch("httpx.get", return_value=response), pytest.raises(ModelCapabilityError):
             get_ollama_version("http://localhost:11434")
 
 
 class TestValidationGaps(unittest.TestCase):
     def test_settings_reject_wrong_types(self) -> None:
         # A bool would otherwise reach Ollama as num_ctx=1.
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             Settings.from_dict({"model": {"context_window": True}})
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             Settings.from_dict({"model": {"context_window": 3.5}})
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             Settings.from_dict({"model": {"temperature": "hot"}})
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             Settings.from_dict({"runtime": {"allow_traversal": "yes"}})
 
     def test_settings_accept_valid_values(self) -> None:
@@ -254,15 +255,16 @@ class TestValidationGaps(unittest.TestCase):
                 "runtime": {"allow_traversal": False},
             }
         )
-        self.assertEqual(s.model.context_window, "max")
-        self.assertEqual(s.model.temperature, 0.7)
+        assert s.model.context_window == "max"
+        assert s.model.temperature == 0.7
 
     def test_reasoning_effort_rejects_arbitrary_text(self) -> None:
         for bad in ["a" * 40, "with space", "bad/slash", "quote'"]:
-            with self.subTest(bad=bad), self.assertRaises(ValueError):
+            with self.subTest(bad=bad), pytest.raises(ValueError):
                 validate_reasoning_effort(bad)
-        self.assertEqual(validate_reasoning_effort("high"), "high")
-        self.assertEqual(validate_reasoning_effort(True), "true")
+        assert validate_reasoning_effort("high") == "high"
+        bool_effort = True
+        assert validate_reasoning_effort(bool_effort) == "true"
 
     def test_mcp_config_rejects_non_object_server(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -270,16 +272,16 @@ class TestValidationGaps(unittest.TestCase):
             cfg.write_text(json.dumps({"mcpServers": {"bad": 5}}), encoding="utf-8")
             with patch("ollama_agent.mcp.loader.MCP_PATH", cfg):
                 coro = _read_main_config()
-                with self.assertRaises(MCPConfigError):
+                with pytest.raises(MCPConfigError):
                     asyncio.run(coro)
 
     def test_mcp_args_must_be_strings(self) -> None:
-        with self.assertRaises(MCPConfigError):
+        with pytest.raises(MCPConfigError):
             _build_stdio_connection("s", {"command": "echo", "args": [1, 2]})
-        self.assertEqual(_build_stdio_connection("s", {"command": "echo"})["args"], [])
+        assert _build_stdio_connection("s", {"command": "echo"})["args"] == []
 
     def test_mention_expanduser_error_is_a_domain_error(self) -> None:
-        with self.assertRaises(PromptProcessingError):
+        with pytest.raises(PromptProcessingError):
             process_prompt_mentions(
                 "@~nosuchuser/notes.md",
                 allow_traversal=True,
@@ -295,42 +297,39 @@ class TestSamplingParamBounds(unittest.IsolatedAsyncioTestCase):
         with patch("ollama_agent.interfaces.commands.params.save_settings"):
             await set_model_param(console, "temperature", "99", runtime=runtime)
             await set_model_param(console, "top_k", "-1", runtime=runtime)
-        self.assertEqual(runtime.settings.model.temperature, 0.7)
+        assert runtime.settings.model.temperature == 0.7
         runtime.reload.assert_not_awaited()
-        self.assertIn("between", console.export_text())
+        assert "between" in console.export_text()
 
 
 class TestI18nRobustness(unittest.TestCase):
     def test_failed_locale_load_does_not_corrupt_state(self) -> None:
         with patch("ollama_agent.i18n.resources") as res:
             res.files.return_value.joinpath.return_value.read_text.side_effect = OSError("boom")
-            with self.assertRaises(ValueError):
+            with pytest.raises(ValueError):
                 set_locale("es")
-        self.assertEqual(get_locale(), "en")
-        self.assertEqual(
-            _("Usage: /model [list | set <model>]"),
-            "Usage: /model [list | set <model>]",
-        )
+        assert get_locale() == "en"
+        assert _("Usage: /model [list | set <model>]") == "Usage: /model [list | set <model>]"
 
     def test_literal_brace_does_not_crash(self) -> None:
-        self.assertEqual(get_text("Expected JSON: {}"), "Expected JSON: {}")
-        self.assertEqual(get_text("Expected JSON: {unclosed", foo="bar"), "Expected JSON: {unclosed")
-        self.assertEqual(get_text("a {missing} b", other=1), "a {missing} b")
-        self.assertEqual(get_text("stray { brace", other=1), "stray { brace")
-        self.assertEqual(get_text("stray } brace", other=1), "stray } brace")
+        assert get_text("Expected JSON: {}") == "Expected JSON: {}"
+        assert get_text("Expected JSON: {unclosed", foo="bar") == "Expected JSON: {unclosed"
+        assert get_text("a {missing} b", other=1) == "a {missing} b"
+        assert get_text("stray { brace", other=1) == "stray { brace"
+        assert get_text("stray } brace", other=1) == "stray } brace"
 
     def test_empty_locale_string_rejected(self) -> None:
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             set_locale("   ")
 
 
 class TestTaskValidation(unittest.TestCase):
     def test_missing_keys_raise_value_error(self) -> None:
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             Task.from_dict({"title": "t", "model": "m"})
 
     def test_unknown_input_keys_raise_value_error(self) -> None:
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             Task.from_dict(
                 {
                     "title": "t",
@@ -347,7 +346,7 @@ class TestTaskValidation(unittest.TestCase):
             model="m",
             inputs={"val": TaskInput(type="string")},
         )
-        self.assertEqual(task.render(), "val=")
+        assert task.render() == "val="
 
     def test_numeric_default_is_coerced(self) -> None:
         task = Task(
@@ -356,7 +355,7 @@ class TestTaskValidation(unittest.TestCase):
             model="m",
             inputs={"n": TaskInput(type="number", default="5")},
         )
-        self.assertEqual(task.render(), "n=5")
+        assert task.render() == "n=5"
 
 
 class TestExportSessionErrors(unittest.IsolatedAsyncioTestCase):
@@ -373,8 +372,8 @@ class TestExportSessionErrors(unittest.IsolatedAsyncioTestCase):
             with patch("ollama_agent.interfaces.commands.sessions.get_available_sessions") as sessions:
                 sessions.return_value = [{"thread_id": session_id, "steps": 1, "timestamp": ""}]
                 result = await export_session(console, runtime, session_id, output_path=target)
-        self.assertIsNone(result)
-        self.assertIn("Failed to export", console.export_text())
+        assert result is None
+        assert "Failed to export" in console.export_text()
 
 
 class TestRAGIsolation(unittest.IsolatedAsyncioTestCase):
@@ -391,7 +390,7 @@ class TestRAGIsolation(unittest.IsolatedAsyncioTestCase):
             mgr._client = client
             with (
                 patch.object(RAGManager, "_get_embeddings", AsyncMock(return_value=[[0.0]])),
-                self.assertRaises(RAGError),
+                pytest.raises(RAGError),
             ):
                 await mgr.search("q")
 
@@ -406,8 +405,8 @@ class TestSkillManagerIsolation(unittest.TestCase):
             (base / "good" / "SKILL.md").write_text("---\nname: Good\ndescription: d\n---\nbody\n", encoding="utf-8")
             mgr = SkillManager(skills_dir=base, builtin_skills_dir=Path(tmp) / "_no_builtin")
             names = [sid for sid, _ in mgr.list_all()]
-            self.assertIn("good", names)
-            self.assertNotIn("broken", names)
+            assert "good" in names
+            assert "broken" not in names
 
 
 if __name__ == "__main__":

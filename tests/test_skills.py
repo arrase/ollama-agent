@@ -4,6 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
+
 from ollama_agent.settings.paths import BUILTIN_SKILLS_DIR
 from ollama_agent.skills.manager import (
     SkillManager,
@@ -26,31 +28,31 @@ class TestSkillsManager(unittest.TestCase):
     def test_parse_frontmatter_valid(self) -> None:
         text = "---\nname: PDF Reader\ndescription: Reads PDF documents\n---\n\n# Instructions\nFollow these steps."
         meta, body = _parse_frontmatter(text)
-        self.assertEqual(meta.get("name"), "PDF Reader")
-        self.assertEqual(meta.get("description"), "Reads PDF documents")
-        self.assertIn("# Instructions", body)
+        assert meta.get("name") == "PDF Reader"
+        assert meta.get("description") == "Reads PDF documents"
+        assert "# Instructions" in body
 
     def test_parse_frontmatter_without_frontmatter(self) -> None:
         text = "# Plain Markdown\nNo frontmatter here."
         meta, body = _parse_frontmatter(text)
-        self.assertEqual(meta, {})
-        self.assertEqual(body, text)
+        assert meta == {}
+        assert body == text
 
     def test_parse_frontmatter_invalid_yaml_raises(self) -> None:
         text = "---\nname: [unclosed\n---\nbody"
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             _parse_frontmatter(text)
 
     def test_parse_frontmatter_unclosed_raises(self) -> None:
         text = "---\nname: X\nno closing delimiter"
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             _parse_frontmatter(text)
 
     def test_parse_frontmatter_closing_delimiter_requires_line_start(self) -> None:
         text = "---\nname: X\ndescription: uses --- as separator\n---\nbody"
         meta, body = _parse_frontmatter(text)
-        self.assertEqual(meta["description"], "uses --- as separator")
-        self.assertEqual(body, "body")
+        assert meta["description"] == "uses --- as separator"
+        assert body == "body"
 
     def test_create_and_get_skill(self) -> None:
         created_id = self.mgr.create(
@@ -59,37 +61,37 @@ class TestSkillsManager(unittest.TestCase):
             description="Assists with git commands",
             instructions="Use git status before committing.",
         )
-        self.assertEqual(created_id, "git-helper")
+        assert created_id == "git-helper"
 
         loaded = self.mgr.get("git-helper")
-        self.assertIsNotNone(loaded)
         assert loaded is not None
-        self.assertEqual(loaded.name, "Git Helper")
-        self.assertEqual(loaded.description, "Assists with git commands")
-        self.assertIn("Use git status", loaded.content)
+        assert loaded is not None
+        assert loaded.name == "Git Helper"
+        assert loaded.description == "Assists with git commands"
+        assert "Use git status" in loaded.content
 
     def test_create_existing_skill_without_overwrite_raises(self) -> None:
         self.mgr.create("s1", name="N1", description="D1", instructions="I1")
-        with self.assertRaises(FileExistsError):
+        with pytest.raises(FileExistsError):
             self.mgr.create("s1", name="N1", description="D1", instructions="I1", overwrite=False)
 
     def test_get_missing_skill_raises(self) -> None:
-        with self.assertRaises(FileNotFoundError):
+        with pytest.raises(FileNotFoundError):
             self.mgr.get("nonexistent-skill")
 
     def test_read_skill_requires_name_and_description(self) -> None:
         skill_dir = self.skills_dir / "incomplete"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("---\nname: Only Name\n---\nbody", encoding="utf-8")
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             _read_skill(skill_dir)
 
         (skill_dir / "SKILL.md").write_text("---\nname: ''\ndescription: valid\n---\nbody", encoding="utf-8")
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             _read_skill(skill_dir)
 
         (skill_dir / "SKILL.md").write_text("---\nname: valid\ndescription: '   '\n---\nbody", encoding="utf-8")
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             _read_skill(skill_dir)
 
     def test_find_matches_prefix(self) -> None:
@@ -98,15 +100,15 @@ class TestSkillsManager(unittest.TestCase):
         self.mgr.create("py-test", name="Python Tester", description="Runs tests", instructions="Run pytest")
 
         matches = self.mgr.find_matches("py")
-        self.assertEqual(len(matches), 3)
+        assert len(matches) == 3
         match_ids = [m[0] for m in matches]
-        self.assertEqual(sorted(match_ids), ["py", "py-lint", "py-test"])
+        assert sorted(match_ids) == ["py", "py-lint", "py-test"]
 
     def test_delete_skill(self) -> None:
         self.mgr.create("temp-skill", name="T", description="D", instructions="I")
         self.mgr.delete("temp-skill")
-        self.assertFalse((self.skills_dir / "temp-skill").exists())
-        with self.assertRaises(FileNotFoundError):
+        assert not (self.skills_dir / "temp-skill").exists()
+        with pytest.raises(FileNotFoundError):
             self.mgr.delete("temp-skill")
 
     def test_list_all_sorted(self) -> None:
@@ -114,9 +116,9 @@ class TestSkillsManager(unittest.TestCase):
         self.mgr.create("a-skill", name="Alpha Skill", description="d", instructions="i")
 
         all_skills = self.mgr.list_all()
-        self.assertEqual(len(all_skills), 2)
-        self.assertEqual(all_skills[0][1].name, "Alpha Skill")
-        self.assertEqual(all_skills[1][1].name, "Beta Skill")
+        assert len(all_skills) == 2
+        assert all_skills[0][1].name == "Alpha Skill"
+        assert all_skills[1][1].name == "Beta Skill"
 
     def test_get_skill_with_lowercase_filename(self) -> None:
         skill_dir = self.skills_dir / "custom-skill"
@@ -126,41 +128,41 @@ class TestSkillsManager(unittest.TestCase):
             encoding="utf-8",
         )
         loaded = self.mgr.get("custom-skill")
-        self.assertIsNotNone(loaded)
         assert loaded is not None
-        self.assertEqual(loaded.name, "Lowercase Skill")
+        assert loaded is not None
+        assert loaded.name == "Lowercase Skill"
 
     def test_builtin_skills_present_and_valid(self) -> None:
-        self.assertTrue((BUILTIN_SKILLS_DIR / "skill-creator" / "SKILL.md").is_file())
-        self.assertTrue((BUILTIN_SKILLS_DIR / "task-creator" / "SKILL.md").is_file())
-        self.assertTrue((BUILTIN_SKILLS_DIR / "mcp-configurator" / "SKILL.md").is_file())
+        assert (BUILTIN_SKILLS_DIR / "skill-creator" / "SKILL.md").is_file()
+        assert (BUILTIN_SKILLS_DIR / "task-creator" / "SKILL.md").is_file()
+        assert (BUILTIN_SKILLS_DIR / "mcp-configurator" / "SKILL.md").is_file()
 
         sc = _read_skill(BUILTIN_SKILLS_DIR / "skill-creator")
-        self.assertIsNotNone(sc)
         assert sc is not None
-        self.assertEqual(sc.name, "skill-creator")
-        self.assertGreater(len(sc.description), 0)
-        self.assertIn("SKILL.md", sc.content)
+        assert sc is not None
+        assert sc.name == "skill-creator"
+        assert len(sc.description) > 0
+        assert "SKILL.md" in sc.content
 
         tc = _read_skill(BUILTIN_SKILLS_DIR / "task-creator")
-        self.assertIsNotNone(tc)
         assert tc is not None
-        self.assertEqual(tc.name, "task-creator")
-        self.assertGreater(len(tc.description), 0)
-        self.assertIn("task_id", tc.content)
+        assert tc is not None
+        assert tc.name == "task-creator"
+        assert len(tc.description) > 0
+        assert "task_id" in tc.content
 
         mc = _read_skill(BUILTIN_SKILLS_DIR / "mcp-configurator")
-        self.assertIsNotNone(mc)
         assert mc is not None
-        self.assertEqual(mc.name, "mcp-configurator")
-        self.assertGreater(len(mc.description), 0)
-        self.assertIn("mcp.json", mc.content)
+        assert mc is not None
+        assert mc.name == "mcp-configurator"
+        assert len(mc.description) > 0
+        assert "mcp.json" in mc.content
 
     def test_builtin_skills_loading_and_override(self) -> None:
         mgr_with_builtin = SkillManager(self.skills_dir, builtin_skills_dir=BUILTIN_SKILLS_DIR)
         all_skills = mgr_with_builtin.list_all()
-        self.assertEqual(len(all_skills), 3)
-        self.assertEqual(mgr_with_builtin.get("skill-creator").name, "skill-creator")
+        assert len(all_skills) == 3
+        assert mgr_with_builtin.get("skill-creator").name == "skill-creator"
 
         # User skill overrides builtin skill with same ID
         mgr_with_builtin.create(
@@ -169,23 +171,23 @@ class TestSkillsManager(unittest.TestCase):
             description="Custom",
             instructions="Custom instructions",
         )
-        self.assertEqual(mgr_with_builtin.get("skill-creator").name, "Overridden Skill Creator")
-        self.assertEqual(len(mgr_with_builtin.list_all()), 3)
+        assert mgr_with_builtin.get("skill-creator").name == "Overridden Skill Creator"
+        assert len(mgr_with_builtin.list_all()) == 3
 
         # Deleting the user override restores the built-in skill
         mgr_with_builtin.delete("skill-creator")
-        self.assertEqual(mgr_with_builtin.get("skill-creator").name, "skill-creator")
+        assert mgr_with_builtin.get("skill-creator").name == "skill-creator"
 
     def test_delete_builtin_skill_raises(self) -> None:
         mgr_with_builtin = SkillManager(self.skills_dir, builtin_skills_dir=BUILTIN_SKILLS_DIR)
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             mgr_with_builtin.delete("skill-creator")
 
     def test_builtin_skills_dir_nonexistent_does_not_raise(self) -> None:
         nonexistent = self.skills_dir / "does_not_exist_builtin"
         mgr = SkillManager(self.skills_dir, builtin_skills_dir=nonexistent)
         skills = mgr.list_all()
-        self.assertEqual(skills, [])
+        assert skills == []
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import subprocess
 import unittest
 from unittest.mock import MagicMock, patch
 
+import pytest
 from conftest import make_mock_repl
 from textual import events
 
@@ -33,27 +34,30 @@ class TestClipboard(unittest.TestCase):
         copy_to_system_clipboard("hello mac")
         mock_run.assert_called_once()
         args, kwargs = mock_run.call_args
-        self.assertEqual(args[0], ["pbcopy"])
-        self.assertEqual(kwargs["input"], b"hello mac")
-        self.assertEqual(kwargs["stdout"], subprocess.DEVNULL)
-        self.assertEqual(kwargs["stderr"], subprocess.DEVNULL)
+        assert args[0] == ["pbcopy"]
+        assert kwargs["input"] == b"hello mac"
+        assert kwargs["stdout"] == subprocess.DEVNULL
+        assert kwargs["stderr"] == subprocess.DEVNULL
 
     @patch("sys.platform", "darwin")
     @patch("subprocess.run", return_value=_proc(returncode=1))
     def test_copy_darwin_failure_raises(self, mock_run: MagicMock) -> None:
-        with self.assertRaises(ClipboardError):
+        del mock_run
+        with pytest.raises(ClipboardError):
             copy_to_system_clipboard("hello mac")
 
     @patch("sys.platform", "darwin")
     @patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd=["pbcopy"], timeout=3.0))
     def test_copy_timeout_raises_clipboard_error(self, mock_run: MagicMock) -> None:
-        with self.assertRaises(ClipboardError):
+        del mock_run
+        with pytest.raises(ClipboardError):
             copy_to_system_clipboard("hello mac")
 
     @patch("sys.platform", "darwin")
     @patch("subprocess.run", side_effect=OSError("command failed"))
     def test_copy_oserror_raises_clipboard_error(self, mock_run: MagicMock) -> None:
-        with self.assertRaises(ClipboardError):
+        del mock_run
+        with pytest.raises(ClipboardError):
             copy_to_system_clipboard("hello mac")
 
     @patch("sys.platform", "linux")
@@ -61,17 +65,19 @@ class TestClipboard(unittest.TestCase):
     @patch.dict("os.environ", {"WAYLAND_DISPLAY": "wayland-0"})
     @patch("subprocess.run", return_value=_proc())
     def test_copy_linux_wayland(self, mock_run: MagicMock, mock_which: MagicMock) -> None:
+        del mock_which
         copy_to_system_clipboard("hello wayland")
         mock_run.assert_called_once()
         args, kwargs = mock_run.call_args
-        self.assertEqual(args[0], ["wl-copy"])
-        self.assertEqual(kwargs["input"], b"hello wayland")
+        assert args[0] == ["wl-copy"]
+        assert kwargs["input"] == b"hello wayland"
 
     @patch("sys.platform", "linux")
     @patch("shutil.which", return_value=None)
     @patch.dict("os.environ", {}, clear=True)
     def test_copy_linux_without_tool_raises(self, mock_which: MagicMock) -> None:
-        with self.assertRaises(ClipboardError):
+        del mock_which
+        with pytest.raises(ClipboardError):
             copy_to_system_clipboard("no tools")
 
     @patch("sys.platform", "linux")
@@ -79,11 +85,12 @@ class TestClipboard(unittest.TestCase):
     @patch.dict("os.environ", {}, clear=True)
     @patch("subprocess.run", return_value=_proc())
     def test_copy_linux_xclip(self, mock_run: MagicMock, mock_which: MagicMock) -> None:
+        del mock_which
         copy_to_system_clipboard("hello xclip")
         mock_run.assert_called_once()
         args, kwargs = mock_run.call_args
-        self.assertEqual(args[0], ["xclip", "-selection", "clipboard"])
-        self.assertEqual(kwargs["input"], b"hello xclip")
+        assert args[0] == ["xclip", "-selection", "clipboard"]
+        assert kwargs["input"] == b"hello xclip"
 
     @patch("sys.platform", "win32")
     @patch("ctypes.windll", create=True)
@@ -118,7 +125,7 @@ class TestClipboard(unittest.TestCase):
         mock_k32.GlobalLock.return_value = 0
 
         with patch("ctypes.memmove") as mock_memmove:
-            with self.assertRaises(ClipboardError):
+            with pytest.raises(ClipboardError):
                 copy_to_system_clipboard("hello windows")
             mock_memmove.assert_not_called()
         mock_k32.GlobalFree.assert_called_once_with(12345)
@@ -133,7 +140,7 @@ class TestClipboard(unittest.TestCase):
         mock_windll.kernel32 = mock_k32
         mock_u32.OpenClipboard.return_value = 0
 
-        with self.assertRaises(ClipboardError):
+        with pytest.raises(ClipboardError):
             copy_to_system_clipboard("hello windows")
         mock_u32.CloseClipboard.assert_not_called()
 
@@ -150,7 +157,7 @@ class TestClipboard(unittest.TestCase):
 
         with (
             patch("ctypes.memmove", side_effect=RuntimeError("memmove crash")),
-            self.assertRaises(RuntimeError),
+            pytest.raises(RuntimeError),
         ):
             copy_to_system_clipboard("hello windows")
         mock_k32.GlobalUnlock.assert_called_once_with(12345)
@@ -168,7 +175,7 @@ class TestClipboard(unittest.TestCase):
         mock_k32.GlobalLock.return_value = 67890
         mock_u32.SetClipboardData.return_value = 0
 
-        with patch("ctypes.memmove"), self.assertRaises(ClipboardError):
+        with patch("ctypes.memmove"), pytest.raises(ClipboardError):
             copy_to_system_clipboard("hello windows")
         mock_k32.GlobalFree.assert_called_once_with(12345)
         mock_u32.CloseClipboard.assert_called_once()
@@ -187,7 +194,7 @@ class TestClipboard(unittest.TestCase):
         with patch("ctypes.c_wchar_p") as mock_wchar:
             mock_wchar.return_value.value = "windows clipboard text"
             res = get_system_clipboard()
-            self.assertEqual(res, "windows clipboard text")
+            assert res == "windows clipboard text"
         mock_u32.OpenClipboard.assert_called_once_with(None)
         mock_u32.CloseClipboard.assert_called_once()
 
@@ -204,9 +211,9 @@ class TestClipboard(unittest.TestCase):
 
         with patch("ctypes.c_wchar_p") as mock_wchar:
             mock_wchar.return_value.value = None
-            with self.assertRaises(ClipboardError) as ctx:
+            with pytest.raises(ClipboardError) as ctx:
                 get_system_clipboard()
-            self.assertIn("Failed to decode text from clipboard", str(ctx.exception))
+            assert "Failed to decode text from clipboard" in str(ctx.value)
         mock_k32.GlobalUnlock.assert_called_once_with(12345)
         mock_u32.CloseClipboard.assert_called_once()
 
@@ -220,7 +227,7 @@ class TestClipboard(unittest.TestCase):
         mock_u32.OpenClipboard.return_value = 1
         mock_u32.GetClipboardData.return_value = 0
 
-        with self.assertRaises(ClipboardError):
+        with pytest.raises(ClipboardError):
             get_system_clipboard()
         mock_u32.CloseClipboard.assert_called_once()
 
@@ -233,7 +240,7 @@ class TestClipboard(unittest.TestCase):
         mock_windll.kernel32 = mock_k32
         mock_u32.OpenClipboard.return_value = 0
 
-        with self.assertRaises(ClipboardError):
+        with pytest.raises(ClipboardError):
             get_system_clipboard()
         mock_u32.CloseClipboard.assert_not_called()
 
@@ -250,7 +257,7 @@ class TestClipboard(unittest.TestCase):
 
         with (
             patch("ctypes.c_wchar_p", side_effect=RuntimeError("wchar crash")),
-            self.assertRaises(RuntimeError),
+            pytest.raises(RuntimeError),
         ):
             get_system_clipboard()
         mock_k32.GlobalUnlock.assert_called_once_with(12345)
@@ -261,52 +268,57 @@ class TestClipboard(unittest.TestCase):
     @patch.dict("os.environ", {"WAYLAND_SOCKET": "wayland-socket-1"}, clear=True)
     @patch("subprocess.run", return_value=_proc())
     def test_copy_linux_wayland_socket(self, mock_run: MagicMock, mock_which: MagicMock) -> None:
+        del mock_which
         copy_to_system_clipboard("hello wayland socket")
         mock_run.assert_called_once()
         args, kwargs = mock_run.call_args
-        self.assertEqual(args[0], ["wl-copy"])
-        self.assertEqual(kwargs["input"], b"hello wayland socket")
+        assert args[0] == ["wl-copy"]
+        assert kwargs["input"] == b"hello wayland socket"
 
     @patch("sys.platform", "linux")
     @patch("shutil.which", side_effect=lambda cmd: "/usr/bin/wl-paste" if cmd == "wl-paste" else None)
     @patch.dict("os.environ", {"WAYLAND_SOCKET": "wayland-socket-1"}, clear=True)
     @patch("subprocess.run", return_value=_proc(stdout="wayland socket paste"))
     def test_paste_linux_wayland_socket(self, mock_run: MagicMock, mock_which: MagicMock) -> None:
+        del mock_which
         res = get_system_clipboard()
-        self.assertEqual(res, "wayland socket paste")
+        assert res == "wayland socket paste"
         mock_run.assert_called_once()
         args, kwargs = mock_run.call_args
-        self.assertEqual(args[0], ["wl-paste", "--no-newline"])
-        self.assertEqual(kwargs["errors"], "replace")
+        assert args[0] == ["wl-paste", "--no-newline"]
+        assert kwargs["errors"] == "replace"
 
     @patch("sys.platform", "darwin")
     @patch("subprocess.run")
     def test_get_clipboard_darwin(self, mock_run: MagicMock) -> None:
         mock_run.return_value = _proc(stdout="mac clipboard content")
         res = get_system_clipboard()
-        self.assertEqual(res, "mac clipboard content")
+        assert res == "mac clipboard content"
         mock_run.assert_called_once()
         args, kwargs = mock_run.call_args
-        self.assertEqual(args[0], ["pbpaste"])
-        self.assertEqual(kwargs["encoding"], "utf-8")
-        self.assertEqual(kwargs["errors"], "replace")
+        assert args[0] == ["pbpaste"]
+        assert kwargs["encoding"] == "utf-8"
+        assert kwargs["errors"] == "replace"
 
     @patch("sys.platform", "darwin")
     @patch("subprocess.run", return_value=_proc(returncode=1, stderr="boom"))
     def test_get_clipboard_failure_raises(self, mock_run: MagicMock) -> None:
-        with self.assertRaises(ClipboardError):
+        del mock_run
+        with pytest.raises(ClipboardError):
             get_system_clipboard()
 
     @patch("sys.platform", "darwin")
     @patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd=["pbpaste"], timeout=3.0))
     def test_get_clipboard_timeout_raises(self, mock_run: MagicMock) -> None:
-        with self.assertRaises(ClipboardError):
+        del mock_run
+        with pytest.raises(ClipboardError):
             get_system_clipboard()
 
     @patch("sys.platform", "darwin")
     @patch("subprocess.run", side_effect=OSError("command failed"))
     def test_get_clipboard_oserror_raises(self, mock_run: MagicMock) -> None:
-        with self.assertRaises(ClipboardError):
+        del mock_run
+        with pytest.raises(ClipboardError):
             get_system_clipboard()
 
 
@@ -321,7 +333,7 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
             async with app.run_test():
                 app.copy_to_clipboard("test copy content")
                 mock_sys_copy.assert_called_once_with("test copy content")
-                self.assertEqual(app._clipboard, "test copy content")
+                assert app._clipboard == "test copy content"
 
     async def test_text_selected_auto_copies(self) -> None:
         repl_mock = make_mock_repl()
@@ -336,9 +348,9 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
 
                 app.screen.text_select_all()
                 app.on_text_selected(events.TextSelected())
-                self.assertTrue(mock_sys_copy.called)
+                assert mock_sys_copy.called
                 copied_arg = mock_sys_copy.call_args[0][0]
-                self.assertIn("Selectable text here", copied_arg)
+                assert "Selectable text here" in copied_arg
 
     async def test_action_copy_selection(self) -> None:
         repl_mock = make_mock_repl()
@@ -355,7 +367,7 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
                 app.action_copy_selection()
                 mock_sys_copy.assert_called()
                 copied_arg = mock_sys_copy.call_args[0][0]
-                self.assertIn("Copy action message", copied_arg)
+                assert "Copy action message" in copied_arg
 
     async def test_app_copy_failure_notifies_user(self) -> None:
         repl_mock = make_mock_repl()
@@ -367,16 +379,16 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
         ):
             async with app.run_test():
                 app.copy_to_clipboard("test copy content")
-                self.assertEqual(app._clipboard, "test copy content")
+                assert app._clipboard == "test copy content"
                 mock_notify.assert_called_once()
-                self.assertIn("no xclip", mock_notify.call_args[0][0])
+                assert "no xclip" in mock_notify.call_args[0][0]
 
     async def test_screen_forward_event_handles_detached_widget_gracefully(self) -> None:
         repl_mock = make_mock_repl()
 
         app = OllamaAgentApp(repl_mock)
         async with app.run_test():
-            event = events.MouseDown(None, 5, 5, 0, 0, 1, False, False, False)
+            event = events.MouseDown(None, 5, 5, 0, 0, 1, ctrl=False, meta=False, shift=False)
             with (
                 patch(
                     "textual.screen.Screen._forward_event",
@@ -385,19 +397,19 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
                 patch("logging.warning"),
             ):
                 app.screen._forward_event(event)
-                self.assertIsNone(app.screen._select_state)
+                assert app.screen._select_state is None
 
     async def test_screen_forward_event_reraises_other_attribute_error(self) -> None:
         repl_mock = make_mock_repl()
 
         app = OllamaAgentApp(repl_mock)
         async with app.run_test():
-            event = events.MouseDown(None, 5, 5, 0, 0, 1, False, False, False)
+            event = events.MouseDown(None, 5, 5, 0, 0, 1, ctrl=False, meta=False, shift=False)
             with (
                 patch(
                     "textual.screen.Screen._forward_event",
                     side_effect=AttributeError("'CustomType' object has no attribute 'something_else'"),
                 ),
-                self.assertRaises(AttributeError),
+                pytest.raises(AttributeError),
             ):
                 app.screen._forward_event(event)

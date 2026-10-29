@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from rich.console import Console
 
 from ollama_agent.settings import Settings, load_settings
@@ -38,19 +39,19 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
         self.temp_dir.cleanup()
 
     def test_require_validation(self) -> None:
-        with self.assertRaises(ValidationError):
+        with pytest.raises(ValidationError):
             create_task(self.ctx, "t1", title="   ", prompt="p", model="m")
-        with self.assertRaises(ValidationError):
+        with pytest.raises(ValidationError):
             create_task(self.ctx, "t1", title="t", prompt="   ", model="m")
-        with self.assertRaises(ValidationError):
+        with pytest.raises(ValidationError):
             create_task(self.ctx, "t1", title="t", prompt="p", model="   ")
 
     def test_apply_task_settings(self) -> None:
         task = Task(title="T", prompt="P", model="llama3:8b", reasoning_effort="high")
         settings = load_settings(settings_path=Path(self.temp_dir.name) / "settings.yaml")
         apply_task_settings(settings, task)
-        self.assertEqual(settings.model.name, "llama3:8b")
-        self.assertEqual(settings.model.reasoning_effort, "high")
+        assert settings.model.name == "llama3:8b"
+        assert settings.model.reasoning_effort == "high"
 
     def test_create_and_list_task(self) -> None:
         create_task(
@@ -62,12 +63,12 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
             reasoning_effort="high",
         )
         task = self.mgr.get("run-tests")
-        self.assertIsNotNone(task)
-        self.assertEqual(task.title, "Run Unit Tests")
+        assert task is not None
+        assert task.title == "Run Unit Tests"
 
         list_tasks(self.ctx)
         out = self.console.export_text()
-        self.assertIn("Run Unit Tests", out)
+        assert "Run Unit Tests" in out
 
     def test_delete_task(self) -> None:
         create_task(
@@ -78,7 +79,7 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
             model="gemma4:26b",
         )
         delete_task(self.ctx, "cleanup-task")
-        with self.assertRaises(FileNotFoundError):
+        with pytest.raises(FileNotFoundError):
             self.mgr.get("cleanup-task")
 
     async def test_run_task(self) -> None:
@@ -102,7 +103,7 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
             await run_task(self.ctx, "quick-task", yolo=True)
             mock_check_version.assert_called_once_with(self.ctx.settings.model.base_url)
             mock_runtime_cls.assert_called_once()
-            self.assertTrue(mock_runtime_cls.call_args.kwargs.get("yolo_mode"))
+            assert mock_runtime_cls.call_args.kwargs.get("yolo_mode")
             mock_run.assert_awaited_once()
 
     async def test_run_task_raises_when_execution_fails(self) -> None:
@@ -123,11 +124,11 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
             mock_instance.__aenter__.return_value = mock_instance
             mock_instance.__aexit__.return_value = None
 
-            with self.assertRaises(TaskError):
+            with pytest.raises(TaskError):
                 await run_task(self.ctx, "failing-task")
 
     def test_create_task_rejects_empty_reasoning_effort(self) -> None:
-        with self.assertRaises(ValidationError):
+        with pytest.raises(ValidationError):
             create_task(
                 self.ctx,
                 "bad-effort",
@@ -145,7 +146,7 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
             prompt="p",
             model="gemma4:26b",
         )
-        with self.assertRaises(TaskError):
+        with pytest.raises(TaskError):
             create_task(
                 self.ctx,
                 "dupe-task",
@@ -163,40 +164,32 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
             model="gemma4:26b",
         )
         task = self.mgr.get("default-effort-task")
-        self.assertEqual(task.reasoning_effort, "default")
+        assert task.reasoning_effort == "default"
 
     def test_tasks_context_default_settings(self) -> None:
-        self.assertIsInstance(self.ctx.settings, Settings)
+        assert isinstance(self.ctx.settings, Settings)
 
     def test_resolve_task_errors(self) -> None:
-        with self.assertRaises(TaskNotFoundError):
+        with pytest.raises(TaskNotFoundError):
             self.ctx.resolve_task("missing_task")
 
         create_task(self.ctx, "deploy-prod", title="Prod Deploy", prompt="deploy", model="gemma4:26b")
         create_task(self.ctx, "deploy-staging", title="Staging Deploy", prompt="deploy", model="gemma4:26b")
 
-        with self.assertRaises(AmbiguousTaskError):
+        with pytest.raises(AmbiguousTaskError):
             self.ctx.resolve_task("deploy")
 
         resolved_id, resolved_task = self.ctx.resolve_task("deploy-prod")
-        self.assertEqual(resolved_id, "deploy-prod")
-        self.assertEqual(resolved_task.title, "Prod Deploy")
+        assert resolved_id == "deploy-prod"
+        assert resolved_task.title == "Prod Deploy"
 
     def test_parse_var_assignments_valid(self) -> None:
         raw = ["file=src/main.py", "strict=true", "count=42", "expr=a=b=c"]
         parsed = parse_var_assignments(raw)
-        self.assertEqual(
-            parsed,
-            {
-                "file": "src/main.py",
-                "strict": "true",
-                "count": "42",
-                "expr": "a=b=c",
-            },
-        )
+        assert parsed == {"file": "src/main.py", "strict": "true", "count": "42", "expr": "a=b=c"}
 
     def test_parse_var_assignments_empty(self) -> None:
-        self.assertEqual(parse_var_assignments([]), {})
+        assert parse_var_assignments([]) == {}
 
     def test_parse_var_assignments_edge_cases(self) -> None:
         raw = [
@@ -206,29 +199,26 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
             "  key_with_spaces  =value_with_spaces ",
         ]
         parsed = parse_var_assignments(raw)
-        self.assertEqual(
-            parsed,
-            {
-                "query": "SELECT a=b WHERE c=d",
-                "msg": "hello world with spaces",
-                "empty_val": "",
-                "key_with_spaces": "value_with_spaces ",
-            },
-        )
+        assert parsed == {
+            "query": "SELECT a=b WHERE c=d",
+            "msg": "hello world with spaces",
+            "empty_val": "",
+            "key_with_spaces": "value_with_spaces ",
+        }
 
     def test_parse_var_assignments_invalid_no_equals(self) -> None:
-        with self.assertRaises(ValidationError) as cm:
+        with pytest.raises(ValidationError) as cm:
             parse_var_assignments(["invalid_assignment"])
-        self.assertIn("invalid_assignment", str(cm.exception))
+        assert "invalid_assignment" in str(cm.value)
 
     def test_parse_var_assignments_empty_key_raises(self) -> None:
-        with self.assertRaises(ValidationError) as cm1:
+        with pytest.raises(ValidationError) as cm1:
             parse_var_assignments(["=value"])
-        self.assertIn("=value", str(cm1.exception))
+        assert "=value" in str(cm1.value)
 
-        with self.assertRaises(ValidationError) as cm2:
+        with pytest.raises(ValidationError) as cm2:
             parse_var_assignments(["   =value"])
-        self.assertIn("=value", str(cm2.exception))
+        assert "=value" in str(cm2.value)
 
     async def test_run_task_with_variables(self) -> None:
         task = Task(
@@ -264,9 +254,9 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
         )
         self.mgr.save("req-task", task)
 
-        with self.assertRaises(ValidationError) as cm:
+        with pytest.raises(ValidationError) as cm:
             await run_task(self.ctx, "req-task", variables={})
-        self.assertIn("Missing required input: file", str(cm.exception))
+        assert "Missing required input: file" in str(cm.value)
 
     async def test_run_task_template_syntax_error_raises_validation_error(self) -> None:
         task = Task(
@@ -276,5 +266,5 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
         )
         self.mgr.save("syntax-task", task)
 
-        with self.assertRaises(ValidationError):
+        with pytest.raises(ValidationError):
             await run_task(self.ctx, "syntax-task")

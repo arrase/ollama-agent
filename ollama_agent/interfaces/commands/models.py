@@ -81,9 +81,10 @@ async def _list_models(base_url: str) -> list[Any]:
 async def _tool_icon(model_name: str, base_url: str) -> str:
     try:
         supported = await model_supports_tools(model_name, base_url)
-        return "[green]✓[/green]" if supported else "[red]✗[/red]"
     except ModelCapabilityError:
         return "[yellow]?[/yellow]"
+    else:
+        return "[green]✓[/green]" if supported else "[red]✗[/red]"
 
 
 async def list_models(
@@ -112,6 +113,48 @@ async def list_models(
         console.print(f"[red]{escape(err_msg)}[/red]")
 
 
+async def _verify_model_switchable(
+    console: Console,
+    model_name: str,
+    base_url: str,
+    runtime: AgentRuntime,
+) -> bool:
+    try:
+        available = {model.model for model in await _list_models(base_url)}
+    except (ollama.ResponseError, OSError) as exc:
+        err_msg = _("Error checking model: {exc}", exc=exc)
+        console.print(f"[red]{escape(err_msg)}[/red]")
+        return False
+
+    if model_name not in available:
+        not_found_msg = _(
+            "Model '{model_name}' not found.\nUse /model to see available models.",
+            model_name=model_name,
+        )
+        console.print(f"[red]{escape(not_found_msg)}[/red]")
+        return False
+
+    if model_name == runtime.settings.model.name:
+        return True
+
+    try:
+        supported = await model_supports_tools(model_name, base_url)
+    except ModelCapabilityError as exc:
+        err_msg = _("Cannot verify model capabilities: {exc}", exc=exc)
+        console.print(f"[red]{escape(err_msg)}[/red]")
+        return False
+
+    if not supported:
+        no_tools_msg = _(
+            "Model '{model_name}' does not support tools.\nThe agent requires tool support.",
+            model_name=model_name,
+        )
+        console.print(f"[red]{escape(no_tools_msg)}[/red]")
+        return False
+
+    return True
+
+
 async def set_model(
     console: Console,
     model_name: str,
@@ -120,38 +163,14 @@ async def set_model(
 ) -> str | None:
     """Switch to model_name, returning the new model name."""
     base_url = runtime.settings.model.base_url
-    try:
-        available = {model.model for model in await _list_models(base_url)}
-        if model_name not in available:
-            not_found_msg = _(
-                "Model '{model_name}' not found.\nUse /model to see available models.",
-                model_name=model_name,
-            )
-            console.print(f"[red]{escape(not_found_msg)}[/red]")
-            return None
-    except (ollama.ResponseError, OSError) as exc:
-        err_msg = _("Error checking model: {exc}", exc=exc)
-        console.print(f"[red]{escape(err_msg)}[/red]")
+    current = runtime.settings.model.name
+    if not await _verify_model_switchable(console, model_name, base_url, runtime):
         return None
 
-    current = runtime.settings.model.name
     if model_name == current:
         already_msg = _("Already using model '{model_name}'.", model_name=model_name)
         console.print(f"[yellow]{escape(already_msg)}[/yellow]")
         return current
-
-    try:
-        if not await model_supports_tools(model_name, base_url):
-            no_tools_msg = _(
-                "Model '{model_name}' does not support tools.\nThe agent requires tool support.",
-                model_name=model_name,
-            )
-            console.print(f"[red]{escape(no_tools_msg)}[/red]")
-            return None
-    except ModelCapabilityError as exc:
-        err_msg = _("Cannot verify model capabilities: {exc}", exc=exc)
-        console.print(f"[red]{escape(err_msg)}[/red]")
-        return None
 
     try:
         await runtime.set_model(model_name)
@@ -161,11 +180,12 @@ async def set_model(
             model_name=model_name,
         )
         console.print(f"[green]✓ {escape(switched_msg)}[/green]")
-        return model_name
     except (ollama.ResponseError, OSError) as exc:
         failed_msg = _("Failed to switch to model '{model_name}': {exc}", model_name=model_name, exc=exc)
         console.print(f"[red]{escape(failed_msg)}[/red]")
         return None
+    else:
+        return model_name
 
 
 def _prompt_user_select_model(
@@ -195,10 +215,11 @@ def _prompt_user_select_model(
         if not choice:
             continue
         if choice.isdigit() and 1 <= int(choice) <= len(available_models):
-            selected = available_models[int(choice) - 1].model
+            selected = str(available_models[int(choice) - 1].model)
             break
-        selected = next((m.model for m in available_models if m.model in (choice, f"{choice}:latest")), None)
-        if selected:
+        matched = next((str(m.model) for m in available_models if m.model in (choice, f"{choice}:latest")), None)
+        if matched:
+            selected = matched
             break
         invalid_sel = _(
             "Invalid selection '{choice}'. Please enter a number between 1 and {count} or a model name.",

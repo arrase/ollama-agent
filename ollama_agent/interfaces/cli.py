@@ -114,10 +114,7 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_subcommands(parser: argparse.ArgumentParser) -> None:
-    subparsers = parser.add_subparsers(dest="command")
-
-    # Task commands
+def _add_task_subcommands(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     task_parser = subparsers.add_parser(
         "task",
         help=_("Manage saved tasks"),
@@ -207,7 +204,8 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
     task_delete = task_sub.add_parser("delete", help=_("Delete a saved task"))
     task_delete.add_argument("task_id", type=str, help=_("Task ID or prefix to delete"))
 
-    # RAG commands
+
+def _add_rag_subcommands(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     rag_parser = subparsers.add_parser(
         "rag",
         help=_("Manage RAG databases"),
@@ -233,7 +231,8 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         help=_("Treat path as directory and add all files recursively"),
     )
 
-    # Skill commands
+
+def _add_skill_subcommands(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     skill_parser = subparsers.add_parser(
         "skill",
         help=_("Manage skills"),
@@ -262,7 +261,8 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
     skill_delete = skill_sub.add_parser("delete", help=_("Delete a skill"))
     skill_delete.add_argument("skill_id", type=str, help=_("Skill ID or prefix to delete"))
 
-    # Session commands
+
+def _add_session_subcommands(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     session_parser = subparsers.add_parser(
         "session",
         help=_("Manage chat sessions"),
@@ -283,6 +283,14 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
     session_exp.add_argument("session_id", type=str, help=_("Session ID or prefix to export"))
     session_exp.add_argument("--output", "-o", type=str, required=False, help=_("Target markdown file path"))
 
+
+def _add_subcommands(parser: argparse.ArgumentParser) -> None:
+    subparsers = parser.add_subparsers(dest="command")
+    _add_task_subcommands(subparsers)
+    _add_rag_subcommands(subparsers)
+    _add_skill_subcommands(subparsers)
+    _add_session_subcommands(subparsers)
+
     # MCP commands
     mcp_parser = subparsers.add_parser(
         "mcp",
@@ -291,7 +299,6 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         epilog=_("Run 'ollama-agent mcp <subcommand> -h' for more details on a subcommand."),
     )
     mcp_sub = mcp_parser.add_subparsers(dest="subcommand", required=True)
-
     mcp_sub.add_parser("list", help=_("List configured MCP servers and check their status"))
 
     # Agents commands
@@ -302,7 +309,6 @@ def _add_subcommands(parser: argparse.ArgumentParser) -> None:
         epilog=_("Run 'ollama-agent agents <subcommand> -h' for more details on a subcommand."),
     )
     agents_sub = agents_parser.add_subparsers(dest="subcommand", required=True)
-
     agents_sub.add_parser("list", help=_("List all configured subagents"))
 
 

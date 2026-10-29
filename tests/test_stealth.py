@@ -22,13 +22,13 @@ class TestStealthMode(unittest.IsolatedAsyncioTestCase):
 
     async def test_stealth_checkpointer_selection(self) -> None:
         runtime_normal = AgentRuntime(stealth_mode=False)
-        self.assertFalse(runtime_normal.stealth_mode)
+        assert not runtime_normal.stealth_mode
 
         runtime_stealth = AgentRuntime(stealth_mode=True)
-        self.assertTrue(runtime_stealth.stealth_mode)
+        assert runtime_stealth.stealth_mode
         mem_checkpointer = runtime_stealth._get_memory_checkpointer()
-        self.assertIsInstance(mem_checkpointer, MemorySaver)
-        self.assertIs(runtime_stealth._get_memory_checkpointer(), mem_checkpointer)
+        assert isinstance(mem_checkpointer, MemorySaver)
+        assert runtime_stealth._get_memory_checkpointer() is mem_checkpointer
 
     async def test_handle_stealth_command_toggle_and_values(self) -> None:
         out = io.StringIO()
@@ -40,29 +40,29 @@ class TestStealthMode(unittest.IsolatedAsyncioTestCase):
         with patch.object(AgentRuntime, "reload", AsyncMock()) as mock_reload:
             # Toggle on
             await repl._handle_stealth_cmd([])
-            self.assertTrue(runtime.stealth_mode)
+            assert runtime.stealth_mode
             mock_reload.assert_awaited_once()
-            self.assertIn("Stealth mode is now on", out.getvalue())
+            assert "Stealth mode is now on" in out.getvalue()
 
             # Toggle off
             mock_reload.reset_mock()
             await repl._handle_stealth_cmd([])
-            self.assertFalse(runtime.stealth_mode)
+            assert not runtime.stealth_mode
             mock_reload.assert_awaited_once()
-            self.assertIn("Stealth mode is now off", out.getvalue())
+            assert "Stealth mode is now off" in out.getvalue()
 
             # Explicit on (with different truthy values)
             for val in ("on", "true", "yes", "1"):
                 mock_reload.reset_mock()
                 await repl._handle_stealth_cmd([val])
-                self.assertTrue(runtime.stealth_mode)
+                assert runtime.stealth_mode
                 mock_reload.assert_awaited_once()
 
             # Explicit off (with different falsy values)
             for val in ("off", "false", "no", "0"):
                 mock_reload.reset_mock()
                 await repl._handle_stealth_cmd([val])
-                self.assertFalse(runtime.stealth_mode)
+                assert not runtime.stealth_mode
                 mock_reload.assert_awaited_once()
 
             # Invalid argument
@@ -70,23 +70,23 @@ class TestStealthMode(unittest.IsolatedAsyncioTestCase):
             out.seek(0)
             out.truncate(0)
             await repl._handle_stealth_cmd(["invalid_arg"])
-            self.assertFalse(runtime.stealth_mode)
+            assert not runtime.stealth_mode
             mock_reload.assert_not_awaited()
-            self.assertIn("Usage: /stealth [on|off]", out.getvalue())
+            assert "Usage: /stealth [on|off]" in out.getvalue()
 
     def test_immediate_command_and_autocomplete(self) -> None:
-        self.assertTrue(_is_immediate_command("/stealth"))
-        self.assertTrue(_is_immediate_command("/stealth on"))
-        self.assertTrue(_is_immediate_command("/stealth off"))
+        assert _is_immediate_command("/stealth")
+        assert _is_immediate_command("/stealth on")
+        assert _is_immediate_command("/stealth off")
 
         root_cmds = dict(_get_root_commands())
-        self.assertIn("/stealth", root_cmds)
+        assert "/stealth" in root_cmds
 
         subcmds = _get_subcommands()
-        self.assertIn("/stealth", subcmds)
+        assert "/stealth" in subcmds
         sub_names = [name for name, _ in subcmds["/stealth"]]
-        self.assertIn("on", sub_names)
-        self.assertIn("off", sub_names)
+        assert "on" in sub_names
+        assert "off" in sub_names
 
     def test_agent_header_badges(self) -> None:
         runtime = AgentRuntime(stealth_mode=False, yolo_mode=False)
@@ -100,32 +100,32 @@ class TestStealthMode(unittest.IsolatedAsyncioTestCase):
         # 1. Normal (both off)
         header.update_header()
         rendered_text = header.update.call_args[0][0]
-        self.assertIn("YOLO: OFF", rendered_text)
-        self.assertIn("STEALTH: OFF", rendered_text)
+        assert "YOLO: OFF" in rendered_text
+        assert "STEALTH: OFF" in rendered_text
 
         # 2. YOLO on, Stealth off
         runtime.yolo_mode = True
         runtime.stealth_mode = False
         header.update_header()
         rendered_text = header.update.call_args[0][0]
-        self.assertIn("YOLO: ON", rendered_text)
-        self.assertIn("STEALTH: OFF", rendered_text)
+        assert "YOLO: ON" in rendered_text
+        assert "STEALTH: OFF" in rendered_text
 
         # 3. YOLO off, Stealth on
         runtime.yolo_mode = False
         runtime.stealth_mode = True
         header.update_header()
         rendered_text = header.update.call_args[0][0]
-        self.assertIn("YOLO: OFF", rendered_text)
-        self.assertIn("STEALTH: ON", rendered_text)
+        assert "YOLO: OFF" in rendered_text
+        assert "STEALTH: ON" in rendered_text
 
         # 4. Both on
         runtime.yolo_mode = True
         runtime.stealth_mode = True
         header.update_header()
         rendered_text = header.update.call_args[0][0]
-        self.assertIn("YOLO: ON", rendered_text)
-        self.assertIn("STEALTH: ON", rendered_text)
+        assert "YOLO: ON" in rendered_text
+        assert "STEALTH: ON" in rendered_text
 
     def test_update_mode_ui_four_states(self) -> None:
         runtime = AgentRuntime(stealth_mode=False, yolo_mode=False)
@@ -148,34 +148,37 @@ class TestStealthMode(unittest.IsolatedAsyncioTestCase):
 
         app.query_one = mock_query_one  # type: ignore[method-assign]
 
+        enabled = True
+        disabled = False
+
         # 1. Normal (neither)
         runtime.yolo_mode = False
         runtime.stealth_mode = False
         app.update_mode_ui()
-        input_container.set_class.assert_any_call(False, "yolo-mode")
-        input_container.set_class.assert_any_call(False, "stealth-mode")
-        self.assertEqual(prompt_char.styles.color, "#38bdf8")
+        input_container.set_class.assert_any_call(disabled, "yolo-mode")
+        input_container.set_class.assert_any_call(disabled, "stealth-mode")
+        assert prompt_char.styles.color == "#38bdf8"
 
         # 2. YOLO only
         runtime.yolo_mode = True
         runtime.stealth_mode = False
         app.update_mode_ui()
-        input_container.set_class.assert_any_call(True, "yolo-mode")
-        input_container.set_class.assert_any_call(False, "stealth-mode")
-        self.assertEqual(prompt_char.styles.color, "#f87171")
+        input_container.set_class.assert_any_call(enabled, "yolo-mode")
+        input_container.set_class.assert_any_call(disabled, "stealth-mode")
+        assert prompt_char.styles.color == "#f87171"
 
         # 3. Stealth only
         runtime.yolo_mode = False
         runtime.stealth_mode = True
         app.update_mode_ui()
-        input_container.set_class.assert_any_call(False, "yolo-mode")
-        input_container.set_class.assert_any_call(True, "stealth-mode")
-        self.assertEqual(prompt_char.styles.color, "#c084fc")
+        input_container.set_class.assert_any_call(disabled, "yolo-mode")
+        input_container.set_class.assert_any_call(enabled, "stealth-mode")
+        assert prompt_char.styles.color == "#c084fc"
 
         # 4. Both YOLO and Stealth
         runtime.yolo_mode = True
         runtime.stealth_mode = True
         app.update_mode_ui()
-        input_container.set_class.assert_any_call(True, "yolo-mode")
-        input_container.set_class.assert_any_call(True, "stealth-mode")
-        self.assertEqual(prompt_char.styles.color, "#fbbf24")
+        input_container.set_class.assert_any_call(enabled, "yolo-mode")
+        input_container.set_class.assert_any_call(enabled, "stealth-mode")
+        assert prompt_char.styles.color == "#fbbf24"

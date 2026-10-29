@@ -2,18 +2,34 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from collections.abc import Coroutine
+from typing import Any, ClassVar, Protocol
 
 from rich.markup import escape
 from textual import events
 from textual.app import ComposeResult
-from textual.containers import Container, Horizontal
+from textual.containers import Container, Horizontal, ScrollableContainer
 from textual.widgets import Button, Static
+from textual.worker import Worker
 
 from ....i18n import _
 from ....streaming import build_approval_decisions
 from .footer import AgentFooter
 from .messages import AgentResponse
+
+
+class _ApprovalApp(Protocol):
+    _is_approval_pending: bool
+    _is_generating: bool
+    _current_worker: Worker[Any] | None
+    repl: Any
+
+    def query_one(self, selector: type[AgentFooter]) -> AgentFooter: ...
+    def run_worker(self, work: Coroutine[Any, Any, None]) -> Worker[Any]: ...
+    async def cancel_approval(self) -> None: ...
+    async def _handle_approval_decision(
+        self, decisions: list[dict[str, Any]], scroll: ScrollableContainer, agent_msg: AgentResponse
+    ) -> None: ...
 
 
 class ToolApprovalWidget(Container):
@@ -31,8 +47,8 @@ class ToolApprovalWidget(Container):
     def __init__(
         self,
         action_requests: list[dict[str, Any]],
-        app_ref: Any,
-        scroll: Any,
+        app_ref: _ApprovalApp,
+        scroll: ScrollableContainer,
         agent_msg: AgentResponse,
         **kwargs: Any,
     ) -> None:
@@ -67,7 +83,7 @@ class ToolApprovalWidget(Container):
         if event.button.id:
             self._handle_decision(event.button.id)
 
-    def _cycle_button_focus(self, forward: bool) -> None:
+    def _cycle_button_focus(self, *, forward: bool) -> None:
         focused = self.app.focused
         current_id = focused.id if focused and focused.id in self.BUTTON_IDS else None
         if forward:

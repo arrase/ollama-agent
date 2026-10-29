@@ -7,14 +7,16 @@ from typing import Any
 from langchain_core.messages import AIMessageChunk
 
 
-def streaming_text(content: Any) -> str:
+def streaming_text(content: object) -> str:
     """Extract text from a streaming chunk."""
     if isinstance(content, str):
         return content
     if isinstance(content, dict):
-        return content["text"] if content.get("type") == "text" and "text" in content else ""
+        return str(content["text"]) if content.get("type") == "text" and "text" in content else ""
     if isinstance(content, list):
-        return "".join(b["text"] for b in content if isinstance(b, dict) and b.get("type") == "text" and "text" in b)
+        return "".join(
+            str(b["text"]) for b in content if isinstance(b, dict) and b.get("type") == "text" and "text" in b
+        )
     return ""
 
 
@@ -67,7 +69,7 @@ class ThinkTagParser:
 
         return deltas
 
-    def flush(self, hide_reasoning: bool = False) -> list[dict[str, Any]]:
+    def flush(self, *, hide_reasoning: bool = False) -> list[dict[str, Any]]:
         """Flush pending buffer as delta event."""
         buf, self._buffer = self._buffer, ""
         if buf and not (self.in_think and hide_reasoning):
@@ -75,7 +77,7 @@ class ThinkTagParser:
             return [{"type": f"{kind}_delta", "content": buf}]
         return []
 
-    def process_chunk(self, chunk: AIMessageChunk, hide_reasoning: bool = False) -> list[dict[str, Any]]:
+    def process_chunk(self, chunk: AIMessageChunk, *, hide_reasoning: bool = False) -> list[dict[str, Any]]:
         """Convert incoming chunk into delta events.
 
         A single chunk may carry *both* ``reasoning_content`` and ``content`` (Ollama

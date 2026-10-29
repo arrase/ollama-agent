@@ -4,11 +4,13 @@ import asyncio
 import sqlite3
 import tempfile
 import unittest
+from collections.abc import AsyncIterator
 from importlib import resources
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
@@ -47,7 +49,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         mock_runtime = MagicMock()
         mock_runtime.stream_writer = MagicMock()
 
-        async def dummy_handler(req: Any) -> Any:
+        async def dummy_handler(_req: object) -> MagicMock:
             return MagicMock(content="done")
 
         req = ToolCallRequest(
@@ -59,18 +61,18 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
 
         with patch("ollama_agent.agent.middleware.get_tool_timeout", return_value=5):
             res = await _stream_tool_events(req, dummy_handler)
-            self.assertEqual(res.content, "done")
+            assert res.content == "done"
             # Verify stream_writer was called for tool_call and tool_output
-            self.assertEqual(mock_runtime.stream_writer.call_count, 2)
+            assert mock_runtime.stream_writer.call_count == 2
             call_args_list = mock_runtime.stream_writer.call_args_list
-            self.assertEqual(call_args_list[0][0][0]["type"], "tool_call")
-            self.assertEqual(call_args_list[0][0][0]["name"], "web_search")
-            self.assertEqual(call_args_list[1][0][0]["type"], "tool_output")
+            assert call_args_list[0][0][0]["type"] == "tool_call"
+            assert call_args_list[0][0][0]["name"] == "web_search"
+            assert call_args_list[1][0][0]["type"] == "tool_output"
 
     async def test_stream_tool_events_task_agent_name_from_metadata(self) -> None:
         mock_runtime = MagicMock()
 
-        async def dummy_handler(req: Any) -> Any:
+        async def dummy_handler(_req: object) -> MagicMock:
             return MagicMock(content="ok")
 
         req = ToolCallRequest(
@@ -89,14 +91,14 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             await _stream_tool_events(req, dummy_handler)
 
         call_event = mock_runtime.stream_writer.call_args_list[0][0][0]
-        self.assertEqual(call_event["agent_name"], "researcher")
+        assert call_event["agent_name"] == "researcher"
         out_event = mock_runtime.stream_writer.call_args_list[1][0][0]
-        self.assertEqual(out_event["agent_name"], "researcher")
+        assert out_event["agent_name"] == "researcher"
 
     async def test_stream_tool_events_task_subagent_type(self) -> None:
         mock_runtime = MagicMock()
 
-        async def dummy_handler(req: Any) -> Any:
+        async def dummy_handler(_req: object) -> str:
             return "simple string result"
 
         req = ToolCallRequest(
@@ -113,17 +115,17 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         with patch("ollama_agent.agent.middleware.get_tool_timeout", return_value=5):
             res = await _stream_tool_events(req, dummy_handler)
 
-        self.assertEqual(res, "simple string result")
+        assert res == "simple string result"
         call_event = mock_runtime.stream_writer.call_args_list[0][0][0]
-        self.assertEqual(call_event["agent_name"], "analyst")
+        assert call_event["agent_name"] == "analyst"
         out_event = mock_runtime.stream_writer.call_args_list[1][0][0]
-        self.assertEqual(out_event["agent_name"], "analyst")
-        self.assertEqual(out_event["output_len"], len("simple string result"))
+        assert out_event["agent_name"] == "analyst"
+        assert out_event["output_len"] == len("simple string result")
 
     async def test_stream_tool_events_task_command_output_len_and_no_timeout(self) -> None:
         mock_runtime = MagicMock()
 
-        async def slow_task_handler(req: Any) -> Any:
+        async def slow_task_handler(_req: object) -> Command[Any]:
             await asyncio.sleep(0.03)
             return Command(update={"messages": [AIMessage(content="subagent final report")]})
 
@@ -141,9 +143,9 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         with patch("ollama_agent.agent.middleware.get_tool_timeout", return_value=0.001):
             res = await _stream_tool_events(req, slow_task_handler)
 
-        self.assertIsInstance(res, Command)
+        assert isinstance(res, Command)
         out_event = mock_runtime.stream_writer.call_args_list[1][0][0]
-        self.assertEqual(out_event["output_len"], len("subagent final report"))
+        assert out_event["output_len"] == len("subagent final report")
 
     async def test_stream_tool_events_task_fallback_to_metadata(self) -> None:
         mock_runtime = MagicMock()
@@ -152,7 +154,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             def __str__(self) -> str:
                 return "command_payload"
 
-        async def dummy_handler(req: Any) -> Any:
+        async def dummy_handler(_req: object) -> DummyCommand:
             return DummyCommand()
 
         req = ToolCallRequest(
@@ -171,15 +173,15 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             await _stream_tool_events(req, dummy_handler)
 
         call_event = mock_runtime.stream_writer.call_args_list[0][0][0]
-        self.assertEqual(call_event["agent_name"], "fallback_subagent")
+        assert call_event["agent_name"] == "fallback_subagent"
         out_event = mock_runtime.stream_writer.call_args_list[1][0][0]
-        self.assertEqual(out_event["agent_name"], "fallback_subagent")
+        assert out_event["agent_name"] == "fallback_subagent"
         # A Command carries no "content", so its reported length is 0 rather than the
         # length of its repr.
-        self.assertEqual(out_event["output_len"], 0)
+        assert out_event["output_len"] == 0
 
     async def test_stream_tool_events_timeout_returns_tool_message(self) -> None:
-        async def slow_handler(req: Any) -> Any:
+        async def slow_handler(_req: object) -> str:
             await asyncio.sleep(0.5)
             return "done"
 
@@ -194,19 +196,19 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         with patch("ollama_agent.agent.middleware.get_tool_timeout", return_value=0.01):
             result = await _stream_tool_events(req, slow_handler)
 
-        self.assertEqual(result.tool_call_id, "call-3")
-        self.assertEqual(result.name, "slow_tool")
-        self.assertEqual(result.status, "error")
-        self.assertIn("timed out after 0.01s", result.content)
-        self.assertEqual(mock_runtime.stream_writer.call_count, 2)
+        assert result.tool_call_id == "call-3"
+        assert result.name == "slow_tool"
+        assert result.status == "error"
+        assert "timed out after 0.01s" in result.content
+        assert mock_runtime.stream_writer.call_count == 2
         call_events = [c[0][0]["type"] for c in mock_runtime.stream_writer.call_args_list]
-        self.assertEqual(call_events, ["tool_call", "tool_output"])
+        assert call_events == ["tool_call", "tool_output"]
 
     async def test_rag_search_uninitialized(self) -> None:
         set_rag_manager(None)
         res = await rag_search.ainvoke({"query": "test"})
-        self.assertFalse(res["success"])
-        self.assertIn("No RAG database loaded", res["error"])
+        assert not res["success"]
+        assert "No RAG database loaded" in res["error"]
 
     async def test_rag_search_no_db_loaded(self) -> None:
         mock_mgr = MagicMock()
@@ -216,8 +218,8 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         set_rag_manager(mock_mgr)
 
         res = await rag_search.ainvoke({"query": "test"})
-        self.assertFalse(res["success"])
-        self.assertIn("No RAG database loaded", res["error"])
+        assert not res["success"]
+        assert "No RAG database loaded" in res["error"]
 
     async def test_rag_search_success(self) -> None:
         mock_mgr = MagicMock()
@@ -236,9 +238,9 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         set_rag_manager(mock_mgr)
 
         res = await rag_search.ainvoke({"query": "python"})
-        self.assertTrue(res["success"])
-        self.assertIn("Python is a programming language.", res["context"])
-        self.assertIn("guide.md", res["context"])
+        assert res["success"]
+        assert "Python is a programming language." in res["context"]
+        assert "guide.md" in res["context"]
 
     async def test_agent_runtime_lifecycle(self) -> None:
         settings = Settings()
@@ -247,17 +249,17 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         with patch.object(AgentRuntime, "_build_graph", AsyncMock(return_value=MagicMock())) as mock_bg:
             set_rag_manager(None)
             await runtime.reload()
-            self.assertIsNotNone(runtime.graph)
+            assert runtime.graph is not None
             mock_bg.assert_awaited_once()
 
         with patch("ollama_agent.agent.agent.save_settings"), patch.object(AgentRuntime, "reload", AsyncMock()):
             await runtime.set_model("qwen3:32b")
-            self.assertEqual(runtime.settings.model.name, "qwen3:32b")
+            assert runtime.settings.model.name == "qwen3:32b"
 
             await runtime.set_reasoning_effort("high")
-            self.assertEqual(runtime.settings.model.reasoning_effort, "high")
+            assert runtime.settings.model.reasoning_effort == "high"
 
-            with self.assertRaises(ValueError):
+            with pytest.raises(ValueError):
                 await runtime.set_reasoning_effort("")
 
         await runtime.aclose()
@@ -288,10 +290,10 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         ):
             await runtime._build_graph()
             kwargs = mock_cda.call_args.kwargs
-            self.assertIn("rag_policy_content", kwargs["system_prompt"])
-            self.assertIn("fs_sandbox", kwargs["system_prompt"])
-            self.assertIn(rag_search, kwargs["tools"])
-            self.assertEqual(kwargs["skills"], (("/system_skills/", "Built-in"), ("/skills/", "User")))
+            assert "rag_policy_content" in kwargs["system_prompt"]
+            assert "fs_sandbox" in kwargs["system_prompt"]
+            assert rag_search in kwargs["tools"]
+            assert kwargs["skills"] == (("/system_skills/", "Built-in"), ("/skills/", "User"))
 
         # When RAG is inactive, rag_search is not present
         mock_mgr.current_database = None
@@ -306,7 +308,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         ):
             await runtime._build_graph()
             kwargs = mock_cda.call_args.kwargs
-            self.assertNotIn(rag_search, kwargs["tools"])
+            assert rag_search not in kwargs["tools"]
 
         set_rag_manager(None)
         await runtime.aclose()
@@ -316,18 +318,18 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         settings.runtime.allow_traversal = True
         with patch("ollama_agent.agent.agent.load_instructions", return_value=_DEFAULT_INSTRUCTIONS):
             instructions = _prepare_instructions(settings)
-        self.assertIn("You have full access to the host filesystem", instructions)
-        self.assertNotIn("operate on a virtual root", instructions)
-        self.assertIn("Working Directory", instructions)
+        assert "You have full access to the host filesystem" in instructions
+        assert "operate on a virtual root" not in instructions
+        assert "Working Directory" in instructions
 
     def test_prepare_instructions_allow_traversal_false(self) -> None:
         settings = Settings()
         settings.runtime.allow_traversal = False
         with patch("ollama_agent.agent.agent.load_instructions", return_value=_DEFAULT_INSTRUCTIONS):
             instructions = _prepare_instructions(settings)
-        self.assertIn("operate on a virtual root", instructions)
-        self.assertNotIn("You have full access to the host filesystem", instructions)
-        self.assertIn("Working Directory", instructions)
+        assert "operate on a virtual root" in instructions
+        assert "You have full access to the host filesystem" not in instructions
+        assert "Working Directory" in instructions
 
     def test_prepare_instructions_context_variables(self) -> None:
         settings = Settings(
@@ -344,19 +346,19 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         )
         with patch("ollama_agent.agent.agent.load_instructions", return_value=custom_template):
             instructions = _prepare_instructions(settings)
-            self.assertIn("Model: test-model", instructions)
-            self.assertIn("Traversal: True", instructions)
-            self.assertIn("RAG Top K: 5", instructions)
-            self.assertIn("Settings Model: test-model", instructions)
-            self.assertIn("RAG Active: False", instructions)
-            self.assertIn("RAG DB: ", instructions)
+            assert "Model: test-model" in instructions
+            assert "Traversal: True" in instructions
+            assert "RAG Top K: 5" in instructions
+            assert "Settings Model: test-model" in instructions
+            assert "RAG Active: False" in instructions
+            assert "RAG DB: " in instructions
 
     def test_prepare_instructions_rag_inactive(self) -> None:
         settings = Settings()
         set_rag_manager(None)
         with patch("ollama_agent.agent.agent.load_instructions", return_value=_DEFAULT_INSTRUCTIONS):
             instructions = _prepare_instructions(settings)
-        self.assertNotIn("# RAG POLICY", instructions)
+        assert "# RAG POLICY" not in instructions
 
     def test_prepare_instructions_rag_active(self) -> None:
         settings = Settings()
@@ -365,14 +367,14 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         set_rag_manager(mock_mgr)
         with patch("ollama_agent.agent.agent.load_instructions", return_value=_DEFAULT_INSTRUCTIONS):
             instructions = _prepare_instructions(settings)
-        self.assertIn("# RAG POLICY", instructions)
-        self.assertIn("('knowledge_base')", instructions)
+        assert "# RAG POLICY" in instructions
+        assert "('knowledge_base')" in instructions
 
     async def test_agent_runtime_run_streamed(self) -> None:
         settings = Settings()
         runtime = AgentRuntime(settings=settings)
 
-        async def mock_astream(*args: Any, **kwargs: Any):
+        async def mock_astream(*_args: object, **_kwargs: object) -> AsyncIterator[tuple[str, object]]:
             yield "custom", {"type": "tool_call", "name": "test_tool"}
             ai_chunk = MagicMock(type="ai", content="Hello response", additional_kwargs={}, response_metadata={})
             yield "messages", (ai_chunk, {})
@@ -385,15 +387,15 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
 
         events = [event async for event in runtime.run_streamed("Hello agent")]
 
-        self.assertEqual(len(events), 2)
-        self.assertEqual(events[0], {"type": "tool_call", "name": "test_tool"})
-        self.assertEqual(events[1], {"type": "text_delta", "content": "Hello response"})
+        assert len(events) == 2
+        assert events[0] == {"type": "tool_call", "name": "test_tool"}
+        assert events[1] == {"type": "text_delta", "content": "Hello response"}
 
     async def test_agent_runtime_run_streamed_flushes_before_tool_call_and_filters_subagent_chunks(self) -> None:
         settings = Settings()
         runtime = AgentRuntime(settings=settings)
 
-        async def mock_astream(*args: Any, **kwargs: Any):
+        async def mock_astream(*_args: object, **_kwargs: object) -> AsyncIterator[tuple[str, object]]:
             # Partial tag "<th" stays buffered in ThinkTagParser until flushed before tool_call
             c1 = MagicMock(type="ai", content="Before <th", additional_kwargs={}, response_metadata={})
             yield "messages", (c1, {"langgraph_node": "agent"})
@@ -413,21 +415,18 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         runtime.graph = mock_graph
 
         events = [e async for e in runtime.run_streamed("Hello")]
-        self.assertEqual(
-            events,
-            [
-                {"type": "text_delta", "content": "Before "},
-                {"type": "text_delta", "content": "<th"},
-                {"type": "tool_call", "name": "task"},
-            ],
-        )
-        self.assertEqual(runtime.last_context_tokens, 0)
+        assert events == [
+            {"type": "text_delta", "content": "Before "},
+            {"type": "text_delta", "content": "<th"},
+            {"type": "tool_call", "name": "task"},
+        ]
+        assert runtime.last_context_tokens == 0
 
     async def test_agent_runtime_run_streamed_emits_mention_warnings(self) -> None:
         settings = Settings()
         runtime = AgentRuntime(settings=settings)
 
-        async def mock_astream(*args: Any, **kwargs: Any):
+        async def mock_astream(*_args: object, **_kwargs: object) -> AsyncIterator[tuple[str, object]]:
             if False:
                 yield "messages", (MagicMock(), {})
 
@@ -442,7 +441,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         ):
             events = [e async for e in runtime.run_streamed("@foo.bin")]
 
-        self.assertEqual(events, [{"type": "warning", "content": "Skipped binary file foo.bin"}])
+        assert events == [{"type": "warning", "content": "Skipped binary file foo.bin"}]
 
     async def test_agent_runtime_run_streamed_hide_reasoning(self) -> None:
         for effort, expected_hidden in [
@@ -465,16 +464,17 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             class DummyParser:
                 hide_flags = captured_hide
 
-                def process_chunk(self, chunk: Any, hide_reasoning: bool = False) -> list[Any]:
+                def process_chunk(self, _chunk: object, *, hide_reasoning: bool = False) -> list[Any]:
                     self.hide_flags.append(hide_reasoning)
                     return []
 
-                def flush(self, hide_reasoning: bool = False) -> list[Any]:
+                def flush(self, *, hide_reasoning: bool = False) -> list[Any]:
+                    _ = hide_reasoning
                     return []
 
             mock_graph = MagicMock()
 
-            async def mock_astream(*args: Any, **kwargs: Any):
+            async def mock_astream(*_args: object, **_kwargs: object) -> AsyncIterator[tuple[str, object]]:
                 yield "messages", (MagicMock(type="ai", response_metadata={}), {})
 
             mock_graph.astream = mock_astream
@@ -485,13 +485,13 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
                 async for _ in runtime.run_streamed("Test"):
                     pass
 
-            self.assertEqual(captured_hide, [expected_hidden], f"Failed for effort={effort}")
+            assert captured_hide == [expected_hidden], f"Failed for effort={effort}"
 
     async def test_agent_runtime_run_streamed_interrupt(self) -> None:
         settings = Settings()
         runtime = AgentRuntime(settings=settings)
 
-        async def mock_astream(*args: Any, **kwargs: Any):
+        async def mock_astream(*_args: object, **_kwargs: object) -> AsyncIterator[tuple[str, object]]:
             ai_chunk = MagicMock(type="ai", content="Checking...", additional_kwargs={}, response_metadata={})
             yield "messages", (ai_chunk, {})
 
@@ -503,18 +503,18 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
 
         events = [event async for event in runtime.run_streamed("Do write")]
 
-        self.assertEqual(len(events), 2)
-        self.assertEqual(events[0], {"type": "text_delta", "content": "Checking..."})
-        self.assertEqual(events[1]["type"], "interrupt")
-        self.assertEqual(len(events[1]["interrupts"]), 1)
-        self.assertNotIn("config", events[1])
+        assert len(events) == 2
+        assert events[0] == {"type": "text_delta", "content": "Checking..."}
+        assert events[1]["type"] == "interrupt"
+        assert len(events[1]["interrupts"]) == 1
+        assert "config" not in events[1]
 
     async def test_agent_runtime_run_streamed_command_input(self) -> None:
         settings = Settings()
         runtime = AgentRuntime(settings=settings)
 
-        async def mock_astream(inputs: Any, *args: Any, **kwargs: Any):
-            self.assertIsInstance(inputs, Command)
+        async def mock_astream(inputs: object, *_args: object, **_kwargs: object) -> AsyncIterator[tuple[str, object]]:
+            assert isinstance(inputs, Command)
             ai_chunk = MagicMock(type="ai", content="Resumed", additional_kwargs={}, response_metadata={})
             yield "messages", (ai_chunk, {})
 
@@ -527,8 +527,8 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         cmd: Command[Any] = Command(resume={"decisions": [{"type": "approve"}]})
         events = [event async for event in runtime.run_streamed(cmd)]
 
-        self.assertEqual(len(events), 1)
-        self.assertEqual(events[0], {"type": "text_delta", "content": "Resumed"})
+        assert len(events) == 1
+        assert events[0] == {"type": "text_delta", "content": "Resumed"}
 
     async def test_agent_runtime_run_streamed_prompt_error(self) -> None:
         settings = Settings()
@@ -542,9 +542,9 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         ):
             events = [event async for event in runtime.run_streamed("@nonexistent_mention")]
 
-            self.assertEqual(len(events), 1)
-            self.assertEqual(events[0]["type"], "error")
-            self.assertIn("Invalid file mention", events[0]["content"])
+            assert len(events) == 1
+            assert events[0]["type"] == "error"
+            assert "Invalid file mention" in events[0]["content"]
 
     async def test_agent_runtime_run_streamed_external_mention_blocked_no_traversal(self) -> None:
         settings = Settings()
@@ -559,16 +559,16 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
 
             events = [event async for event in runtime.run_streamed(f"Analyze @{outside_file}")]
 
-            self.assertEqual(len(events), 1)
-            self.assertEqual(events[0]["type"], "error")
-            self.assertIn("Access to path outside working directory is not allowed", events[0]["content"])
+            assert len(events) == 1
+            assert events[0]["type"] == "error"
+            assert "Access to path outside working directory is not allowed" in events[0]["content"]
 
     async def test_agent_runtime_run_streamed_external_mention_allowed_with_traversal(self) -> None:
         settings = Settings()
         settings.runtime.allow_traversal = True
         runtime = AgentRuntime(settings=settings)
 
-        async def mock_astream(inputs: Any, *args: Any, **kwargs: Any):
+        async def mock_astream(_inputs: object, *_args: object, **_kwargs: object) -> AsyncIterator[tuple[str, object]]:
             ai_chunk = MagicMock(type="ai", content="Done", additional_kwargs={}, response_metadata={})
             yield "messages", (ai_chunk, {})
 
@@ -584,9 +584,9 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
 
             events = [event async for event in runtime.run_streamed(f"Analyze @{outside_file}")]
 
-            self.assertEqual(len(events), 1)
-            self.assertEqual(events[0]["type"], "text_delta")
-            self.assertEqual(events[0]["content"], "Done")
+            assert len(events) == 1
+            assert events[0]["type"] == "text_delta"
+            assert events[0]["content"] == "Done"
 
     async def test_count_effective_tokens_without_and_with_summary(self) -> None:
         settings = Settings()
@@ -600,7 +600,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         runtime.graph = mock_graph
 
         count = await runtime.count_effective_tokens("thread-1")
-        self.assertGreater(count, 0)
+        assert count > 0
 
         # With summarization event
         summary_msg = HumanMessage(content="Summary of earlier conversation")
@@ -616,7 +616,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             )
         )
         count_with_summary = await runtime.count_effective_tokens("thread-1")
-        self.assertGreater(count_with_summary, 0)
+        assert count_with_summary > 0
 
     async def test_sqlite_checkpointer_initializes_tables(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -624,8 +624,8 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             runtime = AgentRuntime(settings=Settings())
             with patch("ollama_agent.agent.agent.HISTORY_DB_PATH", db_path):
                 saver = await runtime._sqlite_checkpointer()
-                self.assertIsNotNone(saver)
-                self.assertTrue(db_path.exists())
+                assert saver is not None
+                assert db_path.exists()
 
                 conn = sqlite3.connect(str(db_path))
                 cursor = conn.cursor()
@@ -633,8 +633,8 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
                 tables = {row[0] for row in cursor.fetchall()}
                 conn.close()
 
-                self.assertIn("writes", tables)
-                self.assertIn("checkpoints", tables)
+                assert "writes" in tables
+                assert "checkpoints" in tables
             await runtime.aclose()
 
     async def test_checkpointer_persists_across_reload(self) -> None:
@@ -646,13 +646,13 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
                 patch.object(AgentRuntime, "_build_graph", AsyncMock(return_value=MagicMock())),
             ):
                 cp1 = await runtime._sqlite_checkpointer()
-                self.assertIsNotNone(cp1)
+                assert cp1 is not None
                 await runtime.reload()
                 cp2 = await runtime._sqlite_checkpointer()
-                self.assertIs(cp1, cp2)
-                self.assertIsNotNone(cp2.conn)
+                assert cp1 is cp2
+                assert cp2.conn is not None
             await runtime.aclose()
-            self.assertIsNone(runtime._checkpointer)
+            assert runtime._checkpointer is None
 
     async def test_checkpointer_reusable_after_aclose(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -660,13 +660,13 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             runtime = AgentRuntime(settings=Settings())
             with patch("ollama_agent.agent.agent.HISTORY_DB_PATH", db_path):
                 cp1 = await runtime._sqlite_checkpointer()
-                self.assertIsNotNone(cp1)
+                assert cp1 is not None
                 await runtime.aclose()
-                self.assertIsNone(runtime._checkpointer)
+                assert runtime._checkpointer is None
                 # Ensure runtime can be re-used with a newly opened checkpointer stack
                 cp2 = await runtime._sqlite_checkpointer()
-                self.assertIsNotNone(cp2)
-                self.assertIsNot(cp1, cp2)
+                assert cp2 is not None
+                assert cp1 is not cp2
                 await runtime.aclose()
 
     async def test_agent_runtime_set_context_window(self) -> None:
@@ -678,12 +678,12 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             patch("ollama_agent.agent.agent.save_settings") as mock_save,
         ):
             await runtime.set_context_window(16384)
-            self.assertEqual(runtime.settings.model.context_window, 16384)
+            assert runtime.settings.model.context_window == 16384
             mock_save.assert_called_once_with(runtime.settings)
             mock_reload.assert_awaited_once()
 
             await runtime.set_context_window("max")
-            self.assertEqual(runtime.settings.model.context_window, "max")
+            assert runtime.settings.model.context_window == "max"
 
     async def test_build_graph_mcp_tools_and_subagent_mcp_tools_in_interrupt_on(self) -> None:
         settings = Settings()
@@ -723,47 +723,47 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             interrupt_on = kwargs["interrupt_on"]
 
             # Main agent interrupt_on
-            self.assertIn("main_fetch", interrupt_on)
-            self.assertIn("execute", interrupt_on)
-            self.assertIn("write_file", interrupt_on)
-            self.assertIn("edit_file", interrupt_on)
-            self.assertEqual(interrupt_on["main_fetch"]["allowed_decisions"], ["approve", "reject"])
+            assert "main_fetch" in interrupt_on
+            assert "execute" in interrupt_on
+            assert "write_file" in interrupt_on
+            assert "edit_file" in interrupt_on
+            assert interrupt_on["main_fetch"]["allowed_decisions"] == ["approve", "reject"]
 
             # Subagent interrupt_on
             subagents = kwargs["subagents"]
-            self.assertEqual(len(subagents), 2)
+            assert len(subagents) == 2
             sub_spec = subagents[0]
-            self.assertIn("interrupt_on", sub_spec)
+            assert "interrupt_on" in sub_spec
             sub_interrupt_on = sub_spec["interrupt_on"]
-            self.assertIn("git_diff", sub_interrupt_on)
-            self.assertIn("execute", sub_interrupt_on)
-            self.assertIn("write_file", sub_interrupt_on)
-            self.assertIn("edit_file", sub_interrupt_on)
-            self.assertEqual(sub_interrupt_on["git_diff"]["allowed_decisions"], ["approve", "reject"])
+            assert "git_diff" in sub_interrupt_on
+            assert "execute" in sub_interrupt_on
+            assert "write_file" in sub_interrupt_on
+            assert "edit_file" in sub_interrupt_on
+            assert sub_interrupt_on["git_diff"]["allowed_decisions"] == ["approve", "reject"]
 
             gp_spec = subagents[1]
-            self.assertEqual(gp_spec["name"], "general-purpose")
-            self.assertEqual(gp_spec["middleware"], [stream_tool_events_mw])
-            self.assertNotIn("tools", gp_spec)
-            self.assertNotIn("interrupt_on", gp_spec)
+            assert gp_spec["name"] == "general-purpose"
+            assert gp_spec["middleware"] == [stream_tool_events_mw]
+            assert "tools" not in gp_spec
+            assert "interrupt_on" not in gp_spec
 
             # When predicate: normal HITL
             req_main = MagicMock(tool_call={"name": "main_fetch"})
             req_sub = MagicMock(tool_call={"name": "git_diff"})
-            self.assertTrue(interrupt_on["main_fetch"]["when"](req_main))
-            self.assertTrue(sub_interrupt_on["git_diff"]["when"](req_sub))
+            assert interrupt_on["main_fetch"]["when"](req_main)
+            assert sub_interrupt_on["git_diff"]["when"](req_sub)
 
             # When predicate: YOLO mode
             runtime.yolo_mode = True
-            self.assertFalse(interrupt_on["main_fetch"]["when"](req_main))
-            self.assertFalse(sub_interrupt_on["git_diff"]["when"](req_sub))
+            assert not interrupt_on["main_fetch"]["when"](req_main)
+            assert not sub_interrupt_on["git_diff"]["when"](req_sub)
 
             # When predicate: auto_approved_tools
             runtime.yolo_mode = False
             runtime.auto_approved_tools.add("main_fetch")
-            self.assertFalse(interrupt_on["main_fetch"]["when"](req_main))
-            self.assertTrue(sub_interrupt_on["git_diff"]["when"](req_sub))
+            assert not interrupt_on["main_fetch"]["when"](req_main)
+            assert sub_interrupt_on["git_diff"]["when"](req_sub)
             runtime.auto_approved_tools.add("git_diff")
-            self.assertFalse(sub_interrupt_on["git_diff"]["when"](req_sub))
+            assert not sub_interrupt_on["git_diff"]["when"](req_sub)
 
         await runtime.aclose()

@@ -20,7 +20,7 @@ from ..i18n import _
 from .builtin_tools import get_tool_timeout
 
 
-def _compute_output_len(result: Any) -> int:
+def _compute_output_len(result: object) -> int:
     content = getattr(result, "content", None)
     if content is None and isinstance(result, Command) and isinstance(result.update, dict):
         messages = result.update.get("messages")
@@ -32,11 +32,11 @@ def _compute_output_len(result: Any) -> int:
 
 
 async def _invoke_with_timeout(
-    request: Any,
-    handler: Any,
+    request: Any,  # noqa: ANN401
+    handler: Any,  # noqa: ANN401
     tool_name: str,
     tool_call_id: str,
-) -> Any:
+) -> Any:  # noqa: ANN401
     if tool_name == "task":
         return await handler(request)
 
@@ -57,7 +57,7 @@ async def _invoke_with_timeout(
         )
 
 
-async def _stream_tool_events(request: Any, handler: Any) -> Any:
+async def _stream_tool_events(request: Any, handler: Any) -> Any:  # noqa: ANN401
     """Emit tool_call / tool_output events and enforce tool timeout."""
     tool_call = request.tool_call
     tool_name = tool_call["name"]

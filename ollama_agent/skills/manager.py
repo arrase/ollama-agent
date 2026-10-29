@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 from ..core import BaseFileStoreManager, require_text, validate_identifier
 from ..i18n import _

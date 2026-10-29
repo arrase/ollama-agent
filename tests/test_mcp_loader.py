@@ -6,12 +6,14 @@ import json
 import sys
 import tempfile
 import unittest
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import langchain_mcp_adapters.sessions
 import mcp.client.stdio
+import pytest
 from rich.console import Console
 
 import ollama_agent.mcp as mcp_pkg
@@ -40,7 +42,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
     """Unit tests for MCP tool loading and connection builders."""
 
     def test_resolve_env_empty(self) -> None:
-        self.assertEqual(_resolve_env({}, "srv"), {})
+        assert _resolve_env({}, "srv") == {}
 
     def test_resolve_env_success(self) -> None:
         with patch.dict("os.environ", {"API_KEY": "secret123", "PORT": "8080", "USERPROFILE": "C:\\Users\\Test"}):
@@ -50,20 +52,13 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
                 "HOME_DIR": "%USERPROFILE%",
             }
             resolved = _resolve_env(env, "srv")
-            self.assertEqual(
-                resolved,
-                {
-                    "AUTH": "secret123",
-                    "URL": "http://localhost:8080",
-                    "HOME_DIR": "C:\\Users\\Test",
-                },
-            )
+            assert resolved == {"AUTH": "secret123", "URL": "http://localhost:8080", "HOME_DIR": "C:\\Users\\Test"}
 
     def test_resolve_env_missing_raises(self) -> None:
         with patch.dict("os.environ", {}, clear=True):
-            with self.assertRaisesRegex(MCPConfigError, "NONEXISTENT_KEY_XYZ"):
+            with pytest.raises(MCPConfigError, match="NONEXISTENT_KEY_XYZ"):
                 _resolve_env({"AUTH": "${NONEXISTENT_KEY_XYZ}"}, "srv")
-            with self.assertRaisesRegex(MCPConfigError, "NONEXISTENT_KEY_XYZ"):
+            with pytest.raises(MCPConfigError, match="NONEXISTENT_KEY_XYZ"):
                 _resolve_env({"AUTH": "%NONEXISTENT_KEY_XYZ%"}, "srv")
 
     def test_build_mcp_connection_stdio_with_env(self) -> None:
@@ -74,10 +69,10 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
                 "env": {"API_TOKEN": "${TOKEN}"},
             }
             conn = _build_mcp_connection("srv", cfg)
-            self.assertEqual(conn["transport"], "stdio")
-            self.assertEqual(conn["command"], "npx")
-            self.assertEqual(conn["args"], ["-y", "my-server"])
-            self.assertEqual(conn["env"], {"API_TOKEN": "mytoken"})
+            assert conn["transport"] == "stdio"
+            assert conn["command"] == "npx"
+            assert conn["args"] == ["-y", "my-server"]
+            assert conn["env"] == {"API_TOKEN": "mytoken"}
 
     def test_build_mcp_connection_stdio_without_env(self) -> None:
         cfg = {
@@ -85,19 +80,19 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             "args": ["mcp-server-fetch"],
         }
         conn = _build_mcp_connection("srv", cfg)
-        self.assertEqual(conn["transport"], "stdio")
-        self.assertEqual(conn["command"], "uvx")
-        self.assertEqual(conn["args"], ["mcp-server-fetch"])
-        self.assertNotIn("env", conn)
+        assert conn["transport"] == "stdio"
+        assert conn["command"] == "uvx"
+        assert conn["args"] == ["mcp-server-fetch"]
+        assert "env" not in conn
 
     def test_build_mcp_connection_stdio_missing_env_raises(self) -> None:
         with patch.dict("os.environ", {}, clear=True):
             cfg = {"command": "npx", "env": {"VAR": "${UNDEFINED_VAR}"}}
-            with self.assertRaisesRegex(MCPConfigError, "UNDEFINED_VAR"):
+            with pytest.raises(MCPConfigError, match="UNDEFINED_VAR"):
                 _build_mcp_connection("srv", cfg)
 
     def test_build_mcp_connection_null_args_raises(self) -> None:
-        with self.assertRaisesRegex(MCPConfigError, "'args' must be a list"):
+        with pytest.raises(MCPConfigError, match="'args' must be a list"):
             _build_mcp_connection("srv", {"command": "x", "args": None})
 
     def test_build_mcp_connection_http_and_types(self) -> None:
@@ -108,53 +103,54 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             "timeout": 10,
         }
         conn = _build_mcp_connection("srv", cfg_http)
-        self.assertEqual(conn["transport"], "http")
-        self.assertEqual(conn["url"], "https://mcp.example.com/mcp")
-        self.assertEqual(conn["headers"], {"Authorization": "Bearer 123"})
-        self.assertEqual(conn["timeout"], 10)
+        assert conn["transport"] == "http"
+        assert conn["url"] == "https://mcp.example.com/mcp"
+        assert conn["headers"] == {"Authorization": "Bearer 123"}
+        assert conn["timeout"] == 10
 
         cfg_sse = {
             "type": "sse",
             "url": "http://localhost:8000/sse",
         }
         conn_sse = _build_mcp_connection("srv", cfg_sse)
-        self.assertEqual(conn_sse["transport"], "sse")
-        self.assertEqual(conn_sse["url"], "http://localhost:8000/sse")
+        assert conn_sse["transport"] == "sse"
+        assert conn_sse["url"] == "http://localhost:8000/sse"
 
     def test_build_mcp_connection_default_transport_is_http_when_key_absent(self) -> None:
         conn = _build_mcp_connection("srv", {"url": "https://mcp.example.com/mcp"})
-        self.assertEqual(conn["transport"], "http")
+        assert conn["transport"] == "http"
 
     def test_build_mcp_connection_unknown_transport_raises(self) -> None:
-        with self.assertRaisesRegex(MCPConfigError, "unsupported transport 'ws'"):
+        with pytest.raises(MCPConfigError, match="unsupported transport 'ws'"):
             _build_mcp_connection("srv", {"url": "wss://mcp.example.com", "transport": "ws"})
 
     def test_build_mcp_connection_invalid_raises(self) -> None:
-        with self.assertRaisesRegex(MCPConfigError, "requires either 'command' or 'url'"):
+        with pytest.raises(MCPConfigError, match="requires either 'command' or 'url'"):
             _build_mcp_connection("srv", {"unknown": "value"})
 
     def test_build_mcp_connection_empty_command_raises(self) -> None:
-        with self.assertRaisesRegex(MCPConfigError, "'command' must be a non-empty string"):
+        with pytest.raises(MCPConfigError, match="'command' must be a non-empty string"):
             _build_mcp_connection("srv", {"command": ""})
-        with self.assertRaisesRegex(MCPConfigError, "'command' must be a non-empty string"):
+        with pytest.raises(MCPConfigError, match="'command' must be a non-empty string"):
             _build_mcp_connection("srv", {"command": "   "})
-        with self.assertRaisesRegex(MCPConfigError, "'command' must be a non-empty string"):
+        with pytest.raises(MCPConfigError, match="'command' must be a non-empty string"):
             _build_mcp_connection("srv", {"command": 123})
 
     def test_build_mcp_connection_empty_url_raises(self) -> None:
-        with self.assertRaisesRegex(MCPConfigError, "'url' must be a non-empty string"):
+        with pytest.raises(MCPConfigError, match="'url' must be a non-empty string"):
             _build_mcp_connection("srv", {"url": ""})
-        with self.assertRaisesRegex(MCPConfigError, "'url' must be a non-empty string"):
+        with pytest.raises(MCPConfigError, match="'url' must be a non-empty string"):
             _build_mcp_connection("srv", {"url": "   "})
-        with self.assertRaisesRegex(MCPConfigError, "'url' must be a non-empty string"):
+        with pytest.raises(MCPConfigError, match="'url' must be a non-empty string"):
             _build_mcp_connection("srv", {"url": None})
 
     def test_subagent_mcp_server_to_connection_config(self) -> None:
         srv = SubAgentMCPServer(name="git", command="npx", args=["-y", "git-mcp"], env={"GIT_AUTHOR": "test"})
-        self.assertEqual(
-            srv.to_connection_config(),
-            {"command": "npx", "args": ["-y", "git-mcp"], "env": {"GIT_AUTHOR": "test"}},
-        )
+        assert srv.to_connection_config() == {
+            "command": "npx",
+            "args": ["-y", "git-mcp"],
+            "env": {"GIT_AUTHOR": "test"},
+        }
 
     def test_build_mcp_connection_url_and_headers_with_env(self) -> None:
         with patch.dict("os.environ", {"MCP_HOST": "mcp.example.com", "API_TOKEN": "tok_xyz"}):
@@ -164,22 +160,22 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
                 "headers": {"Authorization": "Bearer %API_TOKEN%"},
             }
             conn = _build_mcp_connection("srv", cfg)
-            self.assertEqual(conn["url"], "https://mcp.example.com/mcp")
-            self.assertEqual(conn["headers"], {"Authorization": "Bearer tok_xyz"})
+            assert conn["url"] == "https://mcp.example.com/mcp"
+            assert conn["headers"] == {"Authorization": "Bearer tok_xyz"}
 
     def test_default_mcp_timeout(self) -> None:
-        self.assertEqual(DEFAULT_MCP_TIMEOUT, 10.0)
+        assert DEFAULT_MCP_TIMEOUT == 10.0
 
     def test_mcp_package_exports(self) -> None:
-        self.assertIn("MCPConfigError", mcp_pkg.__all__)
-        self.assertIs(mcp_pkg.MCPConfigError, MCPConfigError)
+        assert "MCPConfigError" in mcp_pkg.__all__
+        assert mcp_pkg.MCPConfigError is MCPConfigError
 
     async def test_load_main_mcp_tools_missing_file_returns_empty(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             missing = Path(tmp_dir) / "mcp.json"
             with patch("ollama_agent.mcp.loader.MCP_PATH", missing):
                 tools = await load_main_mcp_tools()
-                self.assertEqual(tools, [])
+                assert tools == []
 
     async def test_load_main_mcp_tools_invalid_json_raises(self) -> None:
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as tmp:
@@ -187,7 +183,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             tmp_path = Path(tmp.name)
 
         try:
-            with patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path), self.assertRaises(MCPConfigError):
+            with patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path), pytest.raises(MCPConfigError):
                 await load_main_mcp_tools()
         finally:
             tmp_path.unlink(missing_ok=True)
@@ -200,7 +196,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         try:
             with (
                 patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path),
-                self.assertRaisesRegex(MCPConfigError, "expected a JSON object"),
+                pytest.raises(MCPConfigError, match="expected a JSON object"),
             ):
                 await _read_main_config()
         finally:
@@ -214,7 +210,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         try:
             with patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path):
                 servers_cfg = await _read_main_config()
-                self.assertEqual(servers_cfg, {})
+                assert servers_cfg == {}
         finally:
             tmp_path.unlink(missing_ok=True)
 
@@ -226,7 +222,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         try:
             with (
                 patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path),
-                self.assertRaisesRegex(MCPConfigError, "'broken'"),
+                pytest.raises(MCPConfigError, match="'broken'"),
             ):
                 await load_main_mcp_tools()
         finally:
@@ -255,7 +251,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
                 patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client),
             ):
                 tools = await load_main_mcp_tools()
-                self.assertEqual(tools, [mock_tool])
+                assert tools == [mock_tool]
         finally:
             tmp_path.unlink(missing_ok=True)
 
@@ -279,7 +275,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             with (
                 patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path),
                 patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client),
-                self.assertRaisesRegex(MCPConfigError, "fetch.*boom"),
+                pytest.raises(MCPConfigError, match=r"fetch.*boom"),
             ):
                 await load_main_mcp_tools()
         finally:
@@ -287,7 +283,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
 
     async def test_load_subagent_mcp_tools_empty_servers(self) -> None:
         tools = await load_subagent_mcp_tools("test-agent", [])
-        self.assertEqual(tools, [])
+        assert tools == []
 
     async def test_load_subagent_mcp_tools_success(self) -> None:
         servers = [
@@ -304,7 +300,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
 
         with patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client):
             tools = await load_subagent_mcp_tools("coder", servers)
-            self.assertEqual(tools, [mock_tool])
+            assert tools == [mock_tool]
 
     async def test_load_subagent_mcp_tools_failure_raises(self) -> None:
         servers = [
@@ -317,13 +313,13 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         ]
         with (
             patch.dict("os.environ", {}, clear=True),
-            self.assertRaisesRegex(MCPConfigError, "MISSING_VAR_XYZ"),
+            pytest.raises(MCPConfigError, match="MISSING_VAR_XYZ"),
         ):
             await load_subagent_mcp_tools("coder", servers)
 
     async def test_load_subagent_mcp_tools_empty_name_raises(self) -> None:
         servers = [SubAgentMCPServer(name="  ", command="git-mcp")]
-        with self.assertRaisesRegex(MCPConfigError, "cannot be empty"):
+        with pytest.raises(MCPConfigError, match="cannot be empty"):
             await load_subagent_mcp_tools("coder", servers)
 
     async def test_load_subagent_mcp_tools_duplicate_name_raises(self) -> None:
@@ -331,7 +327,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             SubAgentMCPServer(name="git", command="git-mcp"),
             SubAgentMCPServer(name="git", command="git-mcp-2"),
         ]
-        with self.assertRaisesRegex(MCPConfigError, "duplicate MCP server name 'git'"):
+        with pytest.raises(MCPConfigError, match="duplicate MCP server name 'git'"):
             await load_subagent_mcp_tools("coder", servers)
 
     async def test_check_mcp_server_active(self) -> None:
@@ -343,12 +339,12 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
 
         with patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client):
             status = await check_mcp_server("test-server", cfg)
-            self.assertEqual(status.name, "test-server")
-            self.assertEqual(status.status, "active")
-            self.assertEqual(status.transport, "http")
-            self.assertEqual(status.target, "https://mcp.example.com")
-            self.assertEqual(status.tools, ["search_tool"])
-            self.assertEqual(status.error, "")
+            assert status.name == "test-server"
+            assert status.status == "active"
+            assert status.transport == "http"
+            assert status.target == "https://mcp.example.com"
+            assert status.tools == ["search_tool"]
+            assert status.error == ""
 
     async def test_check_mcp_server_failed(self) -> None:
         cfg = {"command": "invalid-cmd"}
@@ -357,15 +353,15 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
 
         with patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client):
             status = await check_mcp_server("bad-server", cfg)
-            self.assertEqual(status.name, "bad-server")
-            self.assertEqual(status.status, "failed")
-            self.assertEqual(status.transport, "stdio")
-            self.assertEqual(status.target, "invalid-cmd")
-            self.assertIn("Command not found", status.error)
+            assert status.name == "bad-server"
+            assert status.status == "failed"
+            assert status.transport == "stdio"
+            assert status.target == "invalid-cmd"
+            assert "Command not found" in status.error
 
     async def test_load_tools_from_connections_empty(self) -> None:
         tools = await _load_tools_from_connections({})
-        self.assertEqual(tools, [])
+        assert tools == []
 
     async def test_load_tools_from_connections_reports_all_failures(self) -> None:
         connections = {
@@ -380,11 +376,11 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("ollama_agent.mcp.loader._connect_and_load", side_effect=fake_connect),
-            self.assertRaises(MCPConfigError) as cm,
+            pytest.raises(MCPConfigError) as cm,
         ):
             await _load_tools_from_connections(connections)
-        self.assertIn("boom-fast-fail", str(cm.exception))
-        self.assertIn("boom-slow-fail", str(cm.exception))
+        assert "boom-fast-fail" in str(cm.value)
+        assert "boom-slow-fail" in str(cm.value)
 
     async def test_check_mcp_server_timeout(self) -> None:
         cfg = {"type": "http", "url": "https://mcp.example.com"}
@@ -393,16 +389,16 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
 
         with patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client):
             status = await check_mcp_server("slow-server", cfg)
-            self.assertEqual(status.name, "slow-server")
-            self.assertEqual(status.status, "failed")
-            self.assertEqual(status.transport, "http")
-            self.assertEqual(status.target, "https://mcp.example.com")
-            self.assertIn("timed out", status.error)
+            assert status.name == "slow-server"
+            assert status.status == "failed"
+            assert status.transport == "http"
+            assert status.target == "https://mcp.example.com"
+            assert "timed out" in status.error
 
     async def test_check_mcp_server_invalid_config(self) -> None:
         status = await check_mcp_server("invalid-server", {"unknown": "bad"})
-        self.assertEqual(status.status, "failed")
-        self.assertIn("requires either 'command' or 'url'", status.error)
+        assert status.status == "failed"
+        assert "requires either 'command' or 'url'" in status.error
 
     async def test_list_mcp_servers_no_config(self) -> None:
         console = Console(file=io.StringIO(), record=True)
@@ -411,7 +407,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             with patch("ollama_agent.mcp.loader.MCP_PATH", missing):
                 await list_mcp_servers(console, settings=Settings())
                 out = console.export_text()
-                self.assertIn("No MCP servers configured", out)
+                assert "No MCP servers configured" in out
 
     async def test_list_mcp_servers_invalid_json_reports_error(self) -> None:
         console = Console(file=io.StringIO(), record=True)
@@ -421,7 +417,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
 
         settings = Settings()
         try:
-            with patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path), self.assertRaises(MCPConfigError):
+            with patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path), pytest.raises(MCPConfigError):
                 await list_mcp_servers(console, settings=settings)
         finally:
             tmp_path.unlink(missing_ok=True)
@@ -461,10 +457,10 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             ):
                 await list_mcp_servers(console, settings=settings)
                 out = console.export_text()
-                self.assertIn("Model Context Protocol (MCP) Servers", out)
-                self.assertIn("tavily", out)
-                self.assertIn("Active", out)
-                self.assertIn("tavily_search", out)
+                assert "Model Context Protocol (MCP) Servers" in out
+                assert "tavily" in out
+                assert "Active" in out
+                assert "tavily_search" in out
         finally:
             tmp_path.unlink(missing_ok=True)
 
@@ -485,7 +481,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         runtime.reload = AsyncMock(side_effect=MCPConfigError("Invalid JSON in mcp.json"))
         runtime.settings = Settings()
 
-        with self.assertRaisesRegex(MCPConfigError, "Invalid JSON in mcp.json"):
+        with pytest.raises(MCPConfigError, match=r"Invalid JSON in mcp\.json"):
             await reload_mcp_servers(console, runtime)
         runtime.reload.assert_awaited_once()
 
@@ -495,7 +491,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         runtime.reload = AsyncMock(side_effect=RuntimeError("Connection failed"))
         runtime.settings = Settings()
 
-        with self.assertRaises(RuntimeError):
+        with pytest.raises(RuntimeError):
             await reload_mcp_servers(console, runtime)
         runtime.reload.assert_awaited_once()
 
@@ -505,7 +501,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             captured_errlog = None
 
             @asynccontextmanager
-            async def fake_orig_stdio(server, errlog=None):
+            async def fake_orig_stdio(_server: object, errlog: object = None) -> AsyncIterator[tuple[str, str]]:
                 nonlocal captured_errlog
                 captured_errlog = errlog
                 yield ("read_stream", "write_stream")
@@ -516,17 +512,17 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             ):
                 server_dummy = MagicMock()
                 async with _mcp_stdio_client(server_dummy) as streams:
-                    self.assertEqual(streams, ("read_stream", "write_stream"))
-                self.assertIsNotNone(captured_errlog)
-                self.assertNotEqual(captured_errlog, sys.stderr)
-                self.assertTrue(log_path.exists())
+                    assert streams == ("read_stream", "write_stream")
+                assert captured_errlog is not None
+                assert captured_errlog != sys.stderr
+                assert log_path.exists()
 
     async def test_mcp_stdio_client_preserves_custom_errlog(self) -> None:
         custom_stream = io.StringIO()
         captured_errlog = None
 
         @asynccontextmanager
-        async def fake_orig_stdio(server, errlog=None):
+        async def fake_orig_stdio(_server: object, errlog: object = None) -> AsyncIterator[tuple[str, str]]:
             nonlocal captured_errlog
             captured_errlog = errlog
             yield ("read_stream", "write_stream")
@@ -534,8 +530,8 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         with patch("ollama_agent.mcp.loader._orig_stdio_client", fake_orig_stdio):
             server_dummy = MagicMock()
             async with _mcp_stdio_client(server_dummy, errlog=custom_stream) as streams:
-                self.assertEqual(streams, ("read_stream", "write_stream"))
-            self.assertEqual(captured_errlog, custom_stream)
+                assert streams == ("read_stream", "write_stream")
+            assert captured_errlog == custom_stream
 
     async def test_mcp_stdio_client_preserves_falsy_custom_errlog(self) -> None:
         class FalsyStream(io.StringIO):
@@ -546,7 +542,7 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         captured_errlog = None
 
         @asynccontextmanager
-        async def fake_orig_stdio(server, errlog=None):
+        async def fake_orig_stdio(_server: object, errlog: object = None) -> AsyncIterator[tuple[str, str]]:
             nonlocal captured_errlog
             captured_errlog = errlog
             yield ("read_stream", "write_stream")
@@ -554,21 +550,21 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         with patch("ollama_agent.mcp.loader._orig_stdio_client", fake_orig_stdio):
             server_dummy = MagicMock()
             async with _mcp_stdio_client(server_dummy, errlog=custom_stream) as streams:
-                self.assertEqual(streams, ("read_stream", "write_stream"))
-            self.assertEqual(captured_errlog, custom_stream)
+                assert streams == ("read_stream", "write_stream")
+            assert captured_errlog == custom_stream
 
     def test_http_url_alias_and_invalid_headers(self) -> None:
         conn = _build_mcp_connection("remote", {"httpUrl": "https://example.com/mcp", "headers": {"X-Key": "val"}})
-        self.assertEqual(conn["url"], "https://example.com/mcp")
-        self.assertEqual(conn["transport"], "http")
-        self.assertEqual(conn["headers"], {"X-Key": "val"})
+        assert conn["url"] == "https://example.com/mcp"
+        assert conn["transport"] == "http"
+        assert conn["headers"] == {"X-Key": "val"}
 
-        with self.assertRaisesRegex(MCPConfigError, "'headers' must be an object"):
+        with pytest.raises(MCPConfigError, match="'headers' must be an object"):
             _build_mcp_connection("remote", {"url": "https://example.com/mcp", "headers": ["bad"]})
 
     async def test_stdio_client_patch_scoped_to_load_and_execution(self) -> None:
-        self.assertIs(mcp.client.stdio.stdio_client, _orig_stdio_client)
-        self.assertIs(langchain_mcp_adapters.sessions.stdio_client, _orig_stdio_client)
+        assert mcp.client.stdio.stdio_client is _orig_stdio_client
+        assert langchain_mcp_adapters.sessions.stdio_client is _orig_stdio_client
 
         seen_during_load: list[object] = []
         seen_during_exec: list[object] = []
@@ -590,12 +586,12 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         with patch("ollama_agent.mcp.loader.MultiServerMCPClient", return_value=mock_client):
             tools = await _connect_and_load("srv", {"transport": "stdio", "command": "npx", "args": []})
 
-        self.assertEqual(seen_during_load, [_mcp_stdio_client])
-        self.assertIs(mcp.client.stdio.stdio_client, _orig_stdio_client)
-        self.assertIs(langchain_mcp_adapters.sessions.stdio_client, _orig_stdio_client)
+        assert seen_during_load == [_mcp_stdio_client]
+        assert mcp.client.stdio.stdio_client is _orig_stdio_client
+        assert langchain_mcp_adapters.sessions.stdio_client is _orig_stdio_client
 
         res = await tools[0].coroutine()
-        self.assertEqual(res, "ok")
-        self.assertEqual(seen_during_exec, [_mcp_stdio_client])
-        self.assertIs(mcp.client.stdio.stdio_client, _orig_stdio_client)
-        self.assertIs(langchain_mcp_adapters.sessions.stdio_client, _orig_stdio_client)
+        assert res == "ok"
+        assert seen_during_exec == [_mcp_stdio_client]
+        assert mcp.client.stdio.stdio_client is _orig_stdio_client
+        assert langchain_mcp_adapters.sessions.stdio_client is _orig_stdio_client

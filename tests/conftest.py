@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock
 _TMP_HOME = tempfile.mkdtemp(prefix="ollama-agent-tests-")
 os.environ["HOME"] = _TMP_HOME
 os.environ["USERPROFILE"] = _TMP_HOME
-atexit.register(shutil.rmtree, _TMP_HOME, True)
+atexit.register(shutil.rmtree, _TMP_HOME, ignore_errors=True)
 
 import pytest  # noqa: E402
 from rich.console import Console  # noqa: E402

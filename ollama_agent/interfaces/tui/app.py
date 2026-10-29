@@ -8,9 +8,10 @@ import re
 from collections import deque
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Protocol
 
 from langgraph.types import Command
+from rich.console import Console
 from rich.markup import escape
 from rich.text import Text
 from textual import events
@@ -22,9 +23,14 @@ from textual.widgets import OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 from textual.worker import Worker
 
+from ...agent import AgentRuntime
 from ...i18n import _
+from ...rag import RAGContext
+from ...skills import SkillsContext
 from ...streaming import extract_action_requests, stream_agent_events
+from ...tasks import TasksContext
 from ..clipboard import ClipboardError, copy_to_system_clipboard, get_system_clipboard
+from ..commands.dispatch import REPLHandler
 from .commands import _CHAT_SCROLL_ID, _is_immediate_command, run_slash_command
 from .completion import (
     NO_ARG_COMMANDS,
@@ -50,7 +56,20 @@ _AT_MENTION_RE = re.compile(r"""(?:^|[\s\(\[\{<])@(?:"([^"]*)|'([^']*)|([^\s"'\(
 _AUTOCOMPLETE_LIST_ID = "#autocomplete-list"
 
 
-class OllamaAgentApp(App):
+class _AppREPL(Protocol):
+    runtime: AgentRuntime
+    console: Console
+    _rag_ctx: RAGContext | None
+    _task_ctx: TasksContext
+    _skills_ctx: SkillsContext
+    app: OllamaAgentApp | None
+
+    def _get_rag_ctx(self) -> RAGContext: ...
+    def _get_commands(self) -> dict[str, REPLHandler]: ...
+    def _handle_new_session(self) -> None: ...
+
+
+class OllamaAgentApp(App[None]):
     """Main Textual Application representing the Agent's interactive TUI."""
 
     BINDINGS: ClassVar[list[BindingType]] = [
@@ -114,20 +133,20 @@ class OllamaAgentApp(App):
             return sys_clip
         return super().clipboard
 
-    def on_text_selected(self, event: events.TextSelected) -> None:
+    def on_text_selected(self, _event: events.TextSelected) -> None:
         self.action_copy_selection()
 
-    def get_default_screen(self) -> Screen:
+    def get_default_screen(self) -> Screen[None]:
         return MainScreen(id="_default")
 
-    def __init__(self, repl: Any) -> None:
+    def __init__(self, repl: _AppREPL) -> None:
         super().__init__()
         self.repl = repl
         self.repl.app = self
         self._is_generating = False
         self._is_approval_pending = False
         self._prompt_queue: deque[str] = deque()
-        self._current_worker: Worker | None = None
+        self._current_worker: Worker[Any] | None = None
         self._post_stream_cleanup: Callable[[], Awaitable[None]] | None = None
 
     def compose(self) -> ComposeResult:
@@ -162,7 +181,7 @@ class OllamaAgentApp(App):
         except asyncio.CancelledError:
             raise
         # Startup failures are reported in the TUI instead of killing it.
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             _log.exception("Agent warmup failed")
             notice = escape(_("Agent startup failed: {exc}", exc=exc))
             self.show_system_notice(f"[bold #f87171]✕ {notice}[/bold #f87171]")
@@ -237,9 +256,11 @@ class OllamaAgentApp(App):
             self.query_one(AgentFooter).set_generating(True)
         self._current_worker = self.run_worker(run_slash_command(self, cmd_line))
 
-    def mount_turn_widgets(self, user_text: str, scroll: Any = None) -> tuple[Any, AgentResponse]:
+    def mount_turn_widgets(
+        self, user_text: str, scroll: ScrollableContainer | None = None
+    ) -> tuple[ScrollableContainer, AgentResponse]:
         if scroll is None:
-            scroll = self.query_one(_CHAT_SCROLL_ID)
+            scroll = self.query_one(_CHAT_SCROLL_ID, ScrollableContainer)
         scroll.mount(UserMessage(user_text))
         agent_msg = AgentResponse()
         scroll.mount(agent_msg)
@@ -362,13 +383,15 @@ class OllamaAgentApp(App):
         await self._finish_cancel_approval()
 
     async def _handle_approval_decision(
-        self, decisions: list[dict[str, Any]], scroll: Any, agent_msg: AgentResponse
+        self, decisions: list[dict[str, Any]], scroll: ScrollableContainer, agent_msg: AgentResponse
     ) -> None:
         self._is_approval_pending = False
         command: Command[Any] = Command(resume={"decisions": decisions})
         await self._run_stream(command, scroll, agent_msg)
 
-    async def _run_stream(self, prompt: str | Command[Any], scroll: Any, agent_msg: AgentResponse) -> None:
+    async def _run_stream(
+        self, prompt: str | Command[Any], scroll: ScrollableContainer, agent_msg: AgentResponse
+    ) -> None:
         """Stream one agent turn, reporting failures in the message widget.
 
         A run that raises must not propagate: ``run_worker`` defaults to
@@ -391,7 +414,7 @@ class OllamaAgentApp(App):
                     self._update_queue_ui()
                 raise
             # Surface the failure in the transcript and keep the app alive.
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 _log.exception("Agent run failed")
                 agent_msg.add_error(_("Run failed: {exc}", exc=exc))
                 self.query_one(ReplInput).focus()

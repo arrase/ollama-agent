@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 from ..core import (
     DEFAULT_REASONING_EFFORT,
@@ -24,7 +24,7 @@ from ..settings.paths import TASKS_DIR
 logger = logging.getLogger(__name__)
 
 
-def _coerce_boolean(name: str, val: Any) -> bool:
+def _coerce_boolean(name: str, val: object) -> bool:
     """Coerce an input value to bool or raise ValueError."""
     if isinstance(val, bool):
         return val
@@ -39,7 +39,7 @@ def _coerce_boolean(name: str, val: Any) -> bool:
     raise ValueError(_("Invalid boolean value for input '{name}': {val}", name=name, val=val))
 
 
-def _coerce_number(name: str, val: Any) -> int | float:
+def _coerce_number(name: str, val: object) -> int | float:
     """Coerce an input value to int or float, or raise ValueError."""
     if isinstance(val, bool):
         raise ValueError(_("Invalid number value for input '{name}': {val}", name=name, val=val))
@@ -65,7 +65,7 @@ class TaskInput:
     required: bool = False
     type: str = "string"  # "string", "boolean", "number"
 
-    def coerce(self, name: str, val: Any) -> Any:
+    def coerce(self, name: str, val: object) -> bool | int | float | str:
         """Coerce an input value to the expected type."""
         if self.type == "boolean":
             return _coerce_boolean(name, val)
@@ -79,7 +79,7 @@ class TaskInput:
 _VALID_TASK_INPUT_TYPES = ("string", "boolean", "number")
 
 
-def _task_input_from_dict(name: str, inp: Any, valid_input_keys: set[str]) -> TaskInput:
+def _task_input_from_dict(name: str, inp: object, valid_input_keys: set[str]) -> TaskInput:
     """Build a single TaskInput from its persisted mapping form."""
     if not isinstance(inp, dict):
         raise ValueError(_("Invalid input definition for '{name}'", name=name))
@@ -94,7 +94,7 @@ def _task_input_from_dict(name: str, inp: Any, valid_input_keys: set[str]) -> Ta
     return TaskInput(**inp)
 
 
-def _task_inputs_from_dict(raw_inputs: Any) -> dict[str, TaskInput]:
+def _task_inputs_from_dict(raw_inputs: object) -> dict[str, TaskInput]:
     """Parse the ``inputs`` mapping of a persisted task, rejecting unknown or malformed entries."""
     if not isinstance(raw_inputs, dict):
         raise ValueError(_("Expected mapping for inputs in Task"))
@@ -116,7 +116,7 @@ class Task:
         self.reasoning_effort = validate_reasoning_effort(self.reasoning_effort)
 
     @classmethod
-    def from_dict(cls, d: Any) -> Task:
+    def from_dict(cls, d: object) -> Task:
         if not isinstance(d, dict):
             raise ValueError(_("Expected mapping for Task, got {type_name}", type_name=type(d).__name__))
         # Report a missing key as a domain error instead of a bare KeyError escaping

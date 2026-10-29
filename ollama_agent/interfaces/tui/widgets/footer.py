@@ -21,11 +21,11 @@ class AgentFooter(Static):
     def on_mount(self) -> None:
         self.update_footer()
 
-    def set_generating(self, is_generating: bool) -> None:
+    def set_generating(self, is_generating: bool) -> None:  # noqa: FBT001
         self._is_generating = is_generating
         self.update_footer()
 
-    def set_approval(self, is_approval: bool) -> None:
+    def set_approval(self, is_approval: bool) -> None:  # noqa: FBT001
         self._is_approval = is_approval
         self.update_footer()
 

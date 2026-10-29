@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Protocol
 
 from rich.markup import escape
 from textual import events
@@ -16,6 +16,11 @@ from ....agent.episodic_memory import HistoryError, load_past_user_prompts
 from ....i18n import _
 
 _log = logging.getLogger(__name__)
+
+
+class _InputApp(Protocol):
+    def accept_completion(self, option_index: int) -> None: ...
+    def hide_autocomplete(self) -> None: ...
 
 
 class ReplInput(TextArea):
@@ -45,7 +50,7 @@ class ReplInput(TextArea):
         self._temp_input: str = ""
 
     def on_mount(self) -> None:
-        super().on_mount()
+        super().on_mount()  # type: ignore[no-untyped-call]
         self._update_height()
         self.run_worker(self._load_history())
 
@@ -53,7 +58,7 @@ class ReplInput(TextArea):
         lines = max(1, min(8, self.document.line_count))
         self.styles.height = lines
 
-    def on_text_area_changed(self, event: TextArea.Changed) -> None:
+    def on_text_area_changed(self, _event: TextArea.Changed) -> None:
         self._update_height()
 
     async def _load_history(self) -> None:
@@ -97,26 +102,21 @@ class ReplInput(TextArea):
         elif key == "up" and autolist.highlighted is not None and autolist.highlighted > 0:
             autolist.highlighted -= 1
 
-    def _handle_autocomplete_key(self, event: events.Key, app: Any, autolist: OptionList) -> bool:
+    def _handle_autocomplete_key(self, event: events.Key, app: _InputApp, autolist: OptionList) -> bool:
         if not autolist.display or autolist.option_count == 0:
             return False
 
-        if event.key in ("down", "up"):
+        if event.key in ("down", "up", "tab", "escape"):
             event.stop()
             event.prevent_default()
-            self._navigate_autocomplete(event.key, autolist)
-            return True
-        if event.key == "tab":
-            event.stop()
-            event.prevent_default()
-            if autolist.highlighted is not None:
+            if event.key in ("down", "up"):
+                self._navigate_autocomplete(event.key, autolist)
+            elif event.key == "tab" and autolist.highlighted is not None:
                 app.accept_completion(autolist.highlighted)
+            elif event.key == "escape":
+                app.hide_autocomplete()
             return True
-        if event.key == "escape":
-            event.stop()
-            event.prevent_default()
-            app.hide_autocomplete()
-            return True
+
         if event.key == "enter" and autolist.highlighted is not None:
             opt = autolist.get_option_at_index(autolist.highlighted)
             if opt and opt.id and self.text.strip() == opt.id:

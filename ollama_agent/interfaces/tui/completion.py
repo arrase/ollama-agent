@@ -8,18 +8,19 @@ import time
 from collections.abc import Iterator, Sequence
 from itertools import islice
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import ollama
 from rich.markup import escape
 from rich.text import Text
 
+from ...agent import AgentRuntime
 from ...agent.episodic_memory import HistoryError
-from ...core.models import format_thinking_value, get_model_thinking_config
+from ...core.models import OllamaChatModel, format_thinking_value, get_model_thinking_config
 from ...i18n import _
-from ...rag import RAGError
-from ...skills import SkillError
-from ...tasks import TaskError
+from ...rag import RAGContext, RAGError
+from ...skills import SkillError, SkillsContext
+from ...tasks import TaskError, TasksContext
 from ..commands.models import format_model_size
 from ..commands.sessions import get_available_sessions
 from .widgets.system import format_queue_preview
@@ -43,8 +44,18 @@ CMD_EXIT = "/exit"
 CMD_QUIT = "/quit"
 NO_ARG_COMMANDS: frozenset[str] = frozenset({CMD_CLEAR, CMD_NEW, CMD_EXIT, CMD_QUIT})
 _MODEL_CACHE_TTL = 10.0
+_SUBCOMMAND_PARTS_COUNT = 2
+_ARGUMENT_PARTS_COUNT = 3
 _model_cache: dict[tuple[str, Any], tuple[float, list[Any]]] = {}
 _model_refresh_inflight: set[tuple[str, Any]] = set()
+
+
+class _CompletionREPL(Protocol):
+    runtime: AgentRuntime
+    _task_ctx: TasksContext
+    _skills_ctx: SkillsContext
+
+    def _get_rag_ctx(self) -> RAGContext: ...
 
 
 def _list_models_sync(base_url: str) -> list[Any]:
@@ -64,7 +75,7 @@ def _refresh_models_in_background(base_url: str, *, wait: bool) -> None:
     def _worker() -> None:
         try:
             models = fn(base_url)
-        except Exception:
+        except Exception:  # noqa: BLE001
             models = []
         finally:
             _model_refresh_inflight.discard(key)
@@ -192,7 +203,7 @@ def _complete_root_commands(token: str) -> list[tuple[str, Text]]:
 _format_thinking_value = format_thinking_value
 
 
-def _complete_effort(sub_token: str, runtime_model: Any) -> list[tuple[str, Text]]:
+def _complete_effort(sub_token: str, runtime_model: OllamaChatModel | None) -> list[tuple[str, Text]]:
     sub_token_lower = sub_token.lower()
     thinking_cfg = get_model_thinking_config(runtime_model.show_info) if runtime_model else None
     results = []
@@ -263,7 +274,7 @@ def _complete_context_args(root_cmd: str, sub_cmd: str, arg_token: str) -> list[
     ]
 
 
-def _complete_task_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: Any) -> list[tuple[str, Text]]:
+def _complete_task_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: _CompletionREPL) -> list[tuple[str, Text]]:
     try:
         tasks = repl._task_ctx.task_manager.list_all()
     except (OSError, ValueError, TaskError):
@@ -280,7 +291,7 @@ def _complete_task_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: Any) 
     ]
 
 
-def _complete_skill_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: Any) -> list[tuple[str, Text]]:
+def _complete_skill_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: _CompletionREPL) -> list[tuple[str, Text]]:
     try:
         skills = repl._skills_ctx.skill_manager.list_all()
     except (OSError, ValueError, SkillError):
@@ -317,7 +328,7 @@ def _complete_session_args(root_cmd: str, sub_cmd: str, arg_token: str) -> list[
     ]
 
 
-def _complete_rag_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: Any) -> list[tuple[str, Text]]:
+def _complete_rag_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: _CompletionREPL) -> list[tuple[str, Text]]:
     try:
         names = repl._get_rag_ctx().rag_manager.list_database_names()
     except (RAGError, OSError):
@@ -351,26 +362,29 @@ def _complete_queue_args(
 
 
 def _complete_arguments(
-    root_cmd: str, sub_cmd: str, arg_token: str, repl: Any, prompt_queue: Sequence[str]
+    root_cmd: str, sub_cmd: str, arg_token: str, repl: _CompletionREPL, prompt_queue: Sequence[str]
 ) -> list[tuple[str, Text]]:
     if root_cmd == CMD_MODEL and sub_cmd == "set":
         return _complete_model_args(root_cmd, sub_cmd, arg_token, repl.runtime.settings.model.base_url)
     if root_cmd == CMD_CONTEXT and sub_cmd == "set":
         return _complete_context_args(root_cmd, sub_cmd, arg_token)
-    if root_cmd == CMD_TASK and sub_cmd in ("run", "delete"):
-        return _complete_task_args(root_cmd, sub_cmd, arg_token, repl)
-    if root_cmd == CMD_SKILL and sub_cmd in ("show", "delete"):
-        return _complete_skill_args(root_cmd, sub_cmd, arg_token, repl)
     if root_cmd == CMD_SESSION and sub_cmd in ("resume", "switch", "delete"):
         return _complete_session_args(root_cmd, sub_cmd, arg_token)
-    if root_cmd == CMD_RAG and sub_cmd in ("load", "delete"):
-        return _complete_rag_args(root_cmd, sub_cmd, arg_token, repl)
     if root_cmd == CMD_QUEUE and sub_cmd in ("rm", "remove", "delete"):
         return _complete_queue_args(root_cmd, sub_cmd, arg_token, prompt_queue)
+    repl_handlers = {
+        CMD_TASK: (("run", "delete"), _complete_task_args),
+        CMD_SKILL: (("show", "delete"), _complete_skill_args),
+        CMD_RAG: (("load", "delete"), _complete_rag_args),
+    }
+    if root_cmd in repl_handlers:
+        valid_subs, handler = repl_handlers[root_cmd]
+        if sub_cmd in valid_subs:
+            return handler(root_cmd, sub_cmd, arg_token, repl)
     return []
 
 
-def slash_completions(text: str, repl: Any, prompt_queue: Sequence[str]) -> list[tuple[str, Text]]:
+def slash_completions(text: str, repl: _CompletionREPL, prompt_queue: Sequence[str]) -> list[tuple[str, Text]]:
     """Build slash-command autocomplete candidates for the current input *text*."""
     parts = text.split(" ")
     num_parts = len(parts)
@@ -380,11 +394,11 @@ def slash_completions(text: str, repl: Any, prompt_queue: Sequence[str]) -> list
         return _complete_root_commands(parts[0])
 
     root_cmd = parts[0]
-    if root_cmd == CMD_EFFORT and num_parts == 2:
+    if root_cmd == CMD_EFFORT and num_parts == _SUBCOMMAND_PARTS_COUNT:
         return _complete_effort(parts[1], repl.runtime.model)
 
     # Level 1: Subcommands (e.g., "/task " or "/task r")
-    if num_parts == 2:
+    if num_parts == _SUBCOMMAND_PARTS_COUNT:
         if root_cmd == CMD_MODEL:
             base_url = repl.runtime.settings.model.base_url
             key = (base_url, _list_models_sync)
@@ -393,7 +407,7 @@ def slash_completions(text: str, repl: Any, prompt_queue: Sequence[str]) -> list
         return _complete_subcommands(root_cmd, parts[1])
 
     # Level 2: Arguments / Dynamic entities (e.g., "/task run ")
-    if num_parts == 3:
+    if num_parts == _ARGUMENT_PARTS_COUNT:
         return _complete_arguments(root_cmd, parts[1], parts[2], repl, prompt_queue)
 
     return []
@@ -404,6 +418,7 @@ def _collect_dir_candidates(
     root_path: Path,
     cwd: Path,
     prefix_lower: str,
+    *,
     show_hidden: bool,
 ) -> list[tuple[str, str]]:
     candidate_dirs = []
@@ -435,6 +450,7 @@ def _filter_file_candidate(
     root_path: Path,
     cwd: Path,
     prefix_lower: str,
+    *,
     show_hidden: bool,
 ) -> tuple[str, str] | None:
     if not show_hidden and filename.startswith("."):
@@ -455,10 +471,11 @@ def _iter_file_completions(
     root_path: Path,
     cwd: Path,
     prefix_lower: str,
+    *,
     show_hidden: bool,
 ) -> Iterator[tuple[str, str]]:
     for filename in sorted(files):
-        item = _filter_file_candidate(filename, root_path, cwd, prefix_lower, show_hidden)
+        item = _filter_file_candidate(filename, root_path, cwd, prefix_lower, show_hidden=show_hidden)
         if item is not None:
             yield item
 
@@ -467,14 +484,15 @@ def _iter_walk_completions(
     search_dir: Path,
     cwd: Path,
     prefix_lower: str,
+    *,
     show_hidden: bool,
 ) -> Iterator[tuple[str, str]]:
     for root, dirs, files in os.walk(search_dir):
         root_path = Path(root)
-        candidate_dirs = _collect_dir_candidates(dirs, root_path, cwd, prefix_lower, show_hidden)
+        candidate_dirs = _collect_dir_candidates(dirs, root_path, cwd, prefix_lower, show_hidden=show_hidden)
         dirs[:] = [d[0] for d in candidate_dirs]
         yield from _iter_dir_completions(candidate_dirs, prefix_lower)
-        yield from _iter_file_completions(files, root_path, cwd, prefix_lower, show_hidden)
+        yield from _iter_file_completions(files, root_path, cwd, prefix_lower, show_hidden=show_hidden)
 
 
 def file_completions(token: str, max_completions: int = 15) -> Iterator[tuple[str, Text]]:
@@ -498,7 +516,7 @@ def file_completions(token: str, max_completions: int = 15) -> Iterator[tuple[st
 
     show_hidden = prefix.startswith(".")
     prefix_lower = ("" if rel_dir == Path() else f"{rel_dir.as_posix().lower()}/") + prefix.lower()
-    matches = _iter_walk_completions(search_dir, cwd, prefix_lower, show_hidden)
+    matches = _iter_walk_completions(search_dir, cwd, prefix_lower, show_hidden=show_hidden)
 
     for rel, meta in islice(matches, max_completions):
         escaped_rel = escape(rel)

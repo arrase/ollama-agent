@@ -124,11 +124,11 @@ class AgentRuntime:
         async with self._init_lock:
             self.graph = await self._build_graph()
 
-    async def _build_graph(self) -> Any:
+    async def _build_graph(self) -> Any:  # noqa: ANN401
         ms = self.settings.model
         instructions = await asyncio.to_thread(_prepare_instructions, self.settings)
 
-        def should_interrupt_tool(request: Any) -> bool:
+        def should_interrupt_tool(request: Any) -> bool:  # noqa: ANN401
             return not self.yolo_mode and request.tool_call["name"] not in self.auto_approved_tools
 
         # TaskGroup (not gather) cancels the siblings when one fails: a bad subagent
@@ -322,7 +322,7 @@ class AgentRuntime:
     def _handle_stream_event(
         self,
         mode: str,
-        event: Any,
+        event: Any,  # noqa: ANN401
         parser: ThinkTagParser,
         *,
         hide_reasoning: bool,

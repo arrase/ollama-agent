@@ -5,6 +5,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
+from ..agent import AgentRuntime
+
 
 class StreamingRenderer(ABC):
     """Abstract base class for streaming renderers."""
@@ -43,7 +45,7 @@ class StreamingRenderer(ABC):
     def on_warning(self, event: dict[str, Any]) -> None:
         """Handle a warning event."""
 
-    async def handle_interrupt(self, event: dict[str, Any], runtime: Any) -> list[dict[str, Any]] | None:
+    async def handle_interrupt(self, event: dict[str, Any], runtime: AgentRuntime) -> list[dict[str, Any]] | None:
         """Handle an interrupt event. Returning None aborts the run."""
 
     @abstractmethod

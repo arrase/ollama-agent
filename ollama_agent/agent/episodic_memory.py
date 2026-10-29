@@ -27,7 +27,7 @@ class HistoryError(RuntimeError):
 
 
 @contextlib.contextmanager
-def connect_history(db_path: Path, read_only: bool = True) -> Iterator[sqlite3.Connection]:
+def connect_history(db_path: Path, *, read_only: bool = True) -> Iterator[sqlite3.Connection]:
     """Open the history database as a context manager that closes on exit."""
     try:
         if read_only:
@@ -54,7 +54,7 @@ def format_iso_timestamp(ts: str) -> str:
     return dt.strftime("%Y-%m-%d %H:%M UTC")
 
 
-def _unwrap_messages(raw: Any) -> tuple[list[Any], bool]:
+def _unwrap_messages(raw: object) -> tuple[list[Any], bool]:
     """Unwrap deserialized message write payload and detect Overwrite."""
     if isinstance(raw, Overwrite):
         val = raw.value
@@ -70,9 +70,9 @@ def _deserialize_messages(typ: str, val: bytes) -> tuple[list[Any], bool]:
         msg_list, is_overwrite = _unwrap_messages(_serializer.loads_typed((typ, val)))
         for msg in msg_list:
             _ = msg.type, msg.content, msg.id
-        return msg_list, is_overwrite
     except (ValueError, KeyError, TypeError, AttributeError) as exc:
         raise ValueError(str(exc)) from exc
+    return msg_list, is_overwrite
 
 
 def _deserialize_checkpoint_ts(typ: str, chk: bytes) -> str:
@@ -185,8 +185,12 @@ def load_past_conversations(
     return conversations
 
 
+_MAX_SNIPPET_LEN = 300
+_MAX_SNIPPETS_PER_SESSION = 4
+
+
 def _format_snippet(role: str, text: str) -> str:
-    truncated = text if len(text) <= 300 else f"{text[:297]}..."
+    truncated = text if len(text) <= _MAX_SNIPPET_LEN else f"{text[: _MAX_SNIPPET_LEN - 3]}..."
     role_label = _("User") if role in ("human", "user") else _("Assistant")
     return f"[{role_label}]: {truncated}"
 
@@ -216,7 +220,7 @@ def _score_conversation(data: dict[str, Any], terms: list[str]) -> tuple[int, li
         term_hits = sum(text.lower().count(t) for t in terms)
         if term_hits > 0:
             match_count += term_hits
-            if len(snippets) < 4:
+            if len(snippets) < _MAX_SNIPPETS_PER_SESSION:
                 snippets.append(_format_snippet(role, text))
 
     if match_count > 0 and not snippets:
@@ -276,3 +280,16 @@ def format_past_conversations_context(results: list[dict[str, Any]]) -> str:
         lines.append("")
 
     return "\n".join(lines).strip()
+
+
+__all__ = [
+    "HISTORY_DB_PATH",
+    "HistoryError",
+    "connect_history",
+    "format_iso_timestamp",
+    "format_past_conversations_context",
+    "load_past_conversations",
+    "load_past_user_prompts",
+    "load_session_timestamps",
+    "search_past_conversations_in_db",
+]
