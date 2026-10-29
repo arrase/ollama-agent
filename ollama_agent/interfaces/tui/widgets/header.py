@@ -2,23 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any
 
 from rich.markup import escape
 from textual.widgets import Static
 
-from ....agent import AgentRuntime
 from ....i18n import _
-from ....rag import RAGContext
 
 _CTX_PCT_CRITICAL = 90
 _CTX_PCT_WARNING = 75
 _KILO_TOKENS = 1000
-
-
-class _HeaderREPL(Protocol):
-    runtime: AgentRuntime
-    _rag_ctx: RAGContext | None
 
 
 def _format_context_info(tokens: int, eff_ctx: int, ms_context_window: int | str) -> str:
@@ -53,7 +46,7 @@ def _format_context_info(tokens: int, eff_ctx: int, ms_context_window: int | str
 class AgentHeader(Static):
     """Dynamic TUI Header displaying agent status information."""
 
-    def __init__(self, repl: _HeaderREPL, **kwargs: Any) -> None:
+    def __init__(self, repl: Any, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.repl = repl
 

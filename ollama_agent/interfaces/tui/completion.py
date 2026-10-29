@@ -8,19 +8,18 @@ import time
 from collections.abc import Iterator, Sequence
 from itertools import islice
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 import ollama
 from rich.markup import escape
 from rich.text import Text
 
-from ...agent import AgentRuntime
 from ...agent.episodic_memory import HistoryError
 from ...core.models import OllamaChatModel, format_thinking_value, get_model_thinking_config
 from ...i18n import _
-from ...rag import RAGContext, RAGError
-from ...skills import SkillError, SkillsContext
-from ...tasks import TaskError, TasksContext
+from ...rag import RAGError
+from ...skills import SkillError
+from ...tasks import TaskError
 from ..commands.models import format_model_size
 from ..commands.sessions import get_available_sessions
 from .widgets.system import format_queue_preview
@@ -48,14 +47,6 @@ _SUBCOMMAND_PARTS_COUNT = 2
 _ARGUMENT_PARTS_COUNT = 3
 _model_cache: dict[tuple[str, Any], tuple[float, list[Any]]] = {}
 _model_refresh_inflight: set[tuple[str, Any]] = set()
-
-
-class _CompletionREPL(Protocol):
-    runtime: AgentRuntime
-    _task_ctx: TasksContext
-    _skills_ctx: SkillsContext
-
-    def _get_rag_ctx(self) -> RAGContext: ...
 
 
 def _list_models_sync(base_url: str) -> list[Any]:
@@ -274,7 +265,7 @@ def _complete_context_args(root_cmd: str, sub_cmd: str, arg_token: str) -> list[
     ]
 
 
-def _complete_task_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: _CompletionREPL) -> list[tuple[str, Text]]:
+def _complete_task_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: Any) -> list[tuple[str, Text]]:
     try:
         tasks = repl._task_ctx.task_manager.list_all()
     except (OSError, ValueError, TaskError):
@@ -291,7 +282,7 @@ def _complete_task_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: _Comp
     ]
 
 
-def _complete_skill_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: _CompletionREPL) -> list[tuple[str, Text]]:
+def _complete_skill_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: Any) -> list[tuple[str, Text]]:
     try:
         skills = repl._skills_ctx.skill_manager.list_all()
     except (OSError, ValueError, SkillError):
@@ -328,7 +319,7 @@ def _complete_session_args(root_cmd: str, sub_cmd: str, arg_token: str) -> list[
     ]
 
 
-def _complete_rag_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: _CompletionREPL) -> list[tuple[str, Text]]:
+def _complete_rag_args(root_cmd: str, sub_cmd: str, arg_token: str, repl: Any) -> list[tuple[str, Text]]:
     try:
         names = repl._get_rag_ctx().rag_manager.list_database_names()
     except (RAGError, OSError):
@@ -362,7 +353,7 @@ def _complete_queue_args(
 
 
 def _complete_arguments(
-    root_cmd: str, sub_cmd: str, arg_token: str, repl: _CompletionREPL, prompt_queue: Sequence[str]
+    root_cmd: str, sub_cmd: str, arg_token: str, repl: Any, prompt_queue: Sequence[str]
 ) -> list[tuple[str, Text]]:
     if root_cmd == CMD_MODEL and sub_cmd == "set":
         return _complete_model_args(root_cmd, sub_cmd, arg_token, repl.runtime.settings.model.base_url)
@@ -384,7 +375,7 @@ def _complete_arguments(
     return []
 
 
-def slash_completions(text: str, repl: _CompletionREPL, prompt_queue: Sequence[str]) -> list[tuple[str, Text]]:
+def slash_completions(text: str, repl: Any, prompt_queue: Sequence[str]) -> list[tuple[str, Text]]:
     """Build slash-command autocomplete candidates for the current input *text*."""
     parts = text.split(" ")
     num_parts = len(parts)

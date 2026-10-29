@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, ClassVar, Protocol
+from typing import Any, ClassVar
 
 from rich.markup import escape
 from textual import events
@@ -16,11 +16,6 @@ from ....agent.episodic_memory import HistoryError, load_past_user_prompts
 from ....i18n import _
 
 _log = logging.getLogger(__name__)
-
-
-class _InputApp(Protocol):
-    def accept_completion(self, option_index: int) -> None: ...
-    def hide_autocomplete(self) -> None: ...
 
 
 class ReplInput(TextArea):
@@ -102,7 +97,7 @@ class ReplInput(TextArea):
         elif key == "up" and autolist.highlighted is not None and autolist.highlighted > 0:
             autolist.highlighted -= 1
 
-    def _handle_autocomplete_key(self, event: events.Key, app: _InputApp, autolist: OptionList) -> bool:
+    def _handle_autocomplete_key(self, event: events.Key, app: Any, autolist: OptionList) -> bool:
         if not autolist.display or autolist.option_count == 0:
             return False
 

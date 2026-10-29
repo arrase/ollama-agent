@@ -8,10 +8,9 @@ import re
 from collections import deque
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, ClassVar, Protocol
+from typing import Any, ClassVar
 
 from langgraph.types import Command
-from rich.console import Console
 from rich.markup import escape
 from rich.text import Text
 from textual import events
@@ -23,14 +22,9 @@ from textual.widgets import OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 from textual.worker import Worker
 
-from ...agent import AgentRuntime
 from ...i18n import _
-from ...rag import RAGContext
-from ...skills import SkillsContext
 from ...streaming import extract_action_requests, stream_agent_events
-from ...tasks import TasksContext
 from ..clipboard import ClipboardError, copy_to_system_clipboard, get_system_clipboard
-from ..commands.dispatch import REPLHandler
 from .commands import _CHAT_SCROLL_ID, _is_immediate_command, run_slash_command
 from .completion import (
     NO_ARG_COMMANDS,
@@ -54,19 +48,6 @@ _log = logging.getLogger(__name__)
 # @-mention regex: matches @"quoted", @'quoted', or @bare at word boundaries.
 _AT_MENTION_RE = re.compile(r"""(?:^|[\s\(\[\{<])@(?:"([^"]*)|'([^']*)|([^\s"'\(\[\{<>,;]*))$""")
 _AUTOCOMPLETE_LIST_ID = "#autocomplete-list"
-
-
-class _AppREPL(Protocol):
-    runtime: AgentRuntime
-    console: Console
-    _rag_ctx: RAGContext | None
-    _task_ctx: TasksContext
-    _skills_ctx: SkillsContext
-    app: OllamaAgentApp | None
-
-    def _get_rag_ctx(self) -> RAGContext: ...
-    def _get_commands(self) -> dict[str, REPLHandler]: ...
-    def _handle_new_session(self) -> None: ...
 
 
 class OllamaAgentApp(App[None]):
@@ -139,7 +120,7 @@ class OllamaAgentApp(App[None]):
     def get_default_screen(self) -> Screen[None]:
         return MainScreen(id="_default")
 
-    def __init__(self, repl: _AppREPL) -> None:
+    def __init__(self, repl: Any) -> None:
         super().__init__()
         self.repl = repl
         self.repl.app = self

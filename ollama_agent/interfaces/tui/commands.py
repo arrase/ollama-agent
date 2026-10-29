@@ -5,15 +5,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import shlex
-from collections.abc import Awaitable, Callable
-from typing import Any, Protocol, overload
+from typing import Any
 
-from langgraph.types import Command
 from rich.markup import escape
 from rich.text import Text
 from textual.containers import ScrollableContainer
-from textual.geometry import Size
-from textual.widget import Widget
 
 from ...agent.episodic_memory import HistoryError
 from ...core.common import extract_text
@@ -57,38 +53,6 @@ _log = logging.getLogger(__name__)
 _CHAT_SCROLL_ID = "#chat-scroll"
 _MIN_SESSION_RESUME_ARGS = 2
 _MIN_SCROLL_WIDTH = 10
-
-
-class _CommandApp(Protocol):
-    repl: Any
-    _is_generating: bool
-    _is_approval_pending: bool
-    _post_stream_cleanup: Callable[[], Awaitable[None]] | None
-
-    @property
-    def size(self) -> Size: ...
-    def show_system_notice(self, notice: str | Text) -> None: ...
-    def show_system_output(self, content: str | Text, title: str | None = None) -> None: ...
-    @overload
-    def query_one(self, selector: type[AgentHeader]) -> AgentHeader: ...
-    @overload
-    def query_one(self, selector: type[AgentFooter]) -> AgentFooter: ...
-    @overload
-    def query_one(self, selector: str, expect_type: type[ScrollableContainer]) -> ScrollableContainer: ...
-    def query_one(self, selector: str | type[Widget], expect_type: type[Widget] | None = None) -> Widget: ...
-    def _deferred_scroll(self) -> None: ...
-    def mount_turn_widgets(
-        self, user_text: str, scroll: ScrollableContainer | None = None
-    ) -> tuple[ScrollableContainer, AgentResponse]: ...
-    async def _run_stream(
-        self, prompt: str | Command[Any], scroll: ScrollableContainer, agent_msg: AgentResponse
-    ) -> None: ...
-    def update_mode_ui(self) -> None: ...
-    def _update_queue_ui(self) -> None: ...
-    async def _run_post_stream_cleanup(self) -> None: ...
-    def exit(self) -> None: ...
-    def _process_next_in_queue(self) -> None: ...
-
 
 IMMEDIATE_COMMANDS: frozenset[tuple[str, str]] = frozenset(
     {
@@ -148,7 +112,7 @@ def _mount_history_messages(scroll: ScrollableContainer, messages: list[Any]) ->
             scroll.mount(AgentResponse(initial_text=content))
 
 
-async def _resume_slash_session(app: _CommandApp, args: list[str], scroll: ScrollableContainer) -> None:
+async def _resume_slash_session(app: Any, args: list[str], scroll: ScrollableContainer) -> None:
     if len(args) < _MIN_SESSION_RESUME_ARGS:
         usage_msg = _("Usage: /session resume <session_id>")
         app.show_system_notice(f"[bold #f87171]✕ {usage_msg}[/bold #f87171]")
@@ -180,7 +144,7 @@ async def _resume_slash_session(app: _CommandApp, args: list[str], scroll: Scrol
     app._deferred_scroll()
 
 
-async def _export_slash_session(app: _CommandApp, args: list[str]) -> None:
+async def _export_slash_session(app: Any, args: list[str]) -> None:
     try:
         with app.repl.console.capture() as capture:
             out_file = await export_session(
@@ -203,7 +167,7 @@ async def _export_slash_session(app: _CommandApp, args: list[str]) -> None:
             app.show_system_notice(f"[bold #f87171]✕ {_('Failed to export session.')}[/bold #f87171]")
 
 
-async def _handle_slash_session(app: _CommandApp, cmd: str, args: list[str], scroll: ScrollableContainer) -> bool:
+async def _handle_slash_session(app: Any, cmd: str, args: list[str], scroll: ScrollableContainer) -> bool:
     if cmd in (CMD_CLEAR, CMD_NEW) or (cmd == CMD_SESSION and args and args[0] == "new"):
         app.repl._handle_new_session()
         await scroll.remove_children()
@@ -227,7 +191,7 @@ async def _handle_slash_session(app: _CommandApp, cmd: str, args: list[str], scr
 
 
 async def _run_creator_skill(
-    app: _CommandApp,
+    app: Any,
     cmd_line: str,
     sub_args: list[str],
     scroll: ScrollableContainer,
@@ -245,9 +209,7 @@ async def _run_creator_skill(
     await app._run_stream(prompt_text, scroll, agent_msg)
 
 
-async def _handle_task_create(
-    app: _CommandApp, cmd_line: str, sub_args: list[str], scroll: ScrollableContainer
-) -> None:
+async def _handle_task_create(app: Any, cmd_line: str, sub_args: list[str], scroll: ScrollableContainer) -> None:
     await _run_creator_skill(
         app,
         cmd_line,
@@ -284,7 +246,7 @@ def _parse_task_run_args(sub_args: list[str]) -> tuple[list[str], bool]:
     return positional, yolo_requested
 
 
-async def _handle_task_run(app: _CommandApp, cmd_line: str, sub_args: list[str], scroll: ScrollableContainer) -> None:
+async def _handle_task_run(app: Any, cmd_line: str, sub_args: list[str], scroll: ScrollableContainer) -> None:
     positional, yolo_requested = _parse_task_run_args(sub_args)
     if not positional:
         app.show_system_notice(f"[bold #f87171]✕ {_('Usage: /task run <id> [-y]')}[/bold #f87171]")
@@ -322,7 +284,7 @@ async def _handle_task_run(app: _CommandApp, cmd_line: str, sub_args: list[str],
             await app._run_post_stream_cleanup()
 
 
-async def _handle_slash_task(app: _CommandApp, cmd_line: str, args: list[str], scroll: ScrollableContainer) -> bool:
+async def _handle_slash_task(app: Any, cmd_line: str, args: list[str], scroll: ScrollableContainer) -> bool:
     cmd = cmd_line.split(maxsplit=1)[0].lower()
     if cmd != CMD_TASK or not args:
         return False
@@ -338,7 +300,7 @@ async def _handle_slash_task(app: _CommandApp, cmd_line: str, args: list[str], s
     return False
 
 
-async def _handle_slash_skill(app: _CommandApp, cmd_line: str, args: list[str], scroll: ScrollableContainer) -> bool:
+async def _handle_slash_skill(app: Any, cmd_line: str, args: list[str], scroll: ScrollableContainer) -> bool:
     cmd = cmd_line.split(maxsplit=1)[0].lower()
     if cmd != CMD_SKILL or not args or args[0] != "create":
         return False
@@ -364,7 +326,7 @@ async def _handle_slash_skill(app: _CommandApp, cmd_line: str, args: list[str], 
 
 
 async def _execute_repl_command(
-    app: _CommandApp,
+    app: Any,
     cmd_line: str,
     cmd: str,
     args: list[str],
@@ -409,7 +371,7 @@ async def _execute_repl_command(
 
 
 async def _dispatch_slash_command(
-    app: _CommandApp,
+    app: Any,
     cmd_line: str,
     cmd: str,
     args: list[str],
@@ -431,7 +393,7 @@ async def _dispatch_slash_command(
     await _execute_repl_command(app, cmd_line, cmd, args, scroll)
 
 
-async def run_slash_command(app: _CommandApp, cmd_line: str) -> None:
+async def run_slash_command(app: Any, cmd_line: str) -> None:
     """Execute a user-typed slash command in the TUI.
 
     Never propagates: a slash command that fails must surface the error in the UI,
