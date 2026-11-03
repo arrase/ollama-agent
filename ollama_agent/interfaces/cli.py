@@ -342,16 +342,19 @@ def handle_subcommand(args: argparse.Namespace, settings: Settings) -> None:
     )
     handler = handlers[(args.command, args.subcommand)]
 
+    async def _run() -> object:
+        try:
+            res = handler()
+            return await res if inspect.iscoroutine(res) else res
+        finally:
+            if rag_ctx is not None:
+                await rag_ctx.rag_manager.aclose()
+
     try:
-        result = handler()
-        if inspect.iscoroutine(result):
-            result = asyncio.run(result)
+        result = asyncio.run(_run())
     except DOMAIN_ERRORS as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
         raise SystemExit(1) from exc
-    finally:
-        if rag_ctx is not None:
-            asyncio.run(rag_ctx.rag_manager.aclose())
 
     # Handlers that report a failure return a falsy value instead of raising, so the
     # exit status must reflect it (otherwise `session delete bogus` exits 0).

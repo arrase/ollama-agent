@@ -410,6 +410,30 @@ class TestDispatchAndCLI(unittest.TestCase):
                 handle_subcommand(args, settings)
             assert cm.value.code == 1
 
+    def test_handle_subcommand_rag_add_closes_on_same_event_loop(self) -> None:
+        parser = create_argument_parser()
+        args = parser.parse_args(["rag", "add", "docs_db", "file.md"])
+        loops: list[asyncio.AbstractEventLoop] = []
+
+        async def fake_add_file(_ctx: object, _path: str) -> None:
+            loops.append(asyncio.get_running_loop())
+
+        async def fake_aclose() -> None:
+            loops.append(asyncio.get_running_loop())
+
+        mock_mgr = MagicMock()
+        mock_mgr.aclose = AsyncMock(side_effect=fake_aclose)
+
+        with (
+            patch("ollama_agent.interfaces.cli.RAGManager", return_value=mock_mgr),
+            patch("ollama_agent.interfaces.commands.dispatch.load_rag_database"),
+            patch("ollama_agent.interfaces.commands.dispatch.add_rag_file", side_effect=fake_add_file),
+        ):
+            handle_subcommand(args, Settings())
+
+        assert len(loops) == 2
+        assert loops[0] is loops[1]
+
     def test_extract_early_language(self) -> None:
         assert _extract_early_language(["-l", "es"]) == "es"
         assert _extract_early_language(["--lang", "fr"]) == "fr"
