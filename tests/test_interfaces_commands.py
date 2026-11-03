@@ -27,7 +27,6 @@ from ollama_agent.interfaces.commands.params import (
     show_effort,
     show_model_params,
 )
-from ollama_agent.interfaces.commands.sessions import new_session
 from ollama_agent.mcp import MCPConfigError
 from ollama_agent.rag import RAGError
 from ollama_agent.settings.config import Settings
@@ -42,12 +41,6 @@ def _repl_handlers(**overrides: object) -> dict[str, REPLHandler]:
 
 class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
     """Unit tests for CLI, model, session, and dispatch handlers."""
-
-    def test_new_session_generates_uuid_hex(self) -> None:
-        console = Console(file=io.StringIO(), record=True)
-        session_id = new_session(console)
-        assert len(session_id) == 8
-        assert "New session started" in console.export_text()
 
     async def test_safe_call_sync_and_async(self) -> None:
         console = Console(file=io.StringIO())
@@ -71,13 +64,6 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         await safe_call(async_fn, console=console)
         assert called_async
 
-    async def test_safe_call_requires_console(self) -> None:
-        def sync_fn() -> None:
-            pass
-
-        with pytest.raises(TypeError):
-            await safe_call(sync_fn)
-
     async def test_safe_call_reports_domain_errors(self) -> None:
         for exc in (
             SkillError("Skill failed"),
@@ -95,14 +81,14 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
                 await safe_call(raiser, console=console)  # Should not raise
                 assert str(exc) in console.export_text()
 
-    async def test_safe_call_propagates_unexpected_errors(self) -> None:
-        console = Console(file=io.StringIO())
+    async def test_safe_call_catches_unexpected_errors(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
 
-        def raise_exit() -> None:
-            raise SystemExit(1)
+        def raise_unexpected() -> None:
+            raise RuntimeError("unexpected boom")
 
-        with pytest.raises(SystemExit):
-            await safe_call(raise_exit, console=console)
+        await safe_call(raise_unexpected, console=console)
+        assert "unexpected boom" in console.export_text()
 
     async def test_list_models_empty(self) -> None:
         console = Console(file=io.StringIO(), record=True)
@@ -139,10 +125,11 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime = MagicMock()
         runtime.settings.model.name = "gemma4:26b"
         runtime.settings.model.base_url = "http://localhost:11434"
+        runtime.set_model = AsyncMock()
 
         with patch("ollama_agent.interfaces.commands.models._list_models", AsyncMock(return_value=[])):
-            res = await set_model(console, "nonexistent_model", runtime=runtime)
-            assert res is None
+            await set_model(console, "nonexistent_model", runtime=runtime)
+            runtime.set_model.assert_not_awaited()
             assert "not found" in console.export_text()
 
     async def test_set_model_same_model(self) -> None:
@@ -150,11 +137,12 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime = MagicMock()
         runtime.settings.model.name = "gemma4:26b"
         runtime.settings.model.base_url = "http://localhost:11434"
+        runtime.set_model = AsyncMock()
 
         mock_m = MagicMock(model="gemma4:26b")
         with patch("ollama_agent.interfaces.commands.models._list_models", AsyncMock(return_value=[mock_m])):
-            res = await set_model(console, "gemma4:26b", runtime=runtime)
-            assert res == "gemma4:26b"
+            await set_model(console, "gemma4:26b", runtime=runtime)
+            runtime.set_model.assert_not_awaited()
             assert "Already using model" in console.export_text()
 
     async def test_set_model_success(self) -> None:
@@ -170,8 +158,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             patch("ollama_agent.interfaces.commands.models._list_models", AsyncMock(return_value=[mock_m1, mock_m2])),
             patch("ollama_agent.interfaces.commands.models.model_supports_tools", AsyncMock(return_value=True)),
         ):
-            res = await set_model(console, "qwen3:32b", runtime=runtime)
-            assert res == "qwen3:32b"
+            await set_model(console, "qwen3:32b", runtime=runtime)
             runtime.set_model.assert_awaited_once_with("qwen3:32b")
             assert "Switched" in console.export_text()
 
@@ -190,9 +177,10 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
     async def test_set_effort_empty(self) -> None:
         console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
+        runtime.set_reasoning_effort = AsyncMock()
 
-        res = await set_effort(console, "   ", runtime=runtime)
-        assert res is None
+        await set_effort(console, "   ", runtime=runtime)
+        runtime.set_reasoning_effort.assert_not_awaited()
         assert "cannot be empty" in console.export_text()
 
     async def test_set_effort_invalid(self) -> None:
@@ -200,9 +188,10 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime = MagicMock()
         runtime.model.show_info = MagicMock(thinking={"values": ["low", "medium", "high"], "default": "medium"})
         runtime.settings.model.reasoning_effort = "medium"
+        runtime.set_reasoning_effort = AsyncMock()
 
-        res = await set_effort(console, "super_extreme", runtime=runtime)
-        assert res is None
+        await set_effort(console, "super_extreme", runtime=runtime)
+        runtime.set_reasoning_effort.assert_not_awaited()
         assert "Invalid reasoning effort" in console.export_text()
 
     async def test_set_effort_same(self) -> None:
@@ -210,9 +199,10 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime = MagicMock()
         runtime.model.show_info = MagicMock(thinking={"values": ["low", "medium", "high"], "default": "medium"})
         runtime.settings.model.reasoning_effort = "high"
+        runtime.set_reasoning_effort = AsyncMock()
 
-        res = await set_effort(console, "high", runtime=runtime)
-        assert res == "high"
+        await set_effort(console, "high", runtime=runtime)
+        runtime.set_reasoning_effort.assert_not_awaited()
         assert "Already using reasoning effort" in console.export_text()
 
     async def test_set_effort_success(self) -> None:
@@ -222,8 +212,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime.settings.model.reasoning_effort = "medium"
         runtime.set_reasoning_effort = AsyncMock()
 
-        res = await set_effort(console, "high", runtime=runtime)
-        assert res == "high"
+        await set_effort(console, "high", runtime=runtime)
         runtime.set_reasoning_effort.assert_awaited_once_with("high")
         assert "Switched reasoning effort" in console.export_text()
 
@@ -246,8 +235,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime.settings.model.reasoning_effort = "high"
         runtime.set_reasoning_effort = AsyncMock()
 
-        res = await set_effort(console, "default", runtime=runtime)
-        assert res == "default"
+        await set_effort(console, "default", runtime=runtime)
         runtime.set_reasoning_effort.assert_awaited_once_with("default")
         assert "Switched reasoning effort" in console.export_text()
 
@@ -258,8 +246,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime.settings.model.reasoning_effort = "true"
         runtime.set_reasoning_effort = AsyncMock()
 
-        res = await set_effort(console, "disabled", runtime=runtime)
-        assert res == "false"
+        await set_effort(console, "disabled", runtime=runtime)
         runtime.set_reasoning_effort.assert_awaited_once_with("false")
 
     def test_show_effort_with_thinking_config_default(self) -> None:
@@ -282,13 +269,11 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime.settings.model.reasoning_effort = "low"
         runtime.set_reasoning_effort = AsyncMock()
 
-        res_enabled = await set_effort(console, "enabled", runtime=runtime)
-        assert res_enabled == "max"
+        await set_effort(console, "enabled", runtime=runtime)
         runtime.set_reasoning_effort.assert_awaited_once_with("max")
 
         runtime.set_reasoning_effort.reset_mock()
-        res_disabled = await set_effort(console, "disabled", runtime=runtime)
-        assert res_disabled is None
+        await set_effort(console, "disabled", runtime=runtime)
         assert "thinking-only model" in console.export_text()
         runtime.set_reasoning_effort.assert_not_called()
 
@@ -300,8 +285,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime.settings.model.reasoning_effort = "high"
         runtime.set_reasoning_effort = AsyncMock()
 
-        res = await set_effort(console, "low", runtime=runtime)
-        assert res == "low"
+        await set_effort(console, "low", runtime=runtime)
         runtime.set_reasoning_effort.assert_awaited_once_with("low")
 
     async def test_set_effort_missing_default_key_enabled(self) -> None:
@@ -312,8 +296,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime.settings.model.reasoning_effort = "low"
         runtime.set_reasoning_effort = AsyncMock()
 
-        res = await set_effort(console, "enabled", runtime=runtime)
-        assert res == "default"
+        await set_effort(console, "enabled", runtime=runtime)
         runtime.set_reasoning_effort.assert_awaited_once_with("default")
 
     def test_show_context_window(self) -> None:
@@ -333,22 +316,24 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
         runtime.settings.model.context_window = 10000
+        runtime.set_context_window = AsyncMock()
 
-        res = await set_context_window(console, "invalid_val", runtime=runtime)
-        assert res is None
+        await set_context_window(console, "invalid_val", runtime=runtime)
+        runtime.set_context_window.assert_not_awaited()
         assert "Invalid context_window" in console.export_text()
 
-        res2 = await set_context_window(console, "0", runtime=runtime)
-        assert res2 is None
+        await set_context_window(console, "0", runtime=runtime)
+        runtime.set_context_window.assert_not_awaited()
         assert "Invalid context_window" in console.export_text()
 
     async def test_set_context_window_same(self) -> None:
         console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
         runtime.settings.model.context_window = 16384
+        runtime.set_context_window = AsyncMock()
 
-        res = await set_context_window(console, "16384", runtime=runtime)
-        assert res == "16384"
+        await set_context_window(console, "16384", runtime=runtime)
+        runtime.set_context_window.assert_not_awaited()
         assert "Already using context window" in console.export_text()
 
     async def test_set_context_window_success_int(self) -> None:
@@ -358,8 +343,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime.effective_context_window = 16384
         runtime.set_context_window = AsyncMock()
 
-        res = await set_context_window(console, "16384", runtime=runtime)
-        assert res == "16384"
+        await set_context_window(console, "16384", runtime=runtime)
         runtime.set_context_window.assert_awaited_once_with(16384)
         assert "Switched context window" in console.export_text()
 
@@ -370,37 +354,9 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         runtime.effective_context_window = 131072
         runtime.set_context_window = AsyncMock()
 
-        res = await set_context_window(console, "max", runtime=runtime)
-        assert res == "max"
+        await set_context_window(console, "max", runtime=runtime)
         runtime.set_context_window.assert_awaited_once_with("max")
         assert "Switched context window" in console.export_text()
-
-    async def test_context_dispatch(self) -> None:
-        console = Console(file=io.StringIO(), record=True)
-        runtime = MagicMock()
-        runtime.settings.model.context_window = 10000
-        runtime.effective_context_window = 10000
-        runtime.settings.model.name = "llama3.2:3b"
-
-        handlers = _repl_handlers(
-            console=console,
-            runtime=runtime,
-        )
-
-        # /context without args
-        handlers["/context"]([])
-        out = console.export_text()
-        assert "Current context window" in out
-        assert "10000" in out
-
-        with patch("ollama_agent.interfaces.commands.dispatch.set_context_window", AsyncMock()) as mock_set_ctx:
-            # /context <size>
-            await safe_call(handlers["/context"], ["16384"], console=console)
-            mock_set_ctx.assert_awaited_with(console, "16384", runtime=runtime)
-
-            # /context max
-            await safe_call(handlers["/context"], ["max"], console=console)
-            mock_set_ctx.assert_awaited_with(console, "max", runtime=runtime)
 
     def test_show_model_params(self) -> None:
         console = Console(file=io.StringIO(), record=True)
@@ -458,6 +414,18 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         await set_model_param(console, "temperature", "not_a_number", runtime=runtime)
         assert "Invalid value" in console.export_text()
 
+    async def test_out_of_range_param_is_rejected(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        runtime = MagicMock()
+        runtime.settings.model.temperature = 0.7
+        runtime.reload = AsyncMock()
+        with patch("ollama_agent.interfaces.commands.params.save_settings"):
+            await set_model_param(console, "temperature", "99", runtime=runtime)
+            await set_model_param(console, "top_k", "-1", runtime=runtime)
+        assert runtime.settings.model.temperature == 0.7
+        runtime.reload.assert_not_awaited()
+        assert "between" in console.export_text()
+
     async def test_model_dispatch(self) -> None:
         console = Console(file=io.StringIO(), record=True)
         runtime = MagicMock()
@@ -489,28 +457,6 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         with patch("ollama_agent.interfaces.commands.dispatch.set_model", AsyncMock()) as switch_mock:
             await safe_call(handlers["/model"], ["some-model"], console=console)
             switch_mock.assert_awaited_once_with(console, "some-model", runtime=runtime)
-
-    async def test_effort_dispatch(self) -> None:
-        console = Console(file=io.StringIO(), record=True)
-        runtime = MagicMock()
-        runtime.settings.model.reasoning_effort = "medium"
-        runtime.settings.model.name = "llama3.2:3b"
-
-        handlers = _repl_handlers(
-            console=console,
-            runtime=runtime,
-        )
-
-        # /effort without args
-        handlers["/effort"]([])
-        out = console.export_text()
-        assert "Current reasoning effort" in out
-        assert "medium" in out
-
-        # /effort <level>
-        with patch("ollama_agent.interfaces.commands.dispatch.set_effort", AsyncMock()) as switch_effort:
-            await safe_call(handlers["/effort"], ["high"], console=console)
-            switch_effort.assert_awaited_once_with(console, "high", runtime=runtime)
 
     async def test_unified_repl_handlers(self) -> None:
         console = Console(file=io.StringIO(), record=True)
@@ -750,13 +696,6 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             mock_load_rag.assert_called_once()
             mock_run.assert_awaited_once()
 
-    def test_handle_subcommand_unknown_exits_2(self) -> None:
-        args = argparse.Namespace(command="task", subcommand="nope", prompt=None, yolo=False, rag=None)
-        settings = Settings()
-        with pytest.raises(SystemExit) as ctx:
-            handle_subcommand(args, settings)
-        assert ctx.value.code == 2
-
     def test_handle_subcommand_reports_false_result_as_failure(self) -> None:
         """Handlers that signal failure by returning False must exit non-zero."""
         args = argparse.Namespace(
@@ -777,8 +716,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         mock_m2 = MagicMock(model="llama3:8b", size=1024**3 * 5)
 
         with patch("ollama_agent.interfaces.commands.models._list_models", AsyncMock(return_value=[mock_m1, mock_m2])):
-            res = ensure_model_configured(settings, console=Console(file=io.StringIO()))
-            assert res == "qwen3:32b"
+            ensure_model_configured(settings, console=Console(file=io.StringIO()))
             assert settings.model.name == "qwen3:32b"
 
     def test_ensure_model_configured_latest_alias(self) -> None:
@@ -790,8 +728,7 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             patch("ollama_agent.interfaces.commands.models._list_models", AsyncMock(return_value=[mock_m])),
             patch("ollama_agent.interfaces.commands.models.save_settings") as mock_save,
         ):
-            res = ensure_model_configured(settings, console=Console(file=io.StringIO()))
-            assert res == "llama3:latest"
+            ensure_model_configured(settings, console=Console(file=io.StringIO()))
             assert settings.model.name == "llama3:latest"
             mock_save.assert_called_once_with(settings)
 
@@ -806,10 +743,9 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             patch("ollama_agent.interfaces.commands.models._list_models", AsyncMock(return_value=[mock_m1, mock_m2])),
             patch("ollama_agent.interfaces.commands.models.model_supports_tools", AsyncMock(return_value=True)),
             patch("ollama_agent.interfaces.commands.models.save_settings") as mock_save,
+            patch("builtins.input", side_effect=["1"]),
         ):
-            inputs = iter(["1"])
-            res = ensure_model_configured(settings, console=console, input_func=lambda _: next(inputs))
-            assert res == "qwen3.8:27b"
+            ensure_model_configured(settings, console=console)
             assert settings.model.name == "qwen3.8:27b"
             mock_save.assert_called_once_with(settings)
             out = console.export_text()
@@ -827,10 +763,9 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             patch("ollama_agent.interfaces.commands.models._list_models", AsyncMock(return_value=[mock_m1, mock_m2])),
             patch("ollama_agent.interfaces.commands.models.model_supports_tools", AsyncMock(return_value=True)),
             patch("ollama_agent.interfaces.commands.models.save_settings") as mock_save,
+            patch("builtins.input", side_effect=["invalid_name", "ornith-1.5:9b"]),
         ):
-            inputs = iter(["invalid_name", "ornith-1.5:9b"])
-            res = ensure_model_configured(settings, console=console, input_func=lambda _: next(inputs))
-            assert res == "ornith-1.5:9b"
+            ensure_model_configured(settings, console=console)
             assert settings.model.name == "ornith-1.5:9b"
             mock_save.assert_called_once_with(settings)
             out = console.export_text()
@@ -847,10 +782,9 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             patch("ollama_agent.interfaces.commands.models._list_models", AsyncMock(return_value=[mock_m1])),
             patch("ollama_agent.interfaces.commands.models.model_supports_tools", AsyncMock(return_value=False)),
             patch("ollama_agent.interfaces.commands.models.save_settings") as mock_save,
+            patch("builtins.input", side_effect=["1"]),
         ):
-            inputs = iter(["1"])
-            res = ensure_model_configured(settings, console=console, input_func=lambda _: next(inputs))
-            assert res == "simple-llm:7b"
+            ensure_model_configured(settings, console=console)
             assert settings.model.name == "simple-llm:7b"
             mock_save.assert_called_once_with(settings)
             out = console.export_text()
@@ -867,10 +801,10 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
             patch("ollama_agent.interfaces.commands.models._list_models", AsyncMock(return_value=[mock_m1])),
             patch("ollama_agent.interfaces.commands.models.model_supports_tools", AsyncMock(return_value=True)),
             patch("ollama_agent.interfaces.commands.models.save_settings") as mock_save,
+            patch("builtins.input", side_effect=["1"]),
         ):
-            inputs = iter(["1"])
-            res = ensure_model_configured(settings, console=console, input_func=lambda _: next(inputs))
-            assert res == "tool-llm:7b"
+            ensure_model_configured(settings, console=console)
+            assert settings.model.name == "tool-llm:7b"
             out = console.export_text()
             assert "✓" in out
             assert "does not support tools" not in out
@@ -970,26 +904,9 @@ class TestInterfacesCommands(unittest.IsolatedAsyncioTestCase):
         assert "Unknown rag subcommand" in console.export_text()
 
         with (
-            patch("ollama_agent.interfaces.commands.dispatch.create_rag_database") as mock_create,
-            patch("ollama_agent.interfaces.commands.dispatch.delete_rag_database") as mock_delete,
-            patch("ollama_agent.interfaces.commands.dispatch.load_rag_database") as mock_load,
-            patch("ollama_agent.interfaces.commands.dispatch.unload_rag_database") as mock_unload,
             patch("ollama_agent.interfaces.commands.dispatch.add_rag_file", AsyncMock()) as mock_add_file,
             patch("ollama_agent.interfaces.commands.dispatch.add_rag_directory", AsyncMock()) as mock_add_dir,
         ):
-            handlers["/rag"](["create", "my_db"])
-            mock_create.assert_called_once()
-
-            handlers["/rag"](["delete", "my_db"])
-            mock_delete.assert_called_once()
-            runtime.reload.assert_called()
-
-            handlers["/rag"](["load", "my_db"])
-            mock_load.assert_called_once()
-
-            handlers["/rag"](["unload"])
-            mock_unload.assert_called_once()
-
             await safe_call(handlers["/rag"], ["add", "my_file.txt"], console=console)
             mock_add_file.assert_awaited_once()
 

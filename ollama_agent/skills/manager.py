@@ -44,14 +44,14 @@ def _find_skill_file(skill_dir: Path) -> Path:
     raise ValueError(_("Missing SKILL.md: {path}", path=skill_dir))
 
 
-def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
-    """Split a SKILL.md into YAML frontmatter dict and body markdown."""
+def _parse_frontmatter(text: str) -> dict[str, Any]:
+    """Extract the YAML frontmatter dict from a SKILL.md file."""
     stripped = text.lstrip()
     if not stripped.startswith("---"):
-        return {}, text
+        return {}
     first_line_end = stripped.find("\n")
     if first_line_end == -1 or stripped[:first_line_end].strip() != "---":
-        return {}, text
+        return {}
     match = _FRONTMATTER_CLOSE.search(stripped, first_line_end + 1)
     if not match:
         raise ValueError(_("Unclosed YAML frontmatter"))
@@ -62,7 +62,7 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
         raise ValueError(_("Invalid YAML frontmatter: {exc}", exc=exc)) from exc
     if not isinstance(meta, dict):
         raise ValueError(_("YAML frontmatter must be a mapping"))
-    return meta, stripped[match.end() :].lstrip("\n")
+    return meta
 
 
 def _read_skill(skill_dir: Path) -> SkillInfo:
@@ -71,7 +71,7 @@ def _read_skill(skill_dir: Path) -> SkillInfo:
     if skill_file.stat().st_size > _MAX_SKILL_SIZE:
         raise ValueError(_("SKILL.md exceeds 10 MB: {path}", path=skill_file))
     raw = skill_file.read_text(encoding="utf-8")
-    meta, _body = _parse_frontmatter(raw)
+    meta = _parse_frontmatter(raw)
     if "name" not in meta or "description" not in meta:
         raise ValueError(_("Skill frontmatter must define non-empty 'name' and 'description': {path}", path=skill_file))
     name = str(meta["name"]).strip()

@@ -45,8 +45,8 @@ NO_ARG_COMMANDS: frozenset[str] = frozenset({CMD_CLEAR, CMD_NEW, CMD_EXIT, CMD_Q
 _MODEL_CACHE_TTL = 10.0
 _SUBCOMMAND_PARTS_COUNT = 2
 _ARGUMENT_PARTS_COUNT = 3
-_model_cache: dict[tuple[str, Any], tuple[float, list[Any]]] = {}
-_model_refresh_inflight: set[tuple[str, Any]] = set()
+_model_cache: dict[str, tuple[float, list[Any]]] = {}
+_model_refresh_inflight: set[str] = set()
 
 
 def _list_models_sync(base_url: str) -> list[Any]:
@@ -57,11 +57,10 @@ def _list_models_sync(base_url: str) -> list[Any]:
 
 
 def _refresh_models_in_background(base_url: str, *, wait: bool) -> None:
-    fn = _list_models_sync
-    key = (base_url, fn)
-    if key in _model_refresh_inflight:
+    if base_url in _model_refresh_inflight:
         return
-    _model_refresh_inflight.add(key)
+    _model_refresh_inflight.add(base_url)
+    fn = _list_models_sync
 
     def _worker() -> None:
         try:
@@ -69,8 +68,8 @@ def _refresh_models_in_background(base_url: str, *, wait: bool) -> None:
         except Exception:  # noqa: BLE001
             models = []
         finally:
-            _model_refresh_inflight.discard(key)
-        _model_cache[key] = (time.monotonic(), models)
+            _model_refresh_inflight.discard(base_url)
+        _model_cache[base_url] = (time.monotonic(), models)
 
     thread = threading.Thread(target=_worker, daemon=True)
     thread.start()
@@ -80,14 +79,13 @@ def _refresh_models_in_background(base_url: str, *, wait: bool) -> None:
 
 def _get_cached_models(base_url: str) -> list[Any]:
     now = time.monotonic()
-    key = (base_url, _list_models_sync)
-    if key in _model_cache:
-        ts, models = _model_cache[key]
+    if base_url in _model_cache:
+        ts, models = _model_cache[base_url]
         if now - ts >= _MODEL_CACHE_TTL:
             _refresh_models_in_background(base_url, wait=False)
         return models
     _refresh_models_in_background(base_url, wait=True)
-    return _model_cache[key][1] if key in _model_cache else []
+    return _model_cache[base_url][1] if base_url in _model_cache else []
 
 
 def _get_root_commands() -> list[tuple[str, str]]:
@@ -191,9 +189,6 @@ def _complete_root_commands(token: str) -> list[tuple[str, Text]]:
     ]
 
 
-_format_thinking_value = format_thinking_value
-
-
 def _complete_effort(sub_token: str, runtime_model: OllamaChatModel | None) -> list[tuple[str, Text]]:
     sub_token_lower = sub_token.lower()
     thinking_cfg = get_model_thinking_config(runtime_model.show_info) if runtime_model else None
@@ -212,7 +207,7 @@ def _complete_effort(sub_token: str, runtime_model: OllamaChatModel | None) -> l
 
     default = thinking_cfg.get("default")
     for v in thinking_cfg["values"]:
-        v_str = _format_thinking_value(v)
+        v_str = format_thinking_value(v)
         if v_str.lower().startswith(sub_token_lower):
             def_label = _("(default)") if v == default else ""
             results.append(
@@ -392,8 +387,7 @@ def slash_completions(text: str, repl: Any, prompt_queue: Sequence[str]) -> list
     if num_parts == _SUBCOMMAND_PARTS_COUNT:
         if root_cmd == CMD_MODEL:
             base_url = repl.runtime.settings.model.base_url
-            key = (base_url, _list_models_sync)
-            if key not in _model_cache or time.monotonic() - _model_cache[key][0] >= _MODEL_CACHE_TTL:
+            if base_url not in _model_cache or time.monotonic() - _model_cache[base_url][0] >= _MODEL_CACHE_TTL:
                 _refresh_models_in_background(base_url, wait=False)
         return _complete_subcommands(root_cmd, parts[1])
 

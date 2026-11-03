@@ -15,9 +15,16 @@ from textual.app import App, ComposeResult
 from textual.widgets import OptionList
 
 from ollama_agent.agent.episodic_memory import HistoryError
-from ollama_agent.interfaces.tui import OllamaAgentApp, OllamaREPL
+from ollama_agent.interfaces.tui import OllamaREPL
+from ollama_agent.interfaces.tui.app import OllamaAgentApp
 from ollama_agent.interfaces.tui.commands import run_slash_command
-from ollama_agent.interfaces.tui.completion import _get_cached_models, _model_cache, file_completions
+from ollama_agent.interfaces.tui.completion import (
+    _get_cached_models,
+    _list_models_sync,
+    _model_cache,
+    file_completions,
+    slash_completions,
+)
 from ollama_agent.interfaces.tui.renderer import _TUIStreamingRenderer
 from ollama_agent.interfaces.tui.screens import MainScreen
 from ollama_agent.interfaces.tui.widgets import (
@@ -28,11 +35,10 @@ from ollama_agent.interfaces.tui.widgets import (
     ReplInput,
     SystemOutputWidget,
     ToolApprovalWidget,
-    ToolCallMessage,
-    ToolOutputMessage,
     UserMessage,
 )
-from ollama_agent.settings.config import Settings, load_settings, save_settings
+from ollama_agent.interfaces.tui.widgets.messages import ToolCallMessage, ToolOutputMessage
+from ollama_agent.settings.config import Settings
 from ollama_agent.tasks.commands import apply_task_settings
 from ollama_agent.tasks.manager import Task
 
@@ -426,7 +432,6 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock._rag_ctx = None
         repl_mock.runtime.yolo_mode = False
         repl_mock.runtime.stealth_mode = False
-        repl_mock._get_commands.return_value = {}
 
         app = OllamaAgentApp(repl_mock)
         async with app.run_test():
@@ -457,10 +462,6 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.yolo_mode = False
         repl_mock.runtime.stealth_mode = False
 
-        cmd_spec = MagicMock()
-        cmd_spec.summary = "Switch model"
-        repl_mock._get_commands.return_value = {"/model": cmd_spec}
-
         app = OllamaAgentApp(repl_mock)
         async with app.run_test():
             autolist = app.query_one("#autocomplete-list", OptionList)
@@ -488,10 +489,6 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock._rag_ctx = None
         repl_mock.runtime.yolo_mode = False
         repl_mock.runtime.stealth_mode = False
-
-        cmd_spec = MagicMock()
-        cmd_spec.summary = "Switch model"
-        repl_mock._get_commands.return_value = {"/model": cmd_spec}
 
         app = OllamaAgentApp(repl_mock)
         async with app.run_test():
@@ -625,6 +622,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
             inp = app.query_one(ReplInput)
 
             # 7. Level 2: Dynamic Models for /model set
+            _model_cache.clear()
             mock_m1 = MagicMock(model="llama3.2:latest", size=4 * 1024**3)
             mock_m2 = MagicMock(model="mistral:latest", size=5 * 1024**3)
             with patch("ollama_agent.interfaces.tui.completion._list_models_sync", return_value=[mock_m1, mock_m2]):
@@ -637,6 +635,7 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
                 app.accept_completion(0)
                 assert inp.text == "/model set llama3.2:latest "
 
+            _model_cache.clear()
             with patch(
                 "ollama_agent.interfaces.tui.completion._list_models_sync",
                 side_effect=OSError("Connection refused"),
@@ -651,7 +650,6 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
         repl_mock._rag_ctx = None
         repl_mock.runtime.yolo_mode = False
-        repl_mock._get_commands.return_value = {}
 
         app = OllamaAgentApp(repl_mock)
         async with app.run_test():
@@ -729,7 +727,6 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
         repl_mock._rag_ctx = None
         repl_mock.runtime.yolo_mode = False
-        repl_mock._get_commands.return_value = {}
 
         app = OllamaAgentApp(repl_mock)
         async with app.run_test() as pilot:
@@ -774,7 +771,6 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.yolo_mode = False
         repl_mock.runtime.reload = AsyncMock()
         repl_mock._rag_ctx = None
-        repl_mock._get_commands.return_value = {}
 
         task = MagicMock(title="My Task", model="task-model", reasoning_effort="high", prompt="Do things")
         task.render.return_value = "Do things"
@@ -810,7 +806,6 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.yolo_mode = False
         repl_mock.runtime.reload = AsyncMock()
         repl_mock._rag_ctx = None
-        repl_mock._get_commands.return_value = {}
 
         task = MagicMock(title="Param Task", model="task-model", reasoning_effort="high", prompt="P")
         task.render.return_value = "Rendered: file=src/app.py mode=strict"
@@ -834,7 +829,6 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.yolo_mode = False
         repl_mock.runtime.reload = AsyncMock()
         repl_mock._rag_ctx = None
-        repl_mock._get_commands.return_value = {}
 
         task = MagicMock(title="Param Task", model="task-model", reasoning_effort="high")
         repl_mock._task_ctx.resolve_task.return_value = ("param-task", task)
@@ -860,7 +854,6 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.yolo_mode = False
         repl_mock.runtime.reload = AsyncMock()
         repl_mock._rag_ctx = None
-        repl_mock._get_commands.return_value = {}
 
         task = MagicMock(title="Param Task", model="task-model", reasoning_effort="high")
         task.render.side_effect = ValueError("Missing required input: file")
@@ -885,7 +878,6 @@ class TestOllamaAgentApp(unittest.IsolatedAsyncioTestCase):
         repl_mock.runtime.settings.model.reasoning_effort = "medium"
         repl_mock._rag_ctx = None
         repl_mock.runtime.yolo_mode = False
-        repl_mock._get_commands.return_value = {}
 
         app = OllamaAgentApp(repl_mock)
         async with app.run_test() as pilot:
@@ -1268,7 +1260,7 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
             assert runtime_mock.thread_id != "abcd1234"
             assert len(chat_scroll.children) == 0
 
-    async def test_task_run_hitl_approval_save_settings_and_cancel_restores_settings(self) -> None:
+    async def test_task_run_hitl_approval_cancel_restores_settings(self) -> None:
         runtime_mock = make_mock_runtime()
         runtime_mock.settings = Settings()
         runtime_mock.settings.model.name = "base-model:latest"
@@ -1283,43 +1275,32 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
             interrupt_obj.value = {"action_requests": [{"name": "execute", "args": {"cmd": "deploy.sh"}}]}
             await renderer.handle_interrupt({"interrupts": [interrupt_obj]}, rt)  # type: ignore[attr-defined]
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            settings_file = Path(tmp_dir) / "settings.yaml"
-            save_settings(runtime_mock.settings, settings_file)
+        async with app.run_test() as pilot:
+            with patch("ollama_agent.interfaces.tui.app.stream_agent_events", side_effect=fake_stream_events):
+                await run_slash_command(app, "/task run deploy")
+                await pilot.pause()
 
-            async with app.run_test() as pilot:
-                with patch("ollama_agent.interfaces.tui.app.stream_agent_events", side_effect=fake_stream_events):
-                    await run_slash_command(app, "/task run deploy")
-                    await pilot.pause()
+            # Task override is active in runtime while paused at HITL approval
+            assert app._is_approval_pending
+            assert runtime_mock.settings.model.name == "task-model:70b"
+            assert runtime_mock.settings.model.reasoning_effort == "high"
 
-                # Task override is active in runtime while paused at HITL approval
-                assert app._is_approval_pending
-                assert runtime_mock.settings.model.name == "task-model:70b"
-                assert runtime_mock.settings.model.reasoning_effort == "high"
+            # Cancel approval via Escape -> restores runtime model/effort and calls cancel_approval once
+            with patch.object(app, "cancel_approval", wraps=app.cancel_approval) as spy_cancel:
+                app.action_cancel_generation()
+                await pilot.pause()
+                assert spy_cancel.call_count == 1
 
-                # Concurrent save_settings (e.g. /params set) must not persist temporary task model/effort
-                runtime_mock.settings.model.temperature = 0.4
-                save_settings(runtime_mock.settings, settings_file)
-                persisted = load_settings(settings_file)
-                assert persisted.model.name == "base-model:latest"
-                assert persisted.model.reasoning_effort == "low"
-                assert persisted.model.temperature == 0.4
-
-                # Cancel approval via Escape -> restores runtime model/effort and calls _begin_cancel_approval once
-                with patch.object(app, "_begin_cancel_approval", wraps=app._begin_cancel_approval) as spy_begin:
-                    app.action_cancel_generation()
-                    await pilot.pause()
-                    assert spy_begin.call_count == 1
-
-                assert not app._is_approval_pending
-                assert runtime_mock.settings.model.name == "base-model:latest"
-                assert runtime_mock.settings.model.reasoning_effort == "low"
+            assert not app._is_approval_pending
+            assert runtime_mock.settings.model.name == "base-model:latest"
+            assert runtime_mock.settings.model.reasoning_effort == "low"
 
     def test_model_autocomplete_negative_cache_and_background_refresh(self) -> None:
         mock_m1 = MagicMock(model="qwen3:8b", size=4 * 1024**3)
         mock_m2 = MagicMock(model="gemma4:26b", size=8 * 1024**3)
 
         # 1. Negative caching: connection error is cached so subsequent keystrokes don't re-fetch
+        _model_cache.clear()
         with patch(
             "ollama_agent.interfaces.tui.completion._list_models_sync",
             side_effect=OSError("Connection refused"),
@@ -1329,16 +1310,47 @@ class TestOllamaREPLUnit(unittest.IsolatedAsyncioTestCase):
             assert mock_fetch_err.call_count == 1
 
         # 2. Expired TTL returns cached value immediately and refreshes in background thread
+        _model_cache.clear()
         with patch(
             "ollama_agent.interfaces.tui.completion._list_models_sync",
             return_value=[mock_m2],
-        ) as mock_fetch_refresh:
-            key = ("http://localhost:11434", mock_fetch_refresh)
+        ):
+            key = "http://localhost:11434"
             _model_cache[key] = (time.monotonic() - 20.0, [mock_m1])
-            immediate = _get_cached_models("http://localhost:11434")
+            immediate = _get_cached_models(key)
             assert immediate == [mock_m1]
             for _ in range(20):
                 if _model_cache[key][1] == [mock_m2]:
                     break
                 time.sleep(0.005)
             assert _model_cache[key][1] == [mock_m2]
+
+    @patch("ollama.Client")
+    def test_list_models_sync(self, mock_client_cls: MagicMock) -> None:
+        mock_client = MagicMock()
+        mock_resp = MagicMock(models=[MagicMock(model="gemma4:26b"), MagicMock(model="qwen3:32b")])
+        mock_client.list.return_value = mock_resp
+        mock_client_cls.return_value = mock_client
+
+        models = _list_models_sync("http://localhost:11434")
+        assert len(models) == 2
+        assert models[0].model == "gemma4:26b"
+        assert models[1].model == "qwen3:32b"
+
+    def test_effort_slash_completions(self) -> None:
+        runtime = MagicMock()
+        runtime.model.show_info = MagicMock(thinking={"values": ["low", "high", "max"], "default": "max"})
+        repl = OllamaREPL(runtime=runtime)
+        app = OllamaAgentApp(repl)
+
+        comps = slash_completions("/effort ", app.repl, list(app._prompt_queue))
+        comp_map = {cmd: text.plain for cmd, text in comps}
+
+        assert "/effort default" in comp_map
+        assert "(model default)" in comp_map["/effort default"]
+
+        assert "/effort max" in comp_map
+        assert "(default)" in comp_map["/effort max"]
+
+        assert "/effort low" in comp_map
+        assert "/effort high" in comp_map

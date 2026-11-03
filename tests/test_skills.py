@@ -27,16 +27,13 @@ class TestSkillsManager(unittest.TestCase):
 
     def test_parse_frontmatter_valid(self) -> None:
         text = "---\nname: PDF Reader\ndescription: Reads PDF documents\n---\n\n# Instructions\nFollow these steps."
-        meta, body = _parse_frontmatter(text)
+        meta = _parse_frontmatter(text)
         assert meta.get("name") == "PDF Reader"
         assert meta.get("description") == "Reads PDF documents"
-        assert "# Instructions" in body
 
     def test_parse_frontmatter_without_frontmatter(self) -> None:
         text = "# Plain Markdown\nNo frontmatter here."
-        meta, body = _parse_frontmatter(text)
-        assert meta == {}
-        assert body == text
+        assert _parse_frontmatter(text) == {}
 
     def test_parse_frontmatter_invalid_yaml_raises(self) -> None:
         text = "---\nname: [unclosed\n---\nbody"
@@ -50,9 +47,8 @@ class TestSkillsManager(unittest.TestCase):
 
     def test_parse_frontmatter_closing_delimiter_requires_line_start(self) -> None:
         text = "---\nname: X\ndescription: uses --- as separator\n---\nbody"
-        meta, body = _parse_frontmatter(text)
+        meta = _parse_frontmatter(text)
         assert meta["description"] == "uses --- as separator"
-        assert body == "body"
 
     def test_create_and_get_skill(self) -> None:
         created_id = self.mgr.create(
@@ -64,7 +60,6 @@ class TestSkillsManager(unittest.TestCase):
         assert created_id == "git-helper"
 
         loaded = self.mgr.get("git-helper")
-        assert loaded is not None
         assert loaded is not None
         assert loaded.name == "Git Helper"
         assert loaded.description == "Assists with git commands"
@@ -129,7 +124,6 @@ class TestSkillsManager(unittest.TestCase):
         )
         loaded = self.mgr.get("custom-skill")
         assert loaded is not None
-        assert loaded is not None
         assert loaded.name == "Lowercase Skill"
 
     def test_builtin_skills_present_and_valid(self) -> None:
@@ -139,13 +133,11 @@ class TestSkillsManager(unittest.TestCase):
 
         sc = _read_skill(BUILTIN_SKILLS_DIR / "skill-creator")
         assert sc is not None
-        assert sc is not None
         assert sc.name == "skill-creator"
         assert len(sc.description) > 0
         assert "SKILL.md" in sc.content
 
         tc = _read_skill(BUILTIN_SKILLS_DIR / "task-creator")
-        assert tc is not None
         assert tc is not None
         assert tc.name == "task-creator"
         assert len(tc.description) > 0
@@ -153,10 +145,20 @@ class TestSkillsManager(unittest.TestCase):
 
         mc = _read_skill(BUILTIN_SKILLS_DIR / "mcp-configurator")
         assert mc is not None
-        assert mc is not None
         assert mc.name == "mcp-configurator"
         assert len(mc.description) > 0
         assert "mcp.json" in mc.content
+
+    def test_broken_skill_does_not_break_listing(self) -> None:
+        (self.skills_dir / "broken").mkdir(parents=True)
+        (self.skills_dir / "broken" / "SKILL.md").write_text("no frontmatter here", encoding="utf-8")
+        (self.skills_dir / "good").mkdir()
+        (self.skills_dir / "good" / "SKILL.md").write_text(
+            "---\nname: Good\ndescription: d\n---\nbody\n", encoding="utf-8"
+        )
+        names = [sid for sid, _ in self.mgr.list_all()]
+        assert "good" in names
+        assert "broken" not in names
 
     def test_builtin_skills_loading_and_override(self) -> None:
         mgr_with_builtin = SkillManager(self.skills_dir, builtin_skills_dir=BUILTIN_SKILLS_DIR)

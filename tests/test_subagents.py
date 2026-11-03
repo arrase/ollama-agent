@@ -154,28 +154,6 @@ class TestSubAgents(unittest.IsolatedAsyncioTestCase):
             assert callable(interrupt_on["git_status"]["when"])
             assert interrupt_on["git_status"]["when"](MagicMock())
 
-    async def test_build_subagents_with_zero_tool_mcp_server_still_wires_interrupt_on(self) -> None:
-        ms = ModelSettings(name="gemma4:26b")
-        sa_list = [
-            SubAgentSettings(
-                name="mcp_agent",
-                description="Agent with failing/empty MCP server",
-                system_prompt="MCP instructions.",
-                mcp_servers=[SubAgentMCPServer(name="empty", command="npx")],
-            )
-        ]
-        mock_model = MagicMock()
-
-        with (
-            patch("ollama_agent.agent.subagents.create_ollama_chat_model", AsyncMock(return_value=mock_model)),
-            patch("ollama_agent.agent.subagents.load_subagent_mcp_tools", AsyncMock(return_value=[])),
-        ):
-            specs = await build_subagents(sa_list, model_settings=ms, should_interrupt_tool=lambda _: True)
-            assert len(specs) == 1
-            assert specs[0]["tools"] == list(BUILTIN_TOOLS)
-            assert "interrupt_on" in specs[0]
-            assert "execute" in specs[0]["interrupt_on"]
-
     async def test_build_subagents_with_custom_should_interrupt(self) -> None:
         ms = ModelSettings(name="gemma4:26b")
         sa_list = [

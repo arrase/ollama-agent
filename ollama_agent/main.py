@@ -15,7 +15,6 @@ from .agent.builtin_tools import set_tool_timeout
 from .core import (
     ModelCapabilityError,
     ModelContextWindowError,
-    OllamaVersionError,
     check_ollama_version,
     validate_reasoning_effort,
 )
@@ -126,7 +125,7 @@ def main() -> None:
         asyncio.run(repl.run())
     except KeyboardInterrupt:
         raise SystemExit(130) from None
-    except (ModelCapabilityError, ModelContextWindowError, OllamaVersionError) as exc:
+    except (ModelCapabilityError, ModelContextWindowError) as exc:
         console.print(f"[red]{escape(_('Error: {exc}', exc=exc))}[/red]")
         raise SystemExit(1) from None
     except SystemExit:

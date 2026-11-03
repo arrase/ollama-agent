@@ -44,11 +44,7 @@ def connect_history(db_path: Path, *, read_only: bool = True) -> Iterator[sqlite
 
 def format_iso_timestamp(ts: str) -> str:
     """Format ISO timestamp into a human-readable UTC string (YYYY-MM-DD HH:MM UTC)."""
-    try:
-        dt = datetime.fromisoformat(ts)
-    except ValueError as exc:
-        # A blob written by another serde/version must not escape as a raw ValueError.
-        raise HistoryError(_("Malformed timestamp in history database: {ts}", ts=ts)) from exc
+    dt = datetime.fromisoformat(ts)
     if dt.tzinfo is not None:
         dt = dt.astimezone(UTC)
     return dt.strftime("%Y-%m-%d %H:%M UTC")
@@ -58,9 +54,6 @@ def _unwrap_messages(raw: object) -> tuple[list[Any], bool]:
     """Unwrap deserialized message write payload and detect Overwrite."""
     if isinstance(raw, Overwrite):
         val = raw.value
-        return (val if isinstance(val, list) else [val]), True
-    if isinstance(raw, dict) and "__overwrite__" in raw:
-        val = raw["__overwrite__"]
         return (val if isinstance(val, list) else [val]), True
     return (raw if isinstance(raw, list) else [raw]), False
 
@@ -114,18 +107,6 @@ def _read_session_timestamps(cursor: sqlite3.Cursor) -> list[tuple[str, str]]:
         "ORDER BY rowid ASC"
     )
     return [(tid, _deserialize_checkpoint_ts(typ, chk)) for tid, typ, chk in cursor.fetchall()]
-
-
-def load_session_timestamps(db_path: Path = HISTORY_DB_PATH) -> list[tuple[str, str]]:
-    """Return ``(thread_id, formatted_ts)`` pairs ordered chronologically."""
-    if not db_path.exists():
-        return []
-
-    try:
-        with connect_history(db_path) as conn:
-            return _read_session_timestamps(conn.cursor())
-    except (sqlite3.Error, OSError, ValueError) as e:
-        raise HistoryError(_(_READ_DB_ERR_MSG, db_path=db_path, e=e)) from e
 
 
 def _read_history_messages(cursor: sqlite3.Cursor, exclude_thread_id: str) -> defaultdict[str, list[Any]]:
@@ -280,16 +261,3 @@ def format_past_conversations_context(results: list[dict[str, Any]]) -> str:
         lines.append("")
 
     return "\n".join(lines).strip()
-
-
-__all__ = [
-    "HISTORY_DB_PATH",
-    "HistoryError",
-    "connect_history",
-    "format_iso_timestamp",
-    "format_past_conversations_context",
-    "load_past_conversations",
-    "load_past_user_prompts",
-    "load_session_timestamps",
-    "search_past_conversations_in_db",
-]

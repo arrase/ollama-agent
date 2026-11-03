@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ollama-agent"
-version = "1.0.2"
+version = "1.0.3"
 description = "AI agent to interact with local language models through Ollama"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -94,8 +94,6 @@ allow-star-arg-any = true
 "tests/**" = ["S101", "SLF001", "PLR2004", "PT011"]
 # TUI submodules share package-internal _-prefixed state and cross-reference OllamaAgentApp/OllamaREPL.
 "ollama_agent/interfaces/tui/**" = ["SLF001", "ANN401"]
-# Optional no-op hooks that subclasses may override.
-"ollama_agent/streaming/base.py" = ["B027"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

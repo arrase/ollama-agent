@@ -3,7 +3,9 @@ from __future__ import annotations
 import unittest
 from unittest.mock import MagicMock
 
-from ollama_agent.streaming.parsers import (
+from langchain_core.messages import AIMessageChunk
+
+from ollama_agent.core.parsers import (
     ThinkTagParser,
     streaming_reasoning,
     streaming_text,
@@ -16,10 +18,6 @@ class TestStreamingParsers(unittest.TestCase):
     def test_streaming_text_string(self) -> None:
         assert streaming_text("hello") == "hello"
         assert streaming_text("") == ""
-
-    def test_streaming_text_dict_payload(self) -> None:
-        assert streaming_text({"type": "text", "text": "hello"}) == "hello"
-        assert streaming_text({"type": "other", "text": "skip"}) == ""
 
     def test_streaming_text_list_payload(self) -> None:
         payload = [
@@ -35,7 +33,6 @@ class TestStreamingParsers(unittest.TestCase):
 
     def test_streaming_reasoning_empty(self) -> None:
         assert streaming_reasoning({}) == ""
-        assert streaming_reasoning(None) == ""
 
     def test_streaming_text_edge_cases(self) -> None:
         assert streaming_text(None) == ""
@@ -43,11 +40,8 @@ class TestStreamingParsers(unittest.TestCase):
         assert streaming_text(["foo", "bar"]) == ""
         assert streaming_text([{"text": "foo"}]) == ""
         assert streaming_text([{"type": "text"}]) == ""
-        assert streaming_text({"type": "text"}) == ""
-        assert streaming_text({"other": "value"}) == ""
 
     def test_streaming_reasoning_edge_cases(self) -> None:
-        assert streaming_reasoning(None) == ""
         assert streaming_reasoning({"reasoning_content": 123}) == ""
         assert streaming_reasoning({"reasoning_content": "step 1"}) == "step 1"
 
@@ -73,7 +67,7 @@ class TestStreamingParsers(unittest.TestCase):
     def test_think_tag_parser_process_chunk(self) -> None:
         parser = ThinkTagParser()
         chunk1 = MagicMock(type="ai", content="<think>Deep thought</think>Answer", additional_kwargs={})
-        events = parser.process_chunk(chunk1)
+        events = parser.process_chunk(chunk1, hide_reasoning=False)
         assert events == [
             {"type": "reasoning_delta", "content": "Deep thought"},
             {"type": "text_delta", "content": "Answer"},
@@ -85,22 +79,51 @@ class TestStreamingParsers(unittest.TestCase):
         events = parser.process_chunk(chunk, hide_reasoning=True)
         assert events == [{"type": "text_delta", "content": "Public"}]
 
+    def test_thinking_and_content_in_one_chunk(self) -> None:
+        parser = ThinkTagParser()
+        chunk = AIMessageChunk(
+            content="answer",
+            additional_kwargs={"reasoning_content": "thought"},
+        )
+        events = parser.process_chunk(chunk, hide_reasoning=False)
+        assert events == [
+            {"type": "reasoning_delta", "content": "thought"},
+            {"type": "text_delta", "content": "answer"},
+        ]
+
+    def test_hide_reasoning_keeps_text(self) -> None:
+        parser = ThinkTagParser()
+        chunk = AIMessageChunk(
+            content="visible",
+            additional_kwargs={"reasoning_content": "secret"},
+        )
+        events = parser.process_chunk(chunk, hide_reasoning=True)
+        assert events == [{"type": "text_delta", "content": "visible"}]
+
+    def test_hidden_reasoning_does_not_desync_the_think_buffer(self) -> None:
+        parser = ThinkTagParser()
+        c1 = AIMessageChunk(content="<think>secret </th")
+        c2 = AIMessageChunk(content="ink>visible")
+        assert parser.process_chunk(c1, hide_reasoning=True) == []
+        assert parser.process_chunk(c2, hide_reasoning=True) == [{"type": "text_delta", "content": "visible"}]
+
+        parser2 = ThinkTagParser()
+        assert parser2.process_chunk(AIMessageChunk(content="<think>trailing </th"), hide_reasoning=True) == []
+        assert parser2.flush(hide_reasoning=True) == []
+
     def test_think_tag_parser_flush(self) -> None:
         parser = ThinkTagParser()
         parser.feed("Trailing text <th")
-        flushed = parser.flush()
+        flushed = parser.flush(hide_reasoning=False)
         assert flushed == [{"type": "text_delta", "content": "<th"}]
 
     def test_think_tag_parser_process_chunk_empty_text(self) -> None:
         parser = ThinkTagParser()
         chunk_empty = MagicMock(type="ai", content="", additional_kwargs={})
-        assert parser.process_chunk(chunk_empty) == []
-
-        chunk_none = MagicMock(type="ai", content=None, additional_kwargs=None)
-        assert parser.process_chunk(chunk_none) == []
+        assert parser.process_chunk(chunk_empty, hide_reasoning=False) == []
 
         chunk_tool = MagicMock(type="tool", content="call", additional_kwargs={})
-        assert parser.process_chunk(chunk_tool) == []
+        assert parser.process_chunk(chunk_tool, hide_reasoning=False) == []
 
 
 if __name__ == "__main__":

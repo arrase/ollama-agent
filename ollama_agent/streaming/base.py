@@ -25,15 +25,19 @@ class StreamingRenderer(ABC):
         if handler is not None:
             handler(event)
 
+    @abstractmethod
     def on_text_delta(self, event: dict[str, Any]) -> None:
         """Handle a text delta event."""
 
+    @abstractmethod
     def on_reasoning_delta(self, event: dict[str, Any]) -> None:
         """Handle a reasoning delta event."""
 
+    @abstractmethod
     def on_tool_call(self, event: dict[str, Any]) -> None:
         """Handle a tool call event."""
 
+    @abstractmethod
     def on_tool_output(self, event: dict[str, Any]) -> None:
         """Handle a tool output event."""
 
@@ -45,6 +49,7 @@ class StreamingRenderer(ABC):
     def on_warning(self, event: dict[str, Any]) -> None:
         """Handle a warning event."""
 
+    @abstractmethod
     async def handle_interrupt(self, event: dict[str, Any], runtime: AgentRuntime) -> list[dict[str, Any]] | None:
         """Handle an interrupt event. Returning None aborts the run."""
 

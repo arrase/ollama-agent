@@ -21,10 +21,6 @@ class ContextLimitExceededError(PromptProcessingError):
     """Raised when context limits are exceeded."""
 
 
-class FileTooLargeError(PromptProcessingError):
-    """Raised when a single referenced file exceeds maximum allowed size."""
-
-
 class ResolvedContext(NamedTuple):
     """Context data resolved from files or directories."""
 
@@ -72,10 +68,10 @@ def is_binary_file(file_path: Path) -> bool:
 
 
 def _check_file_size(file_path: Path, max_file_size: int) -> int:
-    """Return file size in bytes, raising FileTooLargeError if it exceeds max_file_size."""
+    """Return file size in bytes, raising PromptProcessingError if it exceeds max_file_size."""
     size = file_path.stat().st_size
     if size > max_file_size:
-        raise FileTooLargeError(
+        raise PromptProcessingError(
             _(
                 "File too large: {file_path} ({file_size} bytes, limit is {max_file_size} bytes)",
                 file_path=file_path,
@@ -86,19 +82,15 @@ def _check_file_size(file_path: Path, max_file_size: int) -> int:
     return size
 
 
-def read_file_content(file_path: Path, max_file_size: int = 1024 * 1024) -> str:
-    """Read file content as text, enforcing file type and size limit."""
-    if not file_path.is_file():
-        raise PromptProcessingError(_("Path is not a file: {file_path}", file_path=file_path))
-    _check_file_size(file_path, max_file_size)
+def read_file_content(file_path: Path) -> str:
+    """Read file content as text, rejecting binary files."""
     if is_binary_file(file_path):
         raise PromptProcessingError(_("Cannot read binary file as text: {file_path}", file_path=file_path))
     return file_path.read_text(encoding="utf-8", errors="replace")
 
 
-def read_binary_file_b64(file_path: Path, max_file_size: int = 1024 * 1024) -> str:
+def read_binary_file_b64(file_path: Path) -> str:
     """Read binary file content and return as base64 string."""
-    _check_file_size(file_path, max_file_size)
     return base64.b64encode(file_path.read_bytes()).decode("utf-8")
 
 
@@ -119,11 +111,11 @@ def _load_validated_file(
         )
     kind = classify_multimodal_file(file_path)
     if kind:
-        b64_data = read_binary_file_b64(file_path, max_file_size)
+        b64_data = read_binary_file_b64(file_path)
         mime = get_file_type(file_path) or _MIME_FALLBACKS[kind]
         attachments.append({"type": kind, "base64": b64_data, "mime_type": mime})
         return size
-    text_contents[file_path] = read_file_content(file_path, max_file_size)
+    text_contents[file_path] = read_file_content(file_path)
     return size
 
 
@@ -226,9 +218,6 @@ def resolve_context_files(
     allow_traversal: bool = True,
 ) -> ResolvedContext:
     """Resolve a target file or directory into context data."""
-    if not target_path.exists():
-        raise PromptProcessingError(_("Path is neither a file nor a directory: {file_path}", file_path=target_path))
-
     seen = seen_files if seen_files is not None else set()
     if target_path.is_file():
         return _resolve_single_file(
@@ -383,18 +372,3 @@ def process_prompt_mentions(
         prompt = f"{prompt}\n\n--- Attached Context ---\n" + "\n\n".join(blocks) + "\n--- End of Attached Context ---"
 
     return prompt, attachments, warnings
-
-
-__all__ = [
-    "ContextLimitExceededError",
-    "FileTooLargeError",
-    "PromptProcessingError",
-    "ResolvedContext",
-    "classify_multimodal_file",
-    "get_file_type",
-    "is_binary_file",
-    "process_prompt_mentions",
-    "read_binary_file_b64",
-    "read_file_content",
-    "resolve_context_files",
-]

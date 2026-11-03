@@ -14,14 +14,12 @@ from .commands import (
 from .manager import (
     RAGError,
     RAGManager,
-    RAGNotLoadedError,
 )
 
 __all__ = [
     "RAGContext",
     "RAGError",
     "RAGManager",
-    "RAGNotLoadedError",
     "add_rag_directory",
     "add_rag_file",
     "create_rag_database",

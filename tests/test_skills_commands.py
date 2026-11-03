@@ -9,11 +9,8 @@ import pytest
 from rich.console import Console
 
 from ollama_agent.skills.commands import (
-    AmbiguousSkillError,
     SkillError,
-    SkillNotFoundError,
     SkillsContext,
-    ValidationError,
     create_skill,
     delete_skill,
     list_skills,
@@ -36,11 +33,11 @@ class TestSkillsCommands(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_require_validation(self) -> None:
-        with pytest.raises(ValidationError):
+        with pytest.raises(SkillError):
             create_skill(self.ctx, "s1", name="   ", description="d", instructions="i")
-        with pytest.raises(ValidationError):
+        with pytest.raises(SkillError):
             create_skill(self.ctx, "s1", name="n", description="   ", instructions="i")
-        with pytest.raises(ValidationError):
+        with pytest.raises(SkillError):
             create_skill(self.ctx, "s1", name="n", description="d", instructions="   ")
 
     def test_create_and_show_skill(self) -> None:
@@ -52,7 +49,6 @@ class TestSkillsCommands(unittest.TestCase):
             instructions="Run git status",
         )
         skill = self.mgr.get("git-helper")
-        assert skill is not None
         assert skill is not None
         assert skill.name == "Git Helper"
 
@@ -91,16 +87,16 @@ class TestSkillsCommands(unittest.TestCase):
         assert "servers and tools" in out
 
     def test_resolve_skill_errors(self) -> None:
-        with pytest.raises(SkillNotFoundError):
+        with pytest.raises(SkillError):
             self.ctx.resolve_skill("nonexistent")
 
-        with pytest.raises(ValidationError):
+        with pytest.raises(SkillError):
             self.ctx.resolve_skill("invalid/name")
 
         create_skill(self.ctx, "test-1", name="T1", description="D1", instructions="I1")
         create_skill(self.ctx, "test-2", name="T2", description="D2", instructions="I2")
 
-        with pytest.raises(AmbiguousSkillError):
+        with pytest.raises(SkillError):
             self.ctx.resolve_skill("test")
 
     def test_delete_builtin_skill_fails(self) -> None:

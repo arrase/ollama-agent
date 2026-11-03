@@ -12,14 +12,6 @@ from ..i18n import _
 from .manager import RAGError, RAGManager
 
 
-class RAGDatabaseNotFoundError(RAGError):
-    """Raised when a RAG database cannot be resolved by name/prefix."""
-
-
-class AmbiguousRAGDatabaseError(RAGError):
-    """Raised when a database prefix matches multiple databases."""
-
-
 @dataclass
 class RAGContext:
     """Holds shared resources for RAG commands."""
@@ -29,14 +21,13 @@ class RAGContext:
 
     def resolve_database(self, name: str) -> str:
         """Find a database by name/prefix or raise RAGError."""
-        target = require_text(name, _("Database name"), RAGDatabaseNotFoundError)
+        target = require_text(name, _("Database name"), RAGError)
         names = self.rag_manager.list_database_names()
         return resolve_unique_match(
             [(n, n) for n in names if n.startswith(target)],
             target,
             label=_("Database"),
-            not_found_error=RAGDatabaseNotFoundError,
-            ambiguous_error=AmbiguousRAGDatabaseError,
+            error=RAGError,
         )[0]
 
 

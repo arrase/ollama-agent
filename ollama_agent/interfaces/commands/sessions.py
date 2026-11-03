@@ -21,11 +21,9 @@ from ...agent.episodic_memory import (
     search_past_conversations_in_db,
 )
 from ...core.common import extract_text
-from ...core.resource_manager import resolve_unique_match
 from ...i18n import _
 from ...settings.paths import HISTORY_DB_PATH
 
-_SESSION_NOT_FOUND_MSG = "Session '{target_id}' not found."
 _MAX_SNIPPET_LEN = 120
 
 
@@ -40,14 +38,11 @@ def is_current(thread_id: str, current_thread_id: str) -> bool:
     )
 
 
-def new_session(console: Console) -> str:
-    """Start a new session by generating a new thread ID.
-
-    Returns the new thread ID. The caller is responsible for assigning it
-    to the runtime.
-    """
+def new_session(runtime: AgentRuntime) -> str:
+    """Start a new session by generating and assigning a new thread ID."""
     new_id = str(uuid.uuid4())[:8]
-    console.print(f"[green]✓ {_('New session started: {new_id}', new_id=new_id)}[/green]")
+    runtime.thread_id = new_id
+    runtime.last_context_tokens = 0
     return new_id
 
 
@@ -80,12 +75,12 @@ def list_sessions(
     console: Console,
     db_path: Path = HISTORY_DB_PATH,
     current_thread_id: str = "",
-) -> list[dict[str, Any]]:
+) -> None:
     """List available chat sessions with step counts, timestamps, and current session indicator."""
     sessions = get_available_sessions(db_path)
     if not sessions:
         console.print(f"[yellow]{_('No saved sessions found in history.')}[/yellow]")
-        return []
+        return
 
     table = Table(title=_("Saved Sessions"), box=box.ROUNDED, header_style="bold cyan")
     table.add_column(_("Session ID"), style="bold", no_wrap=True)
@@ -103,33 +98,6 @@ def list_sessions(
 
     console.print(table)
     console.print(f"[dim]{_('Use /session resume <id> to switch to a previous session.')}[/dim]")
-    return sessions
-
-
-def _match_session_pairs(target_id: str, available_sessions: list[dict[str, Any]]) -> list[tuple[str, dict[str, Any]]]:
-    clean_id = target_id.strip()
-    if not clean_id:
-        return []
-    return [(s["thread_id"], s) for s in available_sessions if s["thread_id"].startswith(clean_id)]
-
-
-def resolve_session_id(target_id: str, available_sessions: list[dict[str, Any]]) -> str | None:
-    """Resolve target_id by exact match or unambiguous prefix."""
-    clean_id = target_id.strip()
-    if not clean_id:
-        return None
-    try:
-        resolved, _session = resolve_unique_match(
-            _match_session_pairs(clean_id, available_sessions),
-            clean_id,
-            label="Session",
-            not_found_error=LookupError,
-            ambiguous_error=ValueError,
-        )
-    except (LookupError, ValueError):
-        return None
-    else:
-        return resolved
 
 
 def _resolve_or_report_session(
@@ -139,54 +107,37 @@ def _resolve_or_report_session(
 ) -> str | None:
     """Resolve *target_id* against *sessions* or print an error for missing/ambiguous IDs."""
     clean_id = target_id.strip()
-    matches = _match_session_pairs(clean_id, sessions)
-    if not clean_id:
-        not_found_msg = _(_SESSION_NOT_FOUND_MSG, target_id=target_id)
+    matches: list[str] = [str(s["thread_id"]) for s in sessions if clean_id and s["thread_id"].startswith(clean_id)]
+    if not matches:
+        not_found_msg = _("Session '{target_id}' not found.", target_id=target_id)
         console.print(f"[red]{escape(not_found_msg)}[/red]")
         return None
-    try:
-        resolved, _session = resolve_unique_match(
-            matches,
-            clean_id,
-            label="Session",
-            not_found_error=LookupError,
-            ambiguous_error=ValueError,
-        )
-    except ValueError:
-        matches_str = ", ".join(tid for tid, _ in matches[:5])
-        ambiguous_msg = _(
-            "Ambiguous session ID '{target_id}'. Matches: {matches}",
-            target_id=target_id,
-            matches=matches_str,
-        )
-        console.print(f"[red]{escape(ambiguous_msg)}[/red]")
-    except LookupError:
-        not_found_msg = _(_SESSION_NOT_FOUND_MSG, target_id=target_id)
-        console.print(f"[red]{escape(not_found_msg)}[/red]")
-    else:
-        return resolved
+    if clean_id in matches:
+        return clean_id
+    if len(matches) == 1:
+        return matches[0]
+    matches_str = ", ".join(matches[:5])
+    ambiguous_msg = _(
+        "Ambiguous session ID '{target_id}'. Matches: {matches}",
+        target_id=target_id,
+        matches=matches_str,
+    )
+    console.print(f"[red]{escape(ambiguous_msg)}[/red]")
     return None
 
 
 def resume_session(
     console: Console,
     target_id: str,
-    available_sessions: list[dict[str, Any]] | None = None,
     db_path: Path = HISTORY_DB_PATH,
 ) -> str | None:
     """Resume a previous session by thread ID or prefix."""
-    sessions = available_sessions if available_sessions is not None else get_available_sessions(db_path)
+    sessions = get_available_sessions(db_path)
     if not sessions:
         console.print(f"[red]{_('No sessions available to resume.')}[/red]")
         return None
 
-    resolved = _resolve_or_report_session(console, target_id, sessions)
-    if resolved is None:
-        return None
-
-    switched_msg = _("Switched to session: {resolved}", resolved=f"{resolved[:8]} ({resolved})")
-    console.print(f"[green]✓ {escape(switched_msg)}[/green]")
-    return resolved
+    return _resolve_or_report_session(console, target_id, sessions)
 
 
 def delete_session(
@@ -260,15 +211,7 @@ async def export_session(
 ) -> Path | None:
     """Export conversation messages from a session to a Markdown file."""
     sessions = get_available_sessions(db_path)
-    resolved = resolve_session_id(target_id, sessions)
-    if (
-        resolved is None
-        and runtime.stealth_mode
-        and (not target_id.strip() or is_current(target_id.strip(), runtime.thread_id))
-    ):
-        resolved = runtime.thread_id
-    if resolved is None:
-        resolved = _resolve_or_report_session(console, target_id, sessions)
+    resolved = _resolve_or_report_session(console, target_id, sessions)
     if resolved is None:
         return None
 
@@ -303,24 +246,23 @@ def search_sessions(
     query: str,
     db_path: Path = HISTORY_DB_PATH,
     current_thread_id: str = "",
-    limit: int = 10,
-) -> list[dict[str, Any]]:
+) -> None:
     """Search chat sessions matching query keywords and display formatted results."""
     clean_query = query.strip()
     if not clean_query:
         console.print(f"[yellow]{_('Please provide a search query.')}[/yellow]")
-        return []
+        return
 
     results = search_past_conversations_in_db(
         query=clean_query,
         db_path=db_path,
         exclude_thread_id="",
-        limit=limit,
+        limit=10,
     )
     if not results:
         no_res = _("No sessions found matching '{query}'.", query=clean_query)
         console.print(f"[yellow]{escape(no_res)}[/yellow]")
-        return []
+        return
 
     table_title = escape(_("Search Results for '{query}'", query=clean_query))
     table = Table(title=table_title, box=box.ROUNDED, header_style="bold cyan")
@@ -346,4 +288,3 @@ def search_sessions(
 
     console.print(table)
     console.print(f"[dim]{_('Use /session resume <id> to switch to a matched session.')}[/dim]")
-    return results

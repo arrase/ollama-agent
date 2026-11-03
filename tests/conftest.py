@@ -22,7 +22,7 @@ import pytest  # noqa: E402
 from rich.console import Console  # noqa: E402
 
 from ollama_agent.agent.builtin_tools import get_tool_timeout, set_tool_timeout  # noqa: E402
-from ollama_agent.i18n import get_locale, set_locale  # noqa: E402
+from ollama_agent.i18n import set_locale  # noqa: E402
 from ollama_agent.interfaces.commands.dispatch import REPLEnvironment  # noqa: E402
 from ollama_agent.interfaces.tui import OllamaREPL  # noqa: E402
 
@@ -39,10 +39,10 @@ def _reset_global_state() -> Iterator[None]:
     ``set_tool_timeout`` and the active locale are module-level state; without this
     a test that changes them silently affects every test that runs after it.
     """
-    timeout, locale = get_tool_timeout(), get_locale()
+    timeout = get_tool_timeout()
     yield
     set_tool_timeout(timeout)
-    set_locale(locale)
+    set_locale("en")
 
 
 def make_mock_runtime(**overrides: Any) -> MagicMock:
@@ -79,7 +79,6 @@ def make_mock_repl(**overrides: Any) -> MagicMock:
     repl.runtime = make_mock_runtime()
     repl.console = recording_console()
     repl._rag_ctx = None
-    repl._get_commands.return_value = {}
     repl._handle_new_session.side_effect = lambda: OllamaREPL._handle_new_session(repl)
     repl._handle_queue_cmd.side_effect = lambda args: OllamaREPL._handle_queue_cmd(repl, args)
     repl._handle_queue_rm.side_effect = lambda queue, pos_str: OllamaREPL._handle_queue_rm(repl, queue, pos_str)

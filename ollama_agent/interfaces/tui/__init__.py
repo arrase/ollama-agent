@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from .app import OllamaAgentApp
 from .repl import OllamaREPL
 
-__all__ = ["OllamaAgentApp", "OllamaREPL"]
+__all__ = ["OllamaREPL"]

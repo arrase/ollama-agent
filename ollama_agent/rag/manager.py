@@ -82,20 +82,13 @@ SUPPORTED_RAG_EXTENSIONS: frozenset[str] = frozenset(
 # Bounds a single `add_directory` batch so pointing it at a virtualenv or a data dump
 # cannot embed an unbounded tree.
 MAX_INDEXED_FILES = 2000
+_EMBEDDING_BATCH_SIZE = 100
 
-_REQUIRED_PAYLOAD_KEYS: frozenset[str] = frozenset({"content", "source", "filename", "chunk_index"})
+_REQUIRED_PAYLOAD_KEYS: frozenset[str] = frozenset({"content", "filename"})
 
 
 class RAGError(RuntimeError):
     """Base exception for RAG operations."""
-
-
-class RAGNotLoadedError(RAGError):
-    """Raised when no RAG database is loaded."""
-
-
-class RAGDatabaseExistsError(RAGError):
-    """Raised when attempting to create a database that already exists."""
 
 
 class RAGManager:
@@ -132,7 +125,7 @@ class RAGManager:
     def _ensure_loaded(self) -> QdrantClient:
         """Ensure a database is loaded and return the client."""
         if self._client is None:
-            raise RAGNotLoadedError(_("No RAG database loaded. Use /rag load <name> first."))
+            raise RAGError(_("No RAG database loaded. Use /rag load <name> first."))
         return self._client
 
     def list_database_names(self) -> list[str]:
@@ -157,7 +150,6 @@ class RAGManager:
             dbs.append(
                 {
                     "name": path.name,
-                    "path": str(path),
                     "chunks": chunks,
                     "active": is_active,
                 }
@@ -170,7 +162,7 @@ class RAGManager:
         db_path = self._db_path(name)
 
         if db_path.exists():
-            raise RAGDatabaseExistsError(_("Database '{name}' already exists", name=name))
+            raise RAGError(_("Database '{name}' already exists", name=name))
 
         db_path.mkdir(parents=True, exist_ok=True)
 
@@ -211,7 +203,7 @@ class RAGManager:
         shutil.rmtree(db_path)
         logger.info("Deleted RAG database: %s", name)
 
-    def load_database(self, name: str) -> str:
+    def load_database(self, name: str) -> None:
         """Load a RAG database for use."""
         name = _validate_name(name)
         db_path = self._db_path(name)
@@ -227,7 +219,6 @@ class RAGManager:
             raise RAGError(_("Failed to load database '{name}': {e}", name=name, e=e)) from e
         self._current_db = name
         logger.info("Loaded RAG database: %s", name)
-        return name
 
     def unload(self) -> None:
         """Unload the current database."""
@@ -256,8 +247,6 @@ class RAGManager:
                     "content": chunk,
                     "source": source,
                     "filename": path.name,
-                    "chunk_index": i,
-                    "total_chunks": len(chunks),
                 },
             )
             for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=True))
@@ -293,11 +282,7 @@ class RAGManager:
             "chunks": len(chunks),
         }
 
-    async def add_directory(
-        self,
-        dir_path: str,
-        extensions: frozenset[str] = SUPPORTED_RAG_EXTENSIONS,
-    ) -> dict[str, Any]:
+    async def add_directory(self, dir_path: str) -> dict[str, Any]:
         """Add all files from a directory to the current RAG database."""
         client = self._ensure_loaded()
         path = Path(dir_path).expanduser().resolve()
@@ -312,7 +297,7 @@ class RAGManager:
         files = await asyncio.to_thread(lambda: [p for p in sorted(path.rglob("*")) if p.is_file()])
 
         for file_path in files:
-            if file_path.suffix.lower() not in extensions:
+            if file_path.suffix.lower() not in SUPPORTED_RAG_EXTENSIONS:
                 results["skipped"] += 1
                 continue
 
@@ -323,7 +308,7 @@ class RAGManager:
             # Isolate per-file failures: one bad file (or a transient embedder error)
             # must not abort the whole batch after a partial ingest.
             try:
-                content = await asyncio.to_thread(self._read_file, file_path, extensions)
+                content = await asyncio.to_thread(self._read_file, file_path)
                 if not content.strip():
                     results["skipped"] += 1
                     continue
@@ -382,20 +367,17 @@ class RAGManager:
             results.append(
                 {
                     "content": payload["content"],
-                    "source": payload["source"],
                     "filename": payload["filename"],
-                    "score": hit.score,
-                    "chunk_index": payload["chunk_index"],
                 }
             )
         return results
 
-    async def _get_embeddings(self, texts: list[str], batch_size: int = 100) -> list[list[float]]:
+    async def _get_embeddings(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a batch of texts using Ollama."""
         all_embeddings: list[list[float]] = []
         expected_dim = self.settings.embedding_dims
-        for i in range(0, len(texts), batch_size):
-            batch_texts = texts[i : i + batch_size]
+        for i in range(0, len(texts), _EMBEDDING_BATCH_SIZE):
+            batch_texts = texts[i : i + _EMBEDDING_BATCH_SIZE]
             try:
                 response = await self._embedder().embed(
                     model=self.settings.embedder_model,
@@ -454,13 +436,9 @@ class RAGManager:
         splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=overlap)
         return splitter.split_text(text)
 
-    def _read_file(
-        self,
-        path: Path,
-        allowed_extensions: frozenset[str] = SUPPORTED_RAG_EXTENSIONS,
-    ) -> str:
+    def _read_file(self, path: Path) -> str:
         """Read file content as UTF-8."""
-        if path.suffix.lower() not in allowed_extensions:
+        if path.suffix.lower() not in SUPPORTED_RAG_EXTENSIONS:
             raise RAGError(_("Unsupported file type: {file_path}", file_path=path))
         try:
             return path.read_text(encoding="utf-8")

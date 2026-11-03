@@ -5,7 +5,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
@@ -20,7 +20,6 @@ from ollama_agent.interfaces.commands.sessions import (
     is_current,
     list_sessions,
     new_session,
-    resolve_session_id,
     resume_session,
     search_sessions,
 )
@@ -84,9 +83,11 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         conn.close()
 
     def test_new_session(self) -> None:
-        console = Console(file=io.StringIO())
-        sid = new_session(console)
+        runtime = MagicMock(thread_id="old", last_context_tokens=100)
+        sid = new_session(runtime)
         assert len(sid) == 8
+        assert runtime.thread_id == sid
+        assert runtime.last_context_tokens == 0
 
     def test_get_available_sessions_empty_when_no_db(self) -> None:
         sessions = get_available_sessions(self.db_path)
@@ -106,10 +107,10 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         assert step_map["session-87654321"] == 1
 
         console = Console(file=io.StringIO(), record=True)
-        rendered_sessions = list_sessions(console, self.db_path, current_thread_id="session-12345678")
+        list_sessions(console, self.db_path, current_thread_id="session-12345678")
         out = console.export_text()
-        assert len(rendered_sessions) == 2
         assert "session-12345678" in out
+        assert "session-87654321" in out
         assert "current" in out
 
     def test_get_available_sessions_missing_timestamp(self) -> None:
@@ -128,35 +129,26 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         with pytest.raises(HistoryError):
             get_available_sessions(self.db_path)
 
-    def test_resolve_session_id(self) -> None:
-        available = [
-            {"thread_id": "abcdef123456"},
-            {"thread_id": "abcxyz987654"},
-            {"thread_id": "1234567890ab"},
-        ]
-        # Exact match
-        assert resolve_session_id("abcdef123456", available) == "abcdef123456"
-        # Unambiguous prefix
-        assert resolve_session_id("1234", available) == "1234567890ab"
-        # Ambiguous prefix
-        assert resolve_session_id("abc", available) is None
-        # Nonexistent
-        assert resolve_session_id("nonexistent", available) is None
-        # Empty
-        assert resolve_session_id("", available) is None
-
     def test_resume_session(self) -> None:
         self._init_sample_db()
         console = Console(file=io.StringIO(), record=True)
 
-        # Successful resume by prefix
+        # Successful resume by prefix and exact match
         res = resume_session(console, "session-1", db_path=self.db_path)
         assert res == "session-12345678"
-        assert "Switched to session" in console.export_text()
+        res_exact = resume_session(console, "session-87654321", db_path=self.db_path)
+        assert res_exact == "session-87654321"
 
-        # Nonexistent resume
+        # Ambiguous prefix
+        res_amb = resume_session(console, "session-", db_path=self.db_path)
+        assert res_amb is None
+        assert "Ambiguous session ID" in console.export_text()
+
+        # Nonexistent / empty resume
         res2 = resume_session(console, "missing-id", db_path=self.db_path)
         assert res2 is None
+        res_empty = resume_session(console, "", db_path=self.db_path)
+        assert res_empty is None
 
     def test_delete_session(self) -> None:
         self._init_sample_db()
@@ -206,13 +198,13 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         console = Console(file=io.StringIO(), record=True)
 
         # Empty query
-        res_empty = search_sessions(console, "", db_path=self.db_path)
-        assert res_empty == []
+        search_sessions(console, "", db_path=self.db_path)
         assert "Please provide a search query" in console.export_text()
 
         # No database
-        res_nodb = search_sessions(console, "python", db_path=self.db_path)
-        assert res_nodb == []
+        console_nodb = Console(file=io.StringIO(), record=True)
+        search_sessions(console_nodb, "python", db_path=self.db_path)
+        assert "No sessions found" in console_nodb.export_text()
 
         # Populated search
         self._init_sample_db()
@@ -242,8 +234,7 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         conn.close()
 
         console_search = Console(file=io.StringIO(), record=True)
-        results = search_sessions(console_search, "async", db_path=self.db_path)
-        assert len(results) == 1
+        search_sessions(console_search, "async", db_path=self.db_path)
         out = console_search.export_text()
         assert "session-" in out
         assert "async" in out.lower()
@@ -292,6 +283,21 @@ class TestSessionCommands(unittest.IsolatedAsyncioTestCase):
         res = await export_session(console_exp, runtime_mock, "session-", db_path=self.db_path)
         assert res is None
         assert "Ambiguous session ID" in console_exp.export_text()
+
+    async def test_uncreatable_parent_is_reported_not_raised(self) -> None:
+        console = Console(file=io.StringIO(), record=True)
+        session_id = "abc12345"
+        runtime = MagicMock(stealth_mode=False)
+        runtime.get_thread_messages = AsyncMock(return_value=[MagicMock(type="human", content="hi")])
+        # A path under an existing *file* cannot have its parent created.
+        blocker = Path(self.tmpdir.name) / "blocker"
+        blocker.write_text("x", encoding="utf-8")
+        target = str(blocker / "sub" / "out.md")
+        with patch("ollama_agent.interfaces.commands.sessions.get_available_sessions") as sessions:
+            sessions.return_value = [{"thread_id": session_id, "steps": 1, "timestamp": ""}]
+            result = await export_session(console, runtime, session_id, output_path=target)
+        assert result is None
+        assert "Failed to export" in console.export_text()
 
 
 if __name__ == "__main__":

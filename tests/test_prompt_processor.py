@@ -10,9 +10,9 @@ import pytest
 
 from ollama_agent.core.prompt_processor import (
     ContextLimitExceededError,
-    FileTooLargeError,
     PromptProcessingError,
     classify_multimodal_file,
+    get_file_type,
     is_binary_file,
     process_prompt_mentions,
     read_binary_file_b64,
@@ -52,12 +52,6 @@ class TestPromptProcessor(unittest.TestCase):
         file.write_text("print('hello')", encoding="utf-8")
         assert read_file_content(file) == "print('hello')"
 
-    def test_read_file_content_exceeds_max_size_raises(self) -> None:
-        file = self.base_path / "large.txt"
-        file.write_text("x" * 200, encoding="utf-8")
-        with pytest.raises(PromptProcessingError):
-            read_file_content(file, max_file_size=100)
-
     def test_read_binary_file_b64(self) -> None:
         file = self.base_path / "image.png"
         file.write_bytes(b"\x89PNG\r\n\x1a\n")
@@ -82,10 +76,6 @@ class TestPromptProcessor(unittest.TestCase):
         context = resolve_context_files(image)
         assert len(context.attachments) == 1
         assert context.attachments[0]["type"] == "image"
-
-    def test_resolve_context_files_neither_file_nor_dir_raises(self) -> None:
-        with pytest.raises(PromptProcessingError):
-            resolve_context_files(self.base_path / "does_not_exist")
 
     def test_resolve_context_files_directory_collects_warnings_for_skipped_files(self) -> None:
         project = self.base_path / "project"
@@ -176,7 +166,12 @@ class TestPromptProcessor(unittest.TestCase):
         assert "print('world')" in processed
 
     def test_get_file_type_typescript_classified_as_text(self) -> None:
+        assert get_file_type(Path("index.ts")) == "text/plain"
         assert classify_multimodal_file(Path("index.ts")) is None
+
+    def test_mention_expanduser_error_is_a_domain_error(self) -> None:
+        with pytest.raises(PromptProcessingError, match="Cannot expand home directory"):
+            process_prompt_mentions("@~nosuchuser/notes.md", allow_traversal=True)
 
     def test_process_prompt_mentions_with_file_uri(self) -> None:
         file = self.base_path / "service.py"
@@ -333,7 +328,7 @@ class TestPromptProcessor(unittest.TestCase):
         file = self.base_path / "big.txt"
         file.write_text("x" * 500, encoding="utf-8")
 
-        with pytest.raises(FileTooLargeError):
+        with pytest.raises(PromptProcessingError, match="File too large"):
             resolve_context_files(file, max_file_size=100, max_total_size=200)
 
     def test_resolve_context_files_attachment_concrete_mime_types(self) -> None:

@@ -333,7 +333,6 @@ def handle_subcommand(args: argparse.Namespace, settings: Settings) -> None:
     skills_ctx = SkillsContext(console=console, skill_manager=SkillManager())
     rag_ctx = RAGContext(console=console, rag_manager=RAGManager(settings.rag)) if args.command == "rag" else None
 
-    handler_key = (args.command, args.subcommand)
     handlers = build_cli_handlers(
         args,
         task_ctx=ctx,
@@ -341,24 +340,21 @@ def handle_subcommand(args: argparse.Namespace, settings: Settings) -> None:
         skills_ctx=skills_ctx,
         settings=settings,
     )
-    handler = handlers.get(handler_key)
-    if handler is None:
-        if rag_ctx is not None:
-            asyncio.run(rag_ctx.rag_manager.aclose())
-        message = _("Unknown command: {command} {subcommand}", command=args.command, subcommand=args.subcommand)
-        console.print(f"[red]{escape(message)}[/red]")
-        raise SystemExit(2)
+    handler = handlers[(args.command, args.subcommand)]
+
+    async def _run() -> object:
+        try:
+            res = handler()
+            return await res if inspect.iscoroutine(res) else res
+        finally:
+            if rag_ctx is not None:
+                await rag_ctx.rag_manager.aclose()
 
     try:
-        result = handler()
-        if inspect.iscoroutine(result):
-            result = asyncio.run(result)
+        result = asyncio.run(_run())
     except DOMAIN_ERRORS as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
         raise SystemExit(1) from exc
-    finally:
-        if rag_ctx is not None:
-            asyncio.run(rag_ctx.rag_manager.aclose())
 
     # Handlers that report a failure return a falsy value instead of raising, so the
     # exit status must reflect it (otherwise `session delete bogus` exits 0).

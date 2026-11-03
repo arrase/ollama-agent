@@ -8,11 +8,10 @@ from .commands import (
     list_skills,
     show_skill,
 )
-from .manager import SkillInfo, SkillManager
+from .manager import SkillManager
 
 __all__ = [
     "SkillError",
-    "SkillInfo",
     "SkillManager",
     "SkillsContext",
     "create_skill",

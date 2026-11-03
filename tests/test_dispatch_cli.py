@@ -8,24 +8,23 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 from conftest import make_repl_environment, recording_console
-from rich.console import Console
 
 from ollama_agent.core import (
     ModelCapabilityError,
     ModelContextWindowError,
-    OllamaVersionError,
 )
 from ollama_agent.interfaces.cli import create_argument_parser, handle_subcommand
 from ollama_agent.interfaces.commands.dispatch import (
     build_cli_handlers,
     build_repl_handlers,
+    safe_call,
 )
 from ollama_agent.main import _apply_cli_overrides, _extract_early_language, main
 from ollama_agent.rag import RAGManager
 from ollama_agent.rag.commands import RAGContext
 from ollama_agent.settings import RAGSettings, Settings
 from ollama_agent.skills.commands import SkillsContext
-from ollama_agent.tasks.commands import TasksContext
+from ollama_agent.tasks.commands import TaskError, TasksContext
 
 
 def _build_cli_handlers(args: argparse.Namespace) -> dict[tuple[str, str], object]:
@@ -131,20 +130,6 @@ class TestDispatchAndCLI(unittest.TestCase):
         assert ("mcp", "list") in handlers
         assert ("agents", "list") in handlers
 
-    def test_build_cli_handlers_requires_settings(self) -> None:
-        parser = create_argument_parser()
-        args = parser.parse_args(["task", "list"])
-        task_ctx = TasksContext(console=recording_console())
-        rag_ctx = RAGContext(rag_manager=RAGManager(RAGSettings()), console=recording_console())
-        skills_ctx = SkillsContext(console=recording_console())
-        with pytest.raises(TypeError):
-            build_cli_handlers(
-                args,
-                task_ctx=task_ctx,
-                rag_ctx=rag_ctx,
-                skills_ctx=skills_ctx,
-            )
-
     def test_argument_parser_agents_subcommand(self) -> None:
         parser = create_argument_parser()
         args = parser.parse_args(["agents", "list"])
@@ -173,33 +158,6 @@ class TestDispatchAndCLI(unittest.TestCase):
         assert "/rag" in handlers
         assert "/mcp" in handlers
         assert "/agents" in handlers
-
-    def test_build_repl_handlers_intercepted_subcommands_removed(self) -> None:
-        out = io.StringIO()
-        console = Console(file=out)
-        handlers = build_repl_handlers(make_repl_environment(console=console))
-
-        # Inline-intercepted branches are gone from the registry handlers.
-        task_handler = handlers["/task"]
-        skill_handler = handlers["/skill"]
-        session_handler = handlers["/session"]
-
-        # /task create and /task run now report unknown subcommand.
-        task_handler(["create", "my-task"])
-        assert "Unknown task subcommand 'create'" in out.getvalue()
-        task_handler(["run", "my-task"])
-        assert "Unknown task subcommand 'run'" in out.getvalue()
-
-        # /skill create reports unknown subcommand.
-        skill_handler(["create", "my-skill"])
-        assert "Unknown skill subcommand 'create'" in out.getvalue()
-
-        # /session new/resume/export report unknown subcommand.
-        for sub in ("new", "resume", "switch", "export"):
-            session_handler([sub, "x"])
-        rendered = out.getvalue()
-        for sub in ("new", "resume", "switch", "export"):
-            assert f"Unknown session subcommand '{sub}'" in rendered
 
     def test_main_config_reset(self) -> None:
         # Patch set_locale so the system language does not leak into other tests.
@@ -343,7 +301,7 @@ class TestDispatchAndCLI(unittest.TestCase):
             patch("ollama_agent.main.set_locale", return_value="en"),
             patch("ollama_agent.main.Console", return_value=mock_console),
             patch("ollama_agent.main.load_settings", return_value=Settings()),
-            patch("ollama_agent.main.check_ollama_version", side_effect=OllamaVersionError(err_msg)),
+            patch("ollama_agent.main.check_ollama_version", side_effect=ModelCapabilityError(err_msg)),
             patch("ollama_agent.main.ensure_model_configured") as mock_ensure,
         ):
             with pytest.raises(SystemExit) as cm:
@@ -452,6 +410,30 @@ class TestDispatchAndCLI(unittest.TestCase):
                 handle_subcommand(args, settings)
             assert cm.value.code == 1
 
+    def test_handle_subcommand_rag_add_closes_on_same_event_loop(self) -> None:
+        parser = create_argument_parser()
+        args = parser.parse_args(["rag", "add", "docs_db", "file.md"])
+        loops: list[asyncio.AbstractEventLoop] = []
+
+        async def fake_add_file(_ctx: object, _path: str) -> None:
+            loops.append(asyncio.get_running_loop())
+
+        async def fake_aclose() -> None:
+            loops.append(asyncio.get_running_loop())
+
+        mock_mgr = MagicMock()
+        mock_mgr.aclose = AsyncMock(side_effect=fake_aclose)
+
+        with (
+            patch("ollama_agent.interfaces.cli.RAGManager", return_value=mock_mgr),
+            patch("ollama_agent.interfaces.commands.dispatch.load_rag_database"),
+            patch("ollama_agent.interfaces.commands.dispatch.add_rag_file", side_effect=fake_add_file),
+        ):
+            handle_subcommand(args, Settings())
+
+        assert len(loops) == 2
+        assert loops[0] is loops[1]
+
     def test_extract_early_language(self) -> None:
         assert _extract_early_language(["-l", "es"]) == "es"
         assert _extract_early_language(["--lang", "fr"]) == "fr"
@@ -469,6 +451,20 @@ class TestDispatchAndCLI(unittest.TestCase):
             assert cm.value.code == 0
         output = stdout.getvalue()
         assert "Agente de IA" in output
+
+    def test_unknown_subcommand_with_markup_does_not_crash(self) -> None:
+        env = make_repl_environment(console=recording_console())
+        for handler_name in ("handle_agents", "handle_mcp", "handle_task", "handle_skill", "handle_rag"):
+            with self.subTest(handler=handler_name):
+                getattr(env, handler_name)(["x[/y]z"])
+        assert env.console.file.getvalue()  # type: ignore[union-attr]
+
+    def test_safe_call_escapes_domain_error(self) -> None:
+        console = recording_console()
+        env = make_repl_environment(console=console)
+        with patch("ollama_agent.interfaces.commands.dispatch.list_tasks", side_effect=TaskError("bad [/x]")):
+            asyncio.run(safe_call(env.handle_task, ["list"], console=console))
+        assert "bad" in console.export_text()
 
 
 if __name__ == "__main__":

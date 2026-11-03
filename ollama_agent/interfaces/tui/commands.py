@@ -124,12 +124,7 @@ async def _resume_slash_session(app: Any, args: list[str], scroll: ScrollableCon
         app.show_system_notice(f"[red]{escape(str(exc))}[/red]")
         return
     if not resolved:
-        err_output = capture.get().strip()
-        if err_output:
-            app.show_system_notice(Text.from_ansi(err_output))
-        else:
-            not_found = _("Session not found: {session_id}", session_id=escape(args[1]))
-            app.show_system_notice(f"[bold #f87171]✕ {not_found}[/bold #f87171]")
+        app.show_system_notice(Text.from_ansi(capture.get().strip()))
         return
 
     app.repl.runtime.thread_id = resolved
@@ -160,11 +155,7 @@ async def _export_slash_session(app: Any, args: list[str]) -> None:
         export_msg = _("Session exported to: {path}", path=escape(str(out_file)))
         app.show_system_notice(f"[bold #38bdf8]✓ {export_msg}[/bold #38bdf8]")
     else:
-        err_output = capture.get().strip()
-        if err_output:
-            app.show_system_notice(Text.from_ansi(err_output))
-        else:
-            app.show_system_notice(f"[bold #f87171]✕ {_('Failed to export session.')}[/bold #f87171]")
+        app.show_system_notice(Text.from_ansi(capture.get().strip()))
 
 
 async def _handle_slash_session(app: Any, cmd: str, args: list[str], scroll: ScrollableContainer) -> bool:

@@ -9,14 +9,9 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from rich.console import Console
 
-from ollama_agent.settings import Settings, load_settings
 from ollama_agent.tasks.commands import (
-    AmbiguousTaskError,
     TaskError,
-    TaskNotFoundError,
     TasksContext,
-    ValidationError,
-    apply_task_settings,
     create_task,
     delete_task,
     list_tasks,
@@ -39,19 +34,12 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
         self.temp_dir.cleanup()
 
     def test_require_validation(self) -> None:
-        with pytest.raises(ValidationError):
+        with pytest.raises(TaskError):
             create_task(self.ctx, "t1", title="   ", prompt="p", model="m")
-        with pytest.raises(ValidationError):
+        with pytest.raises(TaskError):
             create_task(self.ctx, "t1", title="t", prompt="   ", model="m")
-        with pytest.raises(ValidationError):
+        with pytest.raises(TaskError):
             create_task(self.ctx, "t1", title="t", prompt="p", model="   ")
-
-    def test_apply_task_settings(self) -> None:
-        task = Task(title="T", prompt="P", model="llama3:8b", reasoning_effort="high")
-        settings = load_settings(settings_path=Path(self.temp_dir.name) / "settings.yaml")
-        apply_task_settings(settings, task)
-        assert settings.model.name == "llama3:8b"
-        assert settings.model.reasoning_effort == "high"
 
     def test_create_and_list_task(self) -> None:
         create_task(
@@ -128,7 +116,7 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
                 await run_task(self.ctx, "failing-task")
 
     def test_create_task_rejects_empty_reasoning_effort(self) -> None:
-        with pytest.raises(ValidationError):
+        with pytest.raises(TaskError):
             create_task(
                 self.ctx,
                 "bad-effort",
@@ -166,17 +154,14 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
         task = self.mgr.get("default-effort-task")
         assert task.reasoning_effort == "default"
 
-    def test_tasks_context_default_settings(self) -> None:
-        assert isinstance(self.ctx.settings, Settings)
-
     def test_resolve_task_errors(self) -> None:
-        with pytest.raises(TaskNotFoundError):
+        with pytest.raises(TaskError):
             self.ctx.resolve_task("missing_task")
 
         create_task(self.ctx, "deploy-prod", title="Prod Deploy", prompt="deploy", model="gemma4:26b")
         create_task(self.ctx, "deploy-staging", title="Staging Deploy", prompt="deploy", model="gemma4:26b")
 
-        with pytest.raises(AmbiguousTaskError):
+        with pytest.raises(TaskError):
             self.ctx.resolve_task("deploy")
 
         resolved_id, resolved_task = self.ctx.resolve_task("deploy-prod")
@@ -207,16 +192,16 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
         }
 
     def test_parse_var_assignments_invalid_no_equals(self) -> None:
-        with pytest.raises(ValidationError) as cm:
+        with pytest.raises(TaskError) as cm:
             parse_var_assignments(["invalid_assignment"])
         assert "invalid_assignment" in str(cm.value)
 
     def test_parse_var_assignments_empty_key_raises(self) -> None:
-        with pytest.raises(ValidationError) as cm1:
+        with pytest.raises(TaskError) as cm1:
             parse_var_assignments(["=value"])
         assert "=value" in str(cm1.value)
 
-        with pytest.raises(ValidationError) as cm2:
+        with pytest.raises(TaskError) as cm2:
             parse_var_assignments(["   =value"])
         assert "=value" in str(cm2.value)
 
@@ -254,7 +239,7 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
         )
         self.mgr.save("req-task", task)
 
-        with pytest.raises(ValidationError) as cm:
+        with pytest.raises(TaskError) as cm:
             await run_task(self.ctx, "req-task", variables={})
         assert "Missing required input: file" in str(cm.value)
 
@@ -266,5 +251,5 @@ class TestTasksCommands(unittest.IsolatedAsyncioTestCase):
         )
         self.mgr.save("syntax-task", task)
 
-        with pytest.raises(ValidationError):
+        with pytest.raises(TaskError):
             await run_task(self.ctx, "syntax-task")
