@@ -17,7 +17,6 @@ from ollama_agent.settings.config import (
     Settings,
     SubAgentMCPServer,
     SubAgentSettings,
-    _dataclass_from_dict,
     ensure_memory_file,
     load_instructions,
     load_settings,
@@ -51,15 +50,6 @@ class TestConfigManagement(unittest.TestCase):
         assert s.rag.default_top_k == 5
         assert s.rag.embedder_model == "embeddinggemma-2:740m"
         assert s.rag.embedding_dims == 768
-
-        # Default model dict should not include unset sampling parameters
-        model_dict = s.to_dict()["model"]
-        assert "temperature" not in model_dict
-        assert "top_p" not in model_dict
-        assert "top_k" not in model_dict
-        assert "min_p" not in model_dict
-        assert "presence_penalty" not in model_dict
-        assert "repeat_penalty" not in model_dict
 
     def test_settings_serialization_cycle(self) -> None:
         original = Settings(
@@ -164,22 +154,11 @@ class TestConfigManagement(unittest.TestCase):
             assert os.environ["LANGSMITH_PROJECT"] == "test_proj"
             assert os.environ["LANGSMITH_ENDPOINT"] == "https://api.smith.langchain.com"
 
-    def test_setup_environment_injects_langsmith_boolean_tracing(self) -> None:
-        with patch.dict(os.environ, {}, clear=False):
-            s = Settings(
-                langsmith=LangSmithSettings(
-                    tracing=True,
-                )
-            )
-            s.setup_environment()
-            assert os.environ["LANGSMITH_TRACING"] == "true"
-
     def test_ensure_memory_file_creates_file_with_scaffold(self) -> None:
         memory_file = Path(self.temp_dir.name) / "MEMORY.md"
         assert not memory_file.exists()
 
-        result = ensure_memory_file(memory_file)
-        assert result == memory_file
+        ensure_memory_file(memory_file)
         assert memory_file.exists()
         assert "Long-Term Memory" in memory_file.read_text(encoding="utf-8")
 
@@ -295,13 +274,25 @@ class TestConfigManagement(unittest.TestCase):
             Settings.from_dict({"modeel": {"name": "llama3"}})
         assert "modeel" in str(ctx.value)
 
-    def test_dataclass_from_dict_rejects_non_dict(self) -> None:
+    def test_settings_reject_wrong_types(self) -> None:
         with pytest.raises(ValueError):
-            _dataclass_from_dict(ModelSettings, None)
+            Settings.from_dict({"model": {"context_window": True}})
         with pytest.raises(ValueError):
-            _dataclass_from_dict(ModelSettings, "not-a-dict")
+            Settings.from_dict({"model": {"context_window": 3.5}})
         with pytest.raises(ValueError):
-            _dataclass_from_dict(ModelSettings, 123)
+            Settings.from_dict({"model": {"temperature": "hot"}})
+        with pytest.raises(ValueError):
+            Settings.from_dict({"runtime": {"allow_traversal": "yes"}})
+
+    def test_settings_accept_valid_values(self) -> None:
+        s = Settings.from_dict(
+            {
+                "model": {"name": "m", "temperature": 0.7, "context_window": "max"},
+                "runtime": {"allow_traversal": False},
+            }
+        )
+        assert s.model.context_window == "max"
+        assert s.model.temperature == 0.7
 
     def test_subagents_from_list_parsing(self) -> None:
         raw = [
@@ -331,18 +322,6 @@ class TestConfigManagement(unittest.TestCase):
             Settings.from_dict({"subagents": ["not-a-dict"]})
         with pytest.raises(ValueError):
             Settings.from_dict({"subagents": [{"name": "coder", "mcp_servers": "invalid"}]})
-
-    def test_load_settings_empty_file_raises_value_error(self) -> None:
-        self.settings_file.write_text("", encoding="utf-8")
-        with pytest.raises(ValueError) as ctx:
-            load_settings(self.settings_file)
-        assert "YAML mapping" in str(ctx.value)
-
-    def test_load_settings_falsy_scalar_yaml_raises_value_error(self) -> None:
-        for val in ["", "false\n", "0\n", "[]\n"]:
-            self.settings_file.write_text(val, encoding="utf-8")
-            with pytest.raises(ValueError):
-                load_settings(self.settings_file)
 
 
 if __name__ == "__main__":

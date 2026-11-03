@@ -19,7 +19,6 @@ def build_approval_decisions(
     action: str,  # "approve", "reject", or "allow"
     *,
     runtime: AgentRuntime | None = None,
-    reject_message: str | None = None,
 ) -> list[dict[str, Any]]:
     """Consolidate LangGraph approval/rejection payload construction used across CLI and TUI."""
     if action == "allow" and runtime is not None:
@@ -30,8 +29,6 @@ def build_approval_decisions(
         return [{"type": "approve"} for _ in action_requests]
 
     if action == "reject":
-        if reject_message:
-            return [{"type": "reject", "message": reject_message} for _ in action_requests]
         return [
             {"type": "reject", "message": _("User rejected executing tool '{name}'.", name=req["name"])}
             for req in action_requests

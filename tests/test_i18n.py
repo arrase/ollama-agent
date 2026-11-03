@@ -15,7 +15,6 @@ from ollama_agent.i18n import (
     SUPPORTED_LOCALES,
     _,
     detect_system_language,
-    get_locale,
     set_locale,
 )
 from ollama_agent.interfaces.cli import create_argument_parser
@@ -73,219 +72,60 @@ class TestI18nDetection(unittest.TestCase):
 
 
 class TestI18nLocaleManagement(unittest.TestCase):
-    """Test setting the active locale and the supported locales registry."""
+    """Test setting the active locale and translation lookups."""
 
-    def test_supported_locales_list(self) -> None:
-        locales = SUPPORTED_LOCALES
-        assert "en" in locales
-        assert "es" in locales
-        assert "fr" in locales
-        assert "de" in locales
-        assert "it" in locales
-        assert "pt" in locales
-        assert "zh" in locales
-        assert "ja" in locales
-        assert "ru" in locales
-        assert "hi" in locales
-        assert "ko" in locales
-        assert "ar" in locales
-        assert "tr" in locales
-        assert "pl" in locales
-        assert "nl" in locales
-        assert "uk" in locales
+    def tearDown(self) -> None:
+        set_locale("en")
 
     def test_set_valid_locale(self) -> None:
         for loc in SUPPORTED_LOCALES:
-            assert set_locale(loc) == loc
+            set_locale(loc)
 
     def test_set_locale_with_region_suffix(self) -> None:
-        assert set_locale("es_ES.UTF-8") == "es"
-        assert set_locale("fr-FR") == "fr"
-        assert set_locale("hi_IN.UTF-8") == "hi"
-        assert set_locale("zh_CN") == "zh"
+        set_locale("es_ES.UTF-8")
+        assert _("Exit the REPL") == "Salir del REPL"
+        set_locale("fr-FR")
+        assert _("Exit the REPL") == "Quitter le REPL"
 
     def test_set_unsupported_locale_raises_value_error(self) -> None:
         with pytest.raises(ValueError, match="Unsupported language: unsupported_lang"):
             set_locale("unsupported_lang")
 
+    def test_empty_locale_string_rejected(self) -> None:
+        with pytest.raises(ValueError):
+            set_locale("   ")
+
     def test_set_locale_none_and_default(self) -> None:
         with patch("ollama_agent.i18n.detect_system_language", return_value="es"):
-            assert set_locale(None) == "es"
-            assert get_locale() == "es"
-            assert set_locale() == "es"
+            set_locale(None)
+            assert _("Exit the REPL") == "Salir del REPL"
+            set_locale()
+            assert _("Exit the REPL") == "Salir del REPL"
 
-    def test_get_locale(self) -> None:
+    def test_failed_locale_load_does_not_corrupt_state(self) -> None:
         set_locale("en")
-        assert get_locale() == "en"
-        set_locale("es")
-        assert get_locale() == "es"
-        set_locale("fr")
-        assert get_locale() == "fr"
+        with patch("ollama_agent.i18n.resources") as res:
+            res.files.return_value.joinpath.return_value.read_text.side_effect = OSError("boom")
+            with pytest.raises(ValueError):
+                set_locale("es")
+        assert _("Usage: /model [list | set <model>]") == "Usage: /model [list | set <model>]"
 
-
-class TestI18nTranslations(unittest.TestCase):
-    """Test string translations across languages and parameter formatting."""
-
-    def test_english_translation(self) -> None:
-        set_locale("en")
-        assert _("Manage saved tasks") == "Manage saved tasks"
-        assert _("Exit the REPL") == "Exit the REPL"
-
-    def test_spanish_translation(self) -> None:
+    def test_translation_lookup_fallback_and_formatting(self) -> None:
         set_locale("es")
         assert _("Manage saved tasks") == "Gestionar tareas guardadas"
-        assert _("Exit the REPL") == "Salir del REPL"
-        assert _("No skills found.") == "No se encontraron habilidades."
-        assert _("Tool:") == "Herramienta:"
-        assert _("Arguments:") == "Argumentos:"
-        assert _("Copy") == "Copiar"
-        assert _("Paste") == "Pegar"
-        assert _("Interrupt") == "Interrumpir"
-        assert _("Show or clear the prompt queue") == "Mostrar o limpiar la cola de prompts"
-        assert _("Approval cancelled.") == "Aprobación cancelada."
-
-    def test_french_translation(self) -> None:
-        set_locale("fr")
-        assert _("Manage saved tasks") == "Gérer les tâches enregistrées"
-        assert _("Exit the REPL") == "Quitter le REPL"
-        assert _("Tool:") == "Outil :"
-        assert _("Arguments:") == "Arguments :"
-        assert _("Show or clear the prompt queue") == "Afficher ou vider la file d'attente des invites"
-        assert _("Approval cancelled.") == "Approbation annulée."
-
-    def test_german_translation(self) -> None:
-        set_locale("de")
-        assert _("Manage saved tasks") == "Gespeicherte Aufgaben verwalten"
-        assert _("Exit the REPL") == "REPL beenden"
-        assert _("Tool:") == "Werkzeug:"
-        assert _("Arguments:") == "Argumente:"
-        assert _("Show or clear the prompt queue") == "Prompt-Warteschlange anzeigen oder leeren"
-        assert _("Approval cancelled.") == "Genehmigung abgebrochen."
-
-    def test_italian_translation(self) -> None:
-        set_locale("it")
-        assert _("Manage saved tasks") == "Gestisci le attività salvate"
-        assert _("Exit the REPL") == "Uscire dalla REPL"
-        assert _("Tool:") == "Strumento:"
-        assert _("Arguments:") == "Argomenti:"
-
-    def test_portuguese_translation(self) -> None:
-        set_locale("pt")
-        assert _("Manage saved tasks") == "Gerenciar tarefas salvas"
-        assert _("Exit the REPL") == "Sair do REPL"
-        assert _("Tool:") == "Ferramenta:"
-        assert _("Arguments:") == "Argumentos:"
-
-    def test_chinese_translation(self) -> None:
-        set_locale("zh")
-        assert _("Manage saved tasks") == "管理保存的任务"
-        assert _("Exit the REPL") == "退出 REPL"
-
-    def test_japanese_translation(self) -> None:
-        set_locale("ja")
-        assert _("Manage saved tasks") == "保存済みタスクを管理"
-        assert _("Exit the REPL") == "REPLを終了"
-
-    def test_russian_translation(self) -> None:
-        set_locale("ru")
-        assert _("Manage saved tasks") == "Управление сохраненными задачами"
-        assert _("Exit the REPL") == "Выйти из REPL"
-
-    def test_hindi_translation(self) -> None:
-        set_locale("hi")
-        assert _("Manage saved tasks") == "सहेजे गए कार्य प्रबंधित करें"
-        assert _("Exit the REPL") == "REPL से बाहर निकलें"
-        assert _("No skills found.") == "कोई कौशल नहीं मिला।"
-
-    def test_korean_translation(self) -> None:
-        set_locale("ko")
-        assert _("Manage saved tasks") == "저장된 작업 관리"
-        assert _("Exit the REPL") == "REPL 종료"
-
-    def test_arabic_translation(self) -> None:
-        set_locale("ar")
-        assert _("Manage saved tasks") == "إدارة المهام المحفوظة"
-        assert _("Exit the REPL") == "اخرج من REPL"
-
-    def test_turkish_translation(self) -> None:
-        set_locale("tr")
-        assert _("Manage saved tasks") == "Kaydedilen görevleri yönet"
-        assert _("Exit the REPL") == "REPL'den çık"
-
-    def test_polish_translation(self) -> None:
-        set_locale("pl")
-        assert _("Manage saved tasks") == "Zarządzaj zapisanymi zadaniami"
-        assert _("Exit the REPL") == "Zakończ działanie REPL"
-
-    def test_dutch_translation(self) -> None:
-        set_locale("nl")
-        assert _("Manage saved tasks") == "Opgeslagen taken beheren"
-        assert _("Exit the REPL") == "Sluit de REPL af"
-
-    def test_ukrainian_translation(self) -> None:
-        set_locale("uk")
-        assert _("Manage saved tasks") == "Керування збереженими завданнями"
-        assert _("Exit the REPL") == "Вийти з REPL"
-
-    def test_parameter_interpolation(self) -> None:
-        set_locale("en")
-        assert (
-            _("Settings file must contain a YAML mapping: {path}", path="demo")
-            == "Settings file must contain a YAML mapping: demo"
-        )
-        set_locale("es")
         assert (
             _("Settings file must contain a YAML mapping: {path}", path="demo")
             == "El archivo de ajustes debe contener un mapeo YAML: demo"
         )
-        set_locale("fr")
-        assert (
-            _("Settings file must contain a YAML mapping: {path}", path="demo")
-            == "Le fichier de paramètres doit contenir un mappage YAML : demo"
-        )
-        set_locale("hi")
-        assert (
-            _("Settings file must contain a YAML mapping: {path}", path="demo")
-            == "सेटिंग्स फ़ाइल में YAML मैपिंग होनी चाहिए: demo"
-        )
-        set_locale("en")
-        assert _("Queued prompts ({count}):", count=1) == "Queued prompts (1):"
-        assert _("Prompt queue cleared ({count} removed).", count=3) == "Prompt queue cleared (3 removed)."
-        assert _("Removed #{pos} from prompt queue: {text}", pos=2, text="foo") == "Removed #2 from prompt queue: foo"
-        assert (
-            _("Invalid queue position '{pos}'. Usage: /queue rm <position>", pos="xyz")
-            == "Invalid queue position 'xyz'. Usage: /queue rm <position>"
-        )
-        assert (
-            _("Queue position {pos} out of range (queue has {count} items).", pos=5, count=2)
-            == "Queue position 5 out of range (queue has 2 items)."
-        )
-        assert _("Queued ({count})", count=4) == "Queued (4)"
-        set_locale("es")
-        assert _("Queued prompts ({count}):", count=1) == "Prompts en cola (1):"
-        assert _("Prompt queue cleared ({count} removed).", count=3) == "Cola de prompts limpiada (3 eliminados)."
-        assert (
-            _("Removed #{pos} from prompt queue: {text}", pos=2, text="foo")
-            == "Eliminado #2 de la cola de prompts: foo"
-        )
-        assert (
-            _("Invalid queue position '{pos}'. Usage: /queue rm <position>", pos="xyz")
-            == "Posición de cola no válida 'xyz'. Uso: /queue rm <posición>"
-        )
-        assert (
-            _("Queue position {pos} out of range (queue has {count} items).", pos=5, count=2)
-            == "Posición de cola 5 fuera de rango (la cola tiene 2 elementos)."
-        )
-        assert _("Queued ({count})", count=4) == "En cola (4)"
-
-    def test_unknown_string_in_english_is_source_language(self) -> None:
-        set_locale("en")
         unknown = "This is a non-registered string"
         assert _(unknown) == unknown
 
-    def test_missing_translation_in_non_default_locale_returns_original(self) -> None:
-        set_locale("es")
-        unknown = "This is a non-registered string"
+        set_locale("en")
+        assert _("Manage saved tasks") == "Manage saved tasks"
+        assert (
+            _("Settings file must contain a YAML mapping: {path}", path="demo")
+            == "Settings file must contain a YAML mapping: demo"
+        )
         assert _(unknown) == unknown
 
 

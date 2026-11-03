@@ -16,14 +16,12 @@ import mcp.client.stdio
 import pytest
 from rich.console import Console
 
-import ollama_agent.mcp as mcp_pkg
 from ollama_agent.mcp.commands import (
     check_mcp_server,
     list_mcp_servers,
     reload_mcp_servers,
 )
 from ollama_agent.mcp.loader import (
-    DEFAULT_MCP_TIMEOUT,
     MCPConfigError,
     _build_mcp_connection,
     _connect_and_load,
@@ -95,6 +93,11 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
         with pytest.raises(MCPConfigError, match="'args' must be a list"):
             _build_mcp_connection("srv", {"command": "x", "args": None})
 
+    def test_mcp_args_must_be_strings(self) -> None:
+        with pytest.raises(MCPConfigError, match="'args' must be a list of strings"):
+            _build_mcp_connection("srv", {"command": "echo", "args": [1, 2]})
+        assert _build_mcp_connection("srv", {"command": "echo"})["args"] == []
+
     def test_build_mcp_connection_http_and_types(self) -> None:
         cfg_http = {
             "type": "http",
@@ -163,13 +166,6 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
             assert conn["url"] == "https://mcp.example.com/mcp"
             assert conn["headers"] == {"Authorization": "Bearer tok_xyz"}
 
-    def test_default_mcp_timeout(self) -> None:
-        assert DEFAULT_MCP_TIMEOUT == 10.0
-
-    def test_mcp_package_exports(self) -> None:
-        assert "MCPConfigError" in mcp_pkg.__all__
-        assert mcp_pkg.MCPConfigError is MCPConfigError
-
     async def test_load_main_mcp_tools_missing_file_returns_empty(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             missing = Path(tmp_dir) / "mcp.json"
@@ -199,18 +195,6 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
                 pytest.raises(MCPConfigError, match="expected a JSON object"),
             ):
                 await _read_main_config()
-        finally:
-            tmp_path.unlink(missing_ok=True)
-
-    async def test_load_main_mcp_tools_legacy_servers_key_ignored(self) -> None:
-        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as tmp:
-            json.dump({"servers": {"fetch": {"command": "uvx", "args": ["mcp-server-fetch"]}}}, tmp)
-            tmp_path = Path(tmp.name)
-
-        try:
-            with patch("ollama_agent.mcp.loader.MCP_PATH", tmp_path):
-                servers_cfg = await _read_main_config()
-                assert servers_cfg == {}
         finally:
             tmp_path.unlink(missing_ok=True)
 
@@ -516,42 +500,6 @@ class TestMCPLoader(unittest.IsolatedAsyncioTestCase):
                 assert captured_errlog is not None
                 assert captured_errlog != sys.stderr
                 assert log_path.exists()
-
-    async def test_mcp_stdio_client_preserves_custom_errlog(self) -> None:
-        custom_stream = io.StringIO()
-        captured_errlog = None
-
-        @asynccontextmanager
-        async def fake_orig_stdio(_server: object, errlog: object = None) -> AsyncIterator[tuple[str, str]]:
-            nonlocal captured_errlog
-            captured_errlog = errlog
-            yield ("read_stream", "write_stream")
-
-        with patch("ollama_agent.mcp.loader._orig_stdio_client", fake_orig_stdio):
-            server_dummy = MagicMock()
-            async with _mcp_stdio_client(server_dummy, errlog=custom_stream) as streams:
-                assert streams == ("read_stream", "write_stream")
-            assert captured_errlog == custom_stream
-
-    async def test_mcp_stdio_client_preserves_falsy_custom_errlog(self) -> None:
-        class FalsyStream(io.StringIO):
-            def __bool__(self) -> bool:
-                return False
-
-        custom_stream = FalsyStream()
-        captured_errlog = None
-
-        @asynccontextmanager
-        async def fake_orig_stdio(_server: object, errlog: object = None) -> AsyncIterator[tuple[str, str]]:
-            nonlocal captured_errlog
-            captured_errlog = errlog
-            yield ("read_stream", "write_stream")
-
-        with patch("ollama_agent.mcp.loader._orig_stdio_client", fake_orig_stdio):
-            server_dummy = MagicMock()
-            async with _mcp_stdio_client(server_dummy, errlog=custom_stream) as streams:
-                assert streams == ("read_stream", "write_stream")
-            assert captured_errlog == custom_stream
 
     def test_http_url_alias_and_invalid_headers(self) -> None:
         conn = _build_mcp_connection("remote", {"httpUrl": "https://example.com/mcp", "headers": {"X-Key": "val"}})

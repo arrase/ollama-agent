@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
 from typing import Any
 
 import ollama
@@ -160,17 +159,17 @@ async def set_model(
     model_name: str,
     *,
     runtime: AgentRuntime,
-) -> str | None:
-    """Switch to model_name, returning the new model name."""
+) -> None:
+    """Switch to model_name."""
     base_url = runtime.settings.model.base_url
     current = runtime.settings.model.name
     if not await _verify_model_switchable(console, model_name, base_url, runtime):
-        return None
+        return
 
     if model_name == current:
         already_msg = _("Already using model '{model_name}'.", model_name=model_name)
         console.print(f"[yellow]{escape(already_msg)}[/yellow]")
-        return current
+        return
 
     try:
         await runtime.set_model(model_name)
@@ -183,16 +182,12 @@ async def set_model(
     except (ollama.ResponseError, OSError) as exc:
         failed_msg = _("Failed to switch to model '{model_name}': {exc}", model_name=model_name, exc=exc)
         console.print(f"[red]{escape(failed_msg)}[/red]")
-        return None
-    else:
-        return model_name
 
 
 def _prompt_user_select_model(
     available_models: list[Any],
     base_url: str,
     console: Console,
-    input_func: Callable[[str], str],
 ) -> str:
     async def _fetch_tool_icons() -> list[str]:
         return await asyncio.gather(*(_tool_icon(m.model, base_url) for m in available_models))
@@ -209,7 +204,7 @@ def _prompt_user_select_model(
 
     while True:
         try:
-            choice = input_func(_("Select a model [1-{count}]: ", count=len(available_models))).strip()
+            choice = input(_("Select a model [1-{count}]: ", count=len(available_models))).strip()
         except (KeyboardInterrupt, EOFError):
             raise SystemExit(1) from None
         if not choice:
@@ -241,8 +236,7 @@ def _prompt_user_select_model(
 def ensure_model_configured(
     settings: Settings,
     console: Console,
-    input_func: Callable[[str], str] = input,
-) -> str:
+) -> None:
     """Ensure the configured model is available in Ollama, or prompt the user to choose one."""
     base_url = settings.model.base_url
     try:
@@ -264,11 +258,11 @@ def ensure_model_configured(
     configured = settings.model.name.strip()
     if configured:
         if configured in model_names:
-            return configured
+            return
         if f"{configured}:latest" in model_names:
             settings.model.name = f"{configured}:latest"
             save_settings(settings)
-            return settings.model.name
+            return
 
     if configured:
         not_avail_msg = _("Configured model '{configured}' is not available in Ollama.", configured=configured)
@@ -276,10 +270,9 @@ def ensure_model_configured(
     else:
         console.print(f"[yellow]{_('No model is currently configured in settings.')}[/yellow]")
 
-    selected = _prompt_user_select_model(available_models, base_url, console, input_func)
+    selected = _prompt_user_select_model(available_models, base_url, console)
 
     settings.model.name = selected
     save_settings(settings)
     saved_msg = _("Selected model '{selected}' saved to configuration.", selected=selected)
     console.print(f"[green]✓ {escape(saved_msg)}[/green]\n")
-    return selected

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import gc
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,7 +7,7 @@ from pathlib import Path
 import pytest
 from jinja2.exceptions import UndefinedError
 
-from ollama_agent.settings.config import Settings, _task_model_overrides
+from ollama_agent.settings.config import Settings
 from ollama_agent.tasks.commands import apply_task_settings
 from ollama_agent.tasks.manager import Task, TaskInput, TaskManager
 
@@ -223,10 +222,6 @@ class TestTaskManager(unittest.TestCase):
             task.render({})
         assert "query" in str(ctx.value)
 
-        with pytest.raises(ValueError) as ctx:
-            task.render({"query": None})
-        assert "query" in str(ctx.value)
-
         assert task.render({"query": "python 3.14"}) == "Search for python 3.14"
 
     def test_render_jinja_conditionals(self) -> None:
@@ -313,17 +308,6 @@ class TestTaskManager(unittest.TestCase):
         assert task.render({"text": 123}) == "Value: 123"
         assert task.render({"text": True}) == "Value: True"
 
-    def test_render_unsupported_input_type_raises(self) -> None:
-        task = Task(
-            title="CustomTypeTest",
-            prompt="Value: {{ custom }}",
-            model="m",
-            inputs={"custom": TaskInput(type="custom_type")},
-        )
-        with pytest.raises(ValueError) as ctx:
-            task.render({"custom": "value"})
-        assert "custom_type" in str(ctx.value)
-
     def test_render_falsy_defaults(self) -> None:
         task = Task(
             title="FalsyDefaults",
@@ -338,15 +322,6 @@ class TestTaskManager(unittest.TestCase):
         assert task.render() == "count=0, active=False, prefix=''"
         assert task.render({"count": 5}) == "count=5, active=False, prefix=''"
         assert task.render({"active": True}) == "count=0, active=True, prefix=''"
-
-    def test_render_explicit_none_does_not_swallow_none(self) -> None:
-        task = Task(
-            title="ExplicitNone",
-            prompt="val={{ val }}",
-            model="m",
-            inputs={"val": TaskInput(type="string", default="fallback")},
-        )
-        assert task.render({"val": None}) == "val=None"
 
     def test_render_undefined_variable_in_block_raises(self) -> None:
         task = Task(
@@ -451,7 +426,40 @@ class TestTaskManager(unittest.TestCase):
         with pytest.raises(ValueError, match="Invalid input definition for 'flag'"):
             Task.from_dict(raw_bad_req)
 
-    def test_apply_task_settings_does_not_leak_to_serialized_settings(self) -> None:
+    def test_missing_keys_raise_value_error(self) -> None:
+        with pytest.raises(ValueError):
+            Task.from_dict({"title": "t", "model": "m"})
+
+    def test_unknown_input_keys_raise_value_error(self) -> None:
+        with pytest.raises(ValueError):
+            Task.from_dict(
+                {
+                    "title": "t",
+                    "prompt": "p",
+                    "model": "m",
+                    "inputs": {"x": {"type": "string", "bogus": 1}},
+                }
+            )
+
+    def test_optional_absent_input_renders_empty(self) -> None:
+        task = Task(
+            title="t",
+            prompt="val={{ val }}",
+            model="m",
+            inputs={"val": TaskInput(type="string")},
+        )
+        assert task.render() == "val="
+
+    def test_numeric_default_is_coerced(self) -> None:
+        task = Task(
+            title="t",
+            prompt="n={{ n }}",
+            model="m",
+            inputs={"n": TaskInput(type="number", default="5")},
+        )
+        assert task.render() == "n=5"
+
+    def test_apply_task_settings_applies_and_restores(self) -> None:
         settings = Settings()
         settings.model.name = "original-model:latest"
         settings.model.reasoning_effort = "low"
@@ -461,44 +469,14 @@ class TestTaskManager(unittest.TestCase):
         assert settings.model.name == "task-override:70b"
         assert settings.model.reasoning_effort == "high"
 
-        # Serializing settings while a task is active must preserve the original model settings
-        serialized = settings.to_dict()
-        assert serialized["model"]["name"] == "original-model:latest"
-        assert serialized["model"]["reasoning_effort"] == "low"
-
         restore()
         assert settings.model.name == "original-model:latest"
         assert settings.model.reasoning_effort == "low"
-        serialized_after = settings.to_dict()
-        assert serialized_after["model"]["name"] == "original-model:latest"
-        assert serialized_after["model"]["reasoning_effort"] == "low"
 
-    def test_apply_task_settings_preserves_mid_task_user_changes_and_cleans_up_on_gc(self) -> None:
-        settings = Settings()
-        settings.model.name = "original-model:latest"
-        settings.model.reasoning_effort = "low"
-        task = Task(title="T", prompt="P", model="task-override:70b", reasoning_effort="high")
-
-        restore = apply_task_settings(settings, task)
-        # User explicitly changes model mid-task (e.g. while paused at HITL approval)
-        settings.model.name = "user-chosen:latest"
-        serialized = settings.to_dict()
-        assert serialized["model"]["name"] == "user-chosen:latest"
-        assert serialized["model"]["reasoning_effort"] == "low"
-
-        restore()
-        assert settings.model.name == "user-chosen:latest"
+        restore_preserve = apply_task_settings(settings, task, preserve_model=True, preserve_effort=True)
+        assert settings.model.name == "original-model:latest"
         assert settings.model.reasoning_effort == "low"
-
-        # Verify weakref cleanup when Settings is garbage-collected without calling restore()
-        transient = Settings()
-        transient.model.name = "orig"
-        key = id(transient.model)
-        apply_task_settings(transient, task)
-        assert key in _task_model_overrides
-        del transient
-        gc.collect()
-        assert key not in _task_model_overrides
+        restore_preserve()
 
 
 if __name__ == "__main__":

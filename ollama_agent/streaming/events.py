@@ -20,8 +20,6 @@ async def stream_agent_events(
     runtime: AgentRuntime,
     prompt: str | Command[Any],
     renderer: StreamingRenderer,
-    *,
-    thread_id: str = "",
 ) -> bool:
     """Stream agent events, returning whether the run completed without aborting."""
     current_prompt = prompt
@@ -29,7 +27,7 @@ async def stream_agent_events(
     try:
         while True:
             interrupt_event: dict[str, Any] | None = None
-            async for event in runtime.run_streamed(current_prompt, thread_id=thread_id):
+            async for event in runtime.run_streamed(current_prompt):
                 etype = event["type"]
                 if etype == "interrupt":
                     interrupt_event = event
@@ -51,7 +49,7 @@ async def stream_agent_events(
     return completed
 
 
-async def run_non_interactive(runtime: AgentRuntime, prompt: str | Command[Any], *, thread_id: str = "") -> bool:
+async def run_non_interactive(runtime: AgentRuntime, prompt: str | Command[Any]) -> bool:
     """Stream agent output to the console (non-interactive mode).
 
     Returns whether the run finished completely (no abort, cancellation or error).
@@ -60,5 +58,4 @@ async def run_non_interactive(runtime: AgentRuntime, prompt: str | Command[Any],
         runtime,
         prompt,
         ConsoleStreamingRenderer(Console()),
-        thread_id=thread_id,
     )

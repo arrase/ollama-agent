@@ -23,7 +23,6 @@ from ollama_agent.agent.episodic_memory import (
     format_past_conversations_context,
     load_past_conversations,
     load_past_user_prompts,
-    load_session_timestamps,
     search_past_conversations_in_db,
 )
 
@@ -234,7 +233,7 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
         self._seed_db()
         set_active_thread_id("thread-100")
 
-        with patch("ollama_agent.agent.episodic_memory.HISTORY_DB_PATH", self.db_path):
+        with patch("ollama_agent.agent.builtin_tools.HISTORY_DB_PATH", self.db_path):
             output = await search_past_conversations.ainvoke({"query": "React Vite"})
             assert "react" in output.lower()
             assert "thread-2" in output
@@ -317,29 +316,23 @@ class TestEpisodicMemory(unittest.IsolatedAsyncioTestCase):
         assert len(convs["thread-scalar"]["messages"]) == 1
         assert convs["thread-scalar"]["messages"][0].content == "Scalar prompt question"
 
-    def test_load_session_timestamps(self) -> None:
-        assert load_session_timestamps(self.db_path) == []
-        self._seed_db()
-        assert load_session_timestamps(self.db_path) == [
-            ("thread-100", "2026-08-20 10:00 UTC"),
-            ("thread-200", "2026-08-21 14:30 UTC"),
-            ("thread-300", "2026-08-22 08:15 UTC"),
-        ]
-
     def test_corrupted_checkpoint_raises_history_error(self) -> None:
-        self._seed_db()
-        conn = sqlite3.connect(str(self.db_path))
-        cur = conn.cursor()
-        chk_typ, chk_val = self.serializer.dumps_typed({"no_ts_key": 123})
-        cur.execute(
-            "INSERT INTO checkpoints (thread_id, checkpoint_id, type, checkpoint) VALUES (?, ?, ?, ?)",
-            ("thread-bad", "cp-bad", chk_typ, chk_val),
-        )
-        conn.commit()
-        conn.close()
+        for bad_payload in ({"no_ts_key": 123}, {"ts": "not-an-iso-timestamp"}):
+            with self.subTest(payload=bad_payload):
+                self._seed_db()
+                conn = sqlite3.connect(str(self.db_path))
+                cur = conn.cursor()
+                chk_typ, chk_val = self.serializer.dumps_typed(bad_payload)
+                cur.execute(
+                    "INSERT INTO checkpoints (thread_id, checkpoint_id, type, checkpoint) VALUES (?, ?, ?, ?)",
+                    ("thread-bad", "cp-bad", chk_typ, chk_val),
+                )
+                conn.commit()
+                conn.close()
 
-        with pytest.raises(HistoryError):
-            load_past_conversations(self.db_path)
+                with pytest.raises(HistoryError):
+                    load_past_conversations(self.db_path)
+                self.db_path.unlink()
 
     def test_overwrite_and_message_deduplication(self) -> None:
         self._seed_db()

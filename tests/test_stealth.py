@@ -2,18 +2,16 @@ from __future__ import annotations
 
 import io
 import unittest
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from langgraph.checkpoint.memory import MemorySaver
 from rich.console import Console
 
 from ollama_agent.agent import AgentRuntime
-from ollama_agent.interfaces.tui import OllamaAgentApp, OllamaREPL
+from ollama_agent.interfaces.tui import OllamaREPL
 from ollama_agent.interfaces.tui.commands import _is_immediate_command
-from ollama_agent.interfaces.tui.completion import (
-    _get_root_commands,
-    _get_subcommands,
-)
+from ollama_agent.interfaces.tui.completion import slash_completions
 from ollama_agent.interfaces.tui.widgets import AgentHeader
 
 
@@ -21,19 +19,38 @@ class TestStealthMode(unittest.IsolatedAsyncioTestCase):
     """Unit tests for stealth mode functionality and visual indicators."""
 
     async def test_stealth_checkpointer_selection(self) -> None:
-        runtime_normal = AgentRuntime(stealth_mode=False)
-        assert not runtime_normal.stealth_mode
+        sqlite_cp = MagicMock()
+        with (
+            patch("ollama_agent.agent.agent.load_instructions", return_value="base"),
+            patch("ollama_agent.agent.agent.ensure_model_supports_tools", AsyncMock()),
+            patch("ollama_agent.agent.agent.create_ollama_chat_model", AsyncMock(return_value=MagicMock(num_ctx=8192))),
+            patch("ollama_agent.agent.agent.create_summarization_tool_middleware", return_value=MagicMock()),
+            patch("ollama_agent.agent.agent.load_main_mcp_tools", AsyncMock(return_value=[])),
+            patch("ollama_agent.agent.agent._ensure_agent_dirs", MagicMock()),
+            patch("ollama_agent.agent.agent._locate_agents_files", MagicMock(return_value=(False, None))),
+            patch("ollama_agent.agent.agent.create_deep_agent") as mock_cda,
+            patch.object(AgentRuntime, "_sqlite_checkpointer", AsyncMock(return_value=sqlite_cp)) as mock_sql_cp,
+        ):
+            runtime_normal = AgentRuntime(stealth_mode=False)
+            await runtime_normal._build_graph()
+            mock_sql_cp.assert_awaited_once()
+            assert mock_cda.call_args.kwargs["checkpointer"] is sqlite_cp
 
-        runtime_stealth = AgentRuntime(stealth_mode=True)
-        assert runtime_stealth.stealth_mode
-        mem_checkpointer = runtime_stealth._get_memory_checkpointer()
-        assert isinstance(mem_checkpointer, MemorySaver)
-        assert runtime_stealth._get_memory_checkpointer() is mem_checkpointer
+            mock_sql_cp.reset_mock()
+            runtime_stealth = AgentRuntime(stealth_mode=True)
+            await runtime_stealth._build_graph()
+            mock_sql_cp.assert_not_awaited()
+            cp1 = mock_cda.call_args.kwargs["checkpointer"]
+            assert isinstance(cp1, MemorySaver)
+
+            await runtime_stealth._build_graph()
+            cp2 = mock_cda.call_args.kwargs["checkpointer"]
+            assert cp1 is cp2
 
     async def test_handle_stealth_command_toggle_and_values(self) -> None:
         out = io.StringIO()
         console = Console(file=out)
-        runtime = AgentRuntime(stealth_mode=False)
+        runtime: Any = AgentRuntime(stealth_mode=False)
         repl = OllamaREPL(runtime=runtime)
         repl.console = console
 
@@ -79,14 +96,12 @@ class TestStealthMode(unittest.IsolatedAsyncioTestCase):
         assert _is_immediate_command("/stealth on")
         assert _is_immediate_command("/stealth off")
 
-        root_cmds = dict(_get_root_commands())
+        root_cmds = [cmd for cmd, _ in slash_completions("/stealth", MagicMock(), ())]
         assert "/stealth" in root_cmds
 
-        subcmds = _get_subcommands()
-        assert "/stealth" in subcmds
-        sub_names = [name for name, _ in subcmds["/stealth"]]
-        assert "on" in sub_names
-        assert "off" in sub_names
+        sub_cmds = [cmd for cmd, _ in slash_completions("/stealth ", MagicMock(), ())]
+        assert "/stealth on" in sub_cmds
+        assert "/stealth off" in sub_cmds
 
     def test_agent_header_badges(self) -> None:
         runtime = AgentRuntime(stealth_mode=False, yolo_mode=False)
@@ -126,59 +141,3 @@ class TestStealthMode(unittest.IsolatedAsyncioTestCase):
         rendered_text = header.update.call_args[0][0]
         assert "YOLO: ON" in rendered_text
         assert "STEALTH: ON" in rendered_text
-
-    def test_update_mode_ui_four_states(self) -> None:
-        runtime = AgentRuntime(stealth_mode=False, yolo_mode=False)
-        repl = MagicMock()
-        repl.runtime = runtime
-        app = OllamaAgentApp(repl=repl)
-
-        prompt_char = MagicMock()
-        input_container = MagicMock()
-        header = MagicMock()
-
-        def mock_query_one(selector_or_type: object) -> MagicMock:
-            if selector_or_type == "#prompt-char":
-                return prompt_char
-            if selector_or_type == "#input-container":
-                return input_container
-            if selector_or_type == AgentHeader:
-                return header
-            return MagicMock()
-
-        app.query_one = mock_query_one  # type: ignore[method-assign]
-
-        enabled = True
-        disabled = False
-
-        # 1. Normal (neither)
-        runtime.yolo_mode = False
-        runtime.stealth_mode = False
-        app.update_mode_ui()
-        input_container.set_class.assert_any_call(disabled, "yolo-mode")
-        input_container.set_class.assert_any_call(disabled, "stealth-mode")
-        assert prompt_char.styles.color == "#38bdf8"
-
-        # 2. YOLO only
-        runtime.yolo_mode = True
-        runtime.stealth_mode = False
-        app.update_mode_ui()
-        input_container.set_class.assert_any_call(enabled, "yolo-mode")
-        input_container.set_class.assert_any_call(disabled, "stealth-mode")
-        assert prompt_char.styles.color == "#f87171"
-
-        # 3. Stealth only
-        runtime.yolo_mode = False
-        runtime.stealth_mode = True
-        app.update_mode_ui()
-        input_container.set_class.assert_any_call(disabled, "yolo-mode")
-        input_container.set_class.assert_any_call(enabled, "stealth-mode")
-        assert prompt_char.styles.color == "#c084fc"
-
-        # 4. Both YOLO and Stealth
-        runtime.yolo_mode = True
-        runtime.stealth_mode = True
-        app.update_mode_ui()
-        input_container.set_class.assert_any_call(enabled, "yolo-mode")
-        input_container.set_class.assert_any_call(enabled, "stealth-mode")
-        assert prompt_char.styles.color == "#fbbf24"

@@ -63,7 +63,7 @@ async def _stream_tool_events(request: Any, handler: Any) -> Any:  # noqa: ANN40
     tool_name = tool_call["name"]
     tool_call_id = tool_call["id"]
     args = tool_call["args"]
-    agent_name = args.get("subagent_type") or (tool_call.get("metadata") or {}).get("lc_agent_name")
+    agent_name = args.get("subagent_type")
 
     event: dict[str, Any] = {"type": "tool_call", "name": tool_name}
     if agent_name:

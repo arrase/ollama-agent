@@ -74,20 +74,20 @@ async def set_effort(
     effort: str,
     *,
     runtime: AgentRuntime,
-) -> str | None:
-    """Switch reasoning effort level, returning the new effort level."""
+) -> None:
+    """Switch reasoning effort level."""
     thinking_cfg = get_model_thinking_config(runtime.model.show_info) if runtime.model else None
     validated, err_msg = validate_and_normalize_effort(effort, thinking_cfg, runtime.settings.model.name)
     if validated is None:
         console.print(f"[red]{escape(str(err_msg))}[/red]")
-        return None
+        return
     norm_effort = validated
 
     current = runtime.settings.model.reasoning_effort
     if norm_effort == current:
         already_msg = _("Already using reasoning effort '{norm_effort}'.", norm_effort=norm_effort)
         console.print(f"[yellow]{escape(already_msg)}[/yellow]")
-        return current
+        return
 
     try:
         await runtime.set_reasoning_effort(norm_effort)
@@ -104,9 +104,6 @@ async def set_effort(
             exc=exc,
         )
         console.print(f"[red]{escape(failed_msg)}[/red]")
-        return None
-    else:
-        return norm_effort
 
 
 def show_context_window(console: Console, runtime: AgentRuntime) -> None:
@@ -140,19 +137,19 @@ async def set_context_window(
     context_window: str,
     *,
     runtime: AgentRuntime,
-) -> str | None:
-    """Switch context window size, returning the new context window."""
+) -> None:
+    """Switch context window size."""
     try:
         val = parse_context_window_input(context_window)
     except ModelContextWindowError as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
-        return None
+        return
 
     current = runtime.settings.model.context_window
     if val == current:
         already_msg = _("Already using context window '{val}'.", val=val)
         console.print(f"[yellow]{escape(already_msg)}[/yellow]")
-        return str(current)
+        return
 
     try:
         await runtime.set_context_window(val)
@@ -165,11 +162,9 @@ async def set_context_window(
             eff_info=eff_info,
         )
         console.print(f"[green]✓ {escape(switched_msg)}[/green]")
-        return str(val)
     except (ollama.ResponseError, OSError, ValueError, ModelContextWindowError) as exc:
         failed_msg = _("Failed to switch context window to '{val}': {exc}", val=val, exc=exc)
         console.print(f"[red]{escape(failed_msg)}[/red]")
-        return None
 
 
 def show_model_params(console: Console, runtime: AgentRuntime) -> None:

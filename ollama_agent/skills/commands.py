@@ -19,18 +19,6 @@ class SkillError(Exception):
     """Base exception for skill command failures."""
 
 
-class SkillNotFoundError(SkillError):
-    """Raised when a skill cannot be resolved by its ID/prefix."""
-
-
-class AmbiguousSkillError(SkillError):
-    """Raised when a skill ID prefix matches multiple skills."""
-
-
-class ValidationError(SkillError):
-    """Raised when a validation rule fails for skill parameters."""
-
-
 @dataclass
 class SkillsContext:
     """Holds shared resources for skill-related commands."""
@@ -42,9 +30,7 @@ class SkillsContext:
         return self.skill_manager.resolve(
             skill_id,
             label=_("Skill"),
-            not_found_error=SkillNotFoundError,
-            ambiguous_error=AmbiguousSkillError,
-            validation_error=ValidationError,
+            error=SkillError,
         )
 
 
@@ -78,9 +64,9 @@ def create_skill(
     force: bool = False,
 ) -> None:
     """Create a new skill."""
-    name = require_text(name, _("Name"), ValidationError)
-    description = require_text(description, _("Description"), ValidationError)
-    instructions = require_text(instructions, _("Instructions"), ValidationError)
+    name = require_text(name, _("Name"), SkillError)
+    description = require_text(description, _("Description"), SkillError)
+    instructions = require_text(instructions, _("Instructions"), SkillError)
     try:
         created = ctx.skill_manager.create(
             skill_id,
@@ -92,7 +78,7 @@ def create_skill(
     except FileExistsError as exc:
         raise SkillError(_("Skill already exists: {skill_id} (use --force to overwrite)", skill_id=skill_id)) from exc
     except ValueError as exc:
-        raise ValidationError(str(exc)) from exc
+        raise SkillError(str(exc)) from exc
     ctx.console.print(
         f"[green]✓ {_('Skill created: {name} ({created})', name=escape(name), created=escape(created))}[/green]"
     )
@@ -103,8 +89,6 @@ def delete_skill(ctx: SkillsContext, skill_id: str) -> None:
     sid, info = ctx.resolve_skill(skill_id)
     try:
         ctx.skill_manager.delete(sid)
-    except FileNotFoundError as exc:
-        raise SkillNotFoundError(str(exc)) from exc
-    except ValueError as exc:
+    except (FileNotFoundError, ValueError) as exc:
         raise SkillError(str(exc)) from exc
     ctx.console.print(f"[green]✓ {_('Skill deleted: {name} ({sid})', name=escape(info.name), sid=escape(sid))}[/green]")

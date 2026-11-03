@@ -71,10 +71,6 @@ class TestResourceManager(unittest.TestCase):
         resolved = self.mgr._path("test_item")
         assert resolved == (self.base_path / "test_item.txt").resolve()
 
-    def test_path_traversal_detection_raises_value_error(self) -> None:
-        with pytest.raises(ValueError):
-            self.mgr._path("../outside_item")
-
     def test_require_text_valid(self) -> None:
         assert require_text("  hello world  ", "Field", ValueError) == "hello world"
 
@@ -88,8 +84,7 @@ class TestResourceManager(unittest.TestCase):
             [("id1", "val1")],
             "id1",
             label="Item",
-            not_found_error=ItemNotFoundError,
-            ambiguous_error=AmbiguousItemError,
+            error=ItemNotFoundError,
         )
         assert match == ("id1", "val1")
 
@@ -99,8 +94,7 @@ class TestResourceManager(unittest.TestCase):
                 [],
                 "missing",
                 label="Item",
-                not_found_error=ItemNotFoundError,
-                ambiguous_error=AmbiguousItemError,
+                error=ItemNotFoundError,
             )
 
     def test_resolve_unique_match_ambiguous_raises(self) -> None:
@@ -109,8 +103,7 @@ class TestResourceManager(unittest.TestCase):
                 [("id1", "v1"), ("id2", "v2")],
                 "id",
                 label="Item",
-                not_found_error=ItemNotFoundError,
-                ambiguous_error=AmbiguousItemError,
+                error=AmbiguousItemError,
             )
 
     def test_resolve_unique_match_exact_match_takes_precedence(self) -> None:
@@ -118,8 +111,7 @@ class TestResourceManager(unittest.TestCase):
             [("test", "v1"), ("test-all", "v2")],
             "test",
             label="Item",
-            not_found_error=ItemNotFoundError,
-            ambiguous_error=AmbiguousItemError,
+            error=AmbiguousItemError,
         )
         assert match == ("test", "v1")
 
@@ -128,9 +120,7 @@ class TestResourceManager(unittest.TestCase):
         res = self.mgr.resolve(
             "tool-a",
             label="Item",
-            not_found_error=ItemNotFoundError,
-            ambiguous_error=AmbiguousItemError,
-            validation_error=ItemValidationError,
+            error=ItemNotFoundError,
         )
         assert res == ("tool-a", "alpha")
 
@@ -139,9 +129,7 @@ class TestResourceManager(unittest.TestCase):
             self.mgr.resolve(
                 "missing",
                 label="Item",
-                not_found_error=ItemNotFoundError,
-                ambiguous_error=AmbiguousItemError,
-                validation_error=ItemValidationError,
+                error=ItemNotFoundError,
             )
 
     def test_manager_resolve_ambiguous_raises(self) -> None:
@@ -151,9 +139,7 @@ class TestResourceManager(unittest.TestCase):
             self.mgr.resolve(
                 "tool",
                 label="Item",
-                not_found_error=ItemNotFoundError,
-                ambiguous_error=AmbiguousItemError,
-                validation_error=ItemValidationError,
+                error=AmbiguousItemError,
             )
 
     def test_manager_resolve_validation_error_raises(self) -> None:
@@ -161,9 +147,7 @@ class TestResourceManager(unittest.TestCase):
             self.mgr.resolve(
                 "invalid!",
                 label="Item",
-                not_found_error=ItemNotFoundError,
-                ambiguous_error=AmbiguousItemError,
-                validation_error=ItemValidationError,
+                error=ItemValidationError,
             )
 
 

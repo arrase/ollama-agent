@@ -277,14 +277,12 @@ class AgentRuntime:
             self._checkpointer = checkpointer
         return self._checkpointer
 
-    async def _ensure_graph(self, thread_id: str = "") -> tuple[Any, str, dict[str, Any]]:
-        """Resolve the thread, lazily build the graph, and return (graph, thread, config)."""
-        thread = thread_id or self.thread_id
+    async def _ensure_graph(self) -> Any:  # noqa: ANN401
+        """Lazily build and return the agent graph."""
         async with self._init_lock:
             if self.graph is None:
                 self.graph = await self._build_graph()
-        config: dict[str, Any] = {"configurable": {"thread_id": thread}}
-        return self.graph, thread, config
+        return self.graph
 
     # -------------------------------------------------------------------
     # Public API
@@ -343,12 +341,12 @@ class AgentRuntime:
     async def run_streamed(
         self,
         prompt: str | Command[Any],
-        *,
-        thread_id: str = "",
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream agent events for the given prompt."""
-        graph, thread, config = await self._ensure_graph(thread_id)
-        set_active_thread_id(thread)
+        graph = await self._ensure_graph()
+        target_thread = self.thread_id
+        config: dict[str, Any] = {"configurable": {"thread_id": target_thread}}
+        set_active_thread_id(target_thread)
         hide_reasoning = self.settings.model.reasoning_effort.lower() in REASONING_HIDE_VALUES
 
         try:
@@ -377,16 +375,16 @@ class AgentRuntime:
         if state.interrupts:
             yield {"type": "interrupt", "interrupts": state.interrupts}
 
-    async def get_thread_messages(self, thread_id: str = "") -> list[Any]:
+    async def get_thread_messages(self, thread_id: str) -> list[Any]:
         """Return the raw stored messages for a thread (empty when unknown)."""
-        graph, _thread, config = await self._ensure_graph(thread_id)
-        state = await graph.aget_state(config)
+        graph = await self._ensure_graph()
+        state = await graph.aget_state({"configurable": {"thread_id": thread_id}})
         return list(state.values.get("messages", []))
 
-    async def count_effective_tokens(self, thread_id: str = "") -> int:
+    async def count_effective_tokens(self, thread_id: str) -> int:
         """Count tokens of the effective context for a thread."""
-        graph, _thread, config = await self._ensure_graph(thread_id)
-        state = await graph.aget_state(config)
+        graph = await self._ensure_graph()
+        state = await graph.aget_state({"configurable": {"thread_id": thread_id}})
         values = state.values
         messages = list(values.get("messages", []))
         event = values.get("_summarization_event")

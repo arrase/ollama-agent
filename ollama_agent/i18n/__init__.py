@@ -28,7 +28,6 @@ SUPPORTED_LOCALES: tuple[str, ...] = (
 )
 DEFAULT_LOCALE = "en"
 
-_current_locale: str = DEFAULT_LOCALE
 _translations: dict[str, str] = {}
 
 
@@ -56,11 +55,9 @@ def detect_system_language() -> str:
     return DEFAULT_LOCALE
 
 
-def set_locale(lang: str | None = None) -> str:
-    global _current_locale, _translations
-    if lang is not None and not lang.strip():
-        raise ValueError("Language must be a non-empty locale code")
-    target = _normalize_lang(lang) if lang else detect_system_language()
+def set_locale(lang: str | None = None) -> None:
+    global _translations
+    target = _normalize_lang(lang) if lang is not None else detect_system_language()
     if target not in SUPPORTED_LOCALES:
         raise ValueError(f"Unsupported language: {lang}. Expected one of: {', '.join(SUPPORTED_LOCALES)}")
 
@@ -78,33 +75,17 @@ def set_locale(lang: str | None = None) -> str:
         translations = data
 
     _translations = translations
-    _current_locale = target
-    return _current_locale
-
-
-def get_locale() -> str:
-    return _current_locale
 
 
 def get_text(message: str, **kwargs: Any) -> str:
     text = _translations.get(message, message)
-    if not kwargs:
-        return text
-    try:
-        return text.format(**kwargs)
-    except (KeyError, IndexError, ValueError):
-        # A literal brace in a (possibly translated) message must not crash the caller.
-        return text
+    return text.format(**kwargs) if kwargs else text
 
 
 _ = get_text
 
 __all__ = [
-    "DEFAULT_LOCALE",
     "SUPPORTED_LOCALES",
     "_",
-    "detect_system_language",
-    "get_locale",
-    "get_text",
     "set_locale",
 ]

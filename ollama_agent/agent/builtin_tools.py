@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-from contextvars import ContextVar
-from typing import Any, TypedDict
+from typing import TypedDict
 
 from langchain_core.tools import BaseTool, tool
 
 from ..i18n import _
-from ..rag import RAGError, RAGManager, RAGNotLoadedError
+from ..rag import RAGError, RAGManager
+from ..settings import HISTORY_DB_PATH
 from . import episodic_memory
 
 
@@ -18,53 +18,41 @@ class RAGToolResult(TypedDict, total=False):
 
     success: bool
     context: str
-    results: list[dict[str, Any]]
     error: str
 
 
-_UNSET: Any = object()
-_default_tool_timeout: int = 30
-_default_rag_manager: RAGManager | None = None
-_default_active_thread_id: str = ""
-
-_tool_timeout_var: ContextVar[Any] = ContextVar("tool_timeout", default=_UNSET)
-_rag_manager_var: ContextVar[Any] = ContextVar("rag_manager", default=_UNSET)
-_active_thread_id_var: ContextVar[Any] = ContextVar("active_thread_id", default=_UNSET)
+_tool_timeout: int = 30
+_rag_manager: RAGManager | None = None
+_active_thread_id: str = ""
 
 
 def set_tool_timeout(timeout: int) -> None:
-    global _default_tool_timeout
+    global _tool_timeout
     if timeout <= 0:
         raise ValueError(_("Tool timeout must be greater than 0, got {timeout_s}", timeout_s=timeout))
-    _default_tool_timeout = timeout
-    _tool_timeout_var.set(timeout)
+    _tool_timeout = timeout
 
 
 def get_tool_timeout() -> int:
-    val = _tool_timeout_var.get()
-    return _default_tool_timeout if val is _UNSET else val
+    return _tool_timeout
 
 
 def set_rag_manager(mgr: RAGManager | None) -> None:
-    global _default_rag_manager
-    _default_rag_manager = mgr
-    _rag_manager_var.set(mgr)
+    global _rag_manager
+    _rag_manager = mgr
 
 
 def get_rag_manager() -> RAGManager | None:
-    val = _rag_manager_var.get()
-    return _default_rag_manager if val is _UNSET else val
+    return _rag_manager
 
 
 def set_active_thread_id(thread_id: str) -> None:
-    global _default_active_thread_id
-    _default_active_thread_id = thread_id
-    _active_thread_id_var.set(thread_id)
+    global _active_thread_id
+    _active_thread_id = thread_id
 
 
 def get_active_thread_id() -> str:
-    val = _active_thread_id_var.get()
-    return _default_active_thread_id if val is _UNSET else val
+    return _active_thread_id
 
 
 @tool
@@ -73,7 +61,7 @@ async def rag_search(query: str, top_k: int | None = None) -> RAGToolResult:
     try:
         mgr = get_rag_manager()
         if mgr is None:
-            raise RAGNotLoadedError(_("No RAG database loaded."))
+            raise RAGError(_("No RAG database loaded."))  # noqa: TRY301
         results = await mgr.search(query, top_k)
         context_parts: list[str] = []
         for r in results:
@@ -96,7 +84,7 @@ async def search_past_conversations(query: str, limit: int = 3) -> str:
         results = await asyncio.to_thread(
             episodic_memory.search_past_conversations_in_db,
             query=query,
-            db_path=episodic_memory.HISTORY_DB_PATH,
+            db_path=HISTORY_DB_PATH,
             exclude_thread_id=get_active_thread_id(),
             limit=limit,
         )
@@ -106,16 +94,3 @@ async def search_past_conversations(query: str, limit: int = 3) -> str:
 
 
 BUILTIN_TOOLS: list[BaseTool] = [search_past_conversations]
-
-__all__ = [
-    "BUILTIN_TOOLS",
-    "RAGToolResult",
-    "get_active_thread_id",
-    "get_rag_manager",
-    "get_tool_timeout",
-    "rag_search",
-    "search_past_conversations",
-    "set_active_thread_id",
-    "set_rag_manager",
-    "set_tool_timeout",
-]

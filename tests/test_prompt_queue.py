@@ -9,7 +9,7 @@ from conftest import make_mock_repl, recording_console
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.types import Command
 
-from ollama_agent.interfaces.tui import OllamaAgentApp
+from ollama_agent.interfaces.tui.app import OllamaAgentApp
 from ollama_agent.interfaces.tui.commands import IMMEDIATE_COMMANDS, _is_immediate_command
 from ollama_agent.interfaces.tui.completion import slash_completions
 from ollama_agent.interfaces.tui.widgets import (
@@ -438,35 +438,6 @@ class TestUserCancellationWithQueue(unittest.IsolatedAsyncioTestCase):
             assert sys_out.display
             assert "Prompt queue cleared" in str(sys_out.render())
 
-    async def test_cancel_generation_cancels_worker_and_approval(self) -> None:
-        repl = make_mock_repl()
-        app = OllamaAgentApp(repl)
-        async with app.run_test():
-            footer = app.query_one(AgentFooter)
-            chat_scroll = app.query_one("#chat-scroll")
-
-            # Active generating worker
-            mock_worker = MagicMock()
-            app._is_generating = True
-            app._current_worker = mock_worker
-
-            app.action_cancel_generation()
-            mock_worker.cancel.assert_called_once()
-
-            # Approval pending cancellation
-            app._is_generating = False
-            app._is_approval_pending = True
-            footer.set_approval(True)
-
-            app.action_cancel_generation()
-            assert not app._is_approval_pending
-            assert "Approval required" not in str(footer.render())
-
-            assert len(list(chat_scroll.query(".system-message"))) == 0
-            sys_out = app.query_one(SystemOutputWidget)
-            assert sys_out.display
-            assert "Approval cancelled" in str(sys_out.render())
-
     async def test_action_cancel_or_quit_branches(self) -> None:
         repl = make_mock_repl()
         app = OllamaAgentApp(repl)
@@ -648,7 +619,7 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
 
     def test_queue_list_when_empty(self) -> None:
         repl = make_mock_repl()
-        repl.app = None
+        OllamaAgentApp(repl)
         repl._handle_queue_cmd([])
         output = repl.console.export_text()
         assert "Prompt queue is empty" in output
@@ -683,8 +654,6 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
 
             assert "Prompt queue cleared (3 removed)" in output
             assert len(app._prompt_queue) == 0
-            footer = app.query_one(AgentFooter)
-            assert footer._queued_count == 0
 
     async def test_queue_rm_success(self) -> None:
         repl = make_mock_repl()
@@ -703,8 +672,6 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
             assert len(app._prompt_queue) == 2
             assert app._prompt_queue[0] == "Item 1"
             assert app._prompt_queue[1] == "Item 3"
-            footer = app.query_one(AgentFooter)
-            assert footer._queued_count == 2
 
     async def test_queue_rm_with_hash_prefix(self) -> None:
         repl = make_mock_repl()
@@ -741,14 +708,14 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
 
     def test_queue_rm_missing_position(self) -> None:
         repl = make_mock_repl()
-        repl.app = None
+        OllamaAgentApp(repl)
         repl._handle_queue_cmd(["rm"])
         output = repl.console.export_text()
         assert "Usage: /queue rm <position>" in output
 
     def test_queue_rm_when_empty(self) -> None:
         repl = make_mock_repl()
-        repl.app = None
+        OllamaAgentApp(repl)
         repl._handle_queue_cmd(["rm", "1"])
         output = repl.console.export_text()
         assert "Prompt queue is empty." in output
@@ -806,21 +773,10 @@ class TestQueueSlashCommandsHandler(unittest.IsolatedAsyncioTestCase):
 
     def test_queue_invalid_subcommand(self) -> None:
         repl = make_mock_repl()
-        repl.app = None
+        OllamaAgentApp(repl)
         repl._handle_queue_cmd(["unknown_cmd"])
         output = repl.console.export_text()
         assert "Unknown queue subcommand 'unknown_cmd'" in output
-
-    def test_queue_handler_when_app_is_none(self) -> None:
-        repl = make_mock_repl()
-        repl.app = None
-
-        repl._handle_queue_cmd(["list"])
-        assert "Prompt queue is empty" in repl.console.export_text()
-
-        repl.console = recording_console()
-        repl._handle_queue_cmd(["clear"])
-        assert "Prompt queue cleared (0 removed)" in repl.console.export_text()
 
 
 class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
@@ -919,8 +875,11 @@ class TestSessionTransitionsWithQueue(unittest.IsolatedAsyncioTestCase):
                 if isinstance(prompt, str):
                     streamed.append(prompt)
 
+            def fake_resume_not_found(console: object, target_id: str) -> None:
+                console.print(f"[red]Session '{target_id}' not found.[/red]")  # type: ignore[attr-defined]
+
             with (
-                patch("ollama_agent.interfaces.tui.commands.resume_session", return_value=None),
+                patch("ollama_agent.interfaces.tui.commands.resume_session", side_effect=fake_resume_not_found),
                 patch("ollama_agent.interfaces.tui.app.stream_agent_events", side_effect=fake_stream_events),
             ):
                 app._process_next_in_queue()

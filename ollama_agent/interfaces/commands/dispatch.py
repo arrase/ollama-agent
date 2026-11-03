@@ -20,7 +20,6 @@ from ...mcp.commands import list_mcp_servers, reload_mcp_servers
 from ...rag import (
     RAGContext,
     RAGError,
-    RAGManager,
     add_rag_directory,
     add_rag_file,
     create_rag_database,
@@ -95,7 +94,7 @@ async def _cli_export_session(
     console: Console,
     settings: Settings,
     session_id: str,
-    output_path: str | None = None,
+    output_path: str | None,
 ) -> None:
     async with AgentRuntime(settings=settings) as runtime:
         await export_session(console, runtime, session_id, output_path=output_path)
@@ -105,7 +104,7 @@ def build_cli_handlers(
     args: argparse.Namespace,
     *,
     task_ctx: TasksContext,
-    rag_ctx: RAGContext | None = None,
+    rag_ctx: RAGContext | None,
     skills_ctx: SkillsContext,
     settings: Settings,
 ) -> dict[tuple[str, str], CLIHandler]:
@@ -113,9 +112,7 @@ def build_cli_handlers(
     console = task_ctx.console
 
     def _get_rag_ctx() -> RAGContext:
-        nonlocal rag_ctx
-        if rag_ctx is None:
-            rag_ctx = RAGContext(rag_manager=RAGManager(settings.rag), console=console)
+        assert rag_ctx is not None  # noqa: S101
         return rag_ctx
 
     async def task_run() -> None:
@@ -135,13 +132,10 @@ def build_cli_handlers(
     async def rag_add() -> None:
         ctx = _get_rag_ctx()
         load_rag_database(ctx, args.database)
-        try:
-            if args.dir:
-                await add_rag_directory(ctx, args.path)
-                return
-            await add_rag_file(ctx, args.path)
-        finally:
-            await ctx.rag_manager.aclose()
+        if args.dir:
+            await add_rag_directory(ctx, args.path)
+            return
+        await add_rag_file(ctx, args.path)
 
     return {
         ("task", "list"): lambda: list_tasks(task_ctx),
@@ -225,9 +219,9 @@ class REPLEnvironment:
         on_show: Callable[[], object],
         on_switch: Callable[[str], object],
     ) -> object:
-        if not args or args[0] in ("list", "show"):
+        if not args or args[0] == "list":
             return on_show()
-        if args[0] in ("set", "use", "switch"):
+        if args[0] == "set":
             val = self._require_arg(args, 1, usage)
             return on_switch(val) if val is not None else None
         if len(args) == 1:

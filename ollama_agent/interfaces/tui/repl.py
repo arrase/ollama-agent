@@ -8,7 +8,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from ...agent import AgentRuntime
-from ...agent.builtin_tools import set_rag_manager, set_tool_timeout
+from ...agent.builtin_tools import set_rag_manager
 from ...core import shorten
 from ...i18n import _
 from ...rag import RAGContext, RAGManager, load_rag_database
@@ -37,7 +37,7 @@ class OllamaREPL:
         self._initial_rag_database = rag_database
         self._rag_ctx: RAGContext | None = None
         self._commands: dict[str, REPLHandler] | None = None
-        self.app: OllamaAgentApp | None = None
+        self.app: OllamaAgentApp
 
     def _get_rag_ctx(self) -> RAGContext:
         if self._rag_ctx is None:
@@ -73,8 +73,6 @@ class OllamaREPL:
             rag_ctx = self._get_rag_ctx()
             load_rag_database(rag_ctx, self._initial_rag_database)
 
-        set_tool_timeout(self.runtime.settings.runtime.builtin_tool_timeout)
-
         app = OllamaAgentApp(self)
         try:
             await app.run_async()
@@ -84,10 +82,9 @@ class OllamaREPL:
         finally:
             await self.cleanup()
 
-    def _handle_new_session(self) -> None:
-        with self.console.capture():
-            self.runtime.thread_id = new_session(self.console)
-        self.runtime.last_context_tokens = 0
+    def _handle_new_session(self) -> str:
+        self.runtime.thread_id = new_session(self.runtime)
+        return self.runtime.thread_id
 
     def _parse_toggle_arg(self, args: list[str], *, current: bool, usage: str) -> bool | None:
         if not args:
@@ -147,13 +144,11 @@ class OllamaREPL:
             return
         item = queue[pos - 1]
         del queue[pos - 1]
-        if self.app is not None:
-            self.app._update_queue_ui()
         msg = _("Removed #{pos} from prompt queue: {text}", pos=pos, text=shorten(item))
         self.console.print(f"[bold #34d399]✓ {escape(msg)}[/bold #34d399]")
 
     def _handle_queue_cmd(self, args: list[str]) -> None:
-        queue = self.app._prompt_queue if self.app is not None else deque()
+        queue = self.app._prompt_queue
         if not args or args[0] == "list":
             if not queue:
                 self.console.print(f"[dim]{_('Prompt queue is empty.')}[/dim]")
@@ -165,8 +160,6 @@ class OllamaREPL:
         if args[0] == "clear":
             count = len(queue)
             queue.clear()
-            if self.app is not None:
-                self.app._update_queue_ui()
             msg = _("Prompt queue cleared ({count} removed).", count=count)
             self.console.print(f"[bold #34d399]✓ {escape(msg)}[/bold #34d399]")
             return

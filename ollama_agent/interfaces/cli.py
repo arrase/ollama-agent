@@ -333,7 +333,6 @@ def handle_subcommand(args: argparse.Namespace, settings: Settings) -> None:
     skills_ctx = SkillsContext(console=console, skill_manager=SkillManager())
     rag_ctx = RAGContext(console=console, rag_manager=RAGManager(settings.rag)) if args.command == "rag" else None
 
-    handler_key = (args.command, args.subcommand)
     handlers = build_cli_handlers(
         args,
         task_ctx=ctx,
@@ -341,13 +340,7 @@ def handle_subcommand(args: argparse.Namespace, settings: Settings) -> None:
         skills_ctx=skills_ctx,
         settings=settings,
     )
-    handler = handlers.get(handler_key)
-    if handler is None:
-        if rag_ctx is not None:
-            asyncio.run(rag_ctx.rag_manager.aclose())
-        message = _("Unknown command: {command} {subcommand}", command=args.command, subcommand=args.subcommand)
-        console.print(f"[red]{escape(message)}[/red]")
-        raise SystemExit(2)
+    handler = handlers[(args.command, args.subcommand)]
 
     try:
         result = handler()

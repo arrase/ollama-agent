@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
@@ -67,13 +68,11 @@ class TaskInput:
 
     def coerce(self, name: str, val: object) -> bool | int | float | str:
         """Coerce an input value to the expected type."""
-        if self.type == "boolean":
-            return _coerce_boolean(name, val)
-        if self.type == "number":
-            return _coerce_number(name, val)
         if self.type == "string":
             return str(val)
-        raise ValueError(_("Unsupported input type '{type}' for input '{name}'", type=self.type, name=name))
+        if self.type == "boolean":
+            return _coerce_boolean(name, val)
+        return _coerce_number(name, val)
 
 
 _VALID_TASK_INPUT_TYPES = ("string", "boolean", "number")
@@ -137,25 +136,22 @@ class Task:
             inputs=_task_inputs_from_dict(d["inputs"]) if "inputs" in d else {},
         )
 
-    def render(self, variables: dict[str, Any] | None = None) -> str:
+    def render(self, variables: Mapping[str, Any] | None = None) -> str:
         """Render the task prompt template using provided variables."""
-        context = dict(variables) if variables else {}
+        context: dict[str, Any] = dict(variables) if variables else {}
         for name, inp in self.inputs.items():
-            # A required input must have a usable value whether it was omitted or
-            # explicitly passed as None.
-            if inp.required and context.get(name) is None:
+            if inp.required and name not in context:
                 raise ValueError(_("Missing required input: {name}", name=name))
-            if name not in context:
-                if inp.default is not None:
-                    # Defaults go through coerce() so `default: "5"` with `type: number`
-                    # does not reach the template as a string.
-                    context[name] = inp.coerce(name, inp.default)
-                else:
-                    # Optional and absent: render as empty rather than letting
-                    # StrictUndefined raise UndefinedError on an otherwise valid task.
-                    context[name] = ""
-            elif context[name] is not None:
+            if name in context:
                 context[name] = inp.coerce(name, context[name])
+            elif inp.default is not None:
+                # Defaults go through coerce() so `default: "5"` with `type: number`
+                # does not reach the template as a string.
+                context[name] = inp.coerce(name, inp.default)
+            else:
+                # Optional and absent: render as empty rather than letting
+                # StrictUndefined raise UndefinedError on an otherwise valid task.
+                context[name] = ""
         return render_prompt_template(self.prompt, context)
 
 

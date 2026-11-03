@@ -13,7 +13,7 @@ from ollama_agent.interfaces.clipboard import (
     copy_to_system_clipboard,
     get_system_clipboard,
 )
-from ollama_agent.interfaces.tui import OllamaAgentApp
+from ollama_agent.interfaces.tui.app import OllamaAgentApp
 from ollama_agent.interfaces.tui.widgets import UserMessage
 
 
@@ -382,34 +382,3 @@ class TestAppClipboardIntegration(unittest.IsolatedAsyncioTestCase):
                 assert app._clipboard == "test copy content"
                 mock_notify.assert_called_once()
                 assert "no xclip" in mock_notify.call_args[0][0]
-
-    async def test_screen_forward_event_handles_detached_widget_gracefully(self) -> None:
-        repl_mock = make_mock_repl()
-
-        app = OllamaAgentApp(repl_mock)
-        async with app.run_test():
-            event = events.MouseDown(None, 5, 5, 0, 0, 1, ctrl=False, meta=False, shift=False)
-            with (
-                patch(
-                    "textual.screen.Screen._forward_event",
-                    side_effect=AttributeError("'NoneType' object has no attribute 'region'"),
-                ),
-                patch("logging.warning"),
-            ):
-                app.screen._forward_event(event)
-                assert app.screen._select_state is None
-
-    async def test_screen_forward_event_reraises_other_attribute_error(self) -> None:
-        repl_mock = make_mock_repl()
-
-        app = OllamaAgentApp(repl_mock)
-        async with app.run_test():
-            event = events.MouseDown(None, 5, 5, 0, 0, 1, ctrl=False, meta=False, shift=False)
-            with (
-                patch(
-                    "textual.screen.Screen._forward_event",
-                    side_effect=AttributeError("'CustomType' object has no attribute 'something_else'"),
-                ),
-                pytest.raises(AttributeError),
-            ):
-                app.screen._forward_event(event)

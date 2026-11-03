@@ -46,10 +46,7 @@ class BaseFileStoreManager(ABC, Generic[T]):
     def _path(self, item_id: str) -> Path:
         """Return the filesystem path for *item_id*."""
         valid_id = validate_identifier(item_id, self.not_found_label)
-        resolved = (self.base_dir / f"{valid_id}{self._ext}").resolve()
-        if not resolved.is_relative_to(self.base_dir) or resolved == self.base_dir:
-            raise ValueError(_("Path traversal detected: {item_id}", item_id=item_id))
-        return resolved
+        return (self.base_dir / f"{valid_id}{self._ext}").resolve()
 
     # ------------------------------------------------------------------
     # Abstract interface – subclasses must implement
@@ -76,21 +73,18 @@ class BaseFileStoreManager(ABC, Generic[T]):
         prefix: str,
         *,
         label: str,
-        not_found_error: type[Exception],
-        ambiguous_error: type[Exception],
-        validation_error: type[Exception],
+        error: type[Exception],
     ) -> tuple[str, T]:
         """Find a unique match for *prefix* or raise a domain-specific error."""
         try:
             matches = self.find_matches(prefix)
         except ValueError as exc:
-            raise validation_error(str(exc)) from exc
+            raise error(str(exc)) from exc
         return resolve_unique_match(
             matches,
             prefix,
             label=label,
-            not_found_error=not_found_error,
-            ambiguous_error=ambiguous_error,
+            error=error,
         )
 
 
@@ -106,24 +100,14 @@ def resolve_unique_match(
     prefix: str,
     *,
     label: str,
-    not_found_error: type[E],
-    ambiguous_error: type[E],
+    error: type[E],
 ) -> tuple[str, T]:
     """Return the only match for *prefix* or raise the matching domain error."""
     if len(matches) == 1:
         return matches[0]
     if not matches:
-        raise not_found_error(_("{label} not found: {prefix}", label=label, prefix=prefix))
+        raise error(_("{label} not found: {prefix}", label=label, prefix=prefix))
     for item in matches:
         if item[0] == prefix:
             return item
-    raise ambiguous_error(
-        _("Ambiguous prefix: {name} -> {matches}", name=prefix, matches=", ".join(m[0] for m in matches))
-    )
-
-
-__all__ = [
-    "BaseFileStoreManager",
-    "require_text",
-    "resolve_unique_match",
-]
+    raise error(_("Ambiguous prefix: {name} -> {matches}", name=prefix, matches=", ".join(m[0] for m in matches)))

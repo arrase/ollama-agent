@@ -8,7 +8,6 @@ import json
 import logging
 import os
 import re
-import sys
 from collections.abc import AsyncIterator, Iterator
 from typing import Any, TextIO, cast
 
@@ -34,13 +33,8 @@ def _open_mcp_log() -> TextIO:
 
 
 @contextlib.asynccontextmanager
-async def _mcp_stdio_client(server: Any, errlog: Any = None) -> AsyncIterator[Any]:  # noqa: ANN401
+async def _mcp_stdio_client(server: Any) -> AsyncIterator[Any]:  # noqa: ANN401
     """Redirect stdio MCP server stderr to mcp.log to keep the TUI pristine."""
-    if errlog is not None and errlog is not sys.stderr:
-        async with _orig_stdio_client(server, errlog=errlog) as streams:
-            yield streams
-        return
-
     f = await asyncio.to_thread(_open_mcp_log)
     try:
         async with _orig_stdio_client(server, errlog=f) as streams:
@@ -53,8 +47,8 @@ async def _mcp_stdio_client(server: Any, errlog: Any = None) -> AsyncIterator[An
 def _patched_stdio_client() -> Iterator[None]:
     global _stdio_patch_depth
     if _stdio_patch_depth == 0:
-        mcp.client.stdio.stdio_client = _mcp_stdio_client
-        langchain_mcp_adapters.sessions.stdio_client = _mcp_stdio_client  # type: ignore[attr-defined]
+        mcp.client.stdio.stdio_client = _mcp_stdio_client  # type: ignore[assignment]
+        langchain_mcp_adapters.sessions.stdio_client = _mcp_stdio_client  # type: ignore[attr-defined,assignment]
     _stdio_patch_depth += 1
     try:
         yield
@@ -135,7 +129,7 @@ def _build_stdio_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, 
 
 
 def _build_url_connection(server_name: str, cfg: dict[str, Any]) -> dict[str, Any]:
-    url = cfg["url"] if "url" in cfg else cfg.get("httpUrl")
+    url = cfg["url"] if "url" in cfg else cfg["httpUrl"]
     if not isinstance(url, str) or not url.strip():
         raise MCPConfigError(_("MCP server '{name}': 'url' must be a non-empty string", name=server_name))
     if "transport" in cfg:

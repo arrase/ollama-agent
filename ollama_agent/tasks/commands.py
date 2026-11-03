@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import weakref
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -18,25 +17,12 @@ from ..core import DEFAULT_REASONING_EFFORT, ReasoningEffortValue, check_ollama_
 from ..i18n import _
 from ..rag import RAGContext, RAGManager, load_rag_database
 from ..settings import Settings
-from ..settings.config import _task_model_overrides
 from ..streaming import run_non_interactive
 from .manager import Task, TaskManager
 
 
 class TaskError(Exception):
     """Base exception for task command failures."""
-
-
-class TaskNotFoundError(TaskError):
-    """Raised when a task cannot be resolved by its ID/prefix."""
-
-
-class AmbiguousTaskError(TaskError):
-    """Raised when a task ID prefix matches multiple tasks."""
-
-
-class ValidationError(TaskError):
-    """Raised when a validation rule fails for task parameters."""
 
 
 @dataclass
@@ -51,9 +37,7 @@ class TasksContext:
         return self.task_manager.resolve(
             task_id,
             label=_("Task"),
-            not_found_error=TaskNotFoundError,
-            ambiguous_error=AmbiguousTaskError,
-            validation_error=ValidationError,
+            error=TaskError,
         )
 
 
@@ -62,11 +46,11 @@ def parse_var_assignments(args: list[str]) -> dict[str, str]:
     result: dict[str, str] = {}
     for item in args:
         if "=" not in item:
-            raise ValidationError(_("Invalid variable assignment '{item}'. Expected 'key=value'.", item=item))
+            raise TaskError(_("Invalid variable assignment '{item}'. Expected 'key=value'.", item=item))
         key, value = item.split("=", 1)
         key = key.strip()
         if not key:
-            raise ValidationError(_("Invalid variable assignment '{item}'. Expected 'key=value'.", item=item))
+            raise TaskError(_("Invalid variable assignment '{item}'. Expected 'key=value'.", item=item))
         result[key] = value
     return result
 
@@ -79,27 +63,16 @@ def apply_task_settings(
     preserve_effort: bool = False,
 ) -> Callable[[], None]:
     """Apply the task's model and reasoning effort onto *settings* and return a restore callback."""
-    model_settings = settings.model
-    key = id(model_settings)
-    if key in _task_model_overrides and _task_model_overrides[key][0]() is model_settings:
-        orig_name, orig_effort = _task_model_overrides[key][1], _task_model_overrides[key][2]
-    else:
-        orig_name, orig_effort = model_settings.name, model_settings.reasoning_effort
-    if not preserve_model and task.model:
-        model_settings.name = task.model
-    if not preserve_effort and task.reasoning_effort:
-        model_settings.reasoning_effort = task.reasoning_effort
-    applied_name = model_settings.name
-    applied_effort = model_settings.reasoning_effort
-    ref = weakref.ref(model_settings, lambda _: _task_model_overrides.pop(key, None))
-    _task_model_overrides[key] = (ref, orig_name, orig_effort, applied_name, applied_effort)
+    model_cfg = settings.model
+    orig_name, orig_effort = model_cfg.name, model_cfg.reasoning_effort
+    if not preserve_model:
+        model_cfg.name = task.model
+    if not preserve_effort:
+        model_cfg.reasoning_effort = task.reasoning_effort
 
     def _restore() -> None:
-        _task_model_overrides.pop(key, None)
-        if model_settings.name == applied_name:
-            model_settings.name = orig_name
-        if model_settings.reasoning_effort == applied_effort:
-            model_settings.reasoning_effort = orig_effort
+        model_cfg.name = orig_name
+        model_cfg.reasoning_effort = orig_effort
 
     return _restore
 
@@ -124,14 +97,14 @@ def list_tasks(ctx: TasksContext) -> None:
 def prepare_task_run(
     ctx: TasksContext,
     task_id: str,
-    variables: dict[str, Any] | None = None,
+    variables: Mapping[str, Any] | None = None,
 ) -> tuple[str, Task, str]:
     """Resolve *task_id* and render its prompt template with *variables*."""
     tid, task = ctx.resolve_task(task_id)
     try:
         rendered_prompt = task.render(variables)
     except (ValueError, TemplateError) as exc:
-        raise ValidationError(str(exc)) from exc
+        raise TaskError(str(exc)) from exc
     return tid, task, rendered_prompt
 
 
@@ -139,7 +112,7 @@ async def run_task(
     ctx: TasksContext,
     task_id: str,
     *,
-    variables: dict[str, Any] | None = None,
+    variables: Mapping[str, Any] | None = None,
     yolo: bool = False,
     stealth: bool = False,
     rag: str | None = None,
@@ -199,16 +172,16 @@ def create_task(
     reasoning_effort: ReasoningEffortValue = DEFAULT_REASONING_EFFORT,
     force: bool = False,
 ) -> None:
-    title = require_text(title, _("Title"), ValidationError)
-    prompt_text = require_text(prompt, _("Prompt"), ValidationError)
-    model_name = require_text(model, _("Model"), ValidationError)
+    title = require_text(title, _("Title"), TaskError)
+    prompt_text = require_text(prompt, _("Prompt"), TaskError)
+    model_name = require_text(model, _("Model"), TaskError)
     try:
         task = Task(title, prompt_text, model_name, reasoning_effort=reasoning_effort)
         saved_id = ctx.task_manager.save(task_id, task, overwrite=force)
     except FileExistsError as exc:
         raise TaskError(_("Task already exists: {task_id} (use --force to overwrite)", task_id=task_id)) from exc
     except ValueError as e:
-        raise ValidationError(str(e)) from e
+        raise TaskError(str(e)) from e
     ctx.console.print(
         f"[green]✓ {_('Task created: {title} ({task_id})', title=escape(task.title), task_id=escape(saved_id))}[/green]"
     )

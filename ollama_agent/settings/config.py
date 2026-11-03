@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import os
-import weakref
 from dataclasses import asdict, dataclass, field
 from importlib import resources
 from pathlib import Path
-from typing import Any, Self, TypeVar
+from typing import Any, Self
 
 import yaml
 from pydantic import (
@@ -28,13 +27,11 @@ from ..core import (
 from ..i18n import _
 from .paths import (
     INSTRUCTIONS_PATH,
-    MEMORY_PATH,
     RAG_DIR,
     SETTINGS_PATH,
 )
 
 _FORBID_EXTRA = ConfigDict(extra="forbid")
-_task_model_overrides: dict[int, tuple[weakref.ref[ModelSettings], str, str, str, str]] = {}
 
 # ---------------------------------------------------------------------------
 # Settings dataclasses (CUD-inspired)
@@ -42,7 +39,7 @@ _task_model_overrides: dict[int, tuple[weakref.ref[ModelSettings], str, str, str
 
 
 @with_config(_FORBID_EXTRA)
-@dataclass(slots=True, weakref_slot=True)
+@dataclass(slots=True)
 class ModelSettings:
     name: StrictStr = ""
     base_url: StrictStr = "http://localhost:11434"
@@ -145,23 +142,13 @@ class Settings:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> Self:
-        return _dataclass_from_dict(cls, raw)
+        try:
+            return TypeAdapter(cls).validate_python(raw)
+        except ValidationError as exc:
+            raise ValueError(str(exc)) from exc
 
     def to_dict(self) -> dict[str, Any]:
-        d = asdict(self)
-        key = id(self.model)
-        if key in _task_model_overrides:
-            ref, orig_name, orig_effort, applied_name, applied_effort = _task_model_overrides[key]
-            if ref() is self.model:
-                if self.model.name == applied_name:
-                    d["model"]["name"] = orig_name
-                if self.model.reasoning_effort == applied_effort:
-                    d["model"]["reasoning_effort"] = orig_effort
-        d["model"] = {k: v for k, v in d["model"].items() if v is not None}
-        ls = d["langsmith"]
-        if not any(ls.values()):
-            d.pop("langsmith")
-        return d
+        return asdict(self)
 
     def setup_environment(self) -> None:
         """Inject settings into the environment variables."""
@@ -173,21 +160,6 @@ class Settings:
             os.environ["LANGSMITH_PROJECT"] = self.langsmith.project
         if self.langsmith.endpoint:
             os.environ["LANGSMITH_ENDPOINT"] = self.langsmith.endpoint
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-T = TypeVar("T")
-
-
-def _dataclass_from_dict(cls: type[T], raw: object) -> T:
-    try:
-        return TypeAdapter(cls).validate_python(raw)
-    except ValidationError as exc:
-        raise ValueError(str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -236,7 +208,7 @@ def load_instructions(instructions_path: Path = INSTRUCTIONS_PATH) -> str:
 # ---------------------------------------------------------------------------
 
 
-def ensure_memory_file(memory_path: Path = MEMORY_PATH) -> Path:
+def ensure_memory_file(memory_path: Path) -> None:
     """Ensure the MEMORY.md file exists, creating it with defaults if needed."""
     if not memory_path.exists():
         memory_path.parent.mkdir(parents=True, exist_ok=True)
@@ -244,7 +216,6 @@ def ensure_memory_file(memory_path: Path = MEMORY_PATH) -> Path:
             "# Long-Term Memory\n\nNo persistent memories yet.\n",
             encoding="utf-8",
         )
-    return memory_path
 
 
 # ---------------------------------------------------------------------------

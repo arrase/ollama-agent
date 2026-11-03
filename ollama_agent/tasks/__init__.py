@@ -11,12 +11,9 @@ from .commands import (
     prepare_task_run,
     run_task,
 )
-from .manager import Task, TaskManager
 
 __all__ = [
-    "Task",
     "TaskError",
-    "TaskManager",
     "TasksContext",
     "apply_task_settings",
     "create_task",

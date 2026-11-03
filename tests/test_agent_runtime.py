@@ -19,7 +19,7 @@ from ollama_agent.agent.agent import AgentRuntime, _prepare_instructions
 from ollama_agent.agent.builtin_tools import rag_search, set_rag_manager
 from ollama_agent.agent.middleware import _stream_tool_events, stream_tool_events_mw
 from ollama_agent.core.prompt_processor import PromptProcessingError
-from ollama_agent.rag.manager import RAGNotLoadedError
+from ollama_agent.rag import RAGError
 from ollama_agent.settings.config import (
     ModelSettings,
     RuntimeSettings,
@@ -68,32 +68,6 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             assert call_args_list[0][0][0]["type"] == "tool_call"
             assert call_args_list[0][0][0]["name"] == "web_search"
             assert call_args_list[1][0][0]["type"] == "tool_output"
-
-    async def test_stream_tool_events_task_agent_name_from_metadata(self) -> None:
-        mock_runtime = MagicMock()
-
-        async def dummy_handler(_req: object) -> MagicMock:
-            return MagicMock(content="ok")
-
-        req = ToolCallRequest(
-            tool_call={
-                "name": "task",
-                "args": {"subagent_type": "researcher"},
-                "id": "call-2",
-                "metadata": {"lc_agent_name": "meta_agent"},
-            },
-            tool=None,
-            state={},
-            runtime=mock_runtime,
-        )
-
-        with patch("ollama_agent.agent.middleware.get_tool_timeout", return_value=5):
-            await _stream_tool_events(req, dummy_handler)
-
-        call_event = mock_runtime.stream_writer.call_args_list[0][0][0]
-        assert call_event["agent_name"] == "researcher"
-        out_event = mock_runtime.stream_writer.call_args_list[1][0][0]
-        assert out_event["agent_name"] == "researcher"
 
     async def test_stream_tool_events_task_subagent_type(self) -> None:
         mock_runtime = MagicMock()
@@ -147,39 +121,6 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         out_event = mock_runtime.stream_writer.call_args_list[1][0][0]
         assert out_event["output_len"] == len("subagent final report")
 
-    async def test_stream_tool_events_task_fallback_to_metadata(self) -> None:
-        mock_runtime = MagicMock()
-
-        class DummyCommand:
-            def __str__(self) -> str:
-                return "command_payload"
-
-        async def dummy_handler(_req: object) -> DummyCommand:
-            return DummyCommand()
-
-        req = ToolCallRequest(
-            tool_call={
-                "name": "task",
-                "args": {},
-                "id": "call-2c",
-                "metadata": {"lc_agent_name": "fallback_subagent"},
-            },
-            tool=None,
-            state={},
-            runtime=mock_runtime,
-        )
-
-        with patch("ollama_agent.agent.middleware.get_tool_timeout", return_value=5):
-            await _stream_tool_events(req, dummy_handler)
-
-        call_event = mock_runtime.stream_writer.call_args_list[0][0][0]
-        assert call_event["agent_name"] == "fallback_subagent"
-        out_event = mock_runtime.stream_writer.call_args_list[1][0][0]
-        assert out_event["agent_name"] == "fallback_subagent"
-        # A Command carries no "content", so its reported length is 0 rather than the
-        # length of its repr.
-        assert out_event["output_len"] == 0
-
     async def test_stream_tool_events_timeout_returns_tool_message(self) -> None:
         async def slow_handler(_req: object) -> str:
             await asyncio.sleep(0.5)
@@ -204,6 +145,24 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         call_events = [c[0][0]["type"] for c in mock_runtime.stream_writer.call_args_list]
         assert call_events == ["tool_call", "tool_output"]
 
+    async def test_stream_tool_events_inner_timeout_error_propagates(self) -> None:
+        async def failing_handler(_req: object) -> str:
+            raise TimeoutError("inner socket timeout")
+
+        mock_runtime = MagicMock()
+        req = ToolCallRequest(
+            tool_call={"name": "fetch_url", "args": {}, "id": "call-4"},
+            tool=None,
+            state={},
+            runtime=mock_runtime,
+        )
+
+        with (
+            patch("ollama_agent.agent.middleware.get_tool_timeout", return_value=5),
+            pytest.raises(TimeoutError, match="inner socket timeout"),
+        ):
+            await _stream_tool_events(req, failing_handler)
+
     async def test_rag_search_uninitialized(self) -> None:
         set_rag_manager(None)
         res = await rag_search.ainvoke({"query": "test"})
@@ -212,9 +171,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
 
     async def test_rag_search_no_db_loaded(self) -> None:
         mock_mgr = MagicMock()
-        mock_mgr.search = AsyncMock(
-            side_effect=RAGNotLoadedError("No RAG database loaded. Use /rag load <name> first.")
-        )
+        mock_mgr.search = AsyncMock(side_effect=RAGError("No RAG database loaded. Use /rag load <name> first."))
         set_rag_manager(mock_mgr)
 
         res = await rag_search.ainvoke({"query": "test"})
@@ -427,7 +384,7 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
         runtime = AgentRuntime(settings=settings)
 
         async def mock_astream(*_args: object, **_kwargs: object) -> AsyncIterator[tuple[str, object]]:
-            if False:
+            for _ in ():
                 yield "messages", (MagicMock(), {})
 
         mock_graph = MagicMock()
@@ -683,7 +640,8 @@ class TestAgentRuntimeComponents(unittest.IsolatedAsyncioTestCase):
             mock_reload.assert_awaited_once()
 
             await runtime.set_context_window("max")
-            assert runtime.settings.model.context_window == "max"
+            ctx_window: int | str = runtime.settings.model.context_window
+            assert ctx_window == "max"
 
     async def test_build_graph_mcp_tools_and_subagent_mcp_tools_in_interrupt_on(self) -> None:
         settings = Settings()

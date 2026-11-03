@@ -20,8 +20,7 @@ def extract_text(content: object) -> str:
     """Convert agent payload content into plain text.
 
     Non-text multimodal blocks (image/audio/video/file) contribute no plain text, so
-    a conversation that attached one must still be readable. Genuinely malformed
-    payloads (e.g. a dict with no recognised key) still raise ``TypeError``.
+    a conversation that attached one must still be readable.
     """
     if isinstance(content, str):
         return content
@@ -33,9 +32,7 @@ def extract_text(content: object) -> str:
         for key in ("text", "content"):
             if key in content:
                 return extract_text(content[key])
-        if "type" in content:
-            return ""
-        raise TypeError("Unsupported dict content for extract_text: missing 'text' or 'content' key")
+        return ""
     raise TypeError(f"Unsupported content shape for extract_text: {type(content).__name__}")
 
 
@@ -51,7 +48,7 @@ _WINDOWS_RESERVED_NAMES: frozenset[str] = frozenset(
 )
 
 
-def validate_identifier(name: str, label: str = "identifier") -> str:
+def validate_identifier(name: str, label: str) -> str:
     """Validate that *name* contains only [A-Za-z0-9_-] and is not a reserved system name."""
     name = name.strip()
     if not name or not re.fullmatch(r"[A-Za-z0-9_-]+", name) or name.upper() in _WINDOWS_RESERVED_NAMES:
@@ -67,12 +64,12 @@ def validate_identifier(name: str, label: str = "identifier") -> str:
 QUICK_PREVIEW_LIMIT = 60
 
 
-def shorten(text: str, limit: int = QUICK_PREVIEW_LIMIT) -> str:
-    """Collapse newlines and truncate *text* to *limit* characters with an ellipsis."""
+def shorten(text: str) -> str:
+    """Collapse newlines and truncate *text* to QUICK_PREVIEW_LIMIT characters with an ellipsis."""
     flat = text.replace("\n", " ")
-    if len(flat) <= limit:
+    if len(flat) <= QUICK_PREVIEW_LIMIT:
         return flat
-    return flat[: limit - 3] + "..."
+    return flat[: QUICK_PREVIEW_LIMIT - 3] + "..."
 
 
 def atomic_write_text(path: Path, text: str) -> None:

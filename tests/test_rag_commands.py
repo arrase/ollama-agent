@@ -10,9 +10,7 @@ import pytest
 from rich.console import Console
 
 from ollama_agent.rag.commands import (
-    AmbiguousRAGDatabaseError,
     RAGContext,
-    RAGDatabaseNotFoundError,
     add_rag_directory,
     add_rag_file,
     create_rag_database,
@@ -22,7 +20,7 @@ from ollama_agent.rag.commands import (
     show_rag_status,
     unload_rag_database,
 )
-from ollama_agent.rag.manager import RAGManager
+from ollama_agent.rag.manager import RAGError, RAGManager
 from ollama_agent.settings import RAGSettings
 
 
@@ -56,28 +54,22 @@ class TestRAGCommands(unittest.IsolatedAsyncioTestCase):
         assert ctx.resolve_database("code") == "code"
 
         # Nonexistent DB
-        with pytest.raises(RAGDatabaseNotFoundError):
+        with pytest.raises(RAGError):
             ctx.resolve_database("nonexistent")
 
         # Ambiguous prefix
         mock_mgr.list_database_names.return_value = ["alpha_1", "alpha_2"]
-        with pytest.raises(AmbiguousRAGDatabaseError):
+        with pytest.raises(RAGError):
             ctx.resolve_database("alpha")
-
-    def test_database_resolution_exact_priority(self) -> None:
-        mock_mgr = MagicMock()
-        mock_mgr.list_database_names.return_value = ["alpha", "alphabet"]
-        ctx = RAGContext(rag_manager=mock_mgr, console=self.console)
-        assert ctx.resolve_database("alpha") == "alpha"
 
     def test_database_resolution_empty_name_raises(self) -> None:
         mock_mgr = MagicMock()
         mock_mgr.list_database_names.return_value = ["docs"]
         ctx = RAGContext(rag_manager=mock_mgr, console=self.console)
-        with pytest.raises(RAGDatabaseNotFoundError) as exc:
+        with pytest.raises(RAGError) as exc:
             ctx.resolve_database("")
         assert "cannot be empty" in str(exc.value)
-        with pytest.raises(RAGDatabaseNotFoundError) as exc:
+        with pytest.raises(RAGError) as exc:
             ctx.resolve_database("   ")
         assert "cannot be empty" in str(exc.value)
 

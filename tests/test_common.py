@@ -8,9 +8,10 @@ from unittest.mock import patch
 import pytest
 
 from ollama_agent.core.common import (
-    DEFAULT_REASONING_EFFORT,
+    QUICK_PREVIEW_LIMIT,
     atomic_write_text,
     extract_text,
+    shorten,
     validate_identifier,
 )
 
@@ -39,13 +40,28 @@ class TestCommonUtilities(unittest.TestCase):
             with self.subTest(value=unknown), pytest.raises(TypeError):
                 extract_text(unknown)
 
-    def test_extract_text_dict_without_text_raises_type_error(self) -> None:
-        with pytest.raises(TypeError):
-            extract_text({"foo": "bar"})
+    def test_extract_text_dict_without_text_returns_empty(self) -> None:
+        assert extract_text({"foo": "bar"}) == ""
+        assert extract_text({"type": "image", "base64": "abc"}) == ""
+
+    def test_mixed_blocks_keep_the_text(self) -> None:
+        blocks = [
+            {"type": "text", "text": "Hello"},
+            {"type": "image", "base64": "deadbeef", "mime_type": "image/png"},
+            {"type": "text", "text": "world"},
+        ]
+        assert extract_text(blocks) == "Hello world"
+
+    def test_shorten_collapses_and_truncates(self) -> None:
+        assert shorten("line1\nline2") == "line1 line2"
+        long_text = "a" * (QUICK_PREVIEW_LIMIT + 10)
+        shortened = shorten(long_text)
+        assert len(shortened) == QUICK_PREVIEW_LIMIT
+        assert shortened.endswith("...")
 
     def test_validate_identifier_valid_names(self) -> None:
-        assert validate_identifier("valid_name-123") == "valid_name-123"
-        assert validate_identifier("  spaced_name  ") == "spaced_name"
+        assert validate_identifier("valid_name-123", "identifier") == "valid_name-123"
+        assert validate_identifier("  spaced_name  ", "identifier") == "spaced_name"
 
     def test_validate_identifier_invalid_names_raise_value_error(self) -> None:
         invalid_cases = [
@@ -67,10 +83,7 @@ class TestCommonUtilities(unittest.TestCase):
         ]
         for invalid_name in invalid_cases:
             with self.subTest(name=invalid_name), pytest.raises(ValueError):
-                validate_identifier(invalid_name)
-
-    def test_default_reasoning_effort(self) -> None:
-        assert DEFAULT_REASONING_EFFORT == "default"
+                validate_identifier(invalid_name, "identifier")
 
     def test_atomic_write_text_success(self) -> None:
         with tempfile.TemporaryDirectory() as td:

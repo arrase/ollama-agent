@@ -3,20 +3,15 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
-
-from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
-from deepagents.middleware.memory import MemoryMiddleware
-from langchain_core.messages import SystemMessage
 
 from ollama_agent.agent import AgentRuntime
 from ollama_agent.core import OllamaChatModel
 from ollama_agent.settings import (
-    AGENTS_MD_NAME,
     Settings,
     find_agents_file,
 )
+from ollama_agent.settings.paths import AGENTS_MD_NAME
 
 
 class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
@@ -78,63 +73,6 @@ class TestAgentsMdSupport(unittest.IsolatedAsyncioTestCase):
         empty_dir = self.base_path / "empty"
         empty_dir.mkdir()
         assert find_agents_file(empty_dir) is None
-
-    def test_memory_middleware_loads_agents_md_into_system_prompt(self) -> None:
-        project_dir = self.base_path / "project"
-        project_dir.mkdir()
-        agents_file = project_dir / "AGENTS.md"
-        agents_file.write_text("# Project Standards\n- Use pytest\n- PEP 8\n", encoding="utf-8")
-
-        agent_dir = self.base_path / "agent_home"
-        agent_dir.mkdir()
-        mem_file = agent_dir / "MEMORY.md"
-        mem_file.write_text("# Long-Term Memory\n- Preference: Python\n", encoding="utf-8")
-
-        default_backend = LocalShellBackend(root_dir=project_dir, virtual_mode=True)
-        agent_backend = FilesystemBackend(root_dir=agent_dir, virtual_mode=True)
-        backend = CompositeBackend(
-            default=default_backend,
-            routes={"/agent/": agent_backend},
-        )
-
-        middleware = MemoryMiddleware(
-            backend=backend,
-            sources=["/agent/MEMORY.md", "/AGENTS.md"],
-        )
-
-        state: dict[str, Any] = {}
-        runtime_mock = MagicMock()
-        update = middleware.before_agent(state, runtime_mock, {})  # type: ignore[arg-type]
-        assert update is not None
-        if update:
-            state.update(update)  # type: ignore[arg-type]
-
-        contents = state.get("memory_contents", {})
-        assert "/agent/MEMORY.md" in contents
-        assert "/AGENTS.md" in contents
-        assert "Project Standards" in contents["/AGENTS.md"]
-
-        class DummyRequest:
-            def __init__(self, state_dict: dict[str, Any]) -> None:
-                self.state = state_dict
-                self.system_message = SystemMessage(content="Base system prompt.")
-                self.model = None
-
-            def override(self, **kwargs: object) -> dict[str, object]:
-                return kwargs
-
-        req = DummyRequest(state)
-        modified = middleware.modify_request(req)  # type: ignore[arg-type]
-        rendered = modified["system_message"].content  # type: ignore[index]
-
-        if isinstance(rendered, list):
-            combined_text = "".join(b.get("text", "") for b in rendered if isinstance(b, dict))
-        else:
-            combined_text = str(rendered)
-
-        assert "/agent/MEMORY.md" in combined_text
-        assert "/AGENTS.md" in combined_text
-        assert "Project Standards" in combined_text
 
     async def test_agent_runtime_routes_ancestor_agents_md(self) -> None:
         repo_root = self.base_path / "my_workspace"

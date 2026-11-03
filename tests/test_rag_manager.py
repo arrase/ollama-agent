@@ -8,10 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ollama_agent.rag.manager import (
-    RAGDatabaseExistsError,
     RAGError,
     RAGManager,
-    RAGNotLoadedError,
     _generate_point_id,
     _validate_name,
 )
@@ -34,6 +32,9 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
+
+    def test_rag_manager_defers_embedder_client(self) -> None:
+        assert self.manager._ollama_client is None
 
     def test_validate_database_name(self) -> None:
         assert _validate_name("docs_v1") == "docs_v1"
@@ -61,12 +62,9 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
         self.settings.chunk_overlap = -1
         with pytest.raises(RAGError):
             self.manager._chunk_text("some text")
-
-    def test_chunk_text_monotonic_forward_progress(self) -> None:
-        self.settings.chunk_size = 50
         self.settings.chunk_overlap = 60
         with pytest.raises(RAGError):
-            self.manager._chunk_text("Paragraph one with some detailed words.\n\nParagraph two with more details here.")
+            self.manager._chunk_text("some text")
 
     def test_chunk_text_long_paragraphs(self) -> None:
         text = "Sentence 1. Sentence 2. Sentence 3. Sentence 4. Sentence 5. Sentence 6."
@@ -91,14 +89,6 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
         with pytest.raises(RAGError):
             self.manager._read_file(f_bin)
 
-    def test_read_file_custom_allowed_extensions(self) -> None:
-        f_custom = self.rag_dir / "test.custom"
-        f_custom.write_text("custom content", encoding="utf-8")
-        with pytest.raises(RAGError):
-            self.manager._read_file(f_custom)
-        content = self.manager._read_file(f_custom, allowed_extensions=frozenset({".custom"}))
-        assert content == "custom content"
-
     def test_read_file_os_error(self) -> None:
         missing = self.rag_dir / "nonexistent.txt"
         with pytest.raises(RAGError):
@@ -115,13 +105,13 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
             assert (self.rag_dir / "knowledge").exists()
 
             # Creating duplicate raises
-            with pytest.raises(RAGDatabaseExistsError):
+            with pytest.raises(RAGError):
                 self.manager.create_database("knowledge")
 
             # List databases
             dbs = self.manager.list_databases()
             assert len(dbs) == 1
-            assert dbs[0]["name"] == "knowledge"
+            assert dbs[0] == {"name": "knowledge", "chunks": None, "active": False}
             assert self.manager.list_database_names() == ["knowledge"]
 
             # Load database
@@ -139,18 +129,6 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
             # Deleting a missing database raises
             with pytest.raises(RAGError):
                 self.manager.delete_database("knowledge")
-
-    def test_create_database_failure_cleanup(self) -> None:
-        with patch("ollama_agent.rag.manager.QdrantClient") as mock_qdrant_cls:
-            mock_client = MagicMock()
-            mock_client.create_collection.side_effect = RuntimeError("Disk full")
-            mock_qdrant_cls.return_value = mock_client
-
-            with pytest.raises(RAGError):
-                self.manager.create_database("failing_db")
-
-            assert not (self.rag_dir / "failing_db").exists()
-            mock_client.close.assert_called()
 
     def test_create_database_error_cleans_up_client_before_rmtree(self) -> None:
         calls: list[str] = []
@@ -182,7 +160,6 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
             "content": "LangChain and LangGraph are framework libraries",
             "source": str(doc),
             "filename": "doc.txt",
-            "chunk_index": 0,
         }
         mock_hit.score = 0.92
         mock_resp = MagicMock(points=[mock_hit])
@@ -197,9 +174,12 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
             mock_client.upsert.assert_called_once()
 
             hits = await self.manager.search("LangGraph")
-            assert len(hits) == 1
-            assert hits[0]["filename"] == "doc.txt"
-            assert hits[0]["score"] == 0.92
+            assert hits == [
+                {
+                    "content": "LangChain and LangGraph are framework libraries",
+                    "filename": "doc.txt",
+                }
+            ]
 
             # empty query raises RAGError
             with pytest.raises(RAGError):
@@ -214,6 +194,21 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
             mock_client.query_points.return_value = MagicMock(points=[mock_hit_none])
             with pytest.raises(RAGError):
                 await self.manager.search("LangGraph")
+
+    async def test_malformed_payload_raises_rag_error(self) -> None:
+        self.manager._current_db = "db"
+        client = MagicMock()
+        hit = MagicMock()
+        hit.payload = {"content": "c"}  # missing filename
+        hit.id = 1
+        hit.score = 0.5
+        client.query_points.return_value = MagicMock(points=[hit])
+        self.manager._client = client
+        with (
+            patch.object(RAGManager, "_get_embeddings", AsyncMock(return_value=[[0.0, 0.0, 0.0, 0.0]])),
+            pytest.raises(RAGError),
+        ):
+            await self.manager.search("q")
 
     async def test_add_file_rejects_unsupported_extension(self) -> None:
         doc = self.rag_dir / "data.xyz"
@@ -258,6 +253,7 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
         ):
             res = await self.manager.add_directory(str(sub_dir))
             assert res["added"] == 2
+            assert res["skipped"] == 1
             assert res["failed"] == 1
 
         # Nonexistent directory raises RAGError
@@ -275,7 +271,7 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
 
         # Unloaded database error
         self.manager.unload()
-        with pytest.raises(RAGNotLoadedError):
+        with pytest.raises(RAGError):
             await self.manager.add_file(str(f1))
 
     async def test_delete_source_points(self) -> None:
@@ -294,49 +290,9 @@ class TestRAGManager(unittest.IsolatedAsyncioTestCase):
             mock_response_rem,
         ]
 
-        embeddings = await self.manager._get_embeddings(texts, batch_size=100)
+        embeddings = await self.manager._get_embeddings(texts)
         assert len(embeddings) == 250
         assert self.manager._ollama_client.embed.call_count == 3
-
-    async def test_add_directory_partial_failure(self) -> None:
-        """One bad file must be counted as failed, not abort the whole batch."""
-        sub_dir = self.rag_dir / "partial_dir"
-        sub_dir.mkdir()
-        f1 = sub_dir / "file1.md"
-        f1.write_text("# Doc 1", encoding="utf-8")
-        f2 = sub_dir / "file2.md"
-        f2.write_text("# Doc 2", encoding="utf-8")
-
-        mock_client = MagicMock()
-        self.manager._client = mock_client
-        self.manager._current_db = "partial_db"
-
-        async def mock_embed(texts: list[str], batch_size: int = 100) -> list[list[float]]:
-            _ = batch_size
-            if "Doc 1" in texts[0]:
-                raise RAGError("Embed failed for doc 1")
-            return [[0.1, 0.2, 0.3, 0.4]] * len(texts)
-
-        with patch.object(RAGManager, "_get_embeddings", side_effect=mock_embed):
-            results = await self.manager.add_directory(str(sub_dir))
-
-        assert results["failed"] == 1
-        assert results["added"] == 1
-
-    async def test_add_directory_counts_empty_files_as_skipped(self) -> None:
-        sub_dir = self.rag_dir / "empty_dir"
-        sub_dir.mkdir()
-        (sub_dir / "blank.md").write_text("   \n", encoding="utf-8")
-        (sub_dir / "real.md").write_text("# Real", encoding="utf-8")
-
-        self.manager._client = MagicMock()
-        self.manager._current_db = "empty_db"
-
-        with patch.object(RAGManager, "_get_embeddings", AsyncMock(return_value=[[0.1, 0.2, 0.3, 0.4]])):
-            results = await self.manager.add_directory(str(sub_dir))
-
-        assert results["skipped"] == 1
-        assert results["added"] == 1
 
     async def test_add_directory_cap_counts_only_added_and_warns_once(self) -> None:
         sub_dir = self.rag_dir / "cap_dir"

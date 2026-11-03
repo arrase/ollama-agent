@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -49,10 +48,6 @@ class ModelContextWindowError(RuntimeError):
     """Raised when the context window for a model cannot be resolved."""
 
 
-class OllamaVersionError(ModelCapabilityError):
-    """Raised when the Ollama server version is lower than the minimum required version."""
-
-
 def get_ollama_version(base_url: str) -> str:
     """Fetch the Ollama server version string from the /api/version endpoint."""
     url = f"{base_url.rstrip('/')}/api/version"
@@ -77,23 +72,20 @@ def get_ollama_version(base_url: str) -> str:
     return version
 
 
-def check_ollama_version(
-    base_url: str,
-    min_version: str = MIN_OLLAMA_VERSION,
-) -> str:
+def check_ollama_version(base_url: str) -> str:
     """Check that the Ollama server version meets the minimum requirement.
 
     Returns the detected Ollama version string if valid.
-    Raises OllamaVersionError if the version is lower than min_version.
+    Raises ModelCapabilityError if the version is lower than MIN_OLLAMA_VERSION.
     """
     version_str = get_ollama_version(base_url)
-    if parse_version(version_str) < parse_version(min_version):
-        raise OllamaVersionError(
+    if parse_version(version_str) < parse_version(MIN_OLLAMA_VERSION):
+        raise ModelCapabilityError(
             _(
                 "Ollama version {version} is lower than required {min_version}. "
                 "Please update your Ollama installation.",
                 version=version_str,
-                min_version=min_version,
+                min_version=MIN_OLLAMA_VERSION,
             )
         )
     return version_str
@@ -186,19 +178,6 @@ def get_model_thinking_config(response: ExtendedShowResponse | None) -> dict[str
     return response.thinking if isinstance(response.thinking, dict) else None
 
 
-async def model_supports_thinking(
-    model: str,
-    base_url: str,
-    *,
-    show_info: ExtendedShowResponse | None = None,
-) -> bool:
-    """Detection of Ollama thinking support for a model."""
-    response = show_info if show_info is not None else await _show_model(model, base_url)
-    if get_model_thinking_config(response) is not None:
-        return True
-    return "thinking" in await get_model_capabilities(model, base_url, show_info=response)
-
-
 def _get_model_info(response: ExtendedShowResponse) -> dict[str, Any] | None:
     """Return the model metadata dict from the ShowResponse."""
     return dict(response.modelinfo) if isinstance(response.modelinfo, dict) else None
@@ -228,9 +207,8 @@ def parse_context_window_input(value: int | str) -> int | str:
 async def resolve_context_window(
     model: str,
     context_window: int | str | None,
-    base_url: str,
     *,
-    show_info: ExtendedShowResponse | None = None,
+    show_info: ExtendedShowResponse,
 ) -> int:
     """Resolve the effective context window for a model."""
     if context_window is not None:
@@ -238,13 +216,11 @@ async def resolve_context_window(
         if isinstance(parsed, int):
             return parsed
 
-    response = show_info if show_info is not None else await _show_model(model, base_url)
-
-    model_info = _get_model_info(response)
+    model_info = _get_model_info(show_info)
     if model_info is not None and (resolved := _model_context_length(model_info)):
         return resolved
 
-    for text in _get_modelfile_sources(response):
+    for text in _get_modelfile_sources(show_info):
         if resolved := _parse_num_ctx(text):
             return resolved
 
@@ -265,7 +241,7 @@ def format_thinking_value(val: object) -> str:
 
 
 def _match_thinking_effort(
-    effort_clean: str,
+    effort: str,
     thinking_cfg: dict[str, Any],
     model_name: str,
 ) -> tuple[bool, bool | str | None, str | None]:
@@ -276,10 +252,7 @@ def _match_thinking_effort(
     raw_values = thinking_cfg.get("values")
     values: list[Any] = list(raw_values) if isinstance(raw_values, (list, tuple)) else []
     default: bool | str | None = thinking_cfg.get("default")
-    effort_lower = effort_clean.lower()
-
-    if not effort_clean or effort_lower in ("default", "hide"):
-        return True, default, None
+    effort_lower = effort.lower()
 
     is_off = effort_lower in REASONING_OFF_VALUES
     is_on = effort_lower in REASONING_ON_VALUES
@@ -309,7 +282,7 @@ def _match_thinking_effort(
         default,
         _(
             "Invalid reasoning effort '{effort}'. Allowed values are: {allowed}",
-            effort=effort_clean,
+            effort=effort,
             allowed=", ".join(format_thinking_value(v) for v in values),
         ),
     )
@@ -317,41 +290,36 @@ def _match_thinking_effort(
 
 def _resolve_thinking_from_cfg(
     thinking_cfg: dict[str, Any],
-    effort_clean: str,
+    effort: str,
     model: str,
-    warn_callback: Callable[[str], None],
     *,
     is_default: bool,
 ) -> bool | str | None:
     if is_default:
         default_val: bool | str | None = thinking_cfg.get("default")
         return default_val
-    matched, resolved, msg = _match_thinking_effort(effort_clean, thinking_cfg, model)
+    matched, resolved, msg = _match_thinking_effort(effort, thinking_cfg, model)
     if not matched and msg is not None:
-        warn_callback(msg)
+        _log.warning(msg)
     return resolved
 
 
 async def resolve_ollama_reasoning(
     model: str,
-    effort: object,
+    effort: str,
     base_url: str,
-    warn_callback: Callable[[str], None],
     *,
-    show_info: ExtendedShowResponse | None = None,
+    show_info: ExtendedShowResponse,
 ) -> bool | str | None:
     """Translate reasoning_effort to Ollama's native reasoning setting using /api/show metadata."""
-    response = show_info if show_info is not None else await _show_model(model, base_url)
-    thinking_cfg = get_model_thinking_config(response)
-
-    effort_clean = "" if effort is None else str(effort).strip()
-    effort_lower = effort_clean.lower()
-    is_default = not effort_clean or effort_lower in ("default", "hide")
+    thinking_cfg = get_model_thinking_config(show_info)
+    effort_lower = effort.lower()
+    is_default = effort_lower in ("default", "hide")
 
     if thinking_cfg is not None:
-        return _resolve_thinking_from_cfg(thinking_cfg, effort_clean, model, warn_callback, is_default=is_default)
+        return _resolve_thinking_from_cfg(thinking_cfg, effort, model, is_default=is_default)
 
-    if "thinking" not in await get_model_capabilities(model, base_url, show_info=response):
+    if "thinking" not in await get_model_capabilities(model, base_url, show_info=show_info):
         return None
 
     if is_default:
@@ -360,13 +328,12 @@ async def resolve_ollama_reasoning(
         return False
     if effort_lower in REASONING_ON_VALUES:
         return True
-    return effort_clean
+    return effort
 
 
 def _find_param_in_modelfile(
     param: str,
     meta_sources: list[str],
-    warn_callback: Callable[[str], None],
     *,
     is_int: bool,
 ) -> int | float | None:
@@ -378,13 +345,11 @@ def _find_param_in_modelfile(
             try:
                 return int(raw) if is_int else float(raw)
             except ValueError:
-                warn_callback(_("Ignoring invalid value '{raw}' for parameter '{param}'.", raw=raw, param=param))
+                _log.warning(_("Ignoring invalid value '{raw}' for parameter '{param}'.", raw=raw, param=param))
     return None
 
 
 async def resolve_model_parameters(
-    model: str,
-    base_url: str,
     *,
     temperature: float | None = None,
     top_p: float | None = None,
@@ -392,8 +357,7 @@ async def resolve_model_parameters(
     min_p: float | None = None,
     presence_penalty: float | None = None,
     repeat_penalty: float | None = None,
-    warn_callback: Callable[[str], None],
-    show_info: ExtendedShowResponse | None = None,
+    show_info: ExtendedShowResponse,
 ) -> dict[str, tuple[Any, str]]:
     """Resolve model sampling parameters with precedence: User > Modelfile."""
     user_inputs: dict[str, Any] = {
@@ -405,8 +369,7 @@ async def resolve_model_parameters(
         "repeat_penalty": repeat_penalty,
     }
 
-    response = show_info if show_info is not None else await _show_model(model, base_url)
-    meta_sources = _get_modelfile_sources(response)
+    meta_sources = _get_modelfile_sources(show_info)
 
     resolved: dict[str, tuple[Any, str]] = {}
 
@@ -416,7 +379,7 @@ async def resolve_model_parameters(
             resolved[param] = (int(user_val) if is_int else float(user_val), "user")
             continue
 
-        found_val = _find_param_in_modelfile(param, meta_sources, warn_callback, is_int=is_int)
+        found_val = _find_param_in_modelfile(param, meta_sources, is_int=is_int)
         if found_val is not None:
             resolved[param] = (found_val, "modelfile")
 
@@ -459,24 +422,20 @@ async def create_ollama_chat_model(
     min_p: float | None = None,
     presence_penalty: float | None = None,
     repeat_penalty: float | None = None,
-    warn_callback: Callable[[str], None] = _log.warning,
 ) -> OllamaChatModel:
     """Create a native ChatOllama model with resolved runtime settings."""
     host = base_url.rstrip("/")
     validated_effort = validate_reasoning_effort(reasoning_effort)
     show_info = await _show_model(model, host)
-    reasoning = await resolve_ollama_reasoning(model, validated_effort, host, warn_callback, show_info=show_info)
-    num_ctx = await resolve_context_window(model, context_window, host, show_info=show_info)
+    reasoning = await resolve_ollama_reasoning(model, validated_effort, host, show_info=show_info)
+    num_ctx = await resolve_context_window(model, context_window, show_info=show_info)
     resolved_params = await resolve_model_parameters(
-        model,
-        host,
         temperature=temperature,
         top_p=top_p,
         top_k=top_k,
         min_p=min_p,
         presence_penalty=presence_penalty,
         repeat_penalty=repeat_penalty,
-        warn_callback=warn_callback,
         show_info=show_info,
     )
 
@@ -523,7 +482,7 @@ def validate_reasoning_effort(effort: object) -> ReasoningEffortValue:
 def validate_and_normalize_effort(
     effort: str,
     thinking_cfg: dict[str, Any] | None,
-    model_name: str = "",
+    model_name: str,
 ) -> tuple[str | None, str | None]:
     """Validate and normalize effort against model thinking config.
 

@@ -83,8 +83,6 @@ class OllamaAgentApp(App[None]):
                 if not w._decided:
                     w._handle_decision("cancel-btn")
                     return
-            self._begin_cancel_approval()
-            self.run_worker(self._finish_cancel_approval())
 
     def action_cancel_or_quit(self) -> None:
         if self._is_generating or self._is_approval_pending or self._prompt_queue:
@@ -348,20 +346,14 @@ class OllamaAgentApp(App[None]):
             self._post_stream_cleanup = None
             await cleanup()
 
-    def _begin_cancel_approval(self) -> None:
+    async def cancel_approval(self) -> None:
         self._is_approval_pending = False
         self.query_one(AgentFooter).set_approval(False)
         self.show_system_notice(f"[bold #f87171]🛑 {_('Approval cancelled.')}[/bold #f87171]")
         self.query_one(ReplInput).focus()
-
-    async def _finish_cancel_approval(self) -> None:
         await self._run_post_stream_cleanup()
         self.query_one(AgentHeader).update_header()
         self._process_next_in_queue()
-
-    async def cancel_approval(self) -> None:
-        self._begin_cancel_approval()
-        await self._finish_cancel_approval()
 
     async def _handle_approval_decision(
         self, decisions: list[dict[str, Any]], scroll: ScrollableContainer, agent_msg: AgentResponse

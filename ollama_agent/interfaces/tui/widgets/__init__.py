@@ -6,7 +6,7 @@ from .approval import ToolApprovalWidget
 from .footer import AgentFooter
 from .header import AgentHeader
 from .input import ReplInput
-from .messages import AgentResponse, ToolCallMessage, ToolOutputMessage, UserMessage
+from .messages import AgentResponse, UserMessage
 from .system import PromptQueueWidget, SystemOutputWidget
 
 __all__ = [
@@ -17,7 +17,5 @@ __all__ = [
     "ReplInput",
     "SystemOutputWidget",
     "ToolApprovalWidget",
-    "ToolCallMessage",
-    "ToolOutputMessage",
     "UserMessage",
 ]
