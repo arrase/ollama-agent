@@ -121,11 +121,10 @@ def _read_history_messages(cursor: sqlite3.Cursor, exclude_thread_id: str) -> de
             thread_messages[tid].clear()
             seen_ids[tid].clear()
         for msg in msg_list:
-            msg_id = msg.id
-            if isinstance(msg_id, str) and msg_id:
-                if msg_id in seen_ids[tid]:
-                    continue
-                seen_ids[tid].add(msg_id)
+            if msg.id in seen_ids[tid]:
+                continue
+            if msg.id:
+                seen_ids[tid].add(msg.id)
             thread_messages[tid].append(msg)
     return thread_messages
 

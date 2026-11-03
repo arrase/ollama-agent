@@ -272,25 +272,26 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         with pytest.raises(ModelCapabilityError):
             await ensure_model_supports_tools("test-model", "http://localhost:11434")
 
-    async def test_resolve_context_window_explicit_value(self) -> None:
-        resolved = await resolve_context_window("test-model", 4096, show_info=MagicMock())
+    def test_resolve_context_window_explicit_value(self) -> None:
+        resolved = resolve_context_window("test-model", 4096, show_info=MagicMock())
         assert resolved == 4096
 
-    async def test_resolve_context_window_string_int(self) -> None:
-        resolved = await resolve_context_window("test-model", "16384", show_info=MagicMock())
+    def test_resolve_context_window_string_int(self) -> None:
+        resolved = resolve_context_window("test-model", "16384", show_info=MagicMock())
         assert resolved == 16384
 
-    async def test_resolve_context_window_invalid_explicit_value_raises(self) -> None:
+    def test_resolve_context_window_invalid_explicit_value_raises(self) -> None:
+        show_info = MagicMock()
         with pytest.raises(ModelContextWindowError):
-            await resolve_context_window("test-model", 0, show_info=MagicMock())
+            resolve_context_window("test-model", 0, show_info=show_info)
 
         with pytest.raises(ModelContextWindowError):
-            await resolve_context_window("test-model", -10, show_info=MagicMock())
+            resolve_context_window("test-model", -10, show_info=show_info)
 
         with pytest.raises(ModelContextWindowError):
-            await resolve_context_window("test-model", "invalid", show_info=MagicMock())
+            resolve_context_window("test-model", "invalid", show_info=show_info)
 
-    async def test_resolve_context_window_max(self) -> None:
+    def test_resolve_context_window_max(self) -> None:
         show_info = ExtendedShowResponse.model_validate(
             {
                 "model_info": {"llama.context_length": 131072},
@@ -298,11 +299,11 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
                 "modelfile": "",
             }
         )
-        resolved = await resolve_context_window("llama3.3:70b", "max", show_info=show_info)
+        resolved = resolve_context_window("llama3.3:70b", "max", show_info=show_info)
         assert resolved == 131072
 
         # Case-insensitive
-        resolved_upper = await resolve_context_window("llama3.3:70b", "MAX", show_info=show_info)
+        resolved_upper = resolve_context_window("llama3.3:70b", "MAX", show_info=show_info)
         assert resolved_upper == 131072
 
         # Ollama SDK modelinfo attribute format (without underscore)
@@ -311,29 +312,29 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
             parameters="",
             modelfile="",
         )
-        resolved_sdk = await resolve_context_window("gemma4:26b-a4b-it-qat", "max", show_info=sdk_show)
+        resolved_sdk = resolve_context_window("gemma4:26b-a4b-it-qat", "max", show_info=sdk_show)
         assert resolved_sdk == 262144
 
-    async def test_resolve_context_window_max_modelfile_fallback(self) -> None:
+    def test_resolve_context_window_max_modelfile_fallback(self) -> None:
         show_info = ExtendedShowResponse(
             model_info={},
             parameters="PARAMETER num_ctx 32768",
             modelfile="",
         )
-        resolved = await resolve_context_window("custom-model", "max", show_info=show_info)
+        resolved = resolve_context_window("custom-model", "max", show_info=show_info)
         assert resolved == 32768
 
-    async def test_resolve_context_window_max_unresolved_raises(self) -> None:
+    def test_resolve_context_window_max_unresolved_raises(self) -> None:
         show_info = ExtendedShowResponse(
             model_info={},
             parameters="",
             modelfile="",
         )
         with pytest.raises(ModelContextWindowError):
-            await resolve_context_window("unknown-model", "max", show_info=show_info)
+            resolve_context_window("unknown-model", "max", show_info=show_info)
 
     @patch("ollama_agent.core.models._show_model")
-    @patch("ollama_agent.core.models.resolve_context_window", AsyncMock(return_value=8192))
+    @patch("ollama_agent.core.models.resolve_context_window", MagicMock(return_value=8192))
     @patch("ollama_agent.core.models.resolve_ollama_reasoning", AsyncMock(return_value=True))
     async def test_create_ollama_chat_model(self, mock_show: AsyncMock) -> None:
         mock_show.return_value = MagicMock(parameters="", modelfile="")
@@ -387,7 +388,7 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         assert resp.thinking == {"values": ["low", "high", "max"], "default": "max"}
         assert resp.capabilities == ["tools", "thinking"]
 
-    async def test_resolve_model_parameters_precedence(self) -> None:
+    def test_resolve_model_parameters_precedence(self) -> None:
         show_info = MagicMock(
             parameters="temperature 0.65\ntop_p 0.85\nrepetition_penalty 1.25",
             modelfile=None,
@@ -395,7 +396,7 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
 
         # 1. User overrides temperature; top_p and repeat_penalty resolve from metadata; unconfigured omitted
         with patch("ollama_agent.core.models._log.warning") as mock_warn:
-            resolved = await resolve_model_parameters(
+            resolved = resolve_model_parameters(
                 temperature=0.3,
                 top_p=None,
                 top_k=None,
@@ -416,14 +417,14 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         assert "presence_penalty" not in resolved
         mock_warn.assert_not_called()
 
-    async def test_resolve_model_parameters_invalid_value_warns(self) -> None:
+    def test_resolve_model_parameters_invalid_value_warns(self) -> None:
         show_info = MagicMock(
             parameters="temperature not-a-number",
             modelfile="",
         )
 
         with patch("ollama_agent.core.models._log.warning") as mock_warn:
-            resolved = await resolve_model_parameters(show_info=show_info)
+            resolved = resolve_model_parameters(show_info=show_info)
 
         assert "temperature" not in resolved
         mock_warn.assert_called_once()
@@ -431,7 +432,7 @@ class TestModelsLogic(unittest.IsolatedAsyncioTestCase):
         assert "temperature" in mock_warn.call_args[0][0]
 
     @patch("ollama_agent.core.models._show_model")
-    @patch("ollama_agent.core.models.resolve_context_window", AsyncMock(return_value=4096))
+    @patch("ollama_agent.core.models.resolve_context_window", MagicMock(return_value=4096))
     @patch("ollama_agent.core.models.resolve_ollama_reasoning", AsyncMock(return_value=None))
     async def test_create_ollama_chat_model_resolves_defaults(self, mock_show: AsyncMock) -> None:
         mock_show.return_value = MagicMock(

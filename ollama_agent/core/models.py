@@ -204,7 +204,7 @@ def parse_context_window_input(value: int | str) -> int | str:
     return value
 
 
-async def resolve_context_window(
+def resolve_context_window(
     model: str,
     context_window: int | str | None,
     *,
@@ -349,7 +349,7 @@ def _find_param_in_modelfile(
     return None
 
 
-async def resolve_model_parameters(
+def resolve_model_parameters(
     *,
     temperature: float | None = None,
     top_p: float | None = None,
@@ -428,8 +428,8 @@ async def create_ollama_chat_model(
     validated_effort = validate_reasoning_effort(reasoning_effort)
     show_info = await _show_model(model, host)
     reasoning = await resolve_ollama_reasoning(model, validated_effort, host, show_info=show_info)
-    num_ctx = await resolve_context_window(model, context_window, show_info=show_info)
-    resolved_params = await resolve_model_parameters(
+    num_ctx = resolve_context_window(model, context_window, show_info=show_info)
+    resolved_params = resolve_model_parameters(
         temperature=temperature,
         top_p=top_p,
         top_k=top_k,
