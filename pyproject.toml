@@ -11,7 +11,7 @@ requires-python = ">=3.11"
 dependencies = [
     "deepagents==0.7.32",
     "langchain==1.4.7",
-    "langchain-core==1.7.0",
+    "langchain-core==1.7.3",
     "langchain-ollama==1.1.0",
     "langgraph==1.2.19",
     "langgraph-checkpoint-sqlite==3.1.2",
@@ -27,7 +27,7 @@ dependencies = [
     "httpx>=0.28.1",
     "mcp>=1.30.0,<2.0.0",
     "packaging>=26.3",
-    "pydantic>=2.14.1",
+    "pydantic>=2.14.2",
 ]
 
 [project.scripts]
@@ -35,12 +35,12 @@ ollama-agent = "ollama_agent.main:main"
 
 [project.optional-dependencies]
 test = [
-    "pytest>=9.1.1",
+    "pytest>=9.2.0",
     "pytest-cov>=7.1.0",
 ]
 dev = [
     "ollama-agent[test]",
-    "ruff==0.17.2",
+    "ruff==0.17.3",
     "mypy>=2.4.0",
 ]
 docs = ["mkdocs-material>=9.8.0"]
