@@ -9,7 +9,7 @@ description = "AI agent to interact with local language models through Ollama"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "deepagents==0.7.32",
+    "deepagents==0.7.34",
     "langchain==1.4.7",
     "langchain-core==1.7.3",
     "langchain-ollama==1.1.0",
