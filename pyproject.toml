@@ -43,7 +43,7 @@ dev = [
     "ruff==0.17.4",
     "mypy>=2.4.0",
 ]
-docs = ["mkdocs-material>=9.8.0"]
+docs = ["mkdocs-material>=9.8.1"]
 
 [tool.setuptools.packages.find]
 where = ["."]
